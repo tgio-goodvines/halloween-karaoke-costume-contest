@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Live Signup Display</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='display.css') }}">
+  </head>
+  <body class="display-mode">
+    {% set first_entry = entries[0] if entries else None %}
+    <div class="display-wrapper">
+      <header class="display-header">
+        <h1>Halloween Karaoke &amp; Costume Contest</h1>
+        <p>Live signup rotation for the big night</p>
+      </header>
+
+      <main class="display-main">
+        <section class="display-card{% if first_entry %} active{% endif %}" data-display-card{% if not first_entry %} hidden{% endif %}>
+          <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
+          <div class="display-primary" data-entry-primary>{{ first_entry['primary'] if first_entry else '' }}</div>
+          <div class="display-secondary" data-entry-secondary>{{ first_entry['secondary'] if first_entry else '' }}</div>
+          <div class="display-tertiary" data-entry-tertiary{% if not first_entry or not first_entry['tertiary'] %} hidden{% endif %}>{{ first_entry['tertiary'] if first_entry and first_entry['tertiary'] else '' }}</div>
+        </section>
+
+        <section class="display-empty{% if not entries %} is-visible{% endif %}" data-empty-state>
+          <p>No signups yet. Encourage guests to join the fun!</p>
+          <p>
+            Visit
+            <a href="{{ url_for('costume_signup') }}">the costume signup</a>
+            or
+            <a href="{{ url_for('karaoke_signup') }}">the karaoke signup</a>
+            to add new entries.
+          </p>
+        </section>
+      </main>
+
+      <footer class="display-footer">
+        <div class="display-count">Costume signups: <strong>{{ costume_count }}</strong></div>
+        <div class="display-count">Karaoke signups: <strong>{{ karaoke_count }}</strong></div>
+        <div class="display-hint">Entries rotate automatically every few seconds</div>
+      </footer>
+    </div>
+
+    <script id="entries-data" type="application/json">{{ entries | tojson }}</script>
+    <script src="{{ url_for('static', filename='display.js') }}"></script>
+  </body>
+</html>

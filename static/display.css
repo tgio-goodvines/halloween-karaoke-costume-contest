@@ -1,0 +1,133 @@
+body.display-mode {
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.display-wrapper {
+  width: min(1100px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  align-items: center;
+}
+
+.display-header h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 4vw, 3.6rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.display-header p {
+  margin: 0;
+  font-size: clamp(1.1rem, 2.3vw, 1.6rem);
+  color: var(--muted);
+}
+
+.display-main {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 50vh;
+}
+
+.display-card {
+  width: min(900px, 100%);
+  padding: clamp(2rem, 4vw, 3.5rem);
+  border-radius: 1.75rem;
+  background: linear-gradient(145deg, rgba(27, 27, 42, 0.85), rgba(38, 22, 42, 0.9));
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: grid;
+  gap: 1.25rem;
+  opacity: 0;
+  transform: translateY(24px) scale(0.98);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.display-card.active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.display-category {
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.display-primary {
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+  font-weight: 700;
+}
+
+.display-secondary {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  color: var(--text);
+}
+
+.display-tertiary {
+  font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+  color: var(--muted);
+}
+
+.display-tertiary[hidden] {
+  display: none !important;
+}
+
+.display-empty {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 2rem;
+  background: rgba(16, 16, 24, 0.6);
+  border-radius: 1.5rem;
+  gap: 1rem;
+}
+
+.display-empty.is-visible {
+  display: flex;
+}
+
+.display-empty a {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.display-footer {
+  width: min(900px, 100%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: clamp(1rem, 2vw, 1.3rem);
+  color: var(--muted);
+}
+
+.display-footer .display-count strong {
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  body.display-mode {
+    padding: 1.5rem;
+  }
+
+  .display-wrapper {
+    gap: 1.8rem;
+  }
+
+  .display-main {
+    min-height: 40vh;
+  }
+}

@@ -31,7 +31,10 @@ karaoke_signups: List[KaraokeSignup] = []
 SLIDES = [
     {
         "title": "Sign Up From Your Phone",
-        "content": "Visit http://10.0.0.241/halloween to enter the costume contest and karaoke queue.",
+        "content": (
+            "Connect to the Halloween Party Wi-Fi (password: halloween) and then visit "
+            "http://10.0.0.241/halloween to enter the costume contest and karaoke queue."
+        ),
     },
     {
         "title": "Welcome to the Halloween Bash!",

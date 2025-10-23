@@ -13,6 +13,16 @@
       <header class="display-header">
         <h1>Qiana and Tony's 2nd Annual Halloween Party</h1>
         <p>Live signup rotation for the big night</p>
+        <div class="display-metrics">
+          <div class="display-count">
+            <span class="display-count__number" data-costume-count>{{ costume_count }}</span>
+            <span class="display-count__label">Costume signups</span>
+          </div>
+          <div class="display-count">
+            <span class="display-count__number" data-karaoke-count>{{ karaoke_count }}</span>
+            <span class="display-count__label">Karaoke signups</span>
+          </div>
+        </div>
       </header>
 
       <main class="display-main">
@@ -32,29 +42,50 @@
         </section>
 
         <section class="display-empty{% if not entries %} is-visible{% endif %}" data-empty-state>
-          <p>No signups yet. Encourage guests to join the fun!</p>
-          <ol>
-            <li>
-              Connect to the <strong>Halloween Party Wi-Fi</strong> network (password: <strong>halloween</strong>).
-            </li>
-            <li>
-              Open a browser and go to
-              <a href="http://10.0.0.241/halloween" target="_blank" rel="noopener">http://10.0.0.241/halloween</a>
-              to sign up—the page won't appear automatically.
-            </li>
-          </ol>
+          <div class="instruction-card">
+            <div class="instruction-card__badge" aria-hidden="true">👻</div>
+            <h2 class="instruction-card__title">Guide guests onto the signup hub</h2>
+            <p class="instruction-card__subtitle">
+              Walk them through these quick steps to get costumes and karaoke songs into the rotation.
+            </p>
+            <ol class="instruction-steps">
+              <li class="instruction-step">
+                <h3 class="instruction-step__heading">Connect to the party Wi-Fi</h3>
+                <p class="instruction-step__body">Open Wi-Fi settings and join our dedicated network.</p>
+                <div class="instruction-callout" role="group" aria-label="Wi-Fi credentials">
+                  <div class="instruction-callout__item">
+                    <span class="instruction-callout__label">Network</span>
+                    <strong class="instruction-callout__value">Halloween Party Wi-Fi</strong>
+                  </div>
+                  <div class="instruction-callout__item">
+                    <span class="instruction-callout__label">Password</span>
+                    <strong class="instruction-callout__value">halloween</strong>
+                  </div>
+                </div>
+              </li>
+              <li class="instruction-step">
+                <h3 class="instruction-step__heading">Visit the Halloween hub</h3>
+                <p class="instruction-step__body">
+                  In a browser, enter the address below to load the signup page.
+                </p>
+                <p class="instruction-step__body">
+                  <a class="instruction-url" href="http://10.0.0.241/halloween" target="_blank" rel="noopener">http://10.0.0.241/halloween</a>
+                </p>
+              </li>
+              <li class="instruction-step">
+                <h3 class="instruction-step__heading">Add their picks to the lineup</h3>
+                <p class="instruction-step__body">
+                  Use the forms on the page to submit their costume and queue a karaoke song so it appears on this screen.
+                </p>
+                <ul class="instruction-substeps">
+                  <li>Tap the <strong>Costume</strong> form for outfit entries.</li>
+                  <li>Tap the <strong>Karaoke</strong> form to reserve a song.</li>
+                </ul>
+              </li>
+            </ol>
+          </div>
         </section>
       </main>
-
-      <footer class="display-footer">
-        <div class="display-count">
-          Costume signups: <strong data-costume-count>{{ costume_count }}</strong>
-        </div>
-        <div class="display-count">
-          Karaoke signups: <strong data-karaoke-count>{{ karaoke_count }}</strong>
-        </div>
-        <div class="display-hint">Entries rotate and refresh automatically</div>
-      </footer>
     </div>
 
     <script id="entries-data" type="application/json">{{ entries | tojson }}</script>

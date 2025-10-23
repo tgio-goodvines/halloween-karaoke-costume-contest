@@ -30,11 +30,8 @@ karaoke_signups: List[KaraokeSignup] = []
 # Demo slides to rotate on the home page
 SLIDES = [
     {
-        "title": "Sign Up From Your Phone",
-        "content": (
-            "1. Connect to the Halloween Party Wi-Fi network (password: halloween). "
-            "2. Open your browser and go to http://10.0.0.241/halloween to sign up—the page won't open automatically."
-        ),
+        "title": "Tonight's Lineup",
+        "content": "Costume contest judging kicks off at 9:30 PM followed by karaoke at 10:15 PM. Make sure you're signed up!",
     },
     {
         "title": "Welcome to the Halloween Bash!",
@@ -54,10 +51,10 @@ SLIDES = [
 def build_rotation_entries() -> List[dict[str, str]]:
     rotation_entries: List[dict[str, str]] = [
         {
-            "category": "Sign Up Tonight!",
-            "primary": "1. Connect to the Halloween Party Wi-Fi network (password: halloween).",
-            "secondary": "2. Open your browser and go to http://10.0.0.241/halloween to sign up.",
-            "tertiary": "The page won't launch automatically—enter the address to join the fun.",
+            "category": "Join the Signup Portal",
+            "primary": "Connect to the Halloween Party Wi-Fi network (password: halloween).",
+            "secondary": "Visit http://10.0.0.241/halloween in your browser to access the forms.",
+            "tertiary": "The portal won't launch automatically—bookmark it so it's handy later.",
             "cta": True,
             "link": "http://10.0.0.241/halloween",
             "link_label": "Open the signup portal",

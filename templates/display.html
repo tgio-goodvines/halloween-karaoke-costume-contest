@@ -36,9 +36,13 @@
       </main>
 
       <footer class="display-footer">
-        <div class="display-count">Costume signups: <strong>{{ costume_count }}</strong></div>
-        <div class="display-count">Karaoke signups: <strong>{{ karaoke_count }}</strong></div>
-        <div class="display-hint">Entries rotate automatically every few seconds</div>
+        <div class="display-count">
+          Costume signups: <strong data-costume-count>{{ costume_count }}</strong>
+        </div>
+        <div class="display-count">
+          Karaoke signups: <strong data-karaoke-count>{{ karaoke_count }}</strong>
+        </div>
+        <div class="display-hint">Entries rotate and refresh automatically</div>
       </footer>
     </div>
 

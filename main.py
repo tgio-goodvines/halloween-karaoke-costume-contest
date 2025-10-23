@@ -48,16 +48,25 @@ SLIDES = [
 ]
 
 
-def build_rotation_entries() -> List[dict[str, str]]:
-    rotation_entries: List[dict[str, str]] = [
+def build_rotation_entries() -> List[dict[str, object]]:
+    rotation_entries: List[dict[str, object]] = [
         {
-            "category": "Join the Signup Portal",
-            "primary": "Connect to the Halloween Party Wi-Fi network (password: halloween).",
-            "secondary": "Visit http://10.0.0.241/halloween in your browser to access the forms.",
-            "tertiary": "The portal won't launch automatically—bookmark it so it's handy later.",
+            "category": "Signup Portal",
+            "primary": "Get guests connected and ready to register.",
+            "secondary": "Share the Wi-Fi credentials and direct them to the Halloween signup page.",
+            "tertiary": "Bookmark the page so it's handy later—there's no automatic prompt.",
             "cta": True,
             "link": "http://10.0.0.241/halloween",
             "link_label": "Open the signup portal",
+            "cta_details": {
+                "lede": "Keep these quick prompts ready so each guest can hop onto the portal.",
+                "wifi_network": "Halloween Party Wi-Fi",
+                "wifi_password": "halloween",
+                "portal_url": "http://10.0.0.241/halloween",
+                "portal_label": "http://10.0.0.241/halloween",
+                "portal_note": "Type the address exactly as shown and add a bookmark for quick access later.",
+                "reminder": "The portal won't launch on its own—reopen it whenever someone needs to update signups.",
+            },
         }
     ]
 
@@ -93,6 +102,11 @@ def build_rotation_entries() -> List[dict[str, str]]:
 
 @app.route("/")
 def index():
+    return redirect(url_for("live_display"))
+
+
+@app.route("/live-display")
+def live_display():
     rotation_entries = build_rotation_entries()
 
     return render_template(

@@ -46,6 +46,44 @@ SLIDES = [
 
 @app.route("/")
 def index():
+    costume_entries = [
+        {
+            "category": "Costume Contest",
+            "primary": signup.name,
+            "secondary": f"Dressed as {signup.costume}",
+            "tertiary": f"Contact: {signup.contact}" if signup.contact else "",
+        }
+        for signup in costume_signups
+    ]
+
+    karaoke_entries = [
+        {
+            "category": "Karaoke Stage",
+            "primary": signup.name,
+            "secondary": f'Performing "{signup.song_title}"',
+            "tertiary": f"by {signup.artist}" if signup.artist else "",
+        }
+        for signup in karaoke_signups
+    ]
+
+    rotation_entries = []
+    max_length = max(len(costume_entries), len(karaoke_entries))
+    for index in range(max_length):
+        if index < len(costume_entries):
+            rotation_entries.append(costume_entries[index])
+        if index < len(karaoke_entries):
+            rotation_entries.append(karaoke_entries[index])
+
+    return render_template(
+        "display.html",
+        entries=rotation_entries,
+        costume_count=len(costume_signups),
+        karaoke_count=len(karaoke_signups),
+    )
+
+
+@app.route("/halloween")
+def halloween_overview():
     return render_template(
         "index.html",
         slides=SLIDES,

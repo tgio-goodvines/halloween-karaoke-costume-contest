@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set title = "Costume Contest Signup" %}
+
+{% block content %}
+<section class="form-section">
+  <h2>Costume Contest Signup</h2>
+  <p>Tell us who you are and what spectacular costume you'll be wearing.</p>
+
+  {% if submitted and not errors %}
+    <div class="success">Thank you for signing up! We can't wait to see your costume.</div>
+  {% endif %}
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post" class="signup-form">
+    <label for="name">Name *</label>
+    <input type="text" id="name" name="name" required>
+
+    <label for="costume">Costume *</label>
+    <input type="text" id="costume" name="costume" required>
+
+    <label for="contact">Contact Info</label>
+    <input type="text" id="contact" name="contact" placeholder="Email or phone (optional)">
+
+    <button type="submit">Submit Costume</button>
+  </form>
+</section>
+
+<section class="submitted-list">
+  <h3>Submitted Costumes</h3>
+  {% if costume_signups %}
+    <ul>
+      {% for signup in costume_signups %}
+        <li>
+          <strong>{{ signup.name }}</strong> as {{ signup.costume }}{% if signup.contact %} &mdash; {{ signup.contact }}{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No entries yet. Submit yours above!</p>
+  {% endif %}
+</section>
+{% endblock %}

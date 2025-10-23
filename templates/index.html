@@ -3,26 +3,34 @@
 
 {% block content %}
 <section class="signup-callout">
-  <div>
+  <div class="signup-callout__intro">
     <h2>Ready to Join the Fun?</h2>
-    <p>Follow these two quick steps to access the signup portal:</p>
-    <ol>
-      <li>
-        Connect to the <strong>Halloween Party Wi-Fi</strong> network (password: <strong>halloween</strong>).
-      </li>
-      <li>
-        Open your browser and go to
+    <p>Follow these quick steps to access the signup portal.</p>
+  </div>
+  <div class="signup-callout__grid">
+    <article class="signup-callout__step">
+      <h3>1. Join the Party Wi-Fi</h3>
+      <p>Open your device settings and connect to the <strong>Halloween Party Wi-Fi</strong> network.</p>
+      <p class="signup-callout__note">Password: <strong>halloween</strong></p>
+    </article>
+    <article class="signup-callout__step">
+      <h3>2. Open the Signup Portal</h3>
+      <p>
+        In your browser, enter
         <a class="signup-callout__link" href="http://10.0.0.241/halloween" target="_blank" rel="noopener"
           >http://10.0.0.241/halloween</a
         >
-        to sign up—the page won't open automatically.
-      </li>
-    </ol>
-    <p>Once you're there, enter the costume contest or claim a karaoke song slot.</p>
-    <a class="signup-callout__button" href="http://10.0.0.241/halloween" target="_blank" rel="noopener"
-      >Open the Signup Portal</a
-    >
+        —the page won’t launch automatically.
+      </p>
+      <p class="signup-callout__note">Add it to your bookmarks so it’s ready for later.</p>
+    </article>
   </div>
+  <p class="signup-callout__cta-text">
+    Once you’re in, enter the costume contest or claim a karaoke song slot to secure your moment on stage.
+  </p>
+  <a class="signup-callout__button" href="http://10.0.0.241/halloween" target="_blank" rel="noopener"
+    >Open the Signup Portal</a
+  >
 </section>
 
 <section class="slides">

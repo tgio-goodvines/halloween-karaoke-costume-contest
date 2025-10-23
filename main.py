@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 
 app = Flask(__name__)
@@ -44,8 +44,7 @@ SLIDES = [
 ]
 
 
-@app.route("/")
-def index():
+def build_rotation_entries() -> List[dict[str, str]]:
     costume_entries = [
         {
             "category": "Costume Contest",
@@ -66,7 +65,7 @@ def index():
         for signup in karaoke_signups
     ]
 
-    rotation_entries = []
+    rotation_entries: List[dict[str, str]] = []
     max_length = max(len(costume_entries), len(karaoke_entries))
     for index in range(max_length):
         if index < len(costume_entries):
@@ -74,11 +73,31 @@ def index():
         if index < len(karaoke_entries):
             rotation_entries.append(karaoke_entries[index])
 
+    return rotation_entries
+
+
+@app.route("/")
+def index():
+    rotation_entries = build_rotation_entries()
+
     return render_template(
         "display.html",
         entries=rotation_entries,
         costume_count=len(costume_signups),
         karaoke_count=len(karaoke_signups),
+    )
+
+
+@app.route("/api/display-data")
+def display_data():
+    rotation_entries = build_rotation_entries()
+
+    return jsonify(
+        {
+            "entries": rotation_entries,
+            "costume_count": len(costume_signups),
+            "karaoke_count": len(karaoke_signups),
+        }
     )
 
 

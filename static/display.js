@@ -2,6 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const dataElement = document.getElementById('entries-data');
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
+  const costumeCountElement = document.querySelector('[data-costume-count]');
+  const karaokeCountElement = document.querySelector('[data-karaoke-count]');
 
   if (!dataElement || !card || !emptyState) {
     return;
@@ -18,22 +20,17 @@ document.addEventListener('DOMContentLoaded', () => {
     entries = [];
   }
 
+  let entriesSignature;
+  try {
+    entriesSignature = JSON.stringify(entries);
+  } catch (error) {
+    entriesSignature = '[]';
+  }
+
   const typeElement = card.querySelector('[data-entry-type]');
   const primaryElement = card.querySelector('[data-entry-primary]');
   const secondaryElement = card.querySelector('[data-entry-secondary]');
   const tertiaryElement = card.querySelector('[data-entry-tertiary]');
-
-  const showEmptyState = entries.length === 0;
-
-  if (showEmptyState) {
-    emptyState.classList.add('is-visible');
-    card.classList.remove('active');
-    card.setAttribute('hidden', '');
-    return;
-  }
-
-  emptyState.classList.remove('is-visible');
-  card.removeAttribute('hidden');
 
   const applyEntry = (entry) => {
     typeElement.textContent = entry.category || '';
@@ -49,24 +46,105 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  let currentIndex = 0;
-  applyEntry(entries[currentIndex]);
-  card.classList.add('active');
-
-  if (entries.length === 1) {
-    return;
-  }
-
   const cycleDelay = 8000;
   const transitionDelay = 450;
+  let currentIndex = 0;
+  let rotationTimerId = null;
 
-  setInterval(() => {
-    card.classList.remove('active');
+  const stopRotation = () => {
+    if (rotationTimerId) {
+      window.clearInterval(rotationTimerId);
+      rotationTimerId = null;
+    }
+  };
 
-    setTimeout(() => {
-      currentIndex = (currentIndex + 1) % entries.length;
+  const swapEntry = (useTransition) => {
+    if (!entries.length) {
+      return;
+    }
+
+    const show = () => {
       applyEntry(entries[currentIndex]);
       card.classList.add('active');
-    }, transitionDelay);
-  }, cycleDelay);
+    };
+
+    if (useTransition) {
+      card.classList.remove('active');
+      window.setTimeout(show, transitionDelay);
+    } else {
+      show();
+    }
+  };
+
+  const renderEntries = ({ resetIndex = false, animate = false } = {}) => {
+    if (entries.length === 0) {
+      stopRotation();
+      emptyState.classList.add('is-visible');
+      card.classList.remove('active');
+      card.setAttribute('hidden', '');
+      return;
+    }
+
+    if (resetIndex) {
+      currentIndex = 0;
+    } else {
+      currentIndex = currentIndex % entries.length;
+    }
+
+    emptyState.classList.remove('is-visible');
+    card.removeAttribute('hidden');
+
+    stopRotation();
+    swapEntry(animate);
+
+    if (entries.length > 1) {
+      rotationTimerId = window.setInterval(() => {
+        currentIndex = (currentIndex + 1) % entries.length;
+        swapEntry(true);
+      }, cycleDelay);
+    }
+  };
+
+  renderEntries({ resetIndex: true });
+
+  const updateCounts = (costumeCount, karaokeCount) => {
+    if (costumeCountElement && Number.isFinite(costumeCount)) {
+      costumeCountElement.textContent = costumeCount;
+    }
+
+    if (karaokeCountElement && Number.isFinite(karaokeCount)) {
+      karaokeCountElement.textContent = karaokeCount;
+    }
+  };
+
+  const refreshInterval = 30000;
+
+  const fetchLatestEntries = async () => {
+    try {
+      const response = await fetch('/api/display-data', { cache: 'no-store' });
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const payload = await response.json();
+      const { entries: newEntries, costume_count: costumeCount, karaoke_count: karaokeCount } = payload;
+
+      updateCounts(costumeCount, karaokeCount);
+
+      if (Array.isArray(newEntries)) {
+        const newSignature = JSON.stringify(newEntries);
+        if (newSignature !== entriesSignature) {
+          entries = newEntries;
+          entriesSignature = newSignature;
+          renderEntries({ resetIndex: true, animate: true });
+        }
+      }
+    } catch (error) {
+      console.error('Unable to refresh display data', error);
+    }
+  };
+
+  fetchLatestEntries();
+  window.setInterval(fetchLatestEntries, refreshInterval);
 });

@@ -9,6 +9,17 @@
   </head>
   <body class="display-mode">
     {% set first_entry = entries[0] if entries else None %}
+    {% set cta_details = first_entry.get('cta_details', {}) if first_entry else {} %}
+    {% set cta_lede = cta_details.get('lede', '') %}
+    {% set cta_wifi_network = cta_details.get('wifi_network', '') %}
+    {% set cta_wifi_password = cta_details.get('wifi_password', '') %}
+    {% set cta_portal_url = cta_details.get('portal_url', '') %}
+    {% if not cta_portal_url %}
+      {% set cta_portal_url = first_entry['link'] if first_entry and first_entry.get('link') else '' %}
+    {% endif %}
+    {% set cta_portal_label = cta_details.get('portal_label', cta_portal_url) %}
+    {% set cta_portal_note = cta_details.get('portal_note', '') %}
+    {% set cta_reminder = cta_details.get('reminder', first_entry['tertiary'] if first_entry and first_entry.get('tertiary') else '') %}
     <div class="display-wrapper">
       <header class="display-header">
         <h1>Qiana and Tony's 2nd Annual Halloween Party</h1>
@@ -27,10 +38,43 @@
 
       <main class="display-main">
         <section class="display-card{% if first_entry %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry %} hidden{% endif %}>
-          <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
-          <div class="display-primary" data-entry-primary>{{ first_entry['primary'] if first_entry else '' }}</div>
-          <div class="display-secondary" data-entry-secondary>{{ first_entry['secondary'] if first_entry else '' }}</div>
-          <div class="display-tertiary" data-entry-tertiary{% if not first_entry or not first_entry['tertiary'] %} hidden{% endif %}>{{ first_entry['tertiary'] if first_entry and first_entry['tertiary'] else '' }}</div>
+          <div class="display-card__default" data-entry-default{% if first_entry and first_entry.get('cta_details') %} hidden{% endif %}>
+            <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
+            <div class="display-primary" data-entry-primary>{{ first_entry['primary'] if first_entry else '' }}</div>
+            <div class="display-secondary" data-entry-secondary>{{ first_entry['secondary'] if first_entry else '' }}</div>
+            <div class="display-tertiary" data-entry-tertiary{% if not first_entry or not first_entry['tertiary'] %} hidden{% endif %}>{{ first_entry['tertiary'] if first_entry and first_entry['tertiary'] else '' }}</div>
+          </div>
+          <div class="display-cta-layout" data-cta-layout{% if not first_entry or not first_entry.get('cta_details') %} hidden{% endif %}>
+            <p class="display-cta-lede" data-cta-lede>{{ cta_lede }}</p>
+            <div class="display-cta-columns">
+              <section class="display-cta-column">
+                <h3 class="display-cta-heading">Wi-Fi access</h3>
+                <dl class="display-cta-list">
+                  <div class="display-cta-list__item">
+                    <dt>Network</dt>
+                    <dd data-cta-wifi-network>{{ cta_wifi_network }}</dd>
+                  </div>
+                  <div class="display-cta-list__item">
+                    <dt>Password</dt>
+                    <dd data-cta-wifi-password>{{ cta_wifi_password }}</dd>
+                  </div>
+                </dl>
+              </section>
+              <section class="display-cta-column">
+                <h3 class="display-cta-heading">Signup portal</h3>
+                <p class="display-cta-text" data-cta-portal-note>{{ cta_portal_note }}</p>
+                <a
+                  class="display-cta-url"
+                  data-cta-portal-link
+                  {% if cta_portal_url %}href="{{ cta_portal_url }}"{% endif %}
+                  target="_blank"
+                  rel="noopener"
+                >{{ cta_portal_label }}</a>
+              </section>
+            </div>
+            <p class="display-cta-reminder" data-cta-reminder>{{ cta_reminder }}</p>
+          </div>
+
           <a
             class="display-cta-link"
             data-entry-link

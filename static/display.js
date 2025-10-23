@@ -27,6 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     entriesSignature = '[]';
   }
 
+  const defaultContent = card.querySelector('[data-entry-default]');
+  const ctaLayout = card.querySelector('[data-cta-layout]');
+  const ctaLedeElement = card.querySelector('[data-cta-lede]');
+  const ctaWifiNetworkElement = card.querySelector('[data-cta-wifi-network]');
+  const ctaWifiPasswordElement = card.querySelector('[data-cta-wifi-password]');
+  const ctaPortalLinkElement = card.querySelector('[data-cta-portal-link]');
+  const ctaPortalNoteElement = card.querySelector('[data-cta-portal-note]');
+  const ctaReminderElement = card.querySelector('[data-cta-reminder]');
   const typeElement = card.querySelector('[data-entry-type]');
   const primaryElement = card.querySelector('[data-entry-primary]');
   const secondaryElement = card.querySelector('[data-entry-secondary]');
@@ -44,6 +52,73 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       tertiaryElement.textContent = '';
       tertiaryElement.setAttribute('hidden', '');
+    }
+
+    const ctaDetails = entry.cta_details || {};
+    const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent);
+
+    if (shouldShowCtaLayout) {
+      defaultContent.setAttribute('hidden', '');
+      ctaLayout.removeAttribute('hidden');
+
+      if (ctaLedeElement) {
+        ctaLedeElement.textContent = ctaDetails.lede || entry.secondary || entry.primary || '';
+      }
+
+      if (ctaWifiNetworkElement) {
+        ctaWifiNetworkElement.textContent = ctaDetails.wifi_network || '';
+      }
+
+      if (ctaWifiPasswordElement) {
+        ctaWifiPasswordElement.textContent = ctaDetails.wifi_password || '';
+      }
+
+      if (ctaPortalLinkElement) {
+        const portalUrl = ctaDetails.portal_url || entry.link || '';
+        const portalLabel = ctaDetails.portal_label || portalUrl;
+
+        if (portalUrl) {
+          ctaPortalLinkElement.textContent = portalLabel || portalUrl;
+          ctaPortalLinkElement.setAttribute('href', portalUrl);
+        } else {
+          ctaPortalLinkElement.textContent = '';
+          ctaPortalLinkElement.removeAttribute('href');
+        }
+      }
+
+      if (ctaPortalNoteElement) {
+        ctaPortalNoteElement.textContent = ctaDetails.portal_note || '';
+      }
+
+      if (ctaReminderElement) {
+        ctaReminderElement.textContent = ctaDetails.reminder || entry.tertiary || '';
+      }
+    } else {
+      if (defaultContent) {
+        defaultContent.removeAttribute('hidden');
+      }
+      if (ctaLayout) {
+        ctaLayout.setAttribute('hidden', '');
+      }
+      if (ctaLedeElement) {
+        ctaLedeElement.textContent = '';
+      }
+      if (ctaWifiNetworkElement) {
+        ctaWifiNetworkElement.textContent = '';
+      }
+      if (ctaWifiPasswordElement) {
+        ctaWifiPasswordElement.textContent = '';
+      }
+      if (ctaPortalLinkElement) {
+        ctaPortalLinkElement.textContent = '';
+        ctaPortalLinkElement.removeAttribute('href');
+      }
+      if (ctaPortalNoteElement) {
+        ctaPortalNoteElement.textContent = '';
+      }
+      if (ctaReminderElement) {
+        ctaReminderElement.textContent = '';
+      }
     }
 
     if (entry.cta) {

@@ -119,6 +119,18 @@ main.container {
   margin-bottom: 1.5rem;
 }
 
+.wifi-reminder {
+  background: rgba(255, 111, 60, 0.16);
+  border: 1px solid rgba(255, 111, 60, 0.45);
+  color: #ffe3d6;
+  padding: 0.85rem 1.1rem;
+  border-radius: 0.85rem;
+  font-weight: 600;
+  margin: 1rem 0;
+  line-height: 1.6;
+  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.25);
+}
+
 .signup-callout__link {
   color: #ffe3d6;
   font-weight: 700;

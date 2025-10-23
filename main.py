@@ -102,6 +102,11 @@ def build_rotation_entries() -> List[dict[str, object]]:
 
 @app.route("/")
 def index():
+    return redirect(url_for("live_display"))
+
+
+@app.route("/live-display")
+def live_display():
     rotation_entries = build_rotation_entries()
 
     return render_template(

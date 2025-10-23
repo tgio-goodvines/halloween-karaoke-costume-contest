@@ -59,13 +59,13 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "link": "http://10.0.0.241/halloween",
             "link_label": "Open the signup portal",
             "cta_details": {
-                "lede": "Keep these quick prompts ready so each guest can hop onto the portal.",
+                "lede": "Sign Up Instructions!",
                 "wifi_network": "Halloween Party Wi-Fi",
                 "wifi_password": "halloween",
                 "portal_url": "http://10.0.0.241/halloween",
                 "portal_label": "http://10.0.0.241/halloween",
                 "portal_note": "Type the address exactly as shown and add a bookmark for quick access later.",
-                "reminder": "The portal won't launch on its own—reopen it whenever someone needs to update signups.",
+                "reminder": "",
             },
         }
     ]

@@ -32,8 +32,8 @@ SLIDES = [
     {
         "title": "Sign Up From Your Phone",
         "content": (
-            "Connect to the Halloween Party Wi-Fi (password: halloween) and then visit "
-            "http://10.0.0.241/halloween to enter the costume contest and karaoke queue."
+            "1. Connect to the Halloween Party Wi-Fi network (password: halloween). "
+            "2. Open your browser and go to http://10.0.0.241/halloween to sign up—the page won't open automatically."
         ),
     },
     {
@@ -55,9 +55,9 @@ def build_rotation_entries() -> List[dict[str, str]]:
     rotation_entries: List[dict[str, str]] = [
         {
             "category": "Sign Up Tonight!",
-            "primary": "Grab your phone and head to",
-            "secondary": "http://10.0.0.241/halloween",
-            "tertiary": "Join the costume contest & karaoke lineup in seconds.",
+            "primary": "1. Connect to the Halloween Party Wi-Fi network (password: halloween).",
+            "secondary": "2. Open your browser and go to http://10.0.0.241/halloween to sign up.",
+            "tertiary": "The page won't launch automatically—enter the address to join the fun.",
             "cta": True,
             "link": "http://10.0.0.241/halloween",
             "link_label": "Open the signup portal",

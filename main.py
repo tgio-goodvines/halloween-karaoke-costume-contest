@@ -54,7 +54,6 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "category": "Signup Portal",
             "primary": "Get guests connected and ready to register.",
             "secondary": "Share the Wi-Fi credentials and direct them to the Halloween signup page.",
-            "tertiary": "Bookmark the page so it's handy later—there's no automatic prompt.",
             "cta": True,
             "link": "http://10.0.0.241/halloween",
             "link_label": "Open the signup portal",

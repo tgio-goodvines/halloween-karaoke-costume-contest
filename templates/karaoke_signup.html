@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set title = "Karaoke Signup" %}
+
+{% block content %}
+<section class="form-section">
+  <h2>Karaoke Signup</h2>
+  <p>Pick your favorite song and we'll add you to the karaoke queue.</p>
+
+  {% if submitted and not errors %}
+    <div class="success">You're in the karaoke lineup! Warm up those vocal cords.</div>
+  {% endif %}
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post" class="signup-form">
+    <label for="name">Name *</label>
+    <input type="text" id="name" name="name" required>
+
+    <label for="song_title">Song Title *</label>
+    <input type="text" id="song_title" name="song_title" required>
+
+    <label for="artist">Artist</label>
+    <input type="text" id="artist" name="artist" placeholder="Optional">
+
+    <button type="submit">Submit Song</button>
+  </form>
+</section>
+
+<section class="submitted-list">
+  <h3>Karaoke Lineup</h3>
+  {% if karaoke_signups %}
+    <ol>
+      {% for signup in karaoke_signups %}
+        <li>
+          <strong>{{ signup.name }}</strong> will sing "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p>No songs submitted yet. Choose yours above!</p>
+  {% endif %}
+</section>
+{% endblock %}

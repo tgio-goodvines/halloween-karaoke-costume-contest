@@ -1,16 +1,123 @@
-# This is a sample Python script.
+from __future__ import annotations
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+from dataclasses import dataclass
+from typing import List
 
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
+from flask import Flask, redirect, render_template, request, url_for
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+app = Flask(__name__)
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+
+@dataclass
+class CostumeSignup:
+    name: str
+    costume: str
+    contact: str
+
+
+@dataclass
+class KaraokeSignup:
+    name: str
+    song_title: str
+    artist: str
+
+
+# In-memory stores for signups. In a production application this would be persisted.
+costume_signups: List[CostumeSignup] = []
+karaoke_signups: List[KaraokeSignup] = []
+
+# Demo slides to rotate on the home page
+SLIDES = [
+    {
+        "title": "Welcome to the Halloween Bash!",
+        "content": "Check out the event schedule and make sure to submit your signups.",
+    },
+    {
+        "title": "Costume Contest Highlights",
+        "content": "Show off your creativity! Sign up to compete for spooky bragging rights.",
+    },
+    {
+        "title": "Karaoke Night",
+        "content": "Pick your favorite song and take center stage on karaoke night.",
+    },
+]
+
+
+@app.route("/")
+def index():
+    return render_template(
+        "index.html",
+        slides=SLIDES,
+        costume_signups=costume_signups,
+        karaoke_signups=karaoke_signups,
+    )
+
+
+@app.route("/costume-signup", methods=["GET", "POST"])
+def costume_signup():
+    errors: List[str] = []
+    submitted = False
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        costume = request.form.get("costume", "").strip()
+        contact = request.form.get("contact", "").strip()
+
+        if not name:
+            errors.append("Name is required.")
+        if not costume:
+            errors.append("Costume description is required.")
+
+        if not errors:
+            costume_signups.append(CostumeSignup(name=name, costume=costume, contact=contact))
+            submitted = True
+            return redirect(url_for("costume_signup", success="1"))
+
+    if request.args.get("success") == "1":
+        submitted = True
+
+    return render_template(
+        "costume_signup.html",
+        errors=errors,
+        submitted=submitted,
+        costume_signups=costume_signups,
+    )
+
+
+@app.route("/karaoke-signup", methods=["GET", "POST"])
+def karaoke_signup():
+    errors: List[str] = []
+    submitted = False
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        song_title = request.form.get("song_title", "").strip()
+        artist = request.form.get("artist", "").strip()
+
+        if not name:
+            errors.append("Name is required.")
+        if not song_title:
+            errors.append("Song title is required.")
+
+        if not errors:
+            karaoke_signups.append(
+                KaraokeSignup(name=name, song_title=song_title, artist=artist)
+            )
+            submitted = True
+            return redirect(url_for("karaoke_signup", success="1"))
+
+    if request.args.get("success") == "1":
+        submitted = True
+
+    return render_template(
+        "karaoke_signup.html",
+        errors=errors,
+        submitted=submitted,
+        karaoke_signups=karaoke_signups,
+    )
+
+
+if __name__ == "__main__":
+    # Run on port 80 so the app is available from any browser.
+    app.run(host="0.0.0.0", port=80, debug=True)

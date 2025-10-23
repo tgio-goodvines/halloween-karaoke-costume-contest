@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set title = "Party Dashboard" %}
+
+{% block content %}
+<section class="slides">
+  <h2>Event Highlights</h2>
+  <div class="slides-wrapper">
+    {% for slide in slides %}
+      <article class="slide{% if loop.first %} active{% endif %}">
+        <h3>{{ slide.title }}</h3>
+        <p>{{ slide.content }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="signup-summary">
+  <div>
+    <h2>Costume Contest Signups</h2>
+    {% if costume_signups %}
+      <ul>
+        {% for signup in costume_signups %}
+          <li>
+            <strong>{{ signup.name }}</strong> as {{ signup.costume }}{% if signup.contact %} &mdash; {{ signup.contact }}{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No costume signups yet. <a href="{{ url_for('costume_signup') }}">Be the first!</a></p>
+    {% endif %}
+  </div>
+  <div>
+    <h2>Karaoke Signups</h2>
+    {% if karaoke_signups %}
+      <ul>
+        {% for signup in karaoke_signups %}
+          <li>
+            <strong>{{ signup.name }}</strong> &mdash; "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No karaoke signups yet. <a href="{{ url_for('karaoke_signup') }}">Choose a song!</a></p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='slides.js') }}"></script>
+{% endblock %}

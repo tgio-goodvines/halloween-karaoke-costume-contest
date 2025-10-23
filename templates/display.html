@@ -16,21 +16,27 @@
       </header>
 
       <main class="display-main">
-        <section class="display-card{% if first_entry %} active{% endif %}" data-display-card{% if not first_entry %} hidden{% endif %}>
+        <section class="display-card{% if first_entry %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry %} hidden{% endif %}>
           <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
           <div class="display-primary" data-entry-primary>{{ first_entry['primary'] if first_entry else '' }}</div>
           <div class="display-secondary" data-entry-secondary>{{ first_entry['secondary'] if first_entry else '' }}</div>
           <div class="display-tertiary" data-entry-tertiary{% if not first_entry or not first_entry['tertiary'] %} hidden{% endif %}>{{ first_entry['tertiary'] if first_entry and first_entry['tertiary'] else '' }}</div>
+          <a
+            class="display-cta-link"
+            data-entry-link
+            {% if not first_entry or not first_entry.get('link') %}hidden{% endif %}
+            {% if first_entry and first_entry.get('link') %}href="{{ first_entry['link'] }}"{% endif %}
+            target="_blank"
+            rel="noopener"
+          >{{ first_entry['link_label'] if first_entry and first_entry.get('link_label') else (first_entry['link'] if first_entry and first_entry.get('link') else '') }}</a>
         </section>
 
         <section class="display-empty{% if not entries %} is-visible{% endif %}" data-empty-state>
           <p>No signups yet. Encourage guests to join the fun!</p>
           <p>
-            Visit
-            <a href="{{ url_for('costume_signup') }}">the costume signup</a>
-            or
-            <a href="{{ url_for('karaoke_signup') }}">the karaoke signup</a>
-            to add new entries.
+            Grab your phone and visit
+            <a href="http://10.0.0.241/halloween" target="_blank" rel="noopener">http://10.0.0.241/halloween</a>
+            to enter the costume contest or join the karaoke lineup.
           </p>
         </section>
       </main>

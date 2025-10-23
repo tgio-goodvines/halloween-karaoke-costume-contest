@@ -30,6 +30,10 @@ karaoke_signups: List[KaraokeSignup] = []
 # Demo slides to rotate on the home page
 SLIDES = [
     {
+        "title": "Sign Up From Your Phone",
+        "content": "Visit http://10.0.0.241/halloween to enter the costume contest and karaoke queue.",
+    },
+    {
         "title": "Welcome to the Halloween Bash!",
         "content": "Check out the event schedule and make sure to submit your signups.",
     },
@@ -45,6 +49,18 @@ SLIDES = [
 
 
 def build_rotation_entries() -> List[dict[str, str]]:
+    rotation_entries: List[dict[str, str]] = [
+        {
+            "category": "Sign Up Tonight!",
+            "primary": "Grab your phone and head to",
+            "secondary": "http://10.0.0.241/halloween",
+            "tertiary": "Join the costume contest & karaoke lineup in seconds.",
+            "cta": True,
+            "link": "http://10.0.0.241/halloween",
+            "link_label": "Open the signup portal",
+        }
+    ]
+
     costume_entries = [
         {
             "category": "Costume Contest",
@@ -65,7 +81,6 @@ def build_rotation_entries() -> List[dict[str, str]]:
         for signup in karaoke_signups
     ]
 
-    rotation_entries: List[dict[str, str]] = []
     max_length = max(len(costume_entries), len(karaoke_entries))
     for index in range(max_length):
         if index < len(costume_entries):

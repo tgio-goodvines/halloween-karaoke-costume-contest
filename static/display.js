@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const primaryElement = card.querySelector('[data-entry-primary]');
   const secondaryElement = card.querySelector('[data-entry-secondary]');
   const tertiaryElement = card.querySelector('[data-entry-tertiary]');
+  const linkElement = card.querySelector('[data-entry-link]');
 
   const applyEntry = (entry) => {
     typeElement.textContent = entry.category || '';
@@ -43,6 +44,24 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       tertiaryElement.textContent = '';
       tertiaryElement.setAttribute('hidden', '');
+    }
+
+    if (entry.cta) {
+      card.classList.add('cta');
+    } else {
+      card.classList.remove('cta');
+    }
+
+    if (linkElement) {
+      if (entry.link) {
+        linkElement.textContent = entry.link_label || entry.link;
+        linkElement.setAttribute('href', entry.link);
+        linkElement.removeAttribute('hidden');
+      } else {
+        linkElement.textContent = '';
+        linkElement.removeAttribute('href');
+        linkElement.setAttribute('hidden', '');
+      }
     }
   };
 

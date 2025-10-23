@@ -60,12 +60,92 @@ nav a:focus {
   transform: translateY(-2px);
 }
 
+.header-callout {
+  margin-top: 0.75rem;
+  background: rgba(255, 111, 60, 0.18);
+  border: 1px solid rgba(255, 111, 60, 0.45);
+  color: #ffe3d6;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  box-shadow: 0 10px 25px rgba(255, 111, 60, 0.25);
+}
+
+.header-callout a {
+  color: #ffe3d6;
+  font-weight: 700;
+}
+
 main.container {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2rem;
   padding: 2rem 0;
+}
+
+.signup-callout {
+  background: radial-gradient(circle at center, rgba(255, 111, 60, 0.25), rgba(27, 27, 42, 0.85));
+  border-radius: 1.25rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  box-shadow: 0 25px 55px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.signup-callout::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(255, 138, 77, 0.2), transparent 60%);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.signup-callout h2 {
+  margin-top: 0;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.signup-callout p {
+  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  margin-bottom: 1.5rem;
+}
+
+.signup-callout__link {
+  color: #ffe3d6;
+  font-weight: 700;
+  text-decoration: none;
+  padding-bottom: 0.15rem;
+  border-bottom: 2px solid rgba(255, 227, 214, 0.65);
+}
+
+.signup-callout__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem 1.8rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff8a4d, #ff5c36);
+  color: #1b1b2a;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: clamp(1rem, 2.4vw, 1.3rem);
+  box-shadow: 0 16px 32px rgba(255, 111, 60, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.signup-callout__button:hover,
+.signup-callout__button:focus {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 22px 38px rgba(255, 111, 60, 0.45);
 }
 
 .slides {

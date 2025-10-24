@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% set title = "Costume Contest Voting" %}
+
+{% block content %}
+<section class="form-section">
+  <h2>Costume Contest Voting</h2>
+  <p>Score each costume from 1 (needs more spook) to 10 (absolute showstopper). Submit the form once you've rated everyone.</p>
+
+  {% if submitted and not errors %}
+    <div class="success">Thanks for voting! Your scores have been recorded.</div>
+  {% endif %}
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if costume_signups %}
+    <form method="post" class="voting-form">
+      <div class="voting-grid">
+        {% for signup in costume_signups %}
+          <fieldset class="voting-card">
+            <legend>
+              <span class="voting-card__name">{{ signup.name }}</span>
+              <span class="voting-card__costume">as {{ signup.costume }}</span>
+            </legend>
+            <label class="voting-card__label" for="rating_{{ loop.index0 }}">
+              Score (1-10)
+              <input
+                type="number"
+                id="rating_{{ loop.index0 }}"
+                name="rating_{{ loop.index0 }}"
+                min="1"
+                max="10"
+                inputmode="numeric"
+                required
+              >
+            </label>
+          </fieldset>
+        {% endfor %}
+      </div>
+      <button type="submit" class="button button--primary">Submit Your Votes</button>
+    </form>
+  {% else %}
+    <p class="admin-empty">No costume entries have been submitted yet. Check back once the contest lineup is ready!</p>
+  {% endif %}
+</section>
+{% endblock %}

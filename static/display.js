@@ -4,6 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
   const overrideContainer = document.querySelector('[data-override-state]');
+  const overrideCardElement = overrideContainer
+    ? overrideContainer.querySelector('.display-override__card')
+    : null;
   const generalOverrideElement = overrideContainer
     ? overrideContainer.querySelector('[data-override-general]')
     : null;
@@ -245,6 +248,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (overrideCardElement) {
+      overrideCardElement.classList.remove(
+        'display-override__card--inferno',
+        'display-override__card--karaoke'
+      );
+    }
+
     const titleText = overrideState && overrideState.title ? overrideState.title : '';
     const highlightText = overrideState && overrideState.highlight ? overrideState.highlight : '';
     const messageText = overrideState && overrideState.message ? overrideState.message : '';
@@ -290,6 +300,13 @@ document.addEventListener('DOMContentLoaded', () => {
         generalOverrideElement.setAttribute('hidden', '');
       }
       karaokeOverrideElement.removeAttribute('hidden');
+
+      if (overrideCardElement) {
+        overrideCardElement.classList.add(
+          'display-override__card--inferno',
+          'display-override__card--karaoke'
+        );
+      }
 
       if (karaokeTitleElement) {
         karaokeTitleElement.textContent = titleText || 'Halloween Karaoke Party';
@@ -399,6 +416,8 @@ document.addEventListener('DOMContentLoaded', () => {
       scoreboardLayout && entry.scoreboard && Array.isArray(entry.scoreboard.entries) && entry.scoreboard.entries.length
     );
     const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent && !hasScoreboard);
+
+    card.classList.remove('display-card--inferno', 'display-card--costume', 'display-card--winner');
 
     if (hasScoreboard) {
       if (defaultContent) {
@@ -572,6 +591,20 @@ document.addEventListener('DOMContentLoaded', () => {
       card.classList.add('cta');
     } else if (!entry.cta || hasScoreboard) {
       card.classList.remove('cta');
+    }
+
+    const categoryText = (entry.category || '').toLowerCase();
+    const isWinnerCard = categoryText.includes('champion');
+    const isCostumeCard = categoryText.includes('costume contest') && !hasScoreboard;
+
+    if (isCostumeCard || isWinnerCard) {
+      card.classList.add('display-card--inferno');
+      if (isCostumeCard) {
+        card.classList.add('display-card--costume');
+      }
+      if (isWinnerCard) {
+        card.classList.add('display-card--winner');
+      }
     }
 
     if (linkElement) {

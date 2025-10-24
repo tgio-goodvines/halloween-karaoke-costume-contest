@@ -1,7 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
   const dataElement = document.getElementById('entries-data');
+  const overrideElement = document.getElementById('override-data');
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
+  const overrideContainer = document.querySelector('[data-override-state]');
+  const overrideTitleElement = overrideContainer ? overrideContainer.querySelector('[data-override-title]') : null;
+  const overrideHighlightElement = overrideContainer ? overrideContainer.querySelector('[data-override-highlight]') : null;
+  const overrideMessageElement = overrideContainer ? overrideContainer.querySelector('[data-override-message]') : null;
+  const overrideDetailsElement = overrideContainer ? overrideContainer.querySelector('[data-override-details]') : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
   const dataEndpoint = (document.body && document.body.dataset && document.body.dataset.displayApi) || '/api/display-data';
@@ -28,6 +34,21 @@ document.addEventListener('DOMContentLoaded', () => {
     entriesSignature = '[]';
   }
 
+  let initialOverrideState = null;
+  if (overrideElement) {
+    try {
+      const parsed = JSON.parse(overrideElement.textContent || 'null');
+      if (parsed && typeof parsed === 'object') {
+        initialOverrideState = parsed;
+      }
+    } catch (error) {
+      console.error('Unable to parse override state', error);
+    }
+  }
+
+  let overrideState = null;
+  let overrideSignature = 'null';
+
   const defaultContent = card.querySelector('[data-entry-default]');
   const ctaLayout = card.querySelector('[data-cta-layout]');
   const ctaLedeElement = card.querySelector('[data-cta-lede]');
@@ -41,6 +62,72 @@ document.addEventListener('DOMContentLoaded', () => {
   const secondaryElement = card.querySelector('[data-entry-secondary]');
   const tertiaryElement = card.querySelector('[data-entry-tertiary]');
   const linkElement = card.querySelector('[data-entry-link]');
+
+  const updateOverrideContent = () => {
+    if (!overrideContainer) {
+      return;
+    }
+
+    if (overrideTitleElement) {
+      overrideTitleElement.textContent = overrideState && overrideState.title ? overrideState.title : '';
+    }
+
+    if (overrideHighlightElement) {
+      const highlight = overrideState && overrideState.highlight ? overrideState.highlight : '';
+      if (highlight) {
+        overrideHighlightElement.textContent = highlight;
+        overrideHighlightElement.removeAttribute('hidden');
+      } else {
+        overrideHighlightElement.textContent = '';
+        overrideHighlightElement.setAttribute('hidden', '');
+      }
+    }
+
+    if (overrideMessageElement) {
+      overrideMessageElement.textContent = overrideState && overrideState.message ? overrideState.message : '';
+    }
+
+    if (overrideDetailsElement) {
+      overrideDetailsElement.innerHTML = '';
+      const details = overrideState && Array.isArray(overrideState.details) ? overrideState.details : [];
+      if (details.length) {
+        details.forEach((detail) => {
+          const item = document.createElement('li');
+          item.textContent = detail;
+          overrideDetailsElement.appendChild(item);
+        });
+        overrideDetailsElement.removeAttribute('hidden');
+      } else {
+        overrideDetailsElement.setAttribute('hidden', '');
+      }
+    }
+  };
+
+  const updateOverrideDisplay = () => {
+    if (!overrideContainer) {
+      return;
+    }
+
+    if (overrideState) {
+      overrideContainer.removeAttribute('hidden');
+      if (card) {
+        card.classList.remove('active');
+        card.setAttribute('hidden', '');
+      }
+      if (emptyState) {
+        emptyState.classList.remove('is-visible');
+        emptyState.setAttribute('hidden', '');
+      }
+    } else {
+      overrideContainer.setAttribute('hidden', '');
+      if (emptyState) {
+        emptyState.removeAttribute('hidden');
+      }
+      if (card) {
+        card.removeAttribute('hidden');
+      }
+    }
+  };
 
   const applyEntry = (entry) => {
     typeElement.textContent = entry.category || '';
@@ -172,6 +259,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const renderEntries = ({ resetIndex = false, animate = false } = {}) => {
+    updateOverrideDisplay();
+
+    if (overrideState) {
+      stopRotation();
+      return;
+    }
+
     if (entries.length === 0) {
       stopRotation();
       emptyState.classList.add('is-visible');
@@ -200,7 +294,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  renderEntries({ resetIndex: true });
+  const setOverrideState = (state, { force = false } = {}) => {
+    let signature = 'null';
+    try {
+      signature = JSON.stringify(state ?? null);
+    } catch (error) {
+      signature = 'null';
+    }
+
+    if (!force && signature === overrideSignature) {
+      return;
+    }
+
+    overrideSignature = signature;
+    overrideState = state && typeof state === 'object' ? state : null;
+    updateOverrideContent();
+    renderEntries({ resetIndex: true });
+  };
+
+  setOverrideState(initialOverrideState ?? null, { force: true });
 
   const updateCounts = (costumeCount, karaokeCount) => {
     if (costumeCountElement && Number.isFinite(costumeCount)) {
@@ -223,9 +335,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const payload = await response.json();
-      const { entries: newEntries, costume_count: costumeCount, karaoke_count: karaokeCount } = payload;
+      const {
+        entries: newEntries,
+        costume_count: costumeCount,
+        karaoke_count: karaokeCount,
+        override: newOverride,
+      } = payload;
 
       updateCounts(costumeCount, karaokeCount);
+      setOverrideState(newOverride || null);
 
       if (Array.isArray(newEntries)) {
         const newSignature = JSON.stringify(newEntries);

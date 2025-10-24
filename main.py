@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
@@ -32,6 +32,66 @@ class KaraokeSignup:
 # In-memory stores for signups. In a production application this would be persisted.
 costume_signups: List[CostumeSignup] = []
 karaoke_signups: List[KaraokeSignup] = []
+costume_votes: List[List[int]] = []
+live_display_override: dict[str, object] | None = None
+
+
+def ensure_costume_votes_alignment() -> None:
+    while len(costume_votes) < len(costume_signups):
+        costume_votes.append([])
+    while len(costume_votes) > len(costume_signups):
+        costume_votes.pop()
+
+
+def build_costume_scoreboard() -> Tuple[List[dict[str, object]], dict[str, object] | None]:
+    ensure_costume_votes_alignment()
+
+    scoreboard: List[dict[str, object]] = []
+    max_average = 0.0
+    leader_index: int | None = None
+
+    for index, signup in enumerate(costume_signups):
+        votes = costume_votes[index] if index < len(costume_votes) else []
+        total = sum(votes)
+        vote_count = len(votes)
+        average = total / vote_count if vote_count else 0.0
+
+        entry = {
+            "name": signup.name,
+            "costume": signup.costume,
+            "total": total,
+            "count": vote_count,
+            "average": average,
+        }
+
+        scoreboard.append(entry)
+
+        if vote_count > 0:
+            if leader_index is None:
+                leader_index = index
+            else:
+                leader = scoreboard[leader_index]
+                if average > leader["average"]:
+                    leader_index = index
+                elif average == leader["average"] and vote_count > leader["count"]:
+                    leader_index = index
+
+        if average > max_average:
+            max_average = average
+
+    if max_average <= 0:
+        max_average = 10.0
+
+    for entry in scoreboard:
+        entry["percent"] = (entry["average"] / max_average) * 100 if max_average else 0.0
+        entry["is_leader"] = False
+
+    leader: dict[str, object] | None = None
+    if leader_index is not None and 0 <= leader_index < len(scoreboard):
+        scoreboard[leader_index]["is_leader"] = True
+        leader = scoreboard[leader_index]
+
+    return scoreboard, leader
 
 # Demo slides to rotate on the home page
 SLIDES = [
@@ -55,6 +115,8 @@ SLIDES = [
 
 
 def build_rotation_entries() -> List[dict[str, object]]:
+    ensure_costume_votes_alignment()
+
     rotation_entries: List[dict[str, object]] = [
         {
             "category": "Signup Portal",
@@ -139,6 +201,7 @@ def live_display():
         entries=rotation_entries,
         costume_count=len(costume_signups),
         karaoke_count=len(karaoke_signups),
+        override=live_display_override,
     )
 
 
@@ -151,6 +214,7 @@ def display_data():
             "entries": rotation_entries,
             "costume_count": len(costume_signups),
             "karaoke_count": len(karaoke_signups),
+            "override": live_display_override,
         }
     )
 
@@ -170,6 +234,9 @@ def halloween_overview():
 def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
+    global live_display_override
+
+    ensure_costume_votes_alignment()
 
     def parse_index(raw_index: str | None, total: int, label: str) -> int | None:
         if raw_index is None:
@@ -207,6 +274,7 @@ def admin_portal():
             index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
             if index is not None:
                 removed = costume_signups.pop(index)
+                costume_votes.pop(index)
                 messages.append(f"Removed costume signup for {removed.name}.")
 
         elif action == "add_costume":
@@ -221,6 +289,7 @@ def admin_portal():
 
             if name and costume:
                 costume_signups.append(CostumeSignup(name=name, costume=costume, contact=contact))
+                costume_votes.append([])
                 messages.append(f"Added costume signup for {name}.")
 
         elif action == "update_karaoke":
@@ -287,6 +356,10 @@ def admin_portal():
                         costume_signups[index],
                         costume_signups[index - 1],
                     )
+                    costume_votes[index - 1], costume_votes[index] = (
+                        costume_votes[index],
+                        costume_votes[index - 1],
+                    )
                     messages.append(f"Moved costume signup for {moved_signup.name} up.")
 
         elif action == "move_costume_down":
@@ -300,7 +373,48 @@ def admin_portal():
                         costume_signups[index],
                         costume_signups[index + 1],
                     )
+                    costume_votes[index + 1], costume_votes[index] = (
+                        costume_votes[index],
+                        costume_votes[index + 1],
+                    )
                     messages.append(f"Moved costume signup for {moved_signup.name} down.")
+
+        elif action == "start_costume_contest":
+            voting_url = url_for("costume_voting", _external=True)
+            live_display_override = {
+                "type": "contest_start",
+                "title": "The Costume Contest Has Begun!",
+                "highlight": "Submit your votes now",
+                "message": "Visit the costume voting page to rate every competitor from 1-10.",
+                "details": [
+                    f"Open {voting_url} on your device to cast your ballot.",
+                    "Scores update live on this dashboard.",
+                ],
+            }
+            messages.append("Live display updated with costume contest kickoff message.")
+
+        elif action == "show_costume_winner":
+            scoreboard, leader = build_costume_scoreboard()
+            if leader and leader["count"]:
+                live_display_override = {
+                    "type": "winner",
+                    "title": "Costume Contest Champion",
+                    "highlight": leader["name"],
+                    "message": f"Dressed as {leader['costume']}",
+                    "details": [
+                        f"Average score: {leader['average']:.2f}",
+                        f"Total votes: {leader['count']}",
+                    ],
+                }
+                messages.append(
+                    f"Live display updated to announce {leader['name']} as the costume contest winner."
+                )
+            else:
+                errors.append("No votes have been submitted yet, so a winner cannot be announced.")
+
+        elif action == "clear_display_override":
+            live_display_override = None
+            messages.append("Live display has been restored to the rotating schedule.")
 
         elif action == "move_karaoke_up":
             index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
@@ -331,6 +445,10 @@ def admin_portal():
         else:
             errors.append("Unknown action submitted. Please try again.")
 
+        ensure_costume_votes_alignment()
+
+    costume_scores, costume_leader = build_costume_scoreboard()
+
     return render_template(
         "admin.html",
         costume_signups=costume_signups,
@@ -338,6 +456,9 @@ def admin_portal():
         errors=errors,
         messages=messages,
         show_admin_link=True,
+        costume_scores=costume_scores,
+        costume_leader=costume_leader,
+        live_override=live_display_override,
     )
 
 
@@ -345,6 +466,8 @@ def admin_portal():
 def costume_signup():
     errors: List[str] = []
     submitted = False
+
+    ensure_costume_votes_alignment()
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -358,6 +481,7 @@ def costume_signup():
 
         if not errors:
             costume_signups.append(CostumeSignup(name=name, costume=costume, contact=contact))
+            costume_votes.append([])
             submitted = True
             return redirect(url_for("costume_signup", success="1"))
 
@@ -412,6 +536,56 @@ def karaoke_signup():
         submitted=submitted,
         karaoke_signups=karaoke_signups,
         show_admin_link=False,
+    )
+
+
+@app.route("/costume-voting", methods=["GET", "POST"])
+def costume_voting_page():
+    errors: List[str] = []
+    submitted = False
+
+    ensure_costume_votes_alignment()
+
+    if request.method == "POST":
+        if not costume_signups:
+            errors.append("There are no costume entries to rate yet.")
+        else:
+            ratings: List[int] = []
+            for index, signup in enumerate(costume_signups):
+                field_name = f"rating_{index}"
+                raw_value = request.form.get(field_name, "").strip()
+
+                if not raw_value:
+                    errors.append(f"Please provide a score for {signup.name}.")
+                    continue
+
+                try:
+                    rating_value = int(raw_value)
+                except ValueError:
+                    errors.append(f"Scores for {signup.name} must be a whole number between 1 and 10.")
+                    continue
+
+                if not 1 <= rating_value <= 10:
+                    errors.append(f"Scores for {signup.name} must be between 1 and 10.")
+                    continue
+
+                ratings.append(rating_value)
+
+            if not errors:
+                for index, rating in enumerate(ratings):
+                    costume_votes[index].append(rating)
+
+                return redirect(url_for("costume_voting_page", success="1"))
+
+    if request.args.get("success") == "1":
+        submitted = True
+
+    return render_template(
+        "costume_voting.html",
+        costume_signups=costume_signups,
+        errors=errors,
+        submitted=submitted,
+        show_admin_link=True,
     )
 
 

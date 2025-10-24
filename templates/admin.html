@@ -29,6 +29,68 @@
     </div>
   {% endif %}
 
+  <section class="admin-section admin-section--contest">
+    <h3>Costume Contest Controls</h3>
+    <p>Kick off the contest, monitor live voting, and announce the winner straight from this dashboard.</p>
+
+    <div class="contest-actions">
+      <form method="post">
+        <button type="submit" name="action" value="start_costume_contest" class="button button--primary">
+          Start the Costume Contest
+        </button>
+      </form>
+      <form method="post">
+        <button type="submit" name="action" value="show_costume_winner" class="button">
+          Show Winner on Live Display
+        </button>
+      </form>
+      <form method="post">
+        <button type="submit" name="action" value="clear_display_override" class="button button--outline">
+          Restore Live Display
+        </button>
+      </form>
+    </div>
+
+    {% if live_override %}
+      <p class="contest-status">
+        <strong>Live display override active:</strong>
+        {{ live_override.title if live_override.title else live_override.type|replace('_', ' ')|title }}
+      </p>
+    {% else %}
+      <p class="contest-status contest-status--inactive">Live display is currently rotating through the scheduled entries.</p>
+    {% endif %}
+
+    <div class="contest-chart">
+      <h4>Vote Tally</h4>
+      {% if costume_scores %}
+        <div class="contest-chart__list">
+          {% for entry in costume_scores %}
+            <article class="contest-chart__item{% if entry.is_leader %} is-leader{% endif %}">
+              <div class="contest-chart__heading">
+                <span class="contest-chart__name">{{ entry.name }}</span>
+                <span class="contest-chart__costume">as {{ entry.costume }}</span>
+              </div>
+              <div class="contest-chart__bar">
+                <div class="contest-chart__bar-fill" style="--score-width: {{ '%.2f' | format(entry.percent) }}%"></div>
+              </div>
+              <div class="contest-chart__meta">
+                <span>Average: {{ '%.2f' | format(entry.average) }}</span>
+                <span>{{ entry.count }} vote{{ 's' if entry.count != 1 else '' }}</span>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+        {% if costume_leader and costume_leader.count %}
+          <p class="contest-leader">Current leader: <strong>{{ costume_leader.name }}</strong> with an average score of {{ '%.2f' | format(costume_leader.average) }}.</p>
+        {% else %}
+          <p class="contest-leader">Votes will appear here once guests start rating costumes.</p>
+        {% endif %}
+      {% else %}
+        <p class="contest-leader">Add costume entries to begin tracking votes.</p>
+      {% endif %}
+    </div>
+  </section>
+
   <div class="admin-grid">
     <section class="admin-section">
       <h3>Costume Contest Signups</h3>

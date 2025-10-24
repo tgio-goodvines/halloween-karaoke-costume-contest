@@ -97,6 +97,63 @@ body.display-mode {
   transform: translateY(0) scale(1);
 }
 
+.display-override {
+  width: min(900px, 100%);
+}
+
+.display-override[hidden] {
+  display: none !important;
+}
+
+.display-override__card {
+  padding: clamp(2rem, 4vw, 3.5rem);
+  border-radius: 1.75rem;
+  background: radial-gradient(circle at top left, rgba(255, 111, 60, 0.28), rgba(27, 27, 42, 0.92));
+  box-shadow: 0 42px 88px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: clamp(1rem, 2.6vw, 1.6rem);
+  text-align: center;
+}
+
+.display-override__title {
+  margin: 0;
+  font-size: clamp(2rem, 4.4vw, 3.2rem);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 22px rgba(255, 111, 60, 0.45);
+}
+
+.display-override__highlight {
+  margin: 0;
+  font-size: clamp(1.3rem, 3vw, 1.8rem);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.display-override__message {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.4vw, 1.4rem);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.display-override__details {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+  font-size: clamp(0.95rem, 2.1vw, 1.15rem);
+  color: rgba(244, 244, 248, 0.85);
+}
+
+.display-override__details li {
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.85rem;
+  background: rgba(16, 16, 32, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .display-card__default {
   display: grid;
   gap: clamp(1rem, 2.4vw, 1.6rem);

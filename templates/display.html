@@ -36,7 +36,7 @@
       </header>
 
       <main class="display-main">
-        <section class="display-card{% if first_entry %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry %} hidden{% endif %}>
+        <section class="display-card{% if first_entry and not override %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry or override %} hidden{% endif %}>
           <div class="display-card__default" data-entry-default{% if first_entry and first_entry.get('cta_details') %} hidden{% endif %}>
             <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
             <div class="display-primary" data-entry-primary>{{ first_entry['primary'] if first_entry else '' }}</div>
@@ -84,7 +84,7 @@
           >{{ first_entry['link_label'] if first_entry and first_entry.get('link_label') and not first_entry.get('cta') else (first_entry['link'] if first_entry and first_entry.get('link') and not first_entry.get('cta') else '') }}</a>
         </section>
 
-        <section class="display-empty{% if not entries %} is-visible{% endif %}" data-empty-state>
+        <section class="display-empty{% if not entries and not override %} is-visible{% endif %}" data-empty-state{% if override %} hidden{% endif %}>
           <div class="instruction-card">
             <div class="instruction-card__badge" aria-hidden="true">👻</div>
             <h2 class="instruction-card__title">Guide guests onto the signup hub</h2>
@@ -128,10 +128,25 @@
             </ol>
           </div>
         </section>
+        <section class="display-override" data-override-state{% if not override %} hidden{% endif %}>
+          <div class="display-override__card">
+            <h2 class="display-override__title" data-override-title>{{ override.title if override else '' }}</h2>
+            <p class="display-override__highlight" data-override-highlight{% if not override or not override.get('highlight') %} hidden{% endif %}>{{ override.highlight if override and override.get('highlight') else '' }}</p>
+            <p class="display-override__message" data-override-message>{{ override.message if override else '' }}</p>
+            <ul class="display-override__details" data-override-details{% if not override or not override.get('details') %} hidden{% endif %}>
+              {% if override and override.get('details') %}
+                {% for detail in override.details %}
+                  <li>{{ detail }}</li>
+                {% endfor %}
+              {% endif %}
+            </ul>
+          </div>
+        </section>
       </main>
     </div>
 
     <script id="entries-data" type="application/json">{{ entries | tojson }}</script>
+    <script id="override-data" type="application/json">{{ override | tojson }}</script>
     <script src="{{ url_for('static', filename='display.js') }}"></script>
   </body>
 </html>

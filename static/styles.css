@@ -354,10 +354,180 @@ main.container {
   box-shadow: 0 10px 24px rgba(255, 95, 86, 0.35);
 }
 
+.button--outline {
+  background: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  color: var(--text);
+  box-shadow: none;
+}
+
 .button:hover,
 .button:focus {
   transform: translateY(-2px);
   filter: brightness(1.05);
+}
+
+.admin-section--contest {
+  gap: 1.25rem;
+}
+
+.contest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.contest-actions form {
+  margin: 0;
+}
+
+.contest-status {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(244, 244, 248, 0.85);
+}
+
+.contest-status--inactive {
+  color: var(--muted);
+}
+
+.contest-chart {
+  background: rgba(10, 10, 22, 0.65);
+  border-radius: 0.85rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.contest-chart h4 {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.contest-chart__list {
+  display: grid;
+  gap: 1rem;
+}
+
+.contest-chart__item {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(20, 20, 36, 0.8);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+}
+
+.contest-chart__item.is-leader {
+  border: 1px solid rgba(255, 111, 60, 0.65);
+  box-shadow: 0 14px 28px rgba(255, 111, 60, 0.22);
+}
+
+.contest-chart__heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+}
+
+.contest-chart__name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.contest-chart__costume {
+  color: var(--muted);
+}
+
+.contest-chart__bar {
+  position: relative;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  height: 12px;
+}
+
+.contest-chart__bar-fill {
+  position: absolute;
+  inset: 0;
+  width: min(var(--score-width, 0%), 100%);
+  background: linear-gradient(135deg, rgba(255, 111, 60, 0.9), rgba(255, 156, 120, 0.8));
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+
+.contest-chart__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: rgba(244, 244, 248, 0.75);
+}
+
+.contest-leader {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.voting-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.voting-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.voting-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(27, 27, 42, 0.85);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.voting-card legend {
+  padding: 0;
+  margin: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.voting-card__name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.voting-card__costume {
+  color: var(--muted);
+}
+
+.voting-card__label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.voting-card__label input {
+  padding: 0.6rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 1.05rem;
+  text-align: center;
 }
 
 .admin-empty {

@@ -23,14 +23,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeMessageElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-message]')
     : null;
-  const karaokeLineupElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-lineup]')
+  const karaokeCurrentElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-current]')
+    : null;
+  const karaokePositionElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-position]')
+    : null;
+  const karaokeNameElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-name]')
+    : null;
+  const karaokeSongElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-song]')
     : null;
   const karaokeEmptyElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-empty]')
-    : null;
-  const karaokeScrollAreaElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('.karaoke-card__scroll-area')
     : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
@@ -110,184 +116,128 @@ document.addEventListener('DOMContentLoaded', () => {
     return '0.00';
   };
 
-  let karaokeScrollTimerId = null;
-  let karaokeScrollStartTimeoutId = null;
-  let karaokeScrollAnimationFrameId = null;
-  let karaokeScrollState = { entryStep: 0, currentIndex: 0, entriesCount: 0 };
-
-  const stopKaraokeAutoScroll = () => {
-    if (karaokeScrollTimerId) {
-      window.clearInterval(karaokeScrollTimerId);
-      karaokeScrollTimerId = null;
-    }
-
-    if (karaokeScrollStartTimeoutId) {
-      window.clearTimeout(karaokeScrollStartTimeoutId);
-      karaokeScrollStartTimeoutId = null;
-    }
-
-    if (karaokeScrollAnimationFrameId) {
-      window.cancelAnimationFrame(karaokeScrollAnimationFrameId);
-      karaokeScrollAnimationFrameId = null;
-    }
-
-    karaokeScrollState = { entryStep: 0, currentIndex: 0, entriesCount: 0 };
+  const karaokeCycleTimings = {
+    initialDelay: 4000,
+    cycleDelay: 6500,
   };
 
-  const lockKaraokeScrollHeight = (height) => {
-    if (!karaokeScrollAreaElement) {
-      return;
+  let karaokeRotationTimerId = null;
+  let karaokeRotationStartTimeoutId = null;
+  let karaokeRotationState = { entries: [], currentIndex: 0 };
+
+  const stopKaraokeRotation = () => {
+    if (karaokeRotationTimerId) {
+      window.clearInterval(karaokeRotationTimerId);
+      karaokeRotationTimerId = null;
     }
 
-    if (Number.isFinite(height) && height > 0) {
-      karaokeScrollAreaElement.style.setProperty('--karaoke-entry-height', `${height}px`);
-      karaokeScrollAreaElement.setAttribute('data-lock-height', 'true');
-      karaokeScrollAreaElement.style.overflow = 'hidden';
-    } else {
-      karaokeScrollAreaElement.style.removeProperty('--karaoke-entry-height');
-      karaokeScrollAreaElement.removeAttribute('data-lock-height');
-      karaokeScrollAreaElement.style.overflow = 'visible';
-      karaokeScrollAreaElement.scrollTop = 0;
+    if (karaokeRotationStartTimeoutId) {
+      window.clearTimeout(karaokeRotationStartTimeoutId);
+      karaokeRotationStartTimeoutId = null;
     }
   };
 
-  const updateKaraokeCurrentHighlight = (index) => {
-    if (!karaokeLineupElement) {
+  const showKaraokePerformer = (entry, index) => {
+    if (!karaokeCurrentElement || !karaokePositionElement || !karaokeNameElement || !karaokeSongElement) {
       return;
     }
 
-    const items = Array.from(karaokeLineupElement.querySelectorAll('.karaoke-lineup__entry'));
-    items.forEach((item, itemIndex) => {
-      if (itemIndex === index) {
-        item.classList.add('is-current');
-      } else {
-        item.classList.remove('is-current');
+    const performerName = entry && typeof entry === 'object' && entry.name ? entry.name : 'TBA';
+    let songLine = 'Song TBD';
+
+    if (entry && typeof entry === 'object') {
+      const songTitle = entry.song_title || '';
+      const artist = entry.artist || '';
+
+      if (songTitle && artist) {
+        songLine = `“${songTitle}” by ${artist}`;
+      } else if (songTitle) {
+        songLine = `“${songTitle}”`;
+      } else if (artist) {
+        songLine = artist;
       }
-    });
+    }
+
+    const totalEntries = karaokeRotationState.entries.length || 0;
+    const positionText =
+      totalEntries > 0 ? `Performer ${Math.min(index + 1, totalEntries)} of ${totalEntries}` : `Performer ${index + 1}`;
+
+    karaokePositionElement.textContent = positionText;
+    karaokeNameElement.textContent = performerName;
+    karaokeSongElement.textContent = songLine;
+
+    karaokeCurrentElement.removeAttribute('hidden');
+    karaokeCurrentElement.classList.remove('is-active');
+    void karaokeCurrentElement.offsetWidth;
+    karaokeCurrentElement.classList.add('is-active');
+
+    if (karaokeEmptyElement) {
+      karaokeEmptyElement.setAttribute('hidden', '');
+    }
   };
 
-  const animateKaraokeScroll = (targetTop) => {
-    if (!karaokeScrollAreaElement) {
+  const startKaraokeRotation = () => {
+    stopKaraokeRotation();
+
+    if (karaokeRotationState.entries.length <= 1) {
       return;
     }
 
-    const startTop = karaokeScrollAreaElement.scrollTop;
-    const distance = targetTop - startTop;
+    karaokeRotationStartTimeoutId = window.setTimeout(() => {
+      const advance = () => {
+        if (!karaokeRotationState.entries.length) {
+          stopKaraokeRotation();
+          return;
+        }
 
-    if (Math.abs(distance) < 1) {
-      karaokeScrollAreaElement.scrollTop = targetTop;
-      return;
-    }
+        karaokeRotationState.currentIndex =
+          (karaokeRotationState.currentIndex + 1) % karaokeRotationState.entries.length;
+        const nextEntry = karaokeRotationState.entries[karaokeRotationState.currentIndex];
+        showKaraokePerformer(nextEntry, karaokeRotationState.currentIndex);
+      };
 
-    const duration = 4000;
-    const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-    const startTime = performance.now();
+      advance();
+      karaokeRotationTimerId = window.setInterval(advance, karaokeCycleTimings.cycleDelay);
+    }, karaokeCycleTimings.initialDelay);
+  };
 
-    if (karaokeScrollAnimationFrameId) {
-      window.cancelAnimationFrame(karaokeScrollAnimationFrameId);
-      karaokeScrollAnimationFrameId = null;
-    }
+  const setupKaraokeRotation = (entries, initialIndex = 0) => {
+    stopKaraokeRotation();
 
-    const step = (now) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      const eased = easeInOut(progress);
-      karaokeScrollAreaElement.scrollTop = startTop + distance * eased;
-
-      if (progress < 1) {
-        karaokeScrollAnimationFrameId = window.requestAnimationFrame(step);
-      } else {
-        karaokeScrollAnimationFrameId = null;
-      }
+    const lineup = Array.isArray(entries) ? entries.slice() : [];
+    karaokeRotationState = {
+      entries: lineup,
+      currentIndex: 0,
     };
 
-    karaokeScrollAnimationFrameId = window.requestAnimationFrame(step);
-  };
-
-  const setupKaraokeAutoScroll = (initialIndex = 0) => {
-    if (!karaokeLineupElement || !karaokeScrollAreaElement) {
+    if (!karaokeCurrentElement) {
       return;
     }
 
-    const entries = Array.from(karaokeLineupElement.querySelectorAll('.karaoke-lineup__entry'));
-
-    if (!entries.length) {
-      stopKaraokeAutoScroll();
-      lockKaraokeScrollHeight(0);
+    if (!lineup.length) {
+      karaokeCurrentElement.classList.remove('is-active');
+      karaokeCurrentElement.setAttribute('hidden', '');
+      if (karaokePositionElement) {
+        karaokePositionElement.textContent = '';
+      }
+      if (karaokeNameElement) {
+        karaokeNameElement.textContent = '';
+      }
+      if (karaokeSongElement) {
+        karaokeSongElement.textContent = '';
+      }
+      if (karaokeEmptyElement) {
+        karaokeEmptyElement.removeAttribute('hidden');
+      }
       return;
     }
-
-    const firstEntry = entries[0];
-    const entryHeight = firstEntry ? firstEntry.offsetHeight : 0;
-    const travelDistance = entries.length > 1 ? entries[1].offsetTop - entries[0].offsetTop : entryHeight;
-
-    lockKaraokeScrollHeight(entryHeight);
 
     const safeIndex = Number.isInteger(initialIndex) && initialIndex >= 0 ? initialIndex : 0;
-    const boundedIndex = Math.min(safeIndex, entries.length - 1);
+    const boundedIndex = Math.min(safeIndex, lineup.length - 1);
+    karaokeRotationState.currentIndex = boundedIndex;
 
-    stopKaraokeAutoScroll();
-
-    karaokeScrollState = {
-      entryStep: travelDistance || entryHeight || 0,
-      currentIndex: boundedIndex,
-      entriesCount: entries.length,
-    };
-
-    const startingOffset = karaokeScrollState.entryStep * karaokeScrollState.currentIndex;
-    karaokeScrollAreaElement.scrollTop = startingOffset;
-    updateKaraokeCurrentHighlight(karaokeScrollState.currentIndex);
-
-    if (entries.length <= 1 || karaokeScrollState.entryStep === 0) {
-      return;
-    }
-
-    const cycleDelay = 6500;
-    const initialDelay = 4000;
-
-    const advance = () => {
-      if (!karaokeScrollState.entriesCount) {
-        return;
-      }
-
-      const nextIndex = (karaokeScrollState.currentIndex + 1) % karaokeScrollState.entriesCount;
-      karaokeScrollState.currentIndex = nextIndex;
-      const target = karaokeScrollState.entryStep * nextIndex;
-      updateKaraokeCurrentHighlight(nextIndex);
-      animateKaraokeScroll(target);
-    };
-
-    karaokeScrollStartTimeoutId = window.setTimeout(() => {
-      advance();
-      karaokeScrollTimerId = window.setInterval(advance, cycleDelay);
-    }, initialDelay);
-  };
-
-  const recomputeKaraokeLayout = () => {
-    if (!karaokeLineupElement || !karaokeScrollAreaElement) {
-      return;
-    }
-
-    if (!karaokeScrollState.entriesCount) {
-      return;
-    }
-
-    const entries = Array.from(karaokeLineupElement.querySelectorAll('.karaoke-lineup__entry'));
-
-    if (!entries.length) {
-      lockKaraokeScrollHeight(0);
-      return;
-    }
-
-    const entryHeight = entries[0].offsetHeight;
-    const travelDistance = entries.length > 1 ? entries[1].offsetTop - entries[0].offsetTop : entryHeight;
-
-    lockKaraokeScrollHeight(entryHeight);
-
-    karaokeScrollState.entryStep = travelDistance || entryHeight || 0;
-
-    const target = karaokeScrollState.entryStep * karaokeScrollState.currentIndex;
-    karaokeScrollAreaElement.scrollTop = target;
+    showKaraokePerformer(lineup[boundedIndex], boundedIndex);
+    startKaraokeRotation();
   };
 
   const updateOverrideContent = () => {
@@ -376,71 +326,8 @@ document.addEventListener('DOMContentLoaded', () => {
           ? karaokeData.current_index
           : -1;
 
-      if (karaokeLineupElement) {
-        karaokeLineupElement.innerHTML = '';
-        stopKaraokeAutoScroll();
-
-        if (lineup.length) {
-          lineup.forEach((entry, index) => {
-            const item = document.createElement('li');
-            item.className = 'karaoke-lineup__entry';
-            if (index === currentIndex) {
-              item.classList.add('is-current');
-            }
-
-            const positionElement = document.createElement('span');
-            positionElement.className = 'karaoke-lineup__position';
-            positionElement.textContent = `${index + 1}.`;
-            item.appendChild(positionElement);
-
-            const nameElement = document.createElement('span');
-            nameElement.className = 'karaoke-lineup__name';
-            const performerName =
-              entry && typeof entry === 'object' && entry.name ? entry.name : 'TBA';
-            nameElement.textContent = performerName;
-            item.appendChild(nameElement);
-
-            const songElement = document.createElement('span');
-            songElement.className = 'karaoke-lineup__song';
-            if (entry && typeof entry === 'object') {
-              const songTitle = entry.song_title || '';
-              const artist = entry.artist || '';
-              let songLine = 'Song TBD';
-              if (songTitle && artist) {
-                songLine = `“${songTitle}” by ${artist}`;
-              } else if (songTitle) {
-                songLine = `“${songTitle}”`;
-              } else if (artist) {
-                songLine = artist;
-              }
-              songElement.textContent = songLine;
-            } else {
-              songElement.textContent = 'Song TBD';
-            }
-            item.appendChild(songElement);
-
-            karaokeLineupElement.appendChild(item);
-          });
-
-          karaokeLineupElement.removeAttribute('hidden');
-          if (karaokeEmptyElement) {
-            karaokeEmptyElement.setAttribute('hidden', '');
-          }
-
-          const initialScrollIndex = currentIndex >= 0 ? currentIndex : 0;
-          window.requestAnimationFrame(() => {
-            setupKaraokeAutoScroll(initialScrollIndex);
-          });
-        } else {
-          karaokeLineupElement.setAttribute('hidden', '');
-          if (karaokeEmptyElement) {
-            karaokeEmptyElement.removeAttribute('hidden');
-          }
-          lockKaraokeScrollHeight(0);
-        }
-      } else if (karaokeEmptyElement) {
-        karaokeEmptyElement.setAttribute('hidden', '');
-      }
+      const initialRotationIndex = currentIndex >= 0 ? currentIndex : 0;
+      setupKaraokeRotation(lineup, initialRotationIndex);
     } else {
       if (generalOverrideElement) {
         generalOverrideElement.removeAttribute('hidden');
@@ -464,17 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
         karaokeMessageElement.setAttribute('hidden', '');
       }
 
-      if (karaokeLineupElement) {
-        karaokeLineupElement.innerHTML = '';
-        karaokeLineupElement.setAttribute('hidden', '');
-      }
-
-      if (karaokeEmptyElement) {
-        karaokeEmptyElement.setAttribute('hidden', '');
-      }
-
-      stopKaraokeAutoScroll();
-      lockKaraokeScrollHeight(0);
+      setupKaraokeRotation([], 0);
     }
   };
 
@@ -795,13 +672,6 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   setOverrideState(initialOverrideState ?? null, { force: true });
-
-  if (karaokeScrollAreaElement) {
-    const handleResize = () => {
-      window.requestAnimationFrame(recomputeKaraokeLayout);
-    };
-    window.addEventListener('resize', handleResize);
-  }
 
   const updateCounts = (costumeCount, karaokeCount) => {
     if (costumeCountElement && Number.isFinite(costumeCount)) {

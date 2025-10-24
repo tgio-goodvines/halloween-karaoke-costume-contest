@@ -239,19 +239,20 @@ body.display-mode {
 
 .display-override__card--karaoke .karaoke-card__title,
 .display-override__card--karaoke .karaoke-card__label,
-.display-override__card--karaoke .karaoke-card__position {
+.display-override__card--karaoke .karaoke-card__timer {
   text-shadow: 0 0 28px rgba(255, 98, 98, 0.85);
   color: #fff2f2;
 }
 
-.display-override__card--karaoke .karaoke-card__current {
+.display-override__card--karaoke .karaoke-card__countdown {
   border-color: rgba(255, 94, 94, 0.75);
   box-shadow: 0 40px 90px rgba(255, 64, 64, 0.45);
   background: linear-gradient(145deg, rgba(255, 70, 70, 0.22), rgba(44, 6, 16, 0.82));
 }
 
-.display-override__card--karaoke .karaoke-card__name {
-  text-shadow: 0 0 32px rgba(255, 72, 72, 0.6);
+.display-override__card--karaoke .karaoke-card__list-item {
+  border-color: rgba(255, 124, 124, 0.45);
+  box-shadow: 0 28px 72px rgba(255, 76, 76, 0.32);
 }
 
 .display-override__card--contest .display-override__title,
@@ -349,7 +350,7 @@ body.display-mode {
 
 .karaoke-card__content {
   display: grid;
-  gap: clamp(1rem, 2.4vw, 1.5rem);
+  gap: clamp(1.2rem, 3vw, 1.8rem);
   justify-items: center;
   width: 100%;
 }
@@ -362,52 +363,98 @@ body.display-mode {
   color: rgba(244, 244, 248, 0.75);
 }
 
-.karaoke-card__current {
-  width: min(680px, 100%);
+.karaoke-card__countdown {
+  width: min(560px, 100%);
   margin: 0 auto;
-  padding: clamp(1.1rem, 2.8vw, 1.8rem) clamp(1.2rem, 3.2vw, 1.9rem);
-  border-radius: 1.35rem;
-  background: rgba(16, 16, 32, 0.75);
+  padding: clamp(1.4rem, 3vw, 2rem) clamp(1.6rem, 3.6vw, 2.6rem);
+  border-radius: 1.5rem;
+  background: rgba(16, 16, 32, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 28px 64px rgba(0, 0, 0, 0.32);
   display: grid;
-  gap: clamp(0.75rem, 2.2vw, 1.2rem);
+  gap: clamp(0.8rem, 2.4vw, 1.35rem);
+  justify-items: center;
   text-align: center;
 }
 
-.karaoke-card__current.is-active {
-  border-color: rgba(255, 111, 60, 0.65);
-  box-shadow: 0 32px 72px rgba(255, 111, 60, 0.18);
-  background: rgba(255, 111, 60, 0.14);
+.karaoke-card__timer {
+  margin: 0;
+  font-size: clamp(2.6rem, 6.5vw, 4rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 0 32px rgba(255, 111, 60, 0.45);
 }
 
-.karaoke-card__current[hidden] {
+.karaoke-card__note {
+  margin: 0;
+  font-size: clamp(1rem, 2.6vw, 1.3rem);
+  color: rgba(255, 255, 255, 0.82);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.karaoke-card__note[hidden] {
   display: none !important;
 }
 
-.karaoke-card__position {
-  margin: 0;
-  font-size: clamp(1rem, 2.6vw, 1.35rem);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.78);
+.karaoke-card__upcoming {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: clamp(1rem, 2.6vw, 1.5rem);
 }
 
-.karaoke-card__name {
+.karaoke-card__list {
+  list-style: none;
   margin: 0;
-  font-size: clamp(1.8rem, 4.5vw, 2.8rem);
+  padding: 0;
+  width: 100%;
+  display: grid;
+  gap: clamp(0.75rem, 2.1vw, 1.2rem);
+}
+
+.karaoke-card__list[hidden] {
+  display: none !important;
+}
+
+.karaoke-card__list-item {
+  display: grid;
+  grid-template-columns: minmax(3ch, auto) 1fr;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.1rem);
+  padding: clamp(0.9rem, 2.4vw, 1.35rem) clamp(1.2rem, 3vw, 1.85rem);
+  border-radius: 1.25rem;
+  background: rgba(16, 16, 32, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.32);
+}
+
+.karaoke-card__list-rank {
+  font-size: clamp(1.1rem, 2.6vw, 1.4rem);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.86);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.karaoke-card__list-info {
+  display: grid;
+  gap: clamp(0.4rem, 1.2vw, 0.65rem);
+}
+
+.karaoke-card__list-name {
+  font-size: clamp(1.4rem, 3.6vw, 2.2rem);
   font-weight: 700;
   color: #fff;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
-  text-shadow: 0 0 24px rgba(255, 111, 60, 0.35);
+  text-transform: uppercase;
+  text-shadow: 0 0 22px rgba(255, 111, 60, 0.35);
 }
 
-.karaoke-card__song {
-  margin: 0;
-  font-size: clamp(1.1rem, 2.8vw, 1.5rem);
-  color: rgba(244, 244, 248, 0.9);
+.karaoke-card__list-song {
+  font-size: clamp(1rem, 2.6vw, 1.3rem);
+  color: rgba(244, 244, 248, 0.85);
 }
 
 .karaoke-card__empty {

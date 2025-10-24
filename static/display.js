@@ -26,17 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeMessageElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-message]')
     : null;
-  const karaokeCurrentElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-current]')
+  const karaokeCountdownElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-countdown]')
     : null;
-  const karaokePositionElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-position]')
+  const karaokeCountdownNoteElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-countdown-note]')
     : null;
-  const karaokeNameElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-name]')
-    : null;
-  const karaokeSongElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-song]')
+  const karaokeLineupElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-lineup]')
     : null;
   const karaokeEmptyElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-empty]')
@@ -119,128 +116,154 @@ document.addEventListener('DOMContentLoaded', () => {
     return '0.00';
   };
 
-  const karaokeCycleTimings = {
-    initialDelay: 4000,
-    cycleDelay: 6500,
+  let karaokeCountdownTimerId = null;
+  let karaokeCountdownTarget = null;
+
+  const stopKaraokeCountdown = () => {
+    if (karaokeCountdownTimerId) {
+      window.clearInterval(karaokeCountdownTimerId);
+      karaokeCountdownTimerId = null;
+    }
+    karaokeCountdownTarget = null;
   };
 
-  let karaokeRotationTimerId = null;
-  let karaokeRotationStartTimeoutId = null;
-  let karaokeRotationState = { entries: [], currentIndex: 0 };
-
-  const stopKaraokeRotation = () => {
-    if (karaokeRotationTimerId) {
-      window.clearInterval(karaokeRotationTimerId);
-      karaokeRotationTimerId = null;
+  const formatPerformerSong = (entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return '';
     }
 
-    if (karaokeRotationStartTimeoutId) {
-      window.clearTimeout(karaokeRotationStartTimeoutId);
-      karaokeRotationStartTimeoutId = null;
+    const songTitle = entry.song_title ? String(entry.song_title).trim() : '';
+    const artist = entry.artist ? String(entry.artist).trim() : '';
+
+    if (songTitle && artist) {
+      return `“${songTitle}” by ${artist}`;
     }
+    if (songTitle) {
+      return `“${songTitle}”`;
+    }
+    if (artist) {
+      return artist;
+    }
+
+    return '';
   };
 
-  const showKaraokePerformer = (entry, index) => {
-    if (!karaokeCurrentElement || !karaokePositionElement || !karaokeNameElement || !karaokeSongElement) {
+  const updateKaraokeLineup = (entries) => {
+    if (!karaokeLineupElement) {
       return;
     }
 
-    const performerName = entry && typeof entry === 'object' && entry.name ? entry.name : 'TBA';
-    let songLine = 'Song TBD';
-
-    if (entry && typeof entry === 'object') {
-      const songTitle = entry.song_title || '';
-      const artist = entry.artist || '';
-
-      if (songTitle && artist) {
-        songLine = `“${songTitle}” by ${artist}`;
-      } else if (songTitle) {
-        songLine = `“${songTitle}”`;
-      } else if (artist) {
-        songLine = artist;
-      }
-    }
-
-    const totalEntries = karaokeRotationState.entries.length || 0;
-    const positionText =
-      totalEntries > 0 ? `Performer ${Math.min(index + 1, totalEntries)} of ${totalEntries}` : `Performer ${index + 1}`;
-
-    karaokePositionElement.textContent = positionText;
-    karaokeNameElement.textContent = performerName;
-    karaokeSongElement.textContent = songLine;
-
-    karaokeCurrentElement.removeAttribute('hidden');
-    karaokeCurrentElement.classList.remove('is-active');
-    void karaokeCurrentElement.offsetWidth;
-    karaokeCurrentElement.classList.add('is-active');
-
-    if (karaokeEmptyElement) {
-      karaokeEmptyElement.setAttribute('hidden', '');
-    }
-  };
-
-  const startKaraokeRotation = () => {
-    stopKaraokeRotation();
-
-    if (karaokeRotationState.entries.length <= 1) {
-      return;
-    }
-
-    karaokeRotationStartTimeoutId = window.setTimeout(() => {
-      const advance = () => {
-        if (!karaokeRotationState.entries.length) {
-          stopKaraokeRotation();
-          return;
-        }
-
-        karaokeRotationState.currentIndex =
-          (karaokeRotationState.currentIndex + 1) % karaokeRotationState.entries.length;
-        const nextEntry = karaokeRotationState.entries[karaokeRotationState.currentIndex];
-        showKaraokePerformer(nextEntry, karaokeRotationState.currentIndex);
-      };
-
-      advance();
-      karaokeRotationTimerId = window.setInterval(advance, karaokeCycleTimings.cycleDelay);
-    }, karaokeCycleTimings.initialDelay);
-  };
-
-  const setupKaraokeRotation = (entries, initialIndex = 0) => {
-    stopKaraokeRotation();
-
-    const lineup = Array.isArray(entries) ? entries.slice() : [];
-    karaokeRotationState = {
-      entries: lineup,
-      currentIndex: 0,
-    };
-
-    if (!karaokeCurrentElement) {
-      return;
-    }
+    karaokeLineupElement.innerHTML = '';
+    const lineup = Array.isArray(entries) ? entries.filter((entry) => entry && typeof entry === 'object') : [];
 
     if (!lineup.length) {
-      karaokeCurrentElement.classList.remove('is-active');
-      karaokeCurrentElement.setAttribute('hidden', '');
-      if (karaokePositionElement) {
-        karaokePositionElement.textContent = '';
-      }
-      if (karaokeNameElement) {
-        karaokeNameElement.textContent = '';
-      }
-      if (karaokeSongElement) {
-        karaokeSongElement.textContent = '';
-      }
+      karaokeLineupElement.setAttribute('hidden', '');
       if (karaokeEmptyElement) {
         karaokeEmptyElement.removeAttribute('hidden');
       }
       return;
     }
 
-    const safeIndex = Number.isInteger(initialIndex) && initialIndex >= 0 ? initialIndex : 0;
-    const boundedIndex = Math.min(safeIndex, lineup.length - 1);
-    karaokeRotationState.currentIndex = boundedIndex;
+    lineup.slice(0, 6).forEach((entry, index) => {
+      const item = document.createElement('li');
+      item.className = 'karaoke-card__list-item';
 
-    showKaraokePerformer(lineup[boundedIndex], boundedIndex);
-    startKaraokeRotation();
+      const rankElement = document.createElement('span');
+      rankElement.className = 'karaoke-card__list-rank';
+      rankElement.textContent = `#${index + 1}`;
+
+      const infoElement = document.createElement('div');
+      infoElement.className = 'karaoke-card__list-info';
+
+      const nameElement = document.createElement('span');
+      nameElement.className = 'karaoke-card__list-name';
+      nameElement.textContent = entry.name ? String(entry.name).trim() || 'TBA' : 'TBA';
+
+      infoElement.appendChild(nameElement);
+
+      const songLine = formatPerformerSong(entry);
+      if (songLine) {
+        const songElement = document.createElement('span');
+        songElement.className = 'karaoke-card__list-song';
+        songElement.textContent = songLine;
+        infoElement.appendChild(songElement);
+      }
+
+      item.appendChild(rankElement);
+      item.appendChild(infoElement);
+
+      karaokeLineupElement.appendChild(item);
+    });
+
+    karaokeLineupElement.removeAttribute('hidden');
+    if (karaokeEmptyElement) {
+      karaokeEmptyElement.setAttribute('hidden', '');
+    }
+  };
+
+  const startKaraokeCountdown = (targetIso, labelText = '') => {
+    if (!karaokeCountdownElement) {
+      return;
+    }
+
+    stopKaraokeCountdown();
+
+    if (karaokeCountdownNoteElement) {
+      if (labelText) {
+        karaokeCountdownNoteElement.textContent = `Until ${labelText}`;
+        karaokeCountdownNoteElement.removeAttribute('hidden');
+      } else {
+        karaokeCountdownNoteElement.textContent = '';
+        karaokeCountdownNoteElement.setAttribute('hidden', '');
+      }
+    }
+
+    if (!targetIso) {
+      karaokeCountdownElement.textContent = '—';
+      return;
+    }
+
+    const parsedTarget = new Date(targetIso);
+    if (Number.isNaN(parsedTarget.getTime())) {
+      karaokeCountdownElement.textContent = '—';
+      return;
+    }
+
+    karaokeCountdownTarget = parsedTarget;
+
+    const updateDisplay = () => {
+      if (!karaokeCountdownTarget) {
+        return;
+      }
+
+      const diff = karaokeCountdownTarget.getTime() - Date.now();
+
+      if (diff <= 0) {
+        karaokeCountdownElement.textContent = '00:00:00';
+        if (karaokeCountdownNoteElement) {
+          karaokeCountdownNoteElement.textContent = labelText
+            ? `${labelText} has arrived!`
+            : 'It\'s showtime!';
+          karaokeCountdownNoteElement.removeAttribute('hidden');
+        }
+        stopKaraokeCountdown();
+        return;
+      }
+
+      const totalSeconds = Math.floor(diff / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      const formattedHours = hours.toString().padStart(2, '0');
+      const formattedMinutes = minutes.toString().padStart(2, '0');
+      const formattedSeconds = seconds.toString().padStart(2, '0');
+
+      karaokeCountdownElement.textContent = `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
+    };
+
+    updateDisplay();
+    karaokeCountdownTimerId = window.setInterval(updateDisplay, 1000);
   };
 
   const updateOverrideContent = () => {
@@ -341,13 +364,17 @@ document.addEventListener('DOMContentLoaded', () => {
           : {};
 
       const lineup = Array.isArray(karaokeData.lineup) ? karaokeData.lineup : [];
-      const currentIndex =
-        Number.isInteger(karaokeData.current_index) && karaokeData.current_index >= 0
-          ? karaokeData.current_index
-          : -1;
+      const countdownTarget =
+        karaokeData.countdown_target && typeof karaokeData.countdown_target === 'string'
+          ? karaokeData.countdown_target
+          : '';
+      const countdownLabel =
+        karaokeData.countdown_label && typeof karaokeData.countdown_label === 'string'
+          ? karaokeData.countdown_label
+          : '';
 
-      const initialRotationIndex = currentIndex >= 0 ? currentIndex : 0;
-      setupKaraokeRotation(lineup, initialRotationIndex);
+      updateKaraokeLineup(lineup);
+      startKaraokeCountdown(countdownTarget, countdownLabel);
     } else {
       if (generalOverrideElement) {
         generalOverrideElement.removeAttribute('hidden');
@@ -371,7 +398,15 @@ document.addEventListener('DOMContentLoaded', () => {
         karaokeMessageElement.setAttribute('hidden', '');
       }
 
-      setupKaraokeRotation([], 0);
+      stopKaraokeCountdown();
+      if (karaokeCountdownElement) {
+        karaokeCountdownElement.textContent = '--:--:--';
+      }
+      if (karaokeCountdownNoteElement) {
+        karaokeCountdownNoteElement.textContent = '';
+        karaokeCountdownNoteElement.setAttribute('hidden', '');
+      }
+      updateKaraokeLineup([]);
 
       if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride)) {
         overrideCardElement.classList.add('display-override__card--inferno');

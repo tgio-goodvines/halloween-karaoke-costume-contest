@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 from threading import Condition
 from uuid import uuid4
@@ -631,22 +632,31 @@ def admin_portal():
                     }
                     for signup in karaoke_signups
                 ]
-                first_signup = lineup_entries[0]
-                first_display_name = first_signup.get("name") or "TBA"
+
                 karaoke_state["party_started"] = True
-                karaoke_state["current_singer_index"] = 0
+                karaoke_state["current_singer_index"] = None
+
+                mountain_offset = timezone(timedelta(hours=-7), name="MST")
+                now_mountain = datetime.now(mountain_offset)
+                countdown_target = now_mountain.replace(
+                    hour=23, minute=0, second=0, microsecond=0
+                )
+                if countdown_target <= now_mountain:
+                    countdown_target += timedelta(days=1)
 
                 live_display_override = {
                     "type": "karaoke_start",
                     "title": "Halloween Karaoke Party",
-                    "highlight": "The stage is live!",
+                    "highlight": "Showtime begins at 11:00 PM MST",
+                    "message": "The lineup is getting ready. Countdown to the first singers!",
                     "karaoke": {
                         "lineup": lineup_entries,
-                        "current_index": karaoke_state["current_singer_index"],
+                        "countdown_target": countdown_target.isoformat(),
+                        "countdown_label": "11:00 PM MST",
                     },
                 }
                 messages.append(
-                    f"Live display updated with the karaoke kickoff card for {first_display_name}."
+                    "Live display updated with the karaoke kickoff countdown."
                 )
                 should_broadcast = True
             else:

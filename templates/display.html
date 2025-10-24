@@ -159,15 +159,18 @@
               <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
               <p class="karaoke-card__message" data-karaoke-message></p>
               <div class="karaoke-card__content">
-                <p class="karaoke-card__label">Now Performing</p>
-                <div class="karaoke-card__current" data-karaoke-current hidden>
-                  <p class="karaoke-card__position" data-karaoke-position></p>
-                  <p class="karaoke-card__name" data-karaoke-name></p>
-                  <p class="karaoke-card__song" data-karaoke-song></p>
-                </div>
-                <p class="karaoke-card__empty" data-karaoke-empty hidden>
-                  No karaoke performers are queued yet.
-                </p>
+                <section class="karaoke-card__countdown">
+                  <p class="karaoke-card__label">Countdown to showtime</p>
+                  <p class="karaoke-card__timer" data-karaoke-countdown>--:--:--</p>
+                  <p class="karaoke-card__note" data-karaoke-countdown-note hidden></p>
+                </section>
+                <section class="karaoke-card__upcoming" data-karaoke-upcoming>
+                  <p class="karaoke-card__label">Upcoming performers</p>
+                  <ol class="karaoke-card__list" data-karaoke-lineup></ol>
+                  <p class="karaoke-card__empty" data-karaoke-empty hidden>
+                    No karaoke performers are queued yet.
+                  </p>
+                </section>
               </div>
             </div>
           </div>

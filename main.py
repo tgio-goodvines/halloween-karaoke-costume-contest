@@ -6,7 +6,6 @@ from threading import Condition
 from uuid import uuid4
 import copy
 import os
-from urllib.parse import parse_qs, urlparse
 
 from flask import (
     Flask,
@@ -170,38 +169,6 @@ def create_scoreboard_card(top_entries: List[dict[str, object]]) -> dict[str, ob
             "entries": scoreboard_rows,
         },
     }
-
-
-def build_youtube_embed_url(raw_url: str) -> str | None:
-    if not raw_url:
-        return None
-
-    parsed = urlparse(raw_url)
-    host = parsed.netloc.lower()
-    path = parsed.path
-    video_id: str | None = None
-
-    if "youtu.be" in host:
-        video_id = path.lstrip("/") or None
-    elif "youtube.com" in host:
-        if path.startswith("/watch"):
-            query_params = parse_qs(parsed.query)
-            video_values = query_params.get("v", [])
-            if video_values:
-                video_id = video_values[0]
-        elif path.startswith("/embed/"):
-            video_id = path.split("/", 2)[-1]
-        elif path.startswith("/shorts/"):
-            video_id = path.split("/", 2)[-1]
-
-    if not video_id:
-        return None
-
-    safe_id = "".join(char for char in video_id if char.isalnum() or char in {"-", "_"})
-    if not safe_id:
-        return None
-
-    return f"https://www.youtube.com/embed/{safe_id}"
 
 
 def build_winner_entry() -> dict[str, object] | None:
@@ -656,9 +623,16 @@ def admin_portal():
 
         elif action == "start_karaoke_party":
             if karaoke_signups:
-                first_signup = karaoke_signups[0]
-                embed_url = build_youtube_embed_url(first_signup.youtube_link)
-
+                lineup_entries = [
+                    {
+                        "name": signup.name,
+                        "song_title": signup.song_title,
+                        "artist": signup.artist,
+                    }
+                    for signup in karaoke_signups
+                ]
+                first_signup = lineup_entries[0]
+                first_display_name = first_signup.get("name") or "TBA"
                 karaoke_state["party_started"] = True
                 karaoke_state["current_singer_index"] = 0
 
@@ -666,21 +640,14 @@ def admin_portal():
                     "type": "karaoke_start",
                     "title": "Halloween Karaoke Party",
                     "highlight": "The stage is live!",
-                    "message": f"Up first: {first_signup.name}",
-                    "details": [
-                        f'Performing "{first_signup.song_title}"',
-                        f"by {first_signup.artist}",
-                    ],
+                    "message": f"Lineup posted below—up first: {first_display_name}",
                     "karaoke": {
-                        "singer_name": first_signup.name,
-                        "song_title": first_signup.song_title,
-                        "artist": first_signup.artist,
-                        "youtube_link": first_signup.youtube_link,
-                        "youtube_embed_url": embed_url,
+                        "lineup": lineup_entries,
+                        "current_index": karaoke_state["current_singer_index"],
                     },
                 }
                 messages.append(
-                    f"Live display updated with the karaoke kickoff card for {first_signup.name}."
+                    f"Live display updated with the karaoke kickoff card for {first_display_name}."
                 )
                 should_broadcast = True
             else:

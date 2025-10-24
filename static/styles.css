@@ -668,6 +668,15 @@ main.container {
   text-align: center;
 }
 
+.voting-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.voting-card__submit {
+  width: 100%;
+}
+
 .admin-empty {
   margin: 0;
   color: var(--muted);

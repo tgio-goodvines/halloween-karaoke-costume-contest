@@ -778,7 +778,7 @@ def costume_voting_page():
         submitted=submitted,
         user_has_voted=user_has_voted,
         username=username,
-        show_admin_link=True,
+        show_admin_link=False,
     )
 
 

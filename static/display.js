@@ -10,7 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const overrideDetailsElement = overrideContainer ? overrideContainer.querySelector('[data-override-details]') : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
-  const dataEndpoint = (document.body && document.body.dataset && document.body.dataset.displayApi) || '/api/display-data';
+  const bodyDataset = (document.body && document.body.dataset) || {};
+  const dataEndpoint = bodyDataset.displayApi || '/api/display-data';
+  const updatesEndpoint = bodyDataset.displayUpdates || null;
 
   if (!dataElement || !card || !emptyState) {
     return;
@@ -360,4 +362,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetchLatestEntries();
   window.setInterval(fetchLatestEntries, refreshInterval);
+
+  const startEventStream = () => {
+    if (!updatesEndpoint || typeof window.EventSource !== 'function') {
+      return;
+    }
+
+    let reconnectTimer = null;
+    let retryDelay = 2000;
+    let eventSource;
+
+    const cleanup = () => {
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch (error) {
+          // Ignore close errors.
+        }
+        eventSource = null;
+      }
+    };
+
+    const connect = () => {
+      cleanup();
+      eventSource = new EventSource(updatesEndpoint, { withCredentials: false });
+
+      eventSource.onmessage = () => {
+        fetchLatestEntries();
+      };
+
+      eventSource.onopen = () => {
+        retryDelay = 2000;
+      };
+
+      eventSource.onerror = () => {
+        cleanup();
+        const delay = retryDelay;
+        reconnectTimer = window.setTimeout(() => {
+          retryDelay = Math.min(Math.max(delay * 1.5, 4000), 30000);
+          connect();
+        }, delay);
+      };
+    };
+
+    connect();
+
+    window.addEventListener('beforeunload', cleanup);
+  };
+
+  startEventStream();
 });

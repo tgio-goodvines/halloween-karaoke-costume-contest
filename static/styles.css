@@ -104,6 +104,71 @@ main.container {
   margin: 0;
 }
 
+.contest-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border-radius: 1.15rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.contest-banner--voting {
+  background: linear-gradient(135deg, rgba(255, 111, 60, 0.85), rgba(255, 165, 96, 0.45));
+  color: #1a0f14;
+}
+
+.contest-banner--winner {
+  background: linear-gradient(135deg, rgba(90, 61, 255, 0.75), rgba(27, 27, 42, 0.9));
+  border-color: rgba(129, 117, 255, 0.5);
+}
+
+.contest-banner__body {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 220px;
+}
+
+.contest-banner__body h2 {
+  margin: 0;
+  font-size: clamp(1.3rem, 3vw, 1.8rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.contest-banner__body p {
+  margin: 0;
+  font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+}
+
+.contest-banner__meta {
+  font-size: clamp(0.85rem, 2vw, 1rem);
+  opacity: 0.85;
+}
+
+.contest-banner__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.4rem;
+  border-radius: 0.85rem;
+  background: rgba(16, 16, 32, 0.9);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.contest-banner__button:hover,
+.contest-banner__button:focus {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.4);
+}
+
 .signup-callout__intro {
   display: flex;
   flex-direction: column;
@@ -348,6 +413,12 @@ main.container {
   box-shadow: 0 10px 24px rgba(255, 111, 60, 0.35);
 }
 
+.button--accent {
+  background: linear-gradient(135deg, #7a5cff, #a889ff);
+  color: white;
+  box-shadow: 0 10px 24px rgba(122, 92, 255, 0.35);
+}
+
 .button--danger {
   background: linear-gradient(135deg, #ff5f56, #d91d1d);
   color: white;
@@ -385,6 +456,47 @@ main.container {
   margin: 0;
   font-size: 0.95rem;
   color: rgba(244, 244, 248, 0.85);
+}
+
+.contest-status--active {
+  color: #ffe4d6;
+  font-weight: 600;
+}
+
+.contest-winner-card {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  background: rgba(20, 20, 38, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+  display: grid;
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.contest-winner-card h4 {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.contest-winner-card__name {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.contest-winner-card__details {
+  margin: 0;
+  font-size: 1rem;
+  color: rgba(244, 244, 248, 0.9);
+}
+
+.contest-winner-card__metrics {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(244, 244, 248, 0.75);
 }
 
 .contest-status--inactive {

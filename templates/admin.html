@@ -40,6 +40,11 @@
         </button>
       </form>
       <form method="post">
+        <button type="submit" name="action" value="lock_costume_winner" class="button button--accent">
+          Lock In Winner
+        </button>
+      </form>
+      <form method="post">
         <button type="submit" name="action" value="show_costume_winner" class="button">
           Show Winner on Live Display
         </button>
@@ -51,6 +56,15 @@
       </form>
     </div>
 
+    {% if costume_contest_state.voting_open %}
+      <p class="contest-status contest-status--active">Voting is live — guests can score every costume right now.</p>
+    {% elif costume_contest_state.winner_locked and costume_contest_state.winner %}
+      <p class="contest-status">
+        <strong>Winner locked in:</strong>
+        {{ costume_contest_state.winner.name }} as {{ costume_contest_state.winner.costume }}.
+      </p>
+    {% endif %}
+
     {% if live_override %}
       <p class="contest-status">
         <strong>Live display override active:</strong>
@@ -58,6 +72,17 @@
       </p>
     {% else %}
       <p class="contest-status contest-status--inactive">Live display is currently rotating through the scheduled entries.</p>
+    {% endif %}
+
+    {% if costume_contest_state.winner_locked and costume_contest_state.winner %}
+      <div class="contest-winner-card">
+        <h4>Costume Contest Champion</h4>
+        <p class="contest-winner-card__name">{{ costume_contest_state.winner.name }}</p>
+        <p class="contest-winner-card__details">{{ costume_contest_state.winner.costume }}</p>
+        <p class="contest-winner-card__metrics">
+          Average: {{ '%.2f' | format(costume_contest_state.winner.average) }} • Votes: {{ costume_contest_state.winner.count }}
+        </p>
+      </div>
     {% endif %}
 
     <div class="contest-chart">

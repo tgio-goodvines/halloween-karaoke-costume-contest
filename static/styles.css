@@ -489,6 +489,42 @@ main.container {
   font-weight: 600;
 }
 
+.karaoke-lineup {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  background: rgba(20, 20, 38, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+  display: grid;
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.karaoke-lineup h4 {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.karaoke-lineup__name {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.karaoke-lineup__song {
+  margin: 0;
+  font-size: 1rem;
+  color: rgba(244, 244, 248, 0.9);
+}
+
+.karaoke-lineup__note {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(255, 206, 166, 0.95);
+}
+
 .contest-winner-card {
   margin-top: 1rem;
   padding: 1rem 1.25rem;

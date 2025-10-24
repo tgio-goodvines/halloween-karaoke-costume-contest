@@ -4,10 +4,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
   const overrideContainer = document.querySelector('[data-override-state]');
+  const generalOverrideElement = overrideContainer
+    ? overrideContainer.querySelector('[data-override-general]')
+    : null;
+  const karaokeOverrideElement = overrideContainer
+    ? overrideContainer.querySelector('[data-override-karaoke]')
+    : null;
   const overrideTitleElement = overrideContainer ? overrideContainer.querySelector('[data-override-title]') : null;
   const overrideHighlightElement = overrideContainer ? overrideContainer.querySelector('[data-override-highlight]') : null;
   const overrideMessageElement = overrideContainer ? overrideContainer.querySelector('[data-override-message]') : null;
   const overrideDetailsElement = overrideContainer ? overrideContainer.querySelector('[data-override-details]') : null;
+  const karaokeTitleElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-title]')
+    : null;
+  const karaokeSubtitleElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-subtitle]')
+    : null;
+  const karaokeMessageElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-message]')
+    : null;
+  const karaokeSingerElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-singer]')
+    : null;
+  const karaokeSongElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-song]')
+    : null;
+  const karaokePreviewElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-preview]')
+    : null;
+  const karaokeIframeElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-iframe]')
+    : null;
+  const karaokeNoteElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-note]')
+    : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
   const bodyDataset = (document.body && document.body.dataset) || {};
@@ -91,14 +121,21 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const titleText = overrideState && overrideState.title ? overrideState.title : '';
+    const highlightText = overrideState && overrideState.highlight ? overrideState.highlight : '';
+    const messageText = overrideState && overrideState.message ? overrideState.message : '';
+    const details = overrideState && Array.isArray(overrideState.details) ? overrideState.details : [];
+    const isKaraokeOverride = Boolean(
+      overrideState && overrideState.type === 'karaoke_start' && karaokeOverrideElement
+    );
+
     if (overrideTitleElement) {
-      overrideTitleElement.textContent = overrideState && overrideState.title ? overrideState.title : '';
+      overrideTitleElement.textContent = titleText;
     }
 
     if (overrideHighlightElement) {
-      const highlight = overrideState && overrideState.highlight ? overrideState.highlight : '';
-      if (highlight) {
-        overrideHighlightElement.textContent = highlight;
+      if (highlightText) {
+        overrideHighlightElement.textContent = highlightText;
         overrideHighlightElement.removeAttribute('hidden');
       } else {
         overrideHighlightElement.textContent = '';
@@ -107,12 +144,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (overrideMessageElement) {
-      overrideMessageElement.textContent = overrideState && overrideState.message ? overrideState.message : '';
+      overrideMessageElement.textContent = messageText;
     }
 
     if (overrideDetailsElement) {
       overrideDetailsElement.innerHTML = '';
-      const details = overrideState && Array.isArray(overrideState.details) ? overrideState.details : [];
       if (details.length) {
         details.forEach((detail) => {
           const item = document.createElement('li');
@@ -122,6 +158,129 @@ document.addEventListener('DOMContentLoaded', () => {
         overrideDetailsElement.removeAttribute('hidden');
       } else {
         overrideDetailsElement.setAttribute('hidden', '');
+      }
+    }
+
+    if (isKaraokeOverride) {
+      if (generalOverrideElement) {
+        generalOverrideElement.setAttribute('hidden', '');
+      }
+      karaokeOverrideElement.removeAttribute('hidden');
+
+      if (karaokeTitleElement) {
+        karaokeTitleElement.textContent = titleText || 'Halloween Karaoke Party';
+      }
+
+      if (karaokeSubtitleElement) {
+        if (highlightText) {
+          karaokeSubtitleElement.textContent = highlightText;
+          karaokeSubtitleElement.removeAttribute('hidden');
+        } else {
+          karaokeSubtitleElement.textContent = '';
+          karaokeSubtitleElement.setAttribute('hidden', '');
+        }
+      }
+
+      if (karaokeMessageElement) {
+        if (messageText) {
+          karaokeMessageElement.textContent = messageText;
+          karaokeMessageElement.removeAttribute('hidden');
+        } else {
+          karaokeMessageElement.textContent = '';
+          karaokeMessageElement.setAttribute('hidden', '');
+        }
+      }
+
+      const karaokeData =
+        overrideState && overrideState.karaoke && typeof overrideState.karaoke === 'object'
+          ? overrideState.karaoke
+          : {};
+
+      if (karaokeSingerElement) {
+        karaokeSingerElement.textContent = karaokeData.singer_name || 'TBA';
+      }
+
+      if (karaokeSongElement) {
+        let songLine = '';
+        const songTitle = karaokeData.song_title || '';
+        const artist = karaokeData.artist || '';
+
+        if (songTitle && artist) {
+          songLine = `"${songTitle}" by ${artist}`;
+        } else if (songTitle) {
+          songLine = `"${songTitle}"`;
+        } else if (artist) {
+          songLine = artist;
+        }
+
+        karaokeSongElement.textContent = songLine;
+      }
+
+      const embedUrl = karaokeData.youtube_embed_url || '';
+
+      if (embedUrl && karaokePreviewElement && karaokeIframeElement) {
+        karaokePreviewElement.removeAttribute('hidden');
+        const embedSrc = embedUrl.includes('?') ? `${embedUrl}&rel=0` : `${embedUrl}?rel=0`;
+        karaokeIframeElement.setAttribute('src', embedSrc);
+        if (karaokeNoteElement) {
+          karaokeNoteElement.textContent = '';
+          karaokeNoteElement.setAttribute('hidden', '');
+        }
+      } else {
+        if (karaokePreviewElement) {
+          karaokePreviewElement.setAttribute('hidden', '');
+        }
+        if (karaokeIframeElement) {
+          karaokeIframeElement.setAttribute('src', '');
+        }
+        if (karaokeNoteElement) {
+          karaokeNoteElement.textContent =
+            'Please give Tony the YouTube link so he can cast it to the TV.';
+          karaokeNoteElement.removeAttribute('hidden');
+        }
+      }
+    } else {
+      if (generalOverrideElement) {
+        generalOverrideElement.removeAttribute('hidden');
+      }
+
+      if (karaokeOverrideElement) {
+        karaokeOverrideElement.setAttribute('hidden', '');
+      }
+
+      if (karaokeTitleElement) {
+        karaokeTitleElement.textContent = '';
+      }
+
+      if (karaokeSubtitleElement) {
+        karaokeSubtitleElement.textContent = '';
+        karaokeSubtitleElement.setAttribute('hidden', '');
+      }
+
+      if (karaokeMessageElement) {
+        karaokeMessageElement.textContent = '';
+        karaokeMessageElement.setAttribute('hidden', '');
+      }
+
+      if (karaokeSingerElement) {
+        karaokeSingerElement.textContent = '';
+      }
+
+      if (karaokeSongElement) {
+        karaokeSongElement.textContent = '';
+      }
+
+      if (karaokePreviewElement) {
+        karaokePreviewElement.setAttribute('hidden', '');
+      }
+
+      if (karaokeIframeElement) {
+        karaokeIframeElement.setAttribute('src', '');
+      }
+
+      if (karaokeNoteElement) {
+        karaokeNoteElement.textContent = '';
+        karaokeNoteElement.setAttribute('hidden', '');
       }
     }
   };

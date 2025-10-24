@@ -6,6 +6,7 @@ from threading import Condition
 from uuid import uuid4
 import copy
 import os
+from urllib.parse import parse_qs, urlparse
 
 from flask import (
     Flask,
@@ -69,6 +70,12 @@ contest_state: dict[str, object] = {
     "winner_locked": False,
     "scoreboard_card": None,
     "show_scoreboard_card": False,
+}
+
+
+karaoke_state: dict[str, object] = {
+    "party_started": False,
+    "current_singer_index": None,
 }
 
 
@@ -157,12 +164,44 @@ def create_scoreboard_card(top_entries: List[dict[str, object]]) -> dict[str, ob
     return {
         "category": "Costume Contest",
         "primary": "Top Costume Scores",
-        "secondary": "Final standings",
+        "secondary": "Final top three standings",
         "tertiary": "Averages reflect scores out of 10.",
         "scoreboard": {
             "entries": scoreboard_rows,
         },
     }
+
+
+def build_youtube_embed_url(raw_url: str) -> str | None:
+    if not raw_url:
+        return None
+
+    parsed = urlparse(raw_url)
+    host = parsed.netloc.lower()
+    path = parsed.path
+    video_id: str | None = None
+
+    if "youtu.be" in host:
+        video_id = path.lstrip("/") or None
+    elif "youtube.com" in host:
+        if path.startswith("/watch"):
+            query_params = parse_qs(parsed.query)
+            video_values = query_params.get("v", [])
+            if video_values:
+                video_id = video_values[0]
+        elif path.startswith("/embed/"):
+            video_id = path.split("/", 2)[-1]
+        elif path.startswith("/shorts/"):
+            video_id = path.split("/", 2)[-1]
+
+    if not video_id:
+        return None
+
+    safe_id = "".join(char for char in video_id if char.isalnum() or char in {"-", "_"})
+    if not safe_id:
+        return None
+
+    return f"https://www.youtube.com/embed/{safe_id}"
 
 
 def build_winner_entry() -> dict[str, object] | None:
@@ -413,7 +452,7 @@ def halloween_login():
 def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
-    global live_display_override, submitted_costume_votes
+    global live_display_override, submitted_costume_votes, karaoke_state
 
     ensure_costume_votes_alignment()
 
@@ -615,6 +654,40 @@ def admin_portal():
                 contest_state["show_scoreboard_card"] = True
             should_broadcast = True
 
+        elif action == "start_karaoke_party":
+            if karaoke_signups:
+                first_signup = karaoke_signups[0]
+                embed_url = build_youtube_embed_url(first_signup.youtube_link)
+
+                karaoke_state["party_started"] = True
+                karaoke_state["current_singer_index"] = 0
+
+                live_display_override = {
+                    "type": "karaoke_start",
+                    "title": "Halloween Karaoke Party",
+                    "highlight": "The stage is live!",
+                    "message": f"Up first: {first_signup.name}",
+                    "details": [
+                        f'Performing "{first_signup.song_title}"',
+                        f"by {first_signup.artist}",
+                    ],
+                    "karaoke": {
+                        "singer_name": first_signup.name,
+                        "song_title": first_signup.song_title,
+                        "artist": first_signup.artist,
+                        "youtube_link": first_signup.youtube_link,
+                        "youtube_embed_url": embed_url,
+                    },
+                }
+                messages.append(
+                    f"Live display updated with the karaoke kickoff card for {first_signup.name}."
+                )
+                should_broadcast = True
+            else:
+                errors.append(
+                    "Add at least one karaoke signup before starting the karaoke party."
+                )
+
         elif action == "lock_costume_winner":
             scoreboard, leader = build_costume_scoreboard()
             if leader and leader["count"]:
@@ -626,7 +699,7 @@ def admin_portal():
                 }
                 contest_state["winner_locked"] = True
                 contest_state["voting_open"] = False
-                top_entries = rank_costume_entries(scoreboard)[:5]
+                top_entries = rank_costume_entries(scoreboard)[:3]
                 contest_state["scoreboard_card"] = (
                     create_scoreboard_card(top_entries) if top_entries else None
                 )
@@ -688,6 +761,7 @@ def admin_portal():
         costume_leader=costume_leader,
         live_override=live_display_override,
         top_costume_rankings=top_costume_rankings,
+        karaoke_state=karaoke_state,
     )
 
 

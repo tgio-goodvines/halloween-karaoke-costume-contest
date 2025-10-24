@@ -98,7 +98,11 @@ body.display-mode {
 }
 
 .display-override {
-  width: min(900px, 100%);
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .display-override[hidden] {
@@ -106,6 +110,8 @@ body.display-mode {
 }
 
 .display-override__card {
+  width: min(900px, 92vw);
+  margin: 0 auto;
   padding: clamp(2rem, 4vw, 3.5rem);
   border-radius: 1.75rem;
   background: radial-gradient(circle at top left, rgba(255, 111, 60, 0.28), rgba(27, 27, 42, 0.92));

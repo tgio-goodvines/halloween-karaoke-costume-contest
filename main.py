@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List, Tuple
+from threading import Condition
 
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    stream_with_context,
+    url_for,
+)
 
 
 app = Flask(__name__)
@@ -34,6 +44,23 @@ costume_signups: List[CostumeSignup] = []
 karaoke_signups: List[KaraokeSignup] = []
 costume_votes: List[List[int]] = []
 live_display_override: dict[str, object] | None = None
+
+display_update_condition = Condition()
+display_update_version = 0
+
+
+def broadcast_display_update() -> None:
+    global display_update_version
+    with display_update_condition:
+        display_update_version += 1
+        display_update_condition.notify_all()
+
+
+contest_state: dict[str, object] = {
+    "voting_open": False,
+    "winner": None,
+    "winner_locked": False,
+}
 
 
 def ensure_costume_votes_alignment() -> None:
@@ -92,6 +119,19 @@ def build_costume_scoreboard() -> Tuple[List[dict[str, object]], dict[str, objec
         leader = scoreboard[leader_index]
 
     return scoreboard, leader
+
+
+def build_winner_entry() -> dict[str, object] | None:
+    winner = contest_state.get("winner")
+    if not winner:
+        return None
+
+    return {
+        "category": "Costume Contest Champion",
+        "primary": winner.get("name", ""),
+        "secondary": f"Crowned for {winner.get('costume', '').strip()}".strip(),
+        "tertiary": f"Average score: {winner.get('average', 0):.2f} | Votes: {winner.get('count', 0)}",
+    }
 
 # Demo slides to rotate on the home page
 SLIDES = [
@@ -177,6 +217,13 @@ def build_rotation_entries() -> List[dict[str, object]]:
         for signup in karaoke_signups
     ]
 
+    winner_entry = build_winner_entry()
+    if winner_entry:
+        rotation_entries.append({
+            **winner_entry,
+            "cta": False,
+        })
+
     max_length = max(len(costume_entries), len(karaoke_entries))
     for index in range(max_length):
         if index < len(costume_entries):
@@ -205,6 +252,34 @@ def live_display():
     )
 
 
+@app.route("/api/display-updates")
+def display_updates():
+    def event_stream():
+        last_sent_version = None
+        # Send the current version immediately so clients sync quickly.
+        with display_update_condition:
+            current_version = display_update_version
+
+        yield f"data: {current_version}\n\n"
+        last_sent_version = current_version
+
+        while True:
+            with display_update_condition:
+                display_update_condition.wait(timeout=25)
+                current_version = display_update_version
+
+            if current_version != last_sent_version:
+                last_sent_version = current_version
+                yield f"data: {current_version}\n\n"
+            else:
+                yield ": keep-alive\n\n"
+
+    response = Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
+
+
 @app.route("/api/display-data")
 def display_data():
     rotation_entries = build_rotation_entries()
@@ -219,11 +294,32 @@ def display_data():
     )
 
 
+@app.context_processor
+def inject_contest_state():
+    return {
+        "costume_contest_state": {
+            "voting_open": bool(contest_state.get("voting_open")),
+            "winner_locked": bool(contest_state.get("winner_locked")),
+            "winner": contest_state.get("winner"),
+        }
+    }
+
+
 @app.route("/halloween")
 def halloween_overview():
+    slides = list(SLIDES)
+    winner = contest_state.get("winner")
+    if winner:
+        slides.append(
+            {
+                "title": "Costume Contest Champion",
+                "content": f"Congratulations to {winner['name']} for {winner['costume']}! Average score: {winner['average']:.2f}.",
+            }
+        )
+
     return render_template(
         "index.html",
-        slides=SLIDES,
+        slides=slides,
         costume_signups=costume_signups,
         karaoke_signups=karaoke_signups,
         show_admin_link=False,
@@ -254,6 +350,7 @@ def admin_portal():
 
     if request.method == "POST":
         action = request.form.get("action", "")
+        should_broadcast = False
 
         if action == "update_costume":
             index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
@@ -269,6 +366,7 @@ def admin_portal():
             if index is not None and name and costume:
                 costume_signups[index] = CostumeSignup(name=name, costume=costume, contact=contact)
                 messages.append(f"Updated costume signup for {name}.")
+                should_broadcast = True
 
         elif action == "delete_costume":
             index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
@@ -276,6 +374,7 @@ def admin_portal():
                 removed = costume_signups.pop(index)
                 costume_votes.pop(index)
                 messages.append(f"Removed costume signup for {removed.name}.")
+                should_broadcast = True
 
         elif action == "add_costume":
             name = request.form.get("name", "").strip()
@@ -291,6 +390,7 @@ def admin_portal():
                 costume_signups.append(CostumeSignup(name=name, costume=costume, contact=contact))
                 costume_votes.append([])
                 messages.append(f"Added costume signup for {name}.")
+                should_broadcast = True
 
         elif action == "update_karaoke":
             index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
@@ -314,12 +414,14 @@ def admin_portal():
                     youtube_link=youtube_link,
                 )
                 messages.append(f"Updated karaoke signup for {name}.")
+                should_broadcast = True
 
         elif action == "delete_karaoke":
             index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
             if index is not None:
                 removed = karaoke_signups.pop(index)
                 messages.append(f"Removed karaoke signup for {removed.name}.")
+                should_broadcast = True
 
         elif action == "add_karaoke":
             name = request.form.get("name", "").strip()
@@ -344,6 +446,7 @@ def admin_portal():
                     )
                 )
                 messages.append(f"Added karaoke signup for {name}.")
+                should_broadcast = True
 
         elif action == "move_costume_up":
             index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
@@ -361,6 +464,7 @@ def admin_portal():
                         costume_votes[index - 1],
                     )
                     messages.append(f"Moved costume signup for {moved_signup.name} up.")
+                    should_broadcast = True
 
         elif action == "move_costume_down":
             index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
@@ -378,6 +482,7 @@ def admin_portal():
                         costume_votes[index + 1],
                     )
                     messages.append(f"Moved costume signup for {moved_signup.name} down.")
+                    should_broadcast = True
 
         elif action == "start_costume_contest":
             voting_url = url_for("costume_voting_page", _external=True)
@@ -392,29 +497,53 @@ def admin_portal():
                 ],
             }
             messages.append("Live display updated with costume contest kickoff message.")
+            contest_state["voting_open"] = True
+            contest_state["winner"] = None
+            contest_state["winner_locked"] = False
+            should_broadcast = True
 
         elif action == "show_costume_winner":
-            scoreboard, leader = build_costume_scoreboard()
-            if leader and leader["count"]:
+            winner = contest_state.get("winner")
+            if winner:
                 live_display_override = {
                     "type": "winner",
                     "title": "Costume Contest Champion",
-                    "highlight": leader["name"],
-                    "message": f"Dressed as {leader['costume']}",
+                    "highlight": winner.get("name"),
+                    "message": f"Dressed as {winner.get('costume')}",
                     "details": [
-                        f"Average score: {leader['average']:.2f}",
-                        f"Total votes: {leader['count']}",
+                        f"Average score: {winner.get('average', 0):.2f}",
+                        f"Total votes: {winner.get('count', 0)}",
                     ],
                 }
                 messages.append(
-                    f"Live display updated to announce {leader['name']} as the costume contest winner."
+                    f"Live display updated to announce {winner.get('name')} as the costume contest winner."
                 )
+                should_broadcast = True
             else:
-                errors.append("No votes have been submitted yet, so a winner cannot be announced.")
+                errors.append("Lock a costume contest winner before announcing it on the live display.")
 
         elif action == "clear_display_override":
             live_display_override = None
             messages.append("Live display has been restored to the rotating schedule.")
+            should_broadcast = True
+
+        elif action == "lock_costume_winner":
+            scoreboard, leader = build_costume_scoreboard()
+            if leader and leader["count"]:
+                contest_state["winner"] = {
+                    "name": leader["name"],
+                    "costume": leader["costume"],
+                    "average": leader["average"],
+                    "count": leader["count"],
+                }
+                contest_state["winner_locked"] = True
+                contest_state["voting_open"] = False
+                messages.append(
+                    f"Locked in {leader['name']} as the costume contest champion."
+                )
+                should_broadcast = True
+            else:
+                errors.append("No votes have been submitted yet, so a winner cannot be locked in.")
 
         elif action == "move_karaoke_up":
             index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
@@ -428,6 +557,7 @@ def admin_portal():
                         karaoke_signups[index - 1],
                     )
                     messages.append(f"Moved karaoke signup for {moved_signup.name} up.")
+                    should_broadcast = True
 
         elif action == "move_karaoke_down":
             index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
@@ -441,11 +571,15 @@ def admin_portal():
                         karaoke_signups[index + 1],
                     )
                     messages.append(f"Moved karaoke signup for {moved_signup.name} down.")
+                    should_broadcast = True
 
         else:
             errors.append("Unknown action submitted. Please try again.")
 
         ensure_costume_votes_alignment()
+
+        if should_broadcast:
+            broadcast_display_update()
 
     costume_scores, costume_leader = build_costume_scoreboard()
 
@@ -574,6 +708,8 @@ def costume_voting_page():
             if not errors:
                 for index, rating in enumerate(ratings):
                     costume_votes[index].append(rating)
+
+                broadcast_display_update()
 
                 return redirect(url_for("costume_voting_page", success="1"))
 

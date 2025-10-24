@@ -2,6 +2,30 @@
 {% set title = "Party Dashboard" %}
 
 {% block content %}
+{% if costume_contest_state.voting_open %}
+  <section class="contest-banner contest-banner--voting">
+    <div class="contest-banner__body">
+      <h2>Costume Contest Voting Is Live!</h2>
+      <p>Rate every costume from 1-10 to help crown tonight's champion.</p>
+    </div>
+    <a class="contest-banner__button" href="{{ url_for('costume_voting_page') }}">Start Voting</a>
+  </section>
+{% elif costume_contest_state.winner_locked and costume_contest_state.winner %}
+  <section class="contest-banner contest-banner--winner">
+    <div class="contest-banner__body">
+      <h2>Costume Contest Champion</h2>
+      <p>
+        Congratulations to <strong>{{ costume_contest_state.winner.name }}</strong> for portraying
+        <strong>{{ costume_contest_state.winner.costume }}</strong>!
+      </p>
+      <p class="contest-banner__meta">
+        Avg Score: {{ '%.2f' | format(costume_contest_state.winner.average) }} • Votes:
+        {{ costume_contest_state.winner.count }}
+      </p>
+    </div>
+  </section>
+{% endif %}
+
 <section class="signup-callout">
   <div class="signup-callout__intro">
     <h2>Welcome to the Party Portal</h2>

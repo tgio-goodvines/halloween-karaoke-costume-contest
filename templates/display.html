@@ -7,7 +7,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='display.css') }}">
   </head>
-  <body class="display-mode" data-display-api="{{ url_for('display_data') }}">
+  <body
+    class="display-mode"
+    data-display-api="{{ url_for('display_data') }}"
+    data-display-updates="{{ url_for('display_updates') }}"
+  >
     {% set first_entry = entries[0] if entries else None %}
     {% set cta_details = first_entry.get('cta_details', {}) if first_entry else {} %}
     {% set cta_lede = cta_details.get('lede', '') %}

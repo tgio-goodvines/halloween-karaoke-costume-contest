@@ -355,6 +355,50 @@ body.display-mode {
   width: 100%;
 }
 
+.karaoke-card__rotator {
+  width: 100%;
+  position: relative;
+  display: grid;
+  align-items: stretch;
+  justify-items: center;
+}
+
+.karaoke-card__panel {
+  grid-area: 1 / 1;
+  width: 100%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  transform: translateY(16px);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.karaoke-card__panel.is-active {
+  position: relative;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  z-index: 1;
+}
+
+.karaoke-card__panel.is-measuring {
+  position: relative;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .karaoke-card__panel {
+    transition-duration: 0.01ms;
+    transition-delay: 0s;
+  }
+}
+
 .karaoke-card__label {
   margin: 0;
   font-size: clamp(0.95rem, 2.2vw, 1.1rem);

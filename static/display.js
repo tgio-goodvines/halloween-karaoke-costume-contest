@@ -38,6 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeEmptyElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-empty]')
     : null;
+  const karaokeRotatorElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-rotator]')
+    : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
   const bodyDataset = (document.body && document.body.dataset) || {};
@@ -118,6 +121,141 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let karaokeCountdownTimerId = null;
   let karaokeCountdownTarget = null;
+  let karaokeRotatorPanels = [];
+  let karaokeRotatorIndex = 0;
+  let karaokeRotatorTimerId = null;
+  let karaokeRotatorResizeHandler = null;
+  const KARAOKE_ROTATOR_INTERVAL = 8000;
+
+  const stopKaraokeRotator = () => {
+    if (karaokeRotatorTimerId) {
+      window.clearInterval(karaokeRotatorTimerId);
+      karaokeRotatorTimerId = null;
+    }
+
+    if (karaokeRotatorResizeHandler) {
+      window.removeEventListener('resize', karaokeRotatorResizeHandler);
+      karaokeRotatorResizeHandler = null;
+    }
+  };
+
+  const collectKaraokeRotatorPanels = () => {
+    if (!karaokeRotatorElement) {
+      karaokeRotatorPanels = [];
+      return;
+    }
+
+    karaokeRotatorPanels = Array.from(
+      karaokeRotatorElement.querySelectorAll('[data-karaoke-panel]')
+    ).filter((panel) => panel instanceof HTMLElement);
+  };
+
+  const applyKaraokeRotatorIndex = () => {
+    if (!karaokeRotatorPanels.length) {
+      return;
+    }
+
+    karaokeRotatorPanels.forEach((panel, panelIndex) => {
+      if (panelIndex === karaokeRotatorIndex) {
+        panel.classList.add('is-active');
+        panel.setAttribute('aria-hidden', 'false');
+      } else {
+        panel.classList.remove('is-active');
+        panel.setAttribute('aria-hidden', 'true');
+      }
+    });
+  };
+
+  const measureKaraokeRotatorHeight = () => {
+    if (!karaokeRotatorElement || !karaokeRotatorPanels.length) {
+      if (karaokeRotatorElement) {
+        karaokeRotatorElement.style.height = '';
+      }
+      return;
+    }
+
+    let maxHeight = 0;
+
+    karaokeRotatorPanels.forEach((panel) => {
+      panel.classList.add('is-measuring');
+      const panelHeight = panel.offsetHeight;
+      if (panelHeight > maxHeight) {
+        maxHeight = panelHeight;
+      }
+      panel.classList.remove('is-measuring');
+    });
+
+    if (maxHeight > 0) {
+      karaokeRotatorElement.style.height = `${Math.ceil(maxHeight)}px`;
+    } else {
+      karaokeRotatorElement.style.height = '';
+    }
+  };
+
+  const refreshKaraokeRotator = ({ resetIndex = false } = {}) => {
+    if (!karaokeRotatorElement) {
+      stopKaraokeRotator();
+      return;
+    }
+
+    collectKaraokeRotatorPanels();
+
+    if (!karaokeRotatorPanels.length) {
+      karaokeRotatorElement.style.height = '';
+      stopKaraokeRotator();
+      return;
+    }
+
+    if (resetIndex || karaokeRotatorIndex >= karaokeRotatorPanels.length) {
+      karaokeRotatorIndex = 0;
+    }
+
+    measureKaraokeRotatorHeight();
+    applyKaraokeRotatorIndex();
+  };
+
+  const queueKaraokeRotatorRefresh = ({ resetIndex = false } = {}) => {
+    if (!karaokeRotatorElement) {
+      return;
+    }
+
+    if (karaokeOverrideElement && karaokeOverrideElement.hasAttribute('hidden')) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      refreshKaraokeRotator({ resetIndex });
+    });
+  };
+
+  const startKaraokeRotator = () => {
+    if (!karaokeRotatorElement) {
+      return;
+    }
+
+    stopKaraokeRotator();
+    refreshKaraokeRotator({ resetIndex: true });
+
+    if (!karaokeRotatorPanels.length) {
+      return;
+    }
+
+    if (!karaokeRotatorResizeHandler) {
+      karaokeRotatorResizeHandler = () => {
+        queueKaraokeRotatorRefresh({ resetIndex: false });
+      };
+      window.addEventListener('resize', karaokeRotatorResizeHandler);
+    }
+
+    if (karaokeRotatorPanels.length <= 1) {
+      return;
+    }
+
+    karaokeRotatorTimerId = window.setInterval(() => {
+      karaokeRotatorIndex = (karaokeRotatorIndex + 1) % karaokeRotatorPanels.length;
+      applyKaraokeRotatorIndex();
+    }, KARAOKE_ROTATOR_INTERVAL);
+  };
 
   const stopKaraokeCountdown = () => {
     if (karaokeCountdownTimerId) {
@@ -161,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (karaokeEmptyElement) {
         karaokeEmptyElement.removeAttribute('hidden');
       }
+      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
@@ -199,6 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (karaokeEmptyElement) {
       karaokeEmptyElement.setAttribute('hidden', '');
     }
+
+    queueKaraokeRotatorRefresh({ resetIndex: false });
   };
 
   const startKaraokeCountdown = (targetIso, labelText = '') => {
@@ -220,12 +361,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!targetIso) {
       karaokeCountdownElement.textContent = '—';
+      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
     const parsedTarget = new Date(targetIso);
     if (Number.isNaN(parsedTarget.getTime())) {
       karaokeCountdownElement.textContent = '—';
+      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
@@ -247,6 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
           karaokeCountdownNoteElement.removeAttribute('hidden');
         }
         stopKaraokeCountdown();
+        queueKaraokeRotatorRefresh({ resetIndex: false });
         return;
       }
 
@@ -264,6 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateDisplay();
     karaokeCountdownTimerId = window.setInterval(updateDisplay, 1000);
+    queueKaraokeRotatorRefresh({ resetIndex: false });
   };
 
   const updateOverrideContent = () => {
@@ -375,6 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       updateKaraokeLineup(lineup);
       startKaraokeCountdown(countdownTarget, countdownLabel);
+      startKaraokeRotator();
     } else {
       if (generalOverrideElement) {
         generalOverrideElement.removeAttribute('hidden');
@@ -382,6 +528,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (karaokeOverrideElement) {
         karaokeOverrideElement.setAttribute('hidden', '');
+      }
+
+      stopKaraokeRotator();
+      if (karaokeRotatorElement) {
+        karaokeRotatorElement.style.height = '';
       }
 
       if (karaokeTitleElement) {

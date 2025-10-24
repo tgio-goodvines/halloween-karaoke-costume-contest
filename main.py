@@ -640,7 +640,6 @@ def admin_portal():
                     "type": "karaoke_start",
                     "title": "Halloween Karaoke Party",
                     "highlight": "The stage is live!",
-                    "message": f"Lineup posted below—up first: {first_display_name}",
                     "karaoke": {
                         "lineup": lineup_entries,
                         "current_index": karaoke_state["current_singer_index"],

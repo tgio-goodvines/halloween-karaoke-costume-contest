@@ -93,12 +93,140 @@ body.display-mode {
   gap: clamp(1rem, 2.4vw, 1.5rem);
   opacity: 0;
   transform: translateY(24px) scale(0.98);
-  transition: opacity 0.6s ease, transform 0.6s ease;
+  transition: opacity 0.6s ease, transform 0.6s ease, box-shadow 0.6s ease, border-color 0.6s ease,
+    background 0.6s ease;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .display-card.active {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+@keyframes inferno-smoke-rise {
+  0% {
+    transform: translate3d(-6%, 14%, 0) scale(0.95) rotate(0deg);
+    opacity: 0.25;
+  }
+  35% {
+    transform: translate3d(8%, -4%, 0) scale(1.1) rotate(6deg);
+    opacity: 0.55;
+  }
+  70% {
+    transform: translate3d(-4%, -18%, 0) scale(1.28) rotate(-4deg);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translate3d(4%, -28%, 0) scale(1.42) rotate(3deg);
+    opacity: 0.22;
+  }
+}
+
+@keyframes inferno-smoke-drift {
+  0% {
+    transform: translate3d(10%, 18%, 0) scale(0.9) rotate(-6deg);
+    opacity: 0.2;
+  }
+  40% {
+    transform: translate3d(-8%, 0%, 0) scale(1.18) rotate(2deg);
+    opacity: 0.5;
+  }
+  80% {
+    transform: translate3d(4%, -22%, 0) scale(1.32) rotate(-2deg);
+    opacity: 0.36;
+  }
+  100% {
+    transform: translate3d(-6%, -32%, 0) scale(1.46) rotate(5deg);
+    opacity: 0.18;
+  }
+}
+
+.display-card::before,
+.display-card::after,
+.display-override__card::before,
+.display-override__card::after {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+  filter: blur(42px);
+  mix-blend-mode: screen;
+  z-index: 0;
+}
+
+.display-card--inferno,
+.display-override__card--inferno {
+  border-color: rgba(255, 72, 72, 0.65);
+  box-shadow: 0 55px 110px rgba(255, 60, 60, 0.35), 0 0 44px rgba(255, 96, 96, 0.35);
+  background: radial-gradient(circle at top, rgba(255, 66, 66, 0.18), rgba(20, 10, 18, 0.92));
+}
+
+.display-card--inferno::before,
+.display-override__card--inferno::before {
+  background: radial-gradient(circle at center, rgba(255, 118, 118, 0.55), rgba(255, 118, 118, 0.08));
+  opacity: 0.6;
+  animation: inferno-smoke-rise 11s ease-in-out infinite;
+}
+
+.display-card--inferno::after,
+.display-override__card--inferno::after {
+  background: radial-gradient(circle at center, rgba(255, 180, 140, 0.45), rgba(255, 180, 140, 0.05));
+  opacity: 0.45;
+  animation: inferno-smoke-drift 13s ease-in-out infinite;
+}
+
+.display-card--costume .display-category,
+.display-card--winner .display-category {
+  color: #ffdada;
+  text-shadow: 0 0 18px rgba(255, 120, 120, 0.75);
+}
+
+.display-card--costume .display-primary,
+.display-card--winner .display-primary {
+  text-shadow: 0 0 22px rgba(255, 120, 120, 0.55);
+}
+
+.display-card--winner {
+  box-shadow: 0 65px 120px rgba(255, 102, 102, 0.42), 0 0 52px rgba(255, 140, 140, 0.4);
+  border-width: 2px;
+}
+
+.display-card--winner .display-secondary,
+.display-card--winner .display-tertiary {
+  color: rgba(255, 231, 231, 0.92);
+}
+
+.display-card--costume .display-secondary,
+.display-card--costume .display-tertiary {
+  color: rgba(255, 218, 218, 0.88);
+}
+
+.display-card--inferno > *,
+.display-override__card--inferno > * {
+  position: relative;
+  z-index: 1;
+}
+
+.display-override__card--inferno {
+  background: radial-gradient(circle at top, rgba(255, 66, 66, 0.22), rgba(25, 12, 22, 0.95));
+}
+
+.display-override__card--karaoke .karaoke-card__title,
+.display-override__card--karaoke .karaoke-card__label,
+.display-override__card--karaoke .karaoke-card__position {
+  text-shadow: 0 0 20px rgba(255, 118, 118, 0.6);
+  color: #ffe8e8;
+}
+
+.display-override__card--karaoke .karaoke-card__current {
+  border-color: rgba(255, 102, 102, 0.55);
+  box-shadow: 0 32px 72px rgba(255, 96, 96, 0.35);
+  background: rgba(255, 96, 96, 0.12);
 }
 
 .display-override {
@@ -124,6 +252,10 @@ body.display-mode {
   display: grid;
   gap: clamp(1rem, 2.6vw, 1.6rem);
   text-align: center;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: box-shadow 0.6s ease, border-color 0.6s ease, background 0.6s ease;
 }
 
 .display-override__general[hidden],

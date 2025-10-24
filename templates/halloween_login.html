@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% set title = "Welcome" %}
+
+{% block content %}
+<section class="form-section">
+  <h2>Welcome to the Halloween Hub</h2>
+  <p>Tell us who you are so we can keep the contest fair. You'll only need to do this once per device.</p>
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post" class="login-form">
+    <label for="username">Your Name</label>
+    <input type="text" id="username" name="username" placeholder="e.g., Jamie" required value="{{ request.form.username }}">
+    <input type="hidden" name="next" value="{{ next_page }}">
+    <button type="submit" class="button button--primary">Continue</button>
+  </form>
+</section>
+{% endblock %}

@@ -120,6 +120,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const scoreboardNoteElement = scoreboardLayout
     ? scoreboardLayout.querySelector('[data-scoreboard-note]')
     : null;
+  const countdownLayout = card.querySelector('[data-countdown-layout]');
+  const countdownCategoryElement = countdownLayout
+    ? countdownLayout.querySelector('[data-countdown-category]')
+    : null;
+  const countdownTitleElement = countdownLayout
+    ? countdownLayout.querySelector('[data-countdown-title]')
+    : null;
+  const countdownSubtitleElement = countdownLayout
+    ? countdownLayout.querySelector('[data-countdown-subtitle]')
+    : null;
+  const countdownTimerElement = countdownLayout
+    ? countdownLayout.querySelector('[data-countdown-timer]')
+    : null;
+  const countdownLabelElement = countdownLayout
+    ? countdownLayout.querySelector('[data-countdown-label]')
+    : null;
   const typeElement = card.querySelector('[data-entry-type]');
   const primaryElement = card.querySelector('[data-entry-primary]');
   const secondaryElement = card.querySelector('[data-entry-secondary]');
@@ -137,12 +153,89 @@ document.addEventListener('DOMContentLoaded', () => {
   let karaokeCountdownTimerId = null;
   let karaokeCountdownTarget = null;
 
+  let rotationCountdownTimerId = null;
+  let rotationCountdownTarget = null;
+  let rotationCountdownLabelText = '';
+
   const stopKaraokeCountdown = () => {
     if (karaokeCountdownTimerId) {
       window.clearInterval(karaokeCountdownTimerId);
       karaokeCountdownTimerId = null;
     }
     karaokeCountdownTarget = null;
+  };
+
+  const stopRotationCountdown = () => {
+    if (rotationCountdownTimerId) {
+      window.clearInterval(rotationCountdownTimerId);
+      rotationCountdownTimerId = null;
+    }
+    rotationCountdownTarget = null;
+    rotationCountdownLabelText = '';
+  };
+
+  const updateRotationCountdownDisplay = () => {
+    if (!countdownTimerElement || !rotationCountdownTarget) {
+      return;
+    }
+
+    const now = new Date();
+    const diffMs = rotationCountdownTarget.getTime() - now.getTime();
+    const remainingSeconds = Math.max(0, Math.floor(diffMs / 1000));
+    const hours = Math.floor(remainingSeconds / 3600);
+    const minutes = Math.floor((remainingSeconds % 3600) / 60);
+    const seconds = remainingSeconds % 60;
+
+    const hoursText = hours.toString().padStart(2, '0');
+    const minutesText = minutes.toString().padStart(2, '0');
+    const secondsText = seconds.toString().padStart(2, '0');
+
+    countdownTimerElement.textContent = `${hoursText}:${minutesText}:${secondsText}`;
+
+    if (countdownLabelElement) {
+      if (remainingSeconds === 0) {
+        countdownLabelElement.textContent = 'It\'s showtime!';
+        countdownLabelElement.removeAttribute('hidden');
+      } else if (rotationCountdownLabelText) {
+        countdownLabelElement.textContent = rotationCountdownLabelText;
+        countdownLabelElement.removeAttribute('hidden');
+      } else {
+        countdownLabelElement.textContent = '';
+        countdownLabelElement.setAttribute('hidden', '');
+      }
+    }
+  };
+
+  const startRotationCountdown = (targetIso, labelText = '') => {
+    if (!countdownTimerElement) {
+      return;
+    }
+
+    stopRotationCountdown();
+
+    if (!targetIso) {
+      countdownTimerElement.textContent = '—';
+      if (countdownLabelElement) {
+        countdownLabelElement.textContent = '';
+        countdownLabelElement.setAttribute('hidden', '');
+      }
+      return;
+    }
+
+    const parsedTarget = new Date(targetIso);
+    if (Number.isNaN(parsedTarget.getTime())) {
+      countdownTimerElement.textContent = '—';
+      if (countdownLabelElement) {
+        countdownLabelElement.textContent = '';
+        countdownLabelElement.setAttribute('hidden', '');
+      }
+      return;
+    }
+
+    rotationCountdownTarget = parsedTarget;
+    rotationCountdownLabelText = labelText;
+    updateRotationCountdownDisplay();
+    rotationCountdownTimerId = window.setInterval(updateRotationCountdownDisplay, 1000);
   };
 
   const formatPerformerSong = (entry) => {
@@ -497,6 +590,7 @@ document.addEventListener('DOMContentLoaded', () => {
           'display-override__card--inferno',
           'display-override__card--karaoke'
         );
+        karaokePerformersCardElement.setAttribute('hidden', '');
       }
 
       if (karaokeTitleElement) {
@@ -563,43 +657,76 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const applyEntry = (entry) => {
-    typeElement.textContent = entry.category || '';
-    primaryElement.textContent = entry.primary || '';
-    secondaryElement.textContent = entry.secondary || '';
+    const safeEntry = entry || {};
 
-    if (entry.tertiary) {
-      tertiaryElement.textContent = entry.tertiary;
+    typeElement.textContent = safeEntry.category || '';
+    primaryElement.textContent = safeEntry.primary || '';
+    secondaryElement.textContent = safeEntry.secondary || '';
+
+    if (safeEntry.tertiary) {
+      tertiaryElement.textContent = safeEntry.tertiary;
       tertiaryElement.removeAttribute('hidden');
     } else {
       tertiaryElement.textContent = '';
       tertiaryElement.setAttribute('hidden', '');
     }
 
-    const ctaDetails = entry.cta_details || {};
+    const ctaDetails = safeEntry.cta_details || {};
+    const countdownDetails =
+      safeEntry.countdown && typeof safeEntry.countdown === 'object' ? safeEntry.countdown : null;
     const hasScoreboard = Boolean(
-      scoreboardLayout && entry.scoreboard && Array.isArray(entry.scoreboard.entries) && entry.scoreboard.entries.length
+      scoreboardLayout &&
+        safeEntry.scoreboard &&
+        Array.isArray(safeEntry.scoreboard.entries) &&
+        safeEntry.scoreboard.entries.length
     );
-    const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent && !hasScoreboard);
+    const hasCountdown = Boolean(
+      countdownLayout &&
+        countdownDetails &&
+        typeof countdownDetails.target === 'string' &&
+        countdownDetails.target
+    );
+    const shouldShowCtaLayout = Boolean(
+      safeEntry.cta && ctaLayout && defaultContent && !hasScoreboard && !hasCountdown
+    );
 
-    card.classList.remove('display-card--inferno', 'display-card--costume', 'display-card--winner');
+    card.classList.remove(
+      'display-card--inferno',
+      'display-card--costume',
+      'display-card--winner',
+      'display-card--countdown'
+    );
+
+    if (countdownLayout) {
+      countdownLayout.setAttribute('hidden', '');
+    }
 
     if (hasScoreboard) {
+      stopRotationCountdown();
+
       if (defaultContent) {
         defaultContent.setAttribute('hidden', '');
       }
       if (ctaLayout) {
         ctaLayout.setAttribute('hidden', '');
       }
+      if (countdownTimerElement) {
+        countdownTimerElement.textContent = '--:--:--';
+      }
+      if (countdownLabelElement) {
+        countdownLabelElement.textContent = '';
+        countdownLabelElement.setAttribute('hidden', '');
+      }
       scoreboardLayout.removeAttribute('hidden');
       card.classList.add('scoreboard');
       card.classList.remove('cta');
 
       if (scoreboardTitleElement) {
-        scoreboardTitleElement.textContent = entry.primary || 'Top Costume Scores';
+        scoreboardTitleElement.textContent = safeEntry.primary || 'Top Costume Scores';
       }
 
       if (scoreboardSubtitleElement) {
-        const subtitle = entry.secondary || '';
+        const subtitle = safeEntry.secondary || '';
         if (subtitle) {
           scoreboardSubtitleElement.textContent = subtitle;
           scoreboardSubtitleElement.removeAttribute('hidden');
@@ -610,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (scoreboardNoteElement) {
-        const note = entry.tertiary || '';
+        const note = safeEntry.tertiary || '';
         if (note) {
           scoreboardNoteElement.textContent = note;
           scoreboardNoteElement.removeAttribute('hidden');
@@ -622,7 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (scoreboardListElement) {
         scoreboardListElement.innerHTML = '';
-        const rows = entry.scoreboard.entries || [];
+        const rows = safeEntry.scoreboard.entries || [];
         rows.forEach((row, index) => {
           const item = document.createElement('li');
           item.className = 'display-scoreboard__item';
@@ -670,12 +797,59 @@ document.addEventListener('DOMContentLoaded', () => {
           scoreboardListElement.appendChild(item);
         });
       }
+    } else if (hasCountdown) {
+      if (defaultContent) {
+        defaultContent.setAttribute('hidden', '');
+      }
+      if (ctaLayout) {
+        ctaLayout.setAttribute('hidden', '');
+      }
+      if (scoreboardLayout) {
+        scoreboardLayout.setAttribute('hidden', '');
+        if (scoreboardListElement) {
+          scoreboardListElement.innerHTML = '';
+        }
+      }
+
+      if (countdownLayout) {
+        countdownLayout.removeAttribute('hidden');
+      }
+
+      card.classList.remove('scoreboard');
+      card.classList.remove('cta');
+      card.classList.add('display-card--countdown');
+
+      if (countdownCategoryElement) {
+        countdownCategoryElement.textContent = safeEntry.category || 'Karaoke Countdown';
+      }
+
+      if (countdownTitleElement) {
+        countdownTitleElement.textContent = safeEntry.primary || 'Countdown to Karaoke';
+      }
+
+      if (countdownSubtitleElement) {
+        const subtitle = safeEntry.secondary || '';
+        if (subtitle) {
+          countdownSubtitleElement.textContent = subtitle;
+          countdownSubtitleElement.removeAttribute('hidden');
+        } else {
+          countdownSubtitleElement.textContent = '';
+          countdownSubtitleElement.setAttribute('hidden', '');
+        }
+      }
+
+      const labelText =
+        countdownDetails && typeof countdownDetails.label === 'string' ? countdownDetails.label : '';
+      const targetValue = countdownDetails ? countdownDetails.target : '';
+      startRotationCountdown(targetValue, labelText);
     } else if (shouldShowCtaLayout) {
+      stopRotationCountdown();
+
       defaultContent.setAttribute('hidden', '');
       ctaLayout.removeAttribute('hidden');
 
       if (ctaLedeElement) {
-        ctaLedeElement.textContent = ctaDetails.lede || entry.secondary || entry.primary || '';
+        ctaLedeElement.textContent = ctaDetails.lede || safeEntry.secondary || safeEntry.primary || '';
       }
 
       if (ctaWifiNetworkElement) {
@@ -687,7 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (ctaPortalLinkElement) {
-        const portalUrl = ctaDetails.portal_url || entry.link || '';
+        const portalUrl = ctaDetails.portal_url || safeEntry.link || '';
         const portalLabel = ctaDetails.portal_label || portalUrl;
 
         if (portalUrl) {
@@ -704,7 +878,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (ctaReminderElement) {
-        ctaReminderElement.textContent = ctaDetails.reminder || entry.tertiary || '';
+        ctaReminderElement.textContent = ctaDetails.reminder || safeEntry.tertiary || '';
       }
 
       if (scoreboardLayout) {
@@ -714,8 +888,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      if (countdownTimerElement) {
+        countdownTimerElement.textContent = '--:--:--';
+      }
+      if (countdownLabelElement) {
+        countdownLabelElement.textContent = '';
+        countdownLabelElement.setAttribute('hidden', '');
+      }
+
       card.classList.remove('scoreboard');
     } else {
+      stopRotationCountdown();
+
       if (defaultContent) {
         defaultContent.removeAttribute('hidden');
       }
@@ -747,17 +931,25 @@ document.addEventListener('DOMContentLoaded', () => {
           scoreboardListElement.innerHTML = '';
         }
       }
+      if (countdownTimerElement) {
+        countdownTimerElement.textContent = '--:--:--';
+      }
+      if (countdownLabelElement) {
+        countdownLabelElement.textContent = '';
+        countdownLabelElement.setAttribute('hidden', '');
+      }
 
       card.classList.remove('scoreboard');
-    }
-
-    if (!hasScoreboard && entry.cta) {
-      card.classList.add('cta');
-    } else if (!entry.cta || hasScoreboard) {
       card.classList.remove('cta');
     }
 
-    const categoryText = (entry.category || '').toLowerCase();
+    if (!hasScoreboard && safeEntry.cta && !hasCountdown) {
+      card.classList.add('cta');
+    } else if (!safeEntry.cta || hasScoreboard || hasCountdown) {
+      card.classList.remove('cta');
+    }
+
+    const categoryText = (safeEntry.category || '').toLowerCase();
     const isWinnerCard = categoryText.includes('champion');
     const isCostumeCard = categoryText.includes('costume contest') && !hasScoreboard;
 
@@ -772,9 +964,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (linkElement) {
-      if (entry.link && !entry.cta && !hasScoreboard) {
-        linkElement.textContent = entry.link_label || entry.link;
-        linkElement.setAttribute('href', entry.link);
+      if (safeEntry.link && !safeEntry.cta && !hasScoreboard && !hasCountdown) {
+        linkElement.textContent = safeEntry.link_label || safeEntry.link;
+        linkElement.setAttribute('href', safeEntry.link);
         linkElement.removeAttribute('hidden');
       } else {
         linkElement.textContent = '';
@@ -819,11 +1011,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (overrideState) {
       stopRotation();
+      stopRotationCountdown();
       return;
     }
 
     if (entries.length === 0) {
       stopRotation();
+      stopRotationCountdown();
       emptyState.classList.add('is-visible');
       card.classList.remove('active');
       card.setAttribute('hidden', '');

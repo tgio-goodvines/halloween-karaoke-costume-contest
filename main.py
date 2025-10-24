@@ -583,7 +583,6 @@ def admin_portal():
                 "message": "Visit the costume voting page to rate every competitor from 1-10.",
                 "details": [
                     f"Open {voting_url} on your device to cast your ballot.",
-                    "Scores update live on this dashboard.",
                 ],
             }
             messages.append("Live display updated with costume contest kickoff message.")

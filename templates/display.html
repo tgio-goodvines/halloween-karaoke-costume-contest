@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='display.css') }}">
   </head>
-  <body class="display-mode">
+  <body class="display-mode" data-display-api="{{ url_for('display_data') }}">
     {% set first_entry = entries[0] if entries else None %}
     {% set cta_details = first_entry.get('cta_details', {}) if first_entry else {} %}
     {% set cta_lede = cta_details.get('lede', '') %}
@@ -77,11 +77,11 @@
           <a
             class="display-cta-link"
             data-entry-link
-            {% if not first_entry or not first_entry.get('link') %}hidden{% endif %}
-            {% if first_entry and first_entry.get('link') %}href="{{ first_entry['link'] }}"{% endif %}
+            {% if (first_entry and (first_entry.get('cta') or not first_entry.get('link'))) or not first_entry %}hidden{% endif %}
+            {% if first_entry and first_entry.get('link') and not first_entry.get('cta') %}href="{{ first_entry['link'] }}"{% endif %}
             target="_blank"
             rel="noopener"
-          >{{ first_entry['link_label'] if first_entry and first_entry.get('link_label') else (first_entry['link'] if first_entry and first_entry.get('link') else '') }}</a>
+          >{{ first_entry['link_label'] if first_entry and first_entry.get('link_label') and not first_entry.get('cta') else (first_entry['link'] if first_entry and first_entry.get('link') and not first_entry.get('cta') else '') }}</a>
         </section>
 
         <section class="display-empty{% if not entries %} is-visible{% endif %}" data-empty-state>

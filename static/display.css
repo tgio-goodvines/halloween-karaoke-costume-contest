@@ -105,6 +105,11 @@ body.display-mode {
   transform: translateY(0) scale(1);
 }
 
+.display-card--countdown {
+  display: grid;
+  gap: clamp(1.5rem, 3vw, 2.25rem);
+}
+
 @keyframes inferno-smoke-rise {
   0% {
     transform: translate3d(-6%, 14%, 0) scale(0.95) rotate(0deg);
@@ -197,6 +202,53 @@ body.display-mode {
 .display-card--winner .display-category {
   color: #ffdada;
   text-shadow: 0 0 18px rgba(255, 120, 120, 0.75);
+}
+
+.display-countdown {
+  display: grid;
+  gap: clamp(1rem, 3vw, 2rem);
+  text-align: center;
+}
+
+.display-countdown__meta {
+  display: grid;
+  gap: clamp(0.4rem, 1.6vw, 0.9rem);
+}
+
+.display-countdown__category {
+  font-size: clamp(0.95rem, 2vw, 1.2rem);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.display-countdown__title {
+  margin: 0;
+  font-size: clamp(2.1rem, 4.8vw, 3.6rem);
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.display-countdown__subtitle {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.4vw, 1.35rem);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.display-countdown__timer {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(2.8rem, 8vw, 5.2rem);
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  text-shadow: 0 0 30px rgba(255, 146, 96, 0.6);
+  color: #ffefe0;
+}
+
+.display-countdown__label {
+  margin: 0;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  color: rgba(255, 255, 255, 0.68);
 }
 
 .display-card--costume .display-primary,

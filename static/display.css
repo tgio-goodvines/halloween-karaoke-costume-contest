@@ -167,12 +167,18 @@ body.display-mode {
 .karaoke-card__scroll-area {
   width: min(680px, 100%);
   max-height: clamp(260px, 58vh, 520px);
-  overflow-y: auto;
   padding-right: clamp(0.3rem, 1vw, 0.75rem);
   margin: 0 auto;
   display: grid;
   gap: clamp(0.75rem, 2.2vw, 1.15rem);
   scrollbar-gutter: stable both-edges;
+  overflow: hidden;
+  transition: height 0.45s ease;
+}
+
+.karaoke-card__scroll-area[data-lock-height='true'] {
+  height: var(--karaoke-entry-height, auto);
+  max-height: none;
 }
 
 .karaoke-card__scroll-area::-webkit-scrollbar {

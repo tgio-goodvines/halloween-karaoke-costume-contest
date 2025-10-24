@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const emptyState = document.querySelector('[data-empty-state]');
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
+  const dataEndpoint = (document.body && document.body.dataset && document.body.dataset.displayApi) || '/api/display-data';
 
   if (!dataElement || !card || !emptyState) {
     return;
@@ -128,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (linkElement) {
-      if (entry.link) {
+      if (entry.link && !entry.cta) {
         linkElement.textContent = entry.link_label || entry.link;
         linkElement.setAttribute('href', entry.link);
         linkElement.removeAttribute('hidden');
@@ -215,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const fetchLatestEntries = async () => {
     try {
-      const response = await fetch('/api/display-data', { cache: 'no-store' });
+      const response = await fetch(dataEndpoint, { cache: 'no-store' });
 
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);

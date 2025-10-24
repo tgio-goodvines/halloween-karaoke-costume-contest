@@ -8,6 +8,11 @@ from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 app = Flask(__name__)
 
+# Allow routes to respond to both `/path` and `/path/` so that users who
+# bookmark a trailing slash variant do not receive a 404 that might look like
+# a timeout when the browser keeps retrying.
+app.url_map.strict_slashes = False
+
 
 @dataclass
 class CostumeSignup:

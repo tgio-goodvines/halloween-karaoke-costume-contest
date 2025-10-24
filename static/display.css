@@ -182,6 +182,12 @@ body.display-mode {
   gap: clamp(1rem, 2.5vw, 1.4rem);
 }
 
+.display-card.scoreboard {
+  background: radial-gradient(circle at top left, rgba(125, 94, 255, 0.28), rgba(27, 27, 42, 0.92));
+  border: 2px solid rgba(188, 153, 255, 0.4);
+  box-shadow: 0 45px 90px rgba(69, 51, 144, 0.28), 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
 .display-cta-layout {
   display: grid;
   gap: clamp(0.85rem, 2.2vw, 1.2rem);
@@ -197,6 +203,108 @@ body.display-mode {
   font-size: clamp(1.05rem, 2.4vw, 1.4rem);
   font-weight: 600;
   color: rgba(255, 255, 255, 0.92);
+}
+
+.display-scoreboard {
+  display: grid;
+  gap: clamp(1rem, 2.2vw, 1.4rem);
+  text-align: left;
+}
+
+.display-scoreboard[hidden] {
+  display: none !important;
+}
+
+.display-scoreboard__header {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.display-scoreboard__title {
+  margin: 0;
+  font-size: clamp(1.4rem, 3.2vw, 2rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.display-scoreboard__subtitle {
+  margin: 0;
+  font-size: clamp(1rem, 2.4vw, 1.3rem);
+  color: rgba(244, 244, 248, 0.85);
+}
+
+.display-scoreboard__subtitle[hidden] {
+  display: none !important;
+}
+
+.display-scoreboard__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: clamp(0.8rem, 1.8vw, 1.1rem);
+}
+
+.display-scoreboard__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: clamp(0.7rem, 1.6vw, 1.1rem);
+  padding: clamp(0.75rem, 1.8vw, 1.05rem);
+  border-radius: 1rem;
+  background: rgba(12, 12, 28, 0.75);
+  border: 1px solid rgba(188, 153, 255, 0.25);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.display-scoreboard__rank {
+  font-size: clamp(1.2rem, 2.6vw, 1.6rem);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.display-scoreboard__info {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.display-scoreboard__name {
+  font-weight: 600;
+  font-size: clamp(1.1rem, 2.4vw, 1.5rem);
+}
+
+.display-scoreboard__costume {
+  font-size: clamp(0.9rem, 2vw, 1.1rem);
+  color: rgba(244, 244, 248, 0.75);
+}
+
+.display-scoreboard__metrics {
+  display: grid;
+  justify-items: end;
+  gap: 0.3rem;
+  text-align: right;
+}
+
+.display-scoreboard__average {
+  font-weight: 700;
+  font-size: clamp(1.2rem, 2.6vw, 1.6rem);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.display-scoreboard__votes {
+  font-size: clamp(0.9rem, 2vw, 1.05rem);
+  color: rgba(244, 244, 248, 0.78);
+}
+
+.display-scoreboard__note {
+  margin: 0;
+  font-size: clamp(0.85rem, 1.8vw, 1rem);
+  color: rgba(244, 244, 248, 0.75);
+  text-align: right;
+}
+
+.display-scoreboard__note[hidden] {
+  display: none !important;
 }
 
 .display-cta-lede:empty {

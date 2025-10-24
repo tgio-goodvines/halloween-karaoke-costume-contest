@@ -160,28 +160,18 @@
               <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
               <p class="karaoke-card__message" data-karaoke-message></p>
               <div class="karaoke-card__content">
-                <div class="karaoke-card__rotator" data-karaoke-rotator>
-                  <section
-                    class="karaoke-card__panel karaoke-card__countdown is-active"
-                    data-karaoke-panel="countdown"
-                  >
-                    <p class="karaoke-card__label">Countdown to showtime</p>
-                    <p class="karaoke-card__timer" data-karaoke-countdown>--:--:--</p>
-                    <p class="karaoke-card__note" data-karaoke-countdown-note hidden></p>
-                  </section>
-                  <section
-                    class="karaoke-card__panel karaoke-card__upcoming"
-                    data-karaoke-panel="upcoming"
-                    data-karaoke-upcoming
-                    aria-hidden="true"
-                  >
-                    <p class="karaoke-card__label">Upcoming performers</p>
-                    <ol class="karaoke-card__list" data-karaoke-lineup></ol>
-                    <p class="karaoke-card__empty" data-karaoke-empty hidden>
-                      No karaoke performers are queued yet.
-                    </p>
-                  </section>
-                </div>
+                <section class="karaoke-card__countdown" data-karaoke-countdown-section>
+                  <p class="karaoke-card__label">Countdown to showtime</p>
+                  <p class="karaoke-card__timer" data-karaoke-countdown>--:--:--</p>
+                  <p class="karaoke-card__note" data-karaoke-countdown-note hidden></p>
+                </section>
+                <section class="karaoke-card__upcoming" data-karaoke-upcoming>
+                  <p class="karaoke-card__label">Upcoming performers</p>
+                  <ol class="karaoke-card__list" data-karaoke-lineup></ol>
+                  <p class="karaoke-card__empty" data-karaoke-empty hidden>
+                    No karaoke performers are queued yet.
+                  </p>
+                </section>
               </div>
             </div>
             </div>

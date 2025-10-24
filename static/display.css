@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Creepster&family=UnifrakturMaguntia&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Creepster&family=Grind+To+The+Max&display=swap");
 
 body.display-mode {
   align-items: center;
@@ -26,7 +26,7 @@ body.display-mode {
 .display-header h1 {
   margin: 0;
   font-size: clamp(2.6rem, 4.6vw, 3.9rem);
-  font-family: "UnifrakturMaguntia", "Creepster", "Nosifer", "Cinzel Decorative", cursive;
+  font-family: "Grind To The Max", "Creepster", "Nosifer", "Cinzel Decorative", cursive;
   letter-spacing: 0.04em;
   text-shadow: 0 0 12px rgba(255, 111, 60, 0.45), 0 0 28px rgba(252, 146, 96, 0.35);
 }

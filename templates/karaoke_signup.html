@@ -27,8 +27,17 @@
     <label for="song_title">Song Title *</label>
     <input type="text" id="song_title" name="song_title" required>
 
-    <label for="artist">Artist</label>
-    <input type="text" id="artist" name="artist" placeholder="Optional">
+    <label for="artist">Artist *</label>
+    <input type="text" id="artist" name="artist" required>
+
+    <label for="youtube_link">YouTube Link</label>
+    <input
+      type="url"
+      id="youtube_link"
+      name="youtube_link"
+      placeholder="https://www.youtube.com/watch?v=... (optional)"
+      inputmode="url"
+    >
 
     <button type="submit">Submit Song</button>
   </form>

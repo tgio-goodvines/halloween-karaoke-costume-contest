@@ -72,6 +72,8 @@
                 </label>
               </div>
               <div class="admin-entry__actions">
+                <button type="submit" name="action" value="move_costume_up" class="button">Move Up</button>
+                <button type="submit" name="action" value="move_costume_down" class="button">Move Down</button>
                 <button type="submit" name="action" value="update_costume" class="button button--primary">Save Changes</button>
                 <button type="submit" name="action" value="delete_costume" class="button button--danger">Remove</button>
               </div>
@@ -99,7 +101,11 @@
           </label>
           <label>
             Artist
-            <input type="text" name="artist" placeholder="Optional">
+            <input type="text" name="artist" required>
+          </label>
+          <label>
+            YouTube Link
+            <input type="url" name="youtube_link" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
           </label>
         </div>
         <button type="submit" name="action" value="add_karaoke" class="button button--primary">Add Karaoke Signup</button>
@@ -121,10 +127,16 @@
                 </label>
                 <label>
                   Artist
-                  <input type="text" name="artist" value="{{ signup.artist }}" placeholder="Optional">
+                  <input type="text" name="artist" value="{{ signup.artist }}" required>
+                </label>
+                <label>
+                  YouTube Link
+                  <input type="url" name="youtube_link" value="{{ signup.youtube_link }}" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
                 </label>
               </div>
               <div class="admin-entry__actions">
+                <button type="submit" name="action" value="move_karaoke_up" class="button">Move Up</button>
+                <button type="submit" name="action" value="move_karaoke_down" class="button">Move Down</button>
                 <button type="submit" name="action" value="update_karaoke" class="button button--primary">Save Changes</button>
                 <button type="submit" name="action" value="delete_karaoke" class="button button--danger">Remove</button>
               </div>

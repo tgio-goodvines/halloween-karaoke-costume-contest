@@ -18,7 +18,7 @@ app.url_map.strict_slashes = False
 class CostumeSignup:
     name: str
     costume: str
-    contact: str
+    contact: str = ""
 
 
 @dataclass
@@ -26,6 +26,7 @@ class KaraokeSignup:
     name: str
     song_title: str
     artist: str
+    youtube_link: str = ""
 
 
 # In-memory stores for signups. In a production application this would be persisted.
@@ -161,6 +162,7 @@ def halloween_overview():
         slides=SLIDES,
         costume_signups=costume_signups,
         karaoke_signups=karaoke_signups,
+        show_admin_link=False,
     )
 
 
@@ -226,14 +228,22 @@ def admin_portal():
             name = request.form.get("name", "").strip()
             song_title = request.form.get("song_title", "").strip()
             artist = request.form.get("artist", "").strip()
+            youtube_link = request.form.get("youtube_link", "").strip()
 
             if not name:
                 errors.append("Karaoke signup name is required.")
             if not song_title:
                 errors.append("Song title is required.")
+            if not artist:
+                errors.append("Artist is required.")
 
-            if index is not None and name and song_title:
-                karaoke_signups[index] = KaraokeSignup(name=name, song_title=song_title, artist=artist)
+            if index is not None and name and song_title and artist:
+                karaoke_signups[index] = KaraokeSignup(
+                    name=name,
+                    song_title=song_title,
+                    artist=artist,
+                    youtube_link=youtube_link,
+                )
                 messages.append(f"Updated karaoke signup for {name}.")
 
         elif action == "delete_karaoke":
@@ -246,15 +256,77 @@ def admin_portal():
             name = request.form.get("name", "").strip()
             song_title = request.form.get("song_title", "").strip()
             artist = request.form.get("artist", "").strip()
+            youtube_link = request.form.get("youtube_link", "").strip()
 
             if not name:
                 errors.append("Karaoke signup name is required to add a new entry.")
             if not song_title:
                 errors.append("Song title is required to add a new entry.")
+            if not artist:
+                errors.append("Artist is required to add a new entry.")
 
-            if name and song_title:
-                karaoke_signups.append(KaraokeSignup(name=name, song_title=song_title, artist=artist))
+            if name and song_title and artist:
+                karaoke_signups.append(
+                    KaraokeSignup(
+                        name=name,
+                        song_title=song_title,
+                        artist=artist,
+                        youtube_link=youtube_link,
+                    )
+                )
                 messages.append(f"Added karaoke signup for {name}.")
+
+        elif action == "move_costume_up":
+            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
+            if index is not None:
+                if index == 0:
+                    messages.append("Costume signup is already at the top.")
+                else:
+                    moved_signup = costume_signups[index]
+                    costume_signups[index - 1], costume_signups[index] = (
+                        costume_signups[index],
+                        costume_signups[index - 1],
+                    )
+                    messages.append(f"Moved costume signup for {moved_signup.name} up.")
+
+        elif action == "move_costume_down":
+            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
+            if index is not None:
+                if index == len(costume_signups) - 1:
+                    messages.append("Costume signup is already at the bottom.")
+                else:
+                    moved_signup = costume_signups[index]
+                    costume_signups[index + 1], costume_signups[index] = (
+                        costume_signups[index],
+                        costume_signups[index + 1],
+                    )
+                    messages.append(f"Moved costume signup for {moved_signup.name} down.")
+
+        elif action == "move_karaoke_up":
+            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            if index is not None:
+                if index == 0:
+                    messages.append("Karaoke signup is already at the top.")
+                else:
+                    moved_signup = karaoke_signups[index]
+                    karaoke_signups[index - 1], karaoke_signups[index] = (
+                        karaoke_signups[index],
+                        karaoke_signups[index - 1],
+                    )
+                    messages.append(f"Moved karaoke signup for {moved_signup.name} up.")
+
+        elif action == "move_karaoke_down":
+            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            if index is not None:
+                if index == len(karaoke_signups) - 1:
+                    messages.append("Karaoke signup is already at the bottom.")
+                else:
+                    moved_signup = karaoke_signups[index]
+                    karaoke_signups[index + 1], karaoke_signups[index] = (
+                        karaoke_signups[index],
+                        karaoke_signups[index + 1],
+                    )
+                    messages.append(f"Moved karaoke signup for {moved_signup.name} down.")
 
         else:
             errors.append("Unknown action submitted. Please try again.")
@@ -265,6 +337,7 @@ def admin_portal():
         karaoke_signups=karaoke_signups,
         errors=errors,
         messages=messages,
+        show_admin_link=True,
     )
 
 
@@ -296,6 +369,7 @@ def costume_signup():
         errors=errors,
         submitted=submitted,
         costume_signups=costume_signups,
+        show_admin_link=False,
     )
 
 
@@ -308,15 +382,23 @@ def karaoke_signup():
         name = request.form.get("name", "").strip()
         song_title = request.form.get("song_title", "").strip()
         artist = request.form.get("artist", "").strip()
+        youtube_link = request.form.get("youtube_link", "").strip()
 
         if not name:
             errors.append("Name is required.")
         if not song_title:
             errors.append("Song title is required.")
+        if not artist:
+            errors.append("Artist is required.")
 
         if not errors:
             karaoke_signups.append(
-                KaraokeSignup(name=name, song_title=song_title, artist=artist)
+                KaraokeSignup(
+                    name=name,
+                    song_title=song_title,
+                    artist=artist,
+                    youtube_link=youtube_link,
+                )
             )
             submitted = True
             return redirect(url_for("karaoke_signup", success="1"))
@@ -329,6 +411,7 @@ def karaoke_signup():
         errors=errors,
         submitted=submitted,
         karaoke_signups=karaoke_signups,
+        show_admin_link=False,
     )
 
 

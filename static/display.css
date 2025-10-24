@@ -363,10 +363,12 @@ body.display-mode {
 }
 
 .display-override__layout {
-  width: min(1180px, 96vw);
+  width: min(1380px, 96vw);
+  margin: 0 auto;
   display: grid;
   gap: clamp(1.6rem, 3vw, 2.3rem);
   align-items: stretch;
+  justify-items: center;
 }
 
 .display-override__layout[data-layout='single'] {
@@ -464,6 +466,8 @@ body.display-mode {
   display: grid;
   gap: clamp(0.75rem, 2vw, 1.1rem);
   text-align: center;
+  justify-items: center;
+  width: 100%;
 }
 
 .karaoke-card__title {

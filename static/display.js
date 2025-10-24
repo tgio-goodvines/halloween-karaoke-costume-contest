@@ -251,7 +251,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (overrideCardElement) {
       overrideCardElement.classList.remove(
         'display-override__card--inferno',
-        'display-override__card--karaoke'
+        'display-override__card--karaoke',
+        'display-override__card--contest',
+        'display-override__card--winner'
       );
     }
 
@@ -259,9 +261,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const highlightText = overrideState && overrideState.highlight ? overrideState.highlight : '';
     const messageText = overrideState && overrideState.message ? overrideState.message : '';
     const details = overrideState && Array.isArray(overrideState.details) ? overrideState.details : [];
-    const isKaraokeOverride = Boolean(
-      overrideState && overrideState.type === 'karaoke_start' && karaokeOverrideElement
-    );
+    const overrideType = overrideState && overrideState.type ? String(overrideState.type) : '';
+    const isKaraokeOverride = Boolean(overrideType === 'karaoke_start' && karaokeOverrideElement);
+    const isContestStartOverride = overrideType === 'contest_start';
+    const isContestWinnerOverride = overrideType === 'winner';
 
     if (overrideTitleElement) {
       overrideTitleElement.textContent = titleText;
@@ -369,6 +372,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       setupKaraokeRotation([], 0);
+
+      if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride)) {
+        overrideCardElement.classList.add('display-override__card--inferno');
+        if (isContestStartOverride) {
+          overrideCardElement.classList.add('display-override__card--contest');
+        }
+        if (isContestWinnerOverride) {
+          overrideCardElement.classList.add('display-override__card--winner');
+        }
+      }
     }
   };
 

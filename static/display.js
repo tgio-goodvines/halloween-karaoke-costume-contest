@@ -44,9 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeEmptyElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-empty]')
     : null;
-  const karaokeRotatorElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-rotator]')
-    : null;
   const karaokePerformersListElement = karaokePerformersCardElement
     ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-list]')
     : null;
@@ -139,242 +136,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let karaokeCountdownTimerId = null;
   let karaokeCountdownTarget = null;
-  let karaokeRotatorPanels = [];
-  let karaokeRotatorIndex = 0;
-  let karaokeRotatorTimerId = null;
-  let karaokeRotatorResizeHandler = null;
-  const KARAOKE_ROTATOR_INTERVAL = 8000;
-  const KARAOKE_PERFORMER_SCROLL_THRESHOLD = 10;
-  const KARAOKE_PERFORMER_SCROLL_STEP = 1;
-  const KARAOKE_PERFORMER_SCROLL_INTERVAL = 60;
-  const KARAOKE_PERFORMER_SCROLL_DELAY = 2000;
-  let karaokePerformersScrollIntervalId = null;
-  let karaokePerformersScrollStartTimeoutId = null;
-  let karaokePerformersScrollResetTimeoutId = null;
-
-  const stopKaraokePerformersScroll = () => {
-    if (karaokePerformersScrollIntervalId) {
-      window.clearInterval(karaokePerformersScrollIntervalId);
-      karaokePerformersScrollIntervalId = null;
-    }
-
-    if (karaokePerformersScrollStartTimeoutId) {
-      window.clearTimeout(karaokePerformersScrollStartTimeoutId);
-      karaokePerformersScrollStartTimeoutId = null;
-    }
-
-    if (karaokePerformersScrollResetTimeoutId) {
-      window.clearTimeout(karaokePerformersScrollResetTimeoutId);
-      karaokePerformersScrollResetTimeoutId = null;
-    }
-  };
-
-  const queueKaraokePerformersScroll = () => {
-    if (!karaokePerformersScrollerElement) {
-      return;
-    }
-
-    const maxScroll =
-      karaokePerformersScrollerElement.scrollHeight - karaokePerformersScrollerElement.clientHeight;
-
-    if (maxScroll <= 0) {
-      return;
-    }
-
-    const startInterval = () => {
-      karaokePerformersScrollStartTimeoutId = null;
-      if (!karaokePerformersScrollerElement) {
-        return;
-      }
-
-      const newMaxScroll =
-        karaokePerformersScrollerElement.scrollHeight - karaokePerformersScrollerElement.clientHeight;
-
-      if (newMaxScroll <= 0) {
-        return;
-      }
-
-      karaokePerformersScrollIntervalId = window.setInterval(() => {
-        if (!karaokePerformersScrollerElement) {
-          return;
-        }
-
-        const nextScrollTop = Math.min(
-          newMaxScroll,
-          karaokePerformersScrollerElement.scrollTop + KARAOKE_PERFORMER_SCROLL_STEP
-        );
-
-        karaokePerformersScrollerElement.scrollTop = nextScrollTop;
-
-        if (nextScrollTop >= newMaxScroll) {
-          if (karaokePerformersScrollIntervalId) {
-            window.clearInterval(karaokePerformersScrollIntervalId);
-            karaokePerformersScrollIntervalId = null;
-          }
-
-          karaokePerformersScrollResetTimeoutId = window.setTimeout(() => {
-            karaokePerformersScrollResetTimeoutId = null;
-            if (!karaokePerformersScrollerElement) {
-              return;
-            }
-
-            karaokePerformersScrollerElement.scrollTop = 0;
-
-            karaokePerformersScrollStartTimeoutId = window.setTimeout(() => {
-              karaokePerformersScrollStartTimeoutId = null;
-              queueKaraokePerformersScroll();
-            }, KARAOKE_PERFORMER_SCROLL_DELAY);
-          }, KARAOKE_PERFORMER_SCROLL_DELAY);
-        }
-      }, KARAOKE_PERFORMER_SCROLL_INTERVAL);
-    };
-
-    karaokePerformersScrollStartTimeoutId = window.setTimeout(startInterval, KARAOKE_PERFORMER_SCROLL_DELAY);
-  };
-
-  const startKaraokePerformersScroll = (shouldScroll) => {
-    stopKaraokePerformersScroll();
-
-    if (!shouldScroll || !karaokePerformersScrollerElement) {
-      if (karaokePerformersScrollerElement) {
-        karaokePerformersScrollerElement.scrollTop = 0;
-      }
-      return;
-    }
-
-    karaokePerformersScrollerElement.scrollTop = 0;
-    queueKaraokePerformersScroll();
-  };
-
-  const stopKaraokeRotator = () => {
-    if (karaokeRotatorTimerId) {
-      window.clearInterval(karaokeRotatorTimerId);
-      karaokeRotatorTimerId = null;
-    }
-
-    if (karaokeRotatorResizeHandler) {
-      window.removeEventListener('resize', karaokeRotatorResizeHandler);
-      karaokeRotatorResizeHandler = null;
-    }
-  };
-
-  const collectKaraokeRotatorPanels = () => {
-    if (!karaokeRotatorElement) {
-      karaokeRotatorPanels = [];
-      return;
-    }
-
-    karaokeRotatorPanels = Array.from(
-      karaokeRotatorElement.querySelectorAll('[data-karaoke-panel]')
-    ).filter((panel) => panel instanceof HTMLElement);
-  };
-
-  const applyKaraokeRotatorIndex = () => {
-    if (!karaokeRotatorPanels.length) {
-      return;
-    }
-
-    karaokeRotatorPanels.forEach((panel, panelIndex) => {
-      if (panelIndex === karaokeRotatorIndex) {
-        panel.classList.add('is-active');
-        panel.setAttribute('aria-hidden', 'false');
-      } else {
-        panel.classList.remove('is-active');
-        panel.setAttribute('aria-hidden', 'true');
-      }
-    });
-  };
-
-  const measureKaraokeRotatorHeight = () => {
-    if (!karaokeRotatorElement || !karaokeRotatorPanels.length) {
-      if (karaokeRotatorElement) {
-        karaokeRotatorElement.style.height = '';
-      }
-      return;
-    }
-
-    let maxHeight = 0;
-
-    karaokeRotatorPanels.forEach((panel) => {
-      panel.classList.add('is-measuring');
-      const panelHeight = panel.offsetHeight;
-      if (panelHeight > maxHeight) {
-        maxHeight = panelHeight;
-      }
-      panel.classList.remove('is-measuring');
-    });
-
-    if (maxHeight > 0) {
-      karaokeRotatorElement.style.height = `${Math.ceil(maxHeight)}px`;
-    } else {
-      karaokeRotatorElement.style.height = '';
-    }
-  };
-
-  const refreshKaraokeRotator = ({ resetIndex = false } = {}) => {
-    if (!karaokeRotatorElement) {
-      stopKaraokeRotator();
-      return;
-    }
-
-    collectKaraokeRotatorPanels();
-
-    if (!karaokeRotatorPanels.length) {
-      karaokeRotatorElement.style.height = '';
-      stopKaraokeRotator();
-      return;
-    }
-
-    if (resetIndex || karaokeRotatorIndex >= karaokeRotatorPanels.length) {
-      karaokeRotatorIndex = 0;
-    }
-
-    measureKaraokeRotatorHeight();
-    applyKaraokeRotatorIndex();
-  };
-
-  const queueKaraokeRotatorRefresh = ({ resetIndex = false } = {}) => {
-    if (!karaokeRotatorElement) {
-      return;
-    }
-
-    if (karaokeOverrideElement && karaokeOverrideElement.hasAttribute('hidden')) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      refreshKaraokeRotator({ resetIndex });
-    });
-  };
-
-  const startKaraokeRotator = () => {
-    if (!karaokeRotatorElement) {
-      return;
-    }
-
-    stopKaraokeRotator();
-    refreshKaraokeRotator({ resetIndex: true });
-
-    if (!karaokeRotatorPanels.length) {
-      return;
-    }
-
-    if (!karaokeRotatorResizeHandler) {
-      karaokeRotatorResizeHandler = () => {
-        queueKaraokeRotatorRefresh({ resetIndex: false });
-      };
-      window.addEventListener('resize', karaokeRotatorResizeHandler);
-    }
-
-    if (karaokeRotatorPanels.length <= 1) {
-      return;
-    }
-
-    karaokeRotatorTimerId = window.setInterval(() => {
-      karaokeRotatorIndex = (karaokeRotatorIndex + 1) % karaokeRotatorPanels.length;
-      applyKaraokeRotatorIndex();
-    }, KARAOKE_ROTATOR_INTERVAL);
-  };
 
   const stopKaraokeCountdown = () => {
     if (karaokeCountdownTimerId) {
@@ -418,11 +179,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (karaokeEmptyElement) {
         karaokeEmptyElement.removeAttribute('hidden');
       }
-      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
-    lineup.slice(0, 6).forEach((entry, index) => {
+    lineup.slice(0, 4).forEach((entry, index) => {
       const item = document.createElement('li');
       item.className = 'karaoke-card__list-item';
 
@@ -457,8 +217,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (karaokeEmptyElement) {
       karaokeEmptyElement.setAttribute('hidden', '');
     }
-
-    queueKaraokeRotatorRefresh({ resetIndex: false });
   };
 
   const updateKaraokePerformers = (entries) => {
@@ -482,7 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (karaokePerformersEmptyElement) {
         karaokePerformersEmptyElement.removeAttribute('hidden');
       }
-      stopKaraokePerformersScroll();
       if (karaokePerformersScrollerElement) {
         karaokePerformersScrollerElement.scrollTop = 0;
       }
@@ -531,14 +288,9 @@ document.addEventListener('DOMContentLoaded', () => {
       karaokePerformersMetaElement.textContent = countText;
       karaokePerformersMetaElement.removeAttribute('hidden');
     }
-
-    const shouldScroll = Boolean(
-      karaokePerformersScrollerElement &&
-        lineup.length > KARAOKE_PERFORMER_SCROLL_THRESHOLD &&
-        karaokePerformersScrollerElement.scrollHeight > karaokePerformersScrollerElement.clientHeight
-    );
-
-    startKaraokePerformersScroll(shouldScroll);
+    if (karaokePerformersScrollerElement) {
+      karaokePerformersScrollerElement.scrollTop = 0;
+    }
   };
 
   const startKaraokeCountdown = (targetIso, labelText = '') => {
@@ -560,14 +312,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!targetIso) {
       karaokeCountdownElement.textContent = '—';
-      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
     const parsedTarget = new Date(targetIso);
     if (Number.isNaN(parsedTarget.getTime())) {
       karaokeCountdownElement.textContent = '—';
-      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
@@ -589,7 +339,6 @@ document.addEventListener('DOMContentLoaded', () => {
           karaokeCountdownNoteElement.removeAttribute('hidden');
         }
         stopKaraokeCountdown();
-        queueKaraokeRotatorRefresh({ resetIndex: false });
         return;
       }
 
@@ -607,7 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateDisplay();
     karaokeCountdownTimerId = window.setInterval(updateDisplay, 1000);
-    queueKaraokeRotatorRefresh({ resetIndex: false });
   };
 
   const updateOverrideContent = () => {
@@ -731,7 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
       updateKaraokeLineup(lineup);
       updateKaraokePerformers(lineup);
       startKaraokeCountdown(countdownTarget, countdownLabel);
-      startKaraokeRotator();
     } else {
       if (generalOverrideElement) {
         generalOverrideElement.removeAttribute('hidden');
@@ -739,11 +486,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (karaokeOverrideElement) {
         karaokeOverrideElement.setAttribute('hidden', '');
-      }
-
-      stopKaraokeRotator();
-      if (karaokeRotatorElement) {
-        karaokeRotatorElement.style.height = '';
       }
 
       if (overrideLayoutElement) {

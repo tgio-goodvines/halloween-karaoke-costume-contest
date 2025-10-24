@@ -4,7 +4,11 @@
 {% block content %}
 <section class="form-section">
   <h2>Costume Contest Voting</h2>
-  <p>Score each costume from 1 (needs more spook) to 10 (absolute showstopper). Submit your complete ballot using any contestant's button once you've rated everyone.</p>
+  <p>Score each costume from 1 (needs more spook) to 10 (absolute showstopper). Make sure you enter a score for every contestant before submitting your ballot.</p>
+
+  <div class="voting-reminder" role="note">
+    <strong>Reminder:</strong> You’ll be asked to rate every costume. Double-check that all fields are filled before you press submit so your scores count.
+  </div>
 
   {% if submitted and not errors %}
     <div class="success">Thanks for voting{% if username %}, {{ username }}{% endif %}! Your scores have been recorded.</div>
@@ -41,18 +45,12 @@
                 required
               >
             </label>
-            <div class="voting-card__actions">
-              <button
-                type="submit"
-                name="submit_target"
-                value="{{ loop.index0 }}"
-                class="button button--primary voting-card__submit"
-              >
-                Submit Votes for {{ signup.name }}
-              </button>
-            </div>
           </fieldset>
         {% endfor %}
+      </div>
+
+      <div class="voting-form__submit">
+        <button type="submit" class="button button--primary">Submit My Costume Scores</button>
       </div>
     </form>
   {% elif costume_signups %}

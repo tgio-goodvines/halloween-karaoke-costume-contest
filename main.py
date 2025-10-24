@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List, Tuple
 from threading import Condition
 from uuid import uuid4
+import copy
 import os
 
 from flask import (
@@ -66,6 +67,8 @@ contest_state: dict[str, object] = {
     "voting_open": False,
     "winner": None,
     "winner_locked": False,
+    "scoreboard_card": None,
+    "show_scoreboard_card": False,
 }
 
 
@@ -125,6 +128,41 @@ def build_costume_scoreboard() -> Tuple[List[dict[str, object]], dict[str, objec
         leader = scoreboard[leader_index]
 
     return scoreboard, leader
+
+
+def rank_costume_entries(entries: List[dict[str, object]]) -> List[dict[str, object]]:
+    return sorted(
+        entries,
+        key=lambda entry: (
+            -float(entry.get("average", 0.0) or 0.0),
+            -int(entry.get("count", 0) or 0),
+            entry.get("name", "").lower(),
+        ),
+    )
+
+
+def create_scoreboard_card(top_entries: List[dict[str, object]]) -> dict[str, object]:
+    scoreboard_rows = [
+        {
+            "rank": index + 1,
+            "name": entry.get("name", ""),
+            "costume": entry.get("costume", ""),
+            "average": float(entry.get("average", 0.0) or 0.0),
+            "count": int(entry.get("count", 0) or 0),
+            "total": int(entry.get("total", 0) or 0),
+        }
+        for index, entry in enumerate(top_entries)
+    ]
+
+    return {
+        "category": "Costume Contest",
+        "primary": "Top Costume Scores",
+        "secondary": "Final standings",
+        "tertiary": "Averages reflect scores out of 10.",
+        "scoreboard": {
+            "entries": scoreboard_rows,
+        },
+    }
 
 
 def build_winner_entry() -> dict[str, object] | None:
@@ -229,6 +267,9 @@ def build_rotation_entries() -> List[dict[str, object]]:
             **winner_entry,
             "cta": False,
         })
+
+    if contest_state.get("show_scoreboard_card") and contest_state.get("scoreboard_card"):
+        rotation_entries.append(copy.deepcopy(contest_state["scoreboard_card"]))
 
     max_length = max(len(costume_entries), len(karaoke_entries))
     for index in range(max_length):
@@ -542,6 +583,8 @@ def admin_portal():
             contest_state["voting_open"] = True
             contest_state["winner"] = None
             contest_state["winner_locked"] = False
+            contest_state["scoreboard_card"] = None
+            contest_state["show_scoreboard_card"] = False
             submitted_costume_votes.clear()
             should_broadcast = True
 
@@ -568,6 +611,8 @@ def admin_portal():
         elif action == "clear_display_override":
             live_display_override = None
             messages.append("Live display has been restored to the rotating schedule.")
+            if contest_state.get("winner_locked") and contest_state.get("scoreboard_card"):
+                contest_state["show_scoreboard_card"] = True
             should_broadcast = True
 
         elif action == "lock_costume_winner":
@@ -581,6 +626,11 @@ def admin_portal():
                 }
                 contest_state["winner_locked"] = True
                 contest_state["voting_open"] = False
+                top_entries = rank_costume_entries(scoreboard)[:5]
+                contest_state["scoreboard_card"] = (
+                    create_scoreboard_card(top_entries) if top_entries else None
+                )
+                contest_state["show_scoreboard_card"] = False
                 messages.append(
                     f"Locked in {leader['name']} as the costume contest champion."
                 )
@@ -625,6 +675,7 @@ def admin_portal():
             broadcast_display_update()
 
     costume_scores, costume_leader = build_costume_scoreboard()
+    top_costume_rankings = rank_costume_entries(costume_scores)[:5]
 
     return render_template(
         "admin.html",
@@ -636,6 +687,7 @@ def admin_portal():
         costume_scores=costume_scores,
         costume_leader=costume_leader,
         live_override=live_display_override,
+        top_costume_rankings=top_costume_rankings,
     )
 
 

@@ -85,6 +85,28 @@
       </div>
     {% endif %}
 
+    {% if costume_contest_state.winner_locked and top_costume_rankings %}
+      <div class="contest-top-card">
+        <h4>Top Costume Scores</h4>
+        <ol class="contest-top-card__list">
+          {% for entry in top_costume_rankings %}
+            <li class="contest-top-card__item">
+              <span class="contest-top-card__rank">#{{ loop.index }}</span>
+              <div class="contest-top-card__info">
+                <span class="contest-top-card__name">{{ entry.name }}</span>
+                <span class="contest-top-card__costume">as {{ entry.costume }}</span>
+              </div>
+              <div class="contest-top-card__score">
+                <span class="contest-top-card__average">{{ '%.2f' | format(entry.average) }}</span>
+                <span class="contest-top-card__votes">{{ entry.count }} vote{{ 's' if entry.count != 1 else '' }}</span>
+              </div>
+            </li>
+          {% endfor %}
+        </ol>
+        <p class="contest-top-card__note">Rankings are based on final average scores out of 10.</p>
+      </div>
+    {% endif %}
+
     <div class="contest-chart">
       <h4>Vote Tally</h4>
       {% if costume_scores %}

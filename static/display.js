@@ -59,11 +59,32 @@ document.addEventListener('DOMContentLoaded', () => {
   const ctaPortalLinkElement = card.querySelector('[data-cta-portal-link]');
   const ctaPortalNoteElement = card.querySelector('[data-cta-portal-note]');
   const ctaReminderElement = card.querySelector('[data-cta-reminder]');
+  const scoreboardLayout = card.querySelector('[data-scoreboard-layout]');
+  const scoreboardTitleElement = scoreboardLayout
+    ? scoreboardLayout.querySelector('[data-scoreboard-title]')
+    : null;
+  const scoreboardSubtitleElement = scoreboardLayout
+    ? scoreboardLayout.querySelector('[data-scoreboard-subtitle]')
+    : null;
+  const scoreboardListElement = scoreboardLayout
+    ? scoreboardLayout.querySelector('[data-scoreboard-list]')
+    : null;
+  const scoreboardNoteElement = scoreboardLayout
+    ? scoreboardLayout.querySelector('[data-scoreboard-note]')
+    : null;
   const typeElement = card.querySelector('[data-entry-type]');
   const primaryElement = card.querySelector('[data-entry-primary]');
   const secondaryElement = card.querySelector('[data-entry-secondary]');
   const tertiaryElement = card.querySelector('[data-entry-tertiary]');
   const linkElement = card.querySelector('[data-entry-link]');
+
+  const formatAverageScore = (value) => {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric.toFixed(2);
+    }
+    return '0.00';
+  };
 
   const updateOverrideContent = () => {
     if (!overrideContainer) {
@@ -145,9 +166,99 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const ctaDetails = entry.cta_details || {};
-    const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent);
+    const hasScoreboard = Boolean(
+      scoreboardLayout && entry.scoreboard && Array.isArray(entry.scoreboard.entries) && entry.scoreboard.entries.length
+    );
+    const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent && !hasScoreboard);
 
-    if (shouldShowCtaLayout) {
+    if (hasScoreboard) {
+      if (defaultContent) {
+        defaultContent.setAttribute('hidden', '');
+      }
+      if (ctaLayout) {
+        ctaLayout.setAttribute('hidden', '');
+      }
+      scoreboardLayout.removeAttribute('hidden');
+      card.classList.add('scoreboard');
+      card.classList.remove('cta');
+
+      if (scoreboardTitleElement) {
+        scoreboardTitleElement.textContent = entry.primary || 'Top Costume Scores';
+      }
+
+      if (scoreboardSubtitleElement) {
+        const subtitle = entry.secondary || '';
+        if (subtitle) {
+          scoreboardSubtitleElement.textContent = subtitle;
+          scoreboardSubtitleElement.removeAttribute('hidden');
+        } else {
+          scoreboardSubtitleElement.textContent = '';
+          scoreboardSubtitleElement.setAttribute('hidden', '');
+        }
+      }
+
+      if (scoreboardNoteElement) {
+        const note = entry.tertiary || '';
+        if (note) {
+          scoreboardNoteElement.textContent = note;
+          scoreboardNoteElement.removeAttribute('hidden');
+        } else {
+          scoreboardNoteElement.textContent = '';
+          scoreboardNoteElement.setAttribute('hidden', '');
+        }
+      }
+
+      if (scoreboardListElement) {
+        scoreboardListElement.innerHTML = '';
+        const rows = entry.scoreboard.entries || [];
+        rows.forEach((row, index) => {
+          const item = document.createElement('li');
+          item.className = 'display-scoreboard__item';
+
+          const rankElement = document.createElement('span');
+          rankElement.className = 'display-scoreboard__rank';
+          const rankValue = Number(row.rank);
+          const safeRank = Number.isFinite(rankValue) ? rankValue : index + 1;
+          rankElement.textContent = `#${safeRank}`;
+
+          const infoElement = document.createElement('div');
+          infoElement.className = 'display-scoreboard__info';
+
+          const nameElement = document.createElement('span');
+          nameElement.className = 'display-scoreboard__name';
+          nameElement.textContent = row.name || '';
+
+          const costumeElement = document.createElement('span');
+          costumeElement.className = 'display-scoreboard__costume';
+          costumeElement.textContent = row.costume ? `as ${row.costume}` : '';
+
+          infoElement.appendChild(nameElement);
+          infoElement.appendChild(costumeElement);
+
+          const metricsElement = document.createElement('div');
+          metricsElement.className = 'display-scoreboard__metrics';
+
+          const averageElement = document.createElement('span');
+          averageElement.className = 'display-scoreboard__average';
+          averageElement.textContent = formatAverageScore(row.average);
+
+          const votesElement = document.createElement('span');
+          votesElement.className = 'display-scoreboard__votes';
+          const voteCount = Number(row.count);
+          const safeCount = Number.isFinite(voteCount) ? voteCount : 0;
+          votesElement.textContent = `${safeCount} ${safeCount === 1 ? 'vote' : 'votes'}`;
+
+          metricsElement.appendChild(averageElement);
+          metricsElement.appendChild(votesElement);
+
+          item.appendChild(rankElement);
+          item.appendChild(infoElement);
+          item.appendChild(metricsElement);
+
+          scoreboardListElement.appendChild(item);
+        });
+      }
+    } else if (shouldShowCtaLayout) {
       defaultContent.setAttribute('hidden', '');
       ctaLayout.removeAttribute('hidden');
 
@@ -183,6 +294,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ctaReminderElement) {
         ctaReminderElement.textContent = ctaDetails.reminder || entry.tertiary || '';
       }
+
+      if (scoreboardLayout) {
+        scoreboardLayout.setAttribute('hidden', '');
+        if (scoreboardListElement) {
+          scoreboardListElement.innerHTML = '';
+        }
+      }
+
+      card.classList.remove('scoreboard');
     } else {
       if (defaultContent) {
         defaultContent.removeAttribute('hidden');
@@ -209,16 +329,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ctaReminderElement) {
         ctaReminderElement.textContent = '';
       }
+      if (scoreboardLayout) {
+        scoreboardLayout.setAttribute('hidden', '');
+        if (scoreboardListElement) {
+          scoreboardListElement.innerHTML = '';
+        }
+      }
+
+      card.classList.remove('scoreboard');
     }
 
-    if (entry.cta) {
+    if (!hasScoreboard && entry.cta) {
       card.classList.add('cta');
-    } else {
+    } else if (!entry.cta || hasScoreboard) {
       card.classList.remove('cta');
     }
 
     if (linkElement) {
-      if (entry.link && !entry.cta) {
+      if (entry.link && !entry.cta && !hasScoreboard) {
         linkElement.textContent = entry.link_label || entry.link;
         linkElement.setAttribute('href', entry.link);
         linkElement.removeAttribute('hidden');

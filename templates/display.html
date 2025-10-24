@@ -141,8 +141,9 @@
           </div>
         </section>
         <section class="display-override" data-override-state{% if not override %} hidden{% endif %}>
-          <div class="display-override__card">
-            <div class="display-override__general" data-override-general>
+          <div class="display-override__layout" data-override-layout data-layout="single">
+            <div class="display-override__card" data-primary-override-card>
+              <div class="display-override__general" data-override-general>
               <h2 class="display-override__title" data-override-title>{{ override.title if override else '' }}</h2>
               <p class="display-override__highlight" data-override-highlight{% if not override or not override.get('highlight') %} hidden{% endif %}>{{ override.highlight if override and override.get('highlight') else '' }}</p>
               <p class="display-override__message" data-override-message>{{ override.message if override else '' }}</p>
@@ -154,7 +155,7 @@
                 {% endif %}
               </ul>
             </div>
-            <div class="display-override__karaoke" data-override-karaoke hidden>
+              <div class="display-override__karaoke" data-override-karaoke hidden>
               <h2 class="karaoke-card__title" data-karaoke-title></h2>
               <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
               <p class="karaoke-card__message" data-karaoke-message></p>
@@ -182,6 +183,21 @@
                   </section>
                 </div>
               </div>
+            </div>
+            </div>
+            <div
+              class="display-override__card display-override__card--karaoke-roster"
+              data-karaoke-performers
+              hidden
+            >
+              <h2 class="karaoke-card__title">Performance Lineup</h2>
+              <p class="karaoke-roster__meta" data-karaoke-performers-count hidden></p>
+              <div class="karaoke-roster__scroller" data-karaoke-performers-scroller>
+                <ol class="karaoke-card__list" data-karaoke-performers-list></ol>
+              </div>
+              <p class="karaoke-roster__empty" data-karaoke-performers-empty hidden>
+                No singers have signed up yet.
+              </p>
             </div>
           </div>
         </section>

@@ -86,16 +86,6 @@
             <p class="display-scoreboard__note" data-scoreboard-note hidden></p>
           </div>
 
-          <div class="display-countdown" data-countdown-layout hidden>
-            <div class="display-countdown__meta">
-              <div class="display-countdown__category" data-countdown-category></div>
-              <h2 class="display-countdown__title" data-countdown-title></h2>
-              <p class="display-countdown__subtitle" data-countdown-subtitle hidden></p>
-            </div>
-            <div class="display-countdown__timer" data-countdown-timer>--:--:--</div>
-            <p class="display-countdown__label" data-countdown-label hidden></p>
-          </div>
-
           <a
             class="display-cta-link"
             data-entry-link
@@ -151,9 +141,8 @@
           </div>
         </section>
         <section class="display-override" data-override-state{% if not override %} hidden{% endif %}>
-          <div class="display-override__layout" data-override-layout data-layout="single">
-            <div class="display-override__card" data-primary-override-card>
-              <div class="display-override__general" data-override-general>
+          <div class="display-override__card">
+            <div class="display-override__general" data-override-general>
               <h2 class="display-override__title" data-override-title>{{ override.title if override else '' }}</h2>
               <p class="display-override__highlight" data-override-highlight{% if not override or not override.get('highlight') %} hidden{% endif %}>{{ override.highlight if override and override.get('highlight') else '' }}</p>
               <p class="display-override__message" data-override-message>{{ override.message if override else '' }}</p>
@@ -165,18 +154,34 @@
                 {% endif %}
               </ul>
             </div>
-              <div class="display-override__karaoke" data-override-karaoke hidden>
+            <div class="display-override__karaoke" data-override-karaoke hidden>
               <h2 class="karaoke-card__title" data-karaoke-title></h2>
               <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
               <p class="karaoke-card__message" data-karaoke-message></p>
               <div class="karaoke-card__content">
-                <section class="karaoke-card__countdown" data-karaoke-countdown-section>
-                  <p class="karaoke-card__label">Countdown to showtime</p>
-                  <p class="karaoke-card__timer" data-karaoke-countdown>--:--:--</p>
-                  <p class="karaoke-card__note" data-karaoke-countdown-note hidden></p>
-                </section>
+                <div class="karaoke-card__rotator" data-karaoke-rotator>
+                  <section
+                    class="karaoke-card__panel karaoke-card__countdown is-active"
+                    data-karaoke-panel="countdown"
+                  >
+                    <p class="karaoke-card__label">Countdown to showtime</p>
+                    <p class="karaoke-card__timer" data-karaoke-countdown>--:--:--</p>
+                    <p class="karaoke-card__note" data-karaoke-countdown-note hidden></p>
+                  </section>
+                  <section
+                    class="karaoke-card__panel karaoke-card__upcoming"
+                    data-karaoke-panel="upcoming"
+                    data-karaoke-upcoming
+                    aria-hidden="true"
+                  >
+                    <p class="karaoke-card__label">Upcoming performers</p>
+                    <ol class="karaoke-card__list" data-karaoke-lineup></ol>
+                    <p class="karaoke-card__empty" data-karaoke-empty hidden>
+                      No karaoke performers are queued yet.
+                    </p>
+                  </section>
+                </div>
               </div>
-            </div>
             </div>
           </div>
         </section>

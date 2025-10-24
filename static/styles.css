@@ -36,6 +36,26 @@ body {
   z-index: 10;
 }
 
+.site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+}
+
+.site-header__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.site-header__user {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 .site-header h1 {
   margin: 0;
 }
@@ -58,6 +78,12 @@ nav a:hover,
 nav a:focus {
   background-color: rgba(255, 111, 60, 0.2);
   transform: translateY(-2px);
+}
+
+@media (max-width: 640px) {
+  .site-header__meta {
+    align-items: flex-start;
+  }
 }
 
 main.container {

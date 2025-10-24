@@ -8,17 +8,22 @@
   </head>
   <body>
     <header class="site-header">
-      <div class="container">
+      <div class="container site-header__inner">
         <h1>Qiana and Tony's 2nd Annual Halloween Party</h1>
-        <nav>
-          <a href="{{ url_for('halloween_overview') }}">Event Overview</a>
-          <a href="{{ url_for('costume_signup') }}">Costume Contest Signup</a>
-          <a href="{{ url_for('costume_voting_page') }}">Costume Voting</a>
-          <a href="{{ url_for('karaoke_signup') }}">Karaoke Signup</a>
-          {% if show_admin_link is not defined or show_admin_link %}
-            <a href="{{ url_for('admin_portal') }}">Admin</a>
+        <div class="site-header__meta">
+          <nav>
+            <a href="{{ url_for('halloween_overview') }}">Event Overview</a>
+            <a href="{{ url_for('costume_signup') }}">Costume Contest Signup</a>
+            <a href="{{ url_for('costume_voting_page') }}">Costume Voting</a>
+            <a href="{{ url_for('karaoke_signup') }}">Karaoke Signup</a>
+            {% if show_admin_link is not defined or show_admin_link %}
+              <a href="{{ url_for('admin_portal') }}">Admin</a>
+            {% endif %}
+          </nav>
+          {% if session.username %}
+            <span class="site-header__user">Signed in as {{ session.username }}</span>
           {% endif %}
-        </nav>
+        </div>
       </div>
     </header>
 

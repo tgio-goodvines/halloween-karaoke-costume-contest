@@ -7,7 +7,7 @@
   <p>Score each costume from 1 (needs more spook) to 10 (absolute showstopper). Submit the form once you've rated everyone.</p>
 
   {% if submitted and not errors %}
-    <div class="success">Thanks for voting! Your scores have been recorded.</div>
+    <div class="success">Thanks for voting{% if username %}, {{ username }}{% endif %}! Your scores have been recorded.</div>
   {% endif %}
 
   {% if errors %}
@@ -20,7 +20,7 @@
     </div>
   {% endif %}
 
-  {% if costume_signups %}
+  {% if costume_signups and not user_has_voted %}
     <form method="post" class="voting-form">
       <div class="voting-grid">
         {% for signup in costume_signups %}
@@ -46,6 +46,8 @@
       </div>
       <button type="submit" class="button button--primary">Submit Your Votes</button>
     </form>
+  {% elif costume_signups %}
+    <p class="success">Thanks again for voting! Only one ballot is counted per guest.</p>
   {% else %}
     <p class="admin-empty">No costume entries have been submitted yet. Check back once the contest lineup is ready!</p>
   {% endif %}

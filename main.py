@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Tuple
 from threading import Condition
+from uuid import uuid4
+import os
 
 from flask import (
     Flask,
@@ -13,10 +15,12 @@ from flask import (
     request,
     stream_with_context,
     url_for,
+    session,
 )
 
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("HALLOWEEN_APP_SECRET", "dev-secret-key")
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -43,6 +47,8 @@ class KaraokeSignup:
 costume_signups: List[CostumeSignup] = []
 karaoke_signups: List[KaraokeSignup] = []
 costume_votes: List[List[int]] = []
+registered_users: dict[str, str] = {}
+submitted_costume_votes: set[str] = set()
 live_display_override: dict[str, object] | None = None
 
 display_update_condition = Condition()
@@ -307,6 +313,9 @@ def inject_contest_state():
 
 @app.route("/halloween")
 def halloween_overview():
+    if "user_id" not in session or "username" not in session:
+        return redirect(url_for("halloween_login", next=url_for("halloween_overview")))
+
     slides = list(SLIDES)
     winner = contest_state.get("winner")
     if winner:
@@ -326,11 +335,44 @@ def halloween_overview():
     )
 
 
+@app.route("/halloween/login", methods=["GET", "POST"])
+def halloween_login():
+    errors: List[str] = []
+    next_page = request.args.get("next") or url_for("halloween_overview")
+
+    if request.method == "POST":
+        provided_next = request.form.get("next")
+        if provided_next:
+            next_page = provided_next
+
+        username = request.form.get("username", "").strip()
+
+        if not username:
+            errors.append("Please share your name so we know who has checked in.")
+        else:
+            user_id = session.get("user_id")
+            if not user_id:
+                user_id = uuid4().hex
+
+            session["user_id"] = user_id
+            session["username"] = username
+            registered_users[user_id] = username
+
+            return redirect(next_page)
+
+    return render_template(
+        "halloween_login.html",
+        errors=errors,
+        next_page=next_page,
+        show_admin_link=False,
+    )
+
+
 @app.route("/admin", methods=["GET", "POST"])
 def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
-    global live_display_override
+    global live_display_override, submitted_costume_votes
 
     ensure_costume_votes_alignment()
 
@@ -500,6 +542,7 @@ def admin_portal():
             contest_state["voting_open"] = True
             contest_state["winner"] = None
             contest_state["winner_locked"] = False
+            submitted_costume_votes.clear()
             should_broadcast = True
 
         elif action == "show_costume_winner":
@@ -680,8 +723,19 @@ def costume_voting_page():
 
     ensure_costume_votes_alignment()
 
+    user_id = session.get("user_id")
+    username = session.get("username")
+
+    if not user_id or user_id not in registered_users:
+        return redirect(url_for("halloween_login", next=url_for("costume_voting_page")))
+
+    user_has_voted = user_id in submitted_costume_votes
+    submitted = user_has_voted
+
     if request.method == "POST":
-        if not costume_signups:
+        if user_has_voted:
+            errors.append("Our records show you've already submitted your costume contest scores. Thank you!")
+        elif not costume_signups:
             errors.append("There are no costume entries to rate yet.")
         else:
             ratings: List[int] = []
@@ -709,6 +763,7 @@ def costume_voting_page():
                 for index, rating in enumerate(ratings):
                     costume_votes[index].append(rating)
 
+                submitted_costume_votes.add(user_id)
                 broadcast_display_update()
 
                 return redirect(url_for("costume_voting_page", success="1"))
@@ -721,6 +776,8 @@ def costume_voting_page():
         costume_signups=costume_signups,
         errors=errors,
         submitted=submitted,
+        user_has_voted=user_has_voted,
+        username=username,
         show_admin_link=True,
     )
 

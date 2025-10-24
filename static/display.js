@@ -23,32 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeMessageElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-message]')
     : null;
-  const karaokeSingerElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-singer]')
+  const karaokeLineupElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-lineup]')
     : null;
-  const karaokeSongElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-song]')
-    : null;
-  const karaokePreviewElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-preview]')
-    : null;
-  const karaokeIframeElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-iframe]')
-    : null;
-  const karaokeThumbnailLinkElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-thumbnail]')
-    : null;
-  const karaokeThumbnailImageElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-thumbnail-image]')
-    : null;
-  const karaokeThumbnailLabelElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-thumbnail-label]')
-    : null;
-  const karaokeOpenLinkElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-open-link]')
-    : null;
-  const karaokeNoteElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-note]')
+  const karaokeEmptyElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-empty]')
     : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
@@ -126,43 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return numeric.toFixed(2);
     }
     return '0.00';
-  };
-
-  const extractYoutubeVideoId = (rawUrl) => {
-    if (!rawUrl || typeof rawUrl !== 'string') {
-      return '';
-    }
-
-    let parsed;
-    try {
-      parsed = new URL(rawUrl);
-    } catch (error) {
-      return '';
-    }
-
-    const { hostname, pathname, searchParams } = parsed;
-    const cleanPathname = pathname || '';
-    let videoId = '';
-
-    if (hostname.includes('youtu.be')) {
-      const [, potentialId] = cleanPathname.split('/');
-      videoId = potentialId || '';
-    } else if (cleanPathname.startsWith('/embed/')) {
-      videoId = cleanPathname.replace('/embed/', '').split(/[/?&#]/)[0];
-    } else if (cleanPathname.startsWith('/shorts/')) {
-      videoId = cleanPathname.replace('/shorts/', '').split(/[/?&#]/)[0];
-    } else {
-      videoId = searchParams.get('v') || '';
-    }
-
-    if (!videoId && cleanPathname) {
-      const segments = cleanPathname.split('/').filter(Boolean);
-      if (segments.length) {
-        videoId = segments[segments.length - 1].split(/[?&#]/)[0];
-      }
-    }
-
-    return videoId;
   };
 
   const updateOverrideContent = () => {
@@ -245,134 +187,69 @@ document.addEventListener('DOMContentLoaded', () => {
           ? overrideState.karaoke
           : {};
 
-      if (karaokeSingerElement) {
-        karaokeSingerElement.textContent = karaokeData.singer_name || 'TBA';
-      }
+      const lineup = Array.isArray(karaokeData.lineup) ? karaokeData.lineup : [];
+      const currentIndex =
+        Number.isInteger(karaokeData.current_index) && karaokeData.current_index >= 0
+          ? karaokeData.current_index
+          : -1;
 
-      if (karaokeSongElement) {
-        let songLine = '';
-        const songTitle = karaokeData.song_title || '';
-        const artist = karaokeData.artist || '';
+      if (karaokeLineupElement) {
+        karaokeLineupElement.innerHTML = '';
 
-        if (songTitle && artist) {
-          songLine = `"${songTitle}" by ${artist}`;
-        } else if (songTitle) {
-          songLine = `"${songTitle}"`;
-        } else if (artist) {
-          songLine = artist;
-        }
-
-        karaokeSongElement.textContent = songLine;
-      }
-
-      const embedUrl = karaokeData.youtube_embed_url || '';
-
-      if (embedUrl && karaokePreviewElement && karaokeIframeElement) {
-        karaokePreviewElement.removeAttribute('hidden');
-        const embedSrc = embedUrl.includes('?') ? `${embedUrl}&rel=0` : `${embedUrl}?rel=0`;
-        karaokeIframeElement.setAttribute('src', embedSrc);
-        karaokeIframeElement.removeAttribute('hidden');
-        if (karaokeThumbnailLinkElement) {
-          karaokeThumbnailLinkElement.setAttribute('hidden', '');
-          karaokeThumbnailLinkElement.setAttribute('href', '#');
-        }
-        if (karaokeOpenLinkElement) {
-          karaokeOpenLinkElement.setAttribute('hidden', '');
-          karaokeOpenLinkElement.setAttribute('href', '#');
-        }
-        if (karaokeThumbnailImageElement) {
-          karaokeThumbnailImageElement.setAttribute('src', '');
-          karaokeThumbnailImageElement.setAttribute('alt', '');
-        }
-        if (karaokeNoteElement) {
-          karaokeNoteElement.textContent = '';
-          karaokeNoteElement.setAttribute('hidden', '');
-        }
-      } else {
-        const youtubeLink = karaokeData.youtube_link || '';
-        const videoId =
-          extractYoutubeVideoId(karaokeData.youtube_embed_url || '') ||
-          extractYoutubeVideoId(youtubeLink);
-        const hasYoutubeLink = Boolean(youtubeLink);
-
-        if (karaokePreviewElement) {
-          if (videoId && hasYoutubeLink) {
-            karaokePreviewElement.removeAttribute('hidden');
-          } else {
-            karaokePreviewElement.setAttribute('hidden', '');
-          }
-        }
-
-        if (karaokeIframeElement) {
-          karaokeIframeElement.setAttribute('src', '');
-          karaokeIframeElement.setAttribute('hidden', '');
-        }
-
-        if (videoId && hasYoutubeLink && karaokeThumbnailLinkElement) {
-          const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-          karaokeThumbnailLinkElement.setAttribute('href', youtubeLink);
-          karaokeThumbnailLinkElement.removeAttribute('hidden');
-          if (karaokeThumbnailImageElement) {
-            karaokeThumbnailImageElement.setAttribute('src', thumbnailUrl);
-            const descriptionParts = [];
-            if (karaokeData.song_title) {
-              descriptionParts.push(`“${karaokeData.song_title}”`);
+        if (lineup.length) {
+          lineup.forEach((entry, index) => {
+            const item = document.createElement('li');
+            item.className = 'karaoke-lineup__entry';
+            if (index === currentIndex) {
+              item.classList.add('is-current');
             }
-            if (karaokeData.artist) {
-              descriptionParts.push(`by ${karaokeData.artist}`);
+
+            const positionElement = document.createElement('span');
+            positionElement.className = 'karaoke-lineup__position';
+            positionElement.textContent = `${index + 1}.`;
+            item.appendChild(positionElement);
+
+            const nameElement = document.createElement('span');
+            nameElement.className = 'karaoke-lineup__name';
+            const performerName =
+              entry && typeof entry === 'object' && entry.name ? entry.name : 'TBA';
+            nameElement.textContent = performerName;
+            item.appendChild(nameElement);
+
+            const songElement = document.createElement('span');
+            songElement.className = 'karaoke-lineup__song';
+            if (entry && typeof entry === 'object') {
+              const songTitle = entry.song_title || '';
+              const artist = entry.artist || '';
+              let songLine = 'Song TBD';
+              if (songTitle && artist) {
+                songLine = `“${songTitle}” by ${artist}`;
+              } else if (songTitle) {
+                songLine = `“${songTitle}”`;
+              } else if (artist) {
+                songLine = artist;
+              }
+              songElement.textContent = songLine;
+            } else {
+              songElement.textContent = 'Song TBD';
             }
-            const description = descriptionParts.length
-              ? `YouTube thumbnail for ${descriptionParts.join(' ')}`
-              : 'YouTube thumbnail preview';
-            karaokeThumbnailImageElement.setAttribute('alt', description);
-          }
-          if (karaokeThumbnailLabelElement) {
-            karaokeThumbnailLabelElement.textContent = 'Open on YouTube';
-          }
-          if (karaokeOpenLinkElement) {
-            karaokeOpenLinkElement.setAttribute('hidden', '');
-            karaokeOpenLinkElement.setAttribute('href', '#');
-          }
-          if (karaokeNoteElement) {
-            karaokeNoteElement.textContent = 'Embeds are disabled—open the video on YouTube to play it.';
-            karaokeNoteElement.removeAttribute('hidden');
-          }
-        } else if (hasYoutubeLink) {
-          if (karaokeThumbnailLinkElement) {
-            karaokeThumbnailLinkElement.setAttribute('hidden', '');
-            karaokeThumbnailLinkElement.setAttribute('href', '#');
-          }
-          if (karaokeThumbnailImageElement) {
-            karaokeThumbnailImageElement.setAttribute('src', '');
-            karaokeThumbnailImageElement.setAttribute('alt', '');
-          }
-          if (karaokeOpenLinkElement) {
-            karaokeOpenLinkElement.setAttribute('href', youtubeLink);
-            karaokeOpenLinkElement.removeAttribute('hidden');
-          }
-          if (karaokeNoteElement) {
-            karaokeNoteElement.textContent = 'Preview unavailable—open the video on YouTube to play it.';
-            karaokeNoteElement.removeAttribute('hidden');
+            item.appendChild(songElement);
+
+            karaokeLineupElement.appendChild(item);
+          });
+
+          karaokeLineupElement.removeAttribute('hidden');
+          if (karaokeEmptyElement) {
+            karaokeEmptyElement.setAttribute('hidden', '');
           }
         } else {
-          if (karaokeThumbnailLinkElement) {
-            karaokeThumbnailLinkElement.setAttribute('hidden', '');
-            karaokeThumbnailLinkElement.setAttribute('href', '#');
-          }
-          if (karaokeThumbnailImageElement) {
-            karaokeThumbnailImageElement.setAttribute('src', '');
-            karaokeThumbnailImageElement.setAttribute('alt', '');
-          }
-          if (karaokeOpenLinkElement) {
-            karaokeOpenLinkElement.setAttribute('hidden', '');
-            karaokeOpenLinkElement.setAttribute('href', '#');
-          }
-          if (karaokeNoteElement) {
-            karaokeNoteElement.textContent =
-              'Please give Tony the YouTube link so he can cast it to the TV.';
-            karaokeNoteElement.removeAttribute('hidden');
+          karaokeLineupElement.setAttribute('hidden', '');
+          if (karaokeEmptyElement) {
+            karaokeEmptyElement.removeAttribute('hidden');
           }
         }
+      } else if (karaokeEmptyElement) {
+        karaokeEmptyElement.setAttribute('hidden', '');
       }
     } else {
       if (generalOverrideElement) {
@@ -397,45 +274,13 @@ document.addEventListener('DOMContentLoaded', () => {
         karaokeMessageElement.setAttribute('hidden', '');
       }
 
-      if (karaokeSingerElement) {
-        karaokeSingerElement.textContent = '';
+      if (karaokeLineupElement) {
+        karaokeLineupElement.innerHTML = '';
+        karaokeLineupElement.setAttribute('hidden', '');
       }
 
-      if (karaokeSongElement) {
-        karaokeSongElement.textContent = '';
-      }
-
-      if (karaokePreviewElement) {
-        karaokePreviewElement.setAttribute('hidden', '');
-      }
-
-      if (karaokeIframeElement) {
-        karaokeIframeElement.setAttribute('src', '');
-        karaokeIframeElement.setAttribute('hidden', '');
-      }
-
-      if (karaokeThumbnailLinkElement) {
-        karaokeThumbnailLinkElement.setAttribute('hidden', '');
-        karaokeThumbnailLinkElement.setAttribute('href', '#');
-      }
-
-      if (karaokeOpenLinkElement) {
-        karaokeOpenLinkElement.setAttribute('hidden', '');
-        karaokeOpenLinkElement.setAttribute('href', '#');
-      }
-
-      if (karaokeThumbnailImageElement) {
-        karaokeThumbnailImageElement.setAttribute('src', '');
-        karaokeThumbnailImageElement.setAttribute('alt', '');
-      }
-
-      if (karaokeThumbnailLabelElement) {
-        karaokeThumbnailLabelElement.textContent = 'Open on YouTube';
-      }
-
-      if (karaokeNoteElement) {
-        karaokeNoteElement.textContent = '';
-        karaokeNoteElement.setAttribute('hidden', '');
+      if (karaokeEmptyElement) {
+        karaokeEmptyElement.setAttribute('hidden', '');
       }
     }
   };

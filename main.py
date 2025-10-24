@@ -164,6 +164,110 @@ def halloween_overview():
     )
 
 
+@app.route("/admin", methods=["GET", "POST"])
+def admin_portal():
+    errors: List[str] = []
+    messages: List[str] = []
+
+    def parse_index(raw_index: str | None, total: int, label: str) -> int | None:
+        if raw_index is None:
+            errors.append(f"Missing {label} index.")
+            return None
+        try:
+            index_value = int(raw_index)
+        except ValueError:
+            errors.append(f"Invalid {label} index.")
+            return None
+        if not 0 <= index_value < total:
+            errors.append(f"{label.capitalize()} entry could not be found.")
+            return None
+        return index_value
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "update_costume":
+            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
+            name = request.form.get("name", "").strip()
+            costume = request.form.get("costume", "").strip()
+            contact = request.form.get("contact", "").strip()
+
+            if not name:
+                errors.append("Costume signup name is required.")
+            if not costume:
+                errors.append("Costume description is required.")
+
+            if index is not None and name and costume:
+                costume_signups[index] = CostumeSignup(name=name, costume=costume, contact=contact)
+                messages.append(f"Updated costume signup for {name}.")
+
+        elif action == "delete_costume":
+            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
+            if index is not None:
+                removed = costume_signups.pop(index)
+                messages.append(f"Removed costume signup for {removed.name}.")
+
+        elif action == "add_costume":
+            name = request.form.get("name", "").strip()
+            costume = request.form.get("costume", "").strip()
+            contact = request.form.get("contact", "").strip()
+
+            if not name:
+                errors.append("Costume signup name is required to add a new entry.")
+            if not costume:
+                errors.append("Costume description is required to add a new entry.")
+
+            if name and costume:
+                costume_signups.append(CostumeSignup(name=name, costume=costume, contact=contact))
+                messages.append(f"Added costume signup for {name}.")
+
+        elif action == "update_karaoke":
+            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            name = request.form.get("name", "").strip()
+            song_title = request.form.get("song_title", "").strip()
+            artist = request.form.get("artist", "").strip()
+
+            if not name:
+                errors.append("Karaoke signup name is required.")
+            if not song_title:
+                errors.append("Song title is required.")
+
+            if index is not None and name and song_title:
+                karaoke_signups[index] = KaraokeSignup(name=name, song_title=song_title, artist=artist)
+                messages.append(f"Updated karaoke signup for {name}.")
+
+        elif action == "delete_karaoke":
+            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            if index is not None:
+                removed = karaoke_signups.pop(index)
+                messages.append(f"Removed karaoke signup for {removed.name}.")
+
+        elif action == "add_karaoke":
+            name = request.form.get("name", "").strip()
+            song_title = request.form.get("song_title", "").strip()
+            artist = request.form.get("artist", "").strip()
+
+            if not name:
+                errors.append("Karaoke signup name is required to add a new entry.")
+            if not song_title:
+                errors.append("Song title is required to add a new entry.")
+
+            if name and song_title:
+                karaoke_signups.append(KaraokeSignup(name=name, song_title=song_title, artist=artist))
+                messages.append(f"Added karaoke signup for {name}.")
+
+        else:
+            errors.append("Unknown action submitted. Please try again.")
+
+    return render_template(
+        "admin.html",
+        costume_signups=costume_signups,
+        karaoke_signups=karaoke_signups,
+        errors=errors,
+        messages=messages,
+    )
+
+
 @app.route("/costume-signup", methods=["GET", "POST"])
 def costume_signup():
     errors: List[str] = []

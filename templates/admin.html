@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% set title = "Admin Portal" %}
+
+{% block content %}
+<section class="admin-panel">
+  <header class="admin-panel__header">
+    <h2>Admin Controls</h2>
+    <p>Use this dashboard to edit the costume contest and karaoke signups in real time.</p>
+  </header>
+
+  {% if errors %}
+    <div class="flash flash--error">
+      <h3>There were some problems:</h3>
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if messages %}
+    <div class="flash flash--success">
+      <ul>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <div class="admin-grid">
+    <section class="admin-section">
+      <h3>Costume Contest Signups</h3>
+
+      <form method="post" class="admin-entry admin-entry--new">
+        <h4>Add a new entry</h4>
+        <div class="admin-entry__fields">
+          <label>
+            Name
+            <input type="text" name="name" required>
+          </label>
+          <label>
+            Costume Description
+            <input type="text" name="costume" required>
+          </label>
+          <label>
+            Contact Details
+            <input type="text" name="contact" placeholder="Optional">
+          </label>
+        </div>
+        <button type="submit" name="action" value="add_costume" class="button button--primary">Add Costume Signup</button>
+      </form>
+
+      {% if costume_signups %}
+        <div class="admin-entry-list">
+          {% for signup in costume_signups %}
+            <form method="post" class="admin-entry">
+              <input type="hidden" name="index" value="{{ loop.index0 }}">
+              <div class="admin-entry__fields">
+                <label>
+                  Name
+                  <input type="text" name="name" value="{{ signup.name }}" required>
+                </label>
+                <label>
+                  Costume Description
+                  <input type="text" name="costume" value="{{ signup.costume }}" required>
+                </label>
+                <label>
+                  Contact Details
+                  <input type="text" name="contact" value="{{ signup.contact }}" placeholder="Optional">
+                </label>
+              </div>
+              <div class="admin-entry__actions">
+                <button type="submit" name="action" value="update_costume" class="button button--primary">Save Changes</button>
+                <button type="submit" name="action" value="delete_costume" class="button button--danger">Remove</button>
+              </div>
+            </form>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="admin-empty">No costume signups yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="admin-section">
+      <h3>Karaoke Signups</h3>
+
+      <form method="post" class="admin-entry admin-entry--new">
+        <h4>Add a new entry</h4>
+        <div class="admin-entry__fields">
+          <label>
+            Name
+            <input type="text" name="name" required>
+          </label>
+          <label>
+            Song Title
+            <input type="text" name="song_title" required>
+          </label>
+          <label>
+            Artist
+            <input type="text" name="artist" placeholder="Optional">
+          </label>
+        </div>
+        <button type="submit" name="action" value="add_karaoke" class="button button--primary">Add Karaoke Signup</button>
+      </form>
+
+      {% if karaoke_signups %}
+        <div class="admin-entry-list">
+          {% for signup in karaoke_signups %}
+            <form method="post" class="admin-entry">
+              <input type="hidden" name="index" value="{{ loop.index0 }}">
+              <div class="admin-entry__fields">
+                <label>
+                  Name
+                  <input type="text" name="name" value="{{ signup.name }}" required>
+                </label>
+                <label>
+                  Song Title
+                  <input type="text" name="song_title" value="{{ signup.song_title }}" required>
+                </label>
+                <label>
+                  Artist
+                  <input type="text" name="artist" value="{{ signup.artist }}" placeholder="Optional">
+                </label>
+              </div>
+              <div class="admin-entry__actions">
+                <button type="submit" name="action" value="update_karaoke" class="button button--primary">Save Changes</button>
+                <button type="submit" name="action" value="delete_karaoke" class="button button--danger">Remove</button>
+              </div>
+            </form>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="admin-empty">No karaoke signups yet.</p>
+      {% endif %}
+    </section>
+  </div>
+</section>
+{% endblock %}

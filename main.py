@@ -380,7 +380,7 @@ def admin_portal():
                     messages.append(f"Moved costume signup for {moved_signup.name} down.")
 
         elif action == "start_costume_contest":
-            voting_url = url_for("costume_voting", _external=True)
+            voting_url = url_for("costume_voting_page", _external=True)
             live_display_override = {
                 "type": "contest_start",
                 "title": "The Costume Contest Has Begun!",

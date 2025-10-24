@@ -164,38 +164,6 @@ body.display-mode {
   width: 100%;
 }
 
-.karaoke-card__scroll-area {
-  width: min(680px, 100%);
-  max-height: clamp(260px, 58vh, 520px);
-  padding-right: clamp(0.3rem, 1vw, 0.75rem);
-  margin: 0 auto;
-  display: grid;
-  gap: clamp(0.75rem, 2.2vw, 1.15rem);
-  scrollbar-gutter: stable both-edges;
-  overflow: hidden;
-  transition: height 0.45s ease;
-}
-
-.karaoke-card__scroll-area[data-lock-height='true'] {
-  height: var(--karaoke-entry-height, auto);
-  max-height: none;
-}
-
-.karaoke-card__scroll-area::-webkit-scrollbar {
-  width: 0.65rem;
-}
-
-.karaoke-card__scroll-area::-webkit-scrollbar-thumb {
-  background: rgba(255, 111, 60, 0.5);
-  border-radius: 999px;
-  box-shadow: inset 0 0 0 2px rgba(12, 12, 28, 0.85);
-}
-
-.karaoke-card__scroll-area::-webkit-scrollbar-track {
-  background: rgba(12, 12, 28, 0.6);
-  border-radius: 999px;
-}
-
 .karaoke-card__label {
   margin: 0;
   font-size: clamp(0.95rem, 2.2vw, 1.1rem);
@@ -204,49 +172,52 @@ body.display-mode {
   color: rgba(244, 244, 248, 0.75);
 }
 
-.karaoke-lineup {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.karaoke-card__current {
+  width: min(680px, 100%);
+  margin: 0 auto;
+  padding: clamp(1.1rem, 2.8vw, 1.8rem) clamp(1.2rem, 3.2vw, 1.9rem);
+  border-radius: 1.35rem;
+  background: rgba(16, 16, 32, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.32);
   display: grid;
-  gap: clamp(0.75rem, 2.4vw, 1.2rem);
+  gap: clamp(0.75rem, 2.2vw, 1.2rem);
+  text-align: center;
 }
 
-.karaoke-lineup__entry {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.5rem 1.2rem;
-  align-items: baseline;
-  padding: clamp(0.85rem, 2.4vw, 1.3rem) clamp(1rem, 3vw, 1.6rem);
-  border-radius: 1.15rem;
-  background: rgba(16, 16, 32, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
-  text-align: left;
-}
-
-.karaoke-lineup__entry.is-current {
+.karaoke-card__current.is-active {
   border-color: rgba(255, 111, 60, 0.65);
-  box-shadow: 0 26px 56px rgba(255, 111, 60, 0.2);
-  background: rgba(255, 111, 60, 0.16);
+  box-shadow: 0 32px 72px rgba(255, 111, 60, 0.18);
+  background: rgba(255, 111, 60, 0.14);
 }
 
-.karaoke-lineup__position {
+.karaoke-card__current[hidden] {
+  display: none !important;
+}
+
+.karaoke-card__position {
+  margin: 0;
   font-size: clamp(1rem, 2.6vw, 1.35rem);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.72);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
 }
 
-.karaoke-lineup__name {
-  font-size: clamp(1.25rem, 3vw, 1.8rem);
+.karaoke-card__name {
+  margin: 0;
+  font-size: clamp(1.8rem, 4.5vw, 2.8rem);
   font-weight: 700;
   color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 24px rgba(255, 111, 60, 0.35);
 }
 
-.karaoke-lineup__song {
-  grid-column: 2 / -1;
-  font-size: clamp(1rem, 2.5vw, 1.35rem);
-  color: rgba(244, 244, 248, 0.85);
+.karaoke-card__song {
+  margin: 0;
+  font-size: clamp(1.1rem, 2.8vw, 1.5rem);
+  color: rgba(244, 244, 248, 0.9);
 }
 
 .karaoke-card__empty {
@@ -255,7 +226,6 @@ body.display-mode {
   color: rgba(244, 244, 248, 0.75);
 }
 
-.karaoke-lineup[hidden],
 .karaoke-card__empty[hidden] {
   display: none !important;
 }

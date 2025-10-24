@@ -142,16 +142,40 @@
         </section>
         <section class="display-override" data-override-state{% if not override %} hidden{% endif %}>
           <div class="display-override__card">
-            <h2 class="display-override__title" data-override-title>{{ override.title if override else '' }}</h2>
-            <p class="display-override__highlight" data-override-highlight{% if not override or not override.get('highlight') %} hidden{% endif %}>{{ override.highlight if override and override.get('highlight') else '' }}</p>
-            <p class="display-override__message" data-override-message>{{ override.message if override else '' }}</p>
-            <ul class="display-override__details" data-override-details{% if not override or not override.get('details') %} hidden{% endif %}>
-              {% if override and override.get('details') %}
-                {% for detail in override.details %}
-                  <li>{{ detail }}</li>
-                {% endfor %}
-              {% endif %}
-            </ul>
+            <div class="display-override__general" data-override-general>
+              <h2 class="display-override__title" data-override-title>{{ override.title if override else '' }}</h2>
+              <p class="display-override__highlight" data-override-highlight{% if not override or not override.get('highlight') %} hidden{% endif %}>{{ override.highlight if override and override.get('highlight') else '' }}</p>
+              <p class="display-override__message" data-override-message>{{ override.message if override else '' }}</p>
+              <ul class="display-override__details" data-override-details{% if not override or not override.get('details') %} hidden{% endif %}>
+                {% if override and override.get('details') %}
+                  {% for detail in override.details %}
+                    <li>{{ detail }}</li>
+                  {% endfor %}
+                {% endif %}
+              </ul>
+            </div>
+            <div class="display-override__karaoke" data-override-karaoke hidden>
+              <h2 class="karaoke-card__title" data-karaoke-title></h2>
+              <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
+              <p class="karaoke-card__message" data-karaoke-message></p>
+              <div class="karaoke-card__content">
+                <div class="karaoke-card__details">
+                  <p class="karaoke-card__label">Now Performing</p>
+                  <p class="karaoke-card__singer" data-karaoke-singer></p>
+                  <p class="karaoke-card__song" data-karaoke-song></p>
+                </div>
+                <div class="karaoke-card__preview" data-karaoke-preview hidden>
+                  <iframe
+                    data-karaoke-iframe
+                    title="YouTube preview"
+                    src=""
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                  ></iframe>
+                </div>
+              </div>
+              <p class="karaoke-card__note" data-karaoke-note hidden></p>
+            </div>
           </div>
         </section>
       </main>

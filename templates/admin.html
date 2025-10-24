@@ -138,6 +138,39 @@
     </div>
   </section>
 
+  <section class="admin-section admin-section--karaoke">
+    <h3>Karaoke Controls</h3>
+    <p>Launch the singing session and spotlight the next performer on the live display.</p>
+
+    <div class="contest-actions">
+      <form method="post">
+        <button type="submit" name="action" value="start_karaoke_party" class="button button--primary">
+          Start the Halloween Karaoke Party
+        </button>
+      </form>
+    </div>
+
+    {% if karaoke_state.party_started %}
+      <p class="contest-status contest-status--active">Karaoke party is live on the big screen!</p>
+    {% else %}
+      <p class="contest-status contest-status--inactive">Karaoke party hasn't been started yet.</p>
+    {% endif %}
+
+    {% set first_karaoke = karaoke_signups[0] if karaoke_signups else None %}
+    {% if first_karaoke %}
+      <div class="karaoke-lineup">
+        <h4>Opening Act</h4>
+        <p class="karaoke-lineup__name">{{ first_karaoke.name }}</p>
+        <p class="karaoke-lineup__song">{{ '"%s"' | format(first_karaoke.song_title) }} by {{ first_karaoke.artist }}</p>
+        {% if not first_karaoke.youtube_link %}
+          <p class="karaoke-lineup__note">Reminder: grab their YouTube link so Tony can cast it to the TV.</p>
+        {% endif %}
+      </div>
+    {% else %}
+      <p class="contest-status">Add karaoke signups to build the performance queue.</p>
+    {% endif %}
+  </section>
+
   <div class="admin-grid">
     <section class="admin-section">
       <h3>Costume Contest Signups</h3>

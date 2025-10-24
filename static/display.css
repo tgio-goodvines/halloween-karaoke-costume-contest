@@ -126,6 +126,90 @@ body.display-mode {
   text-align: center;
 }
 
+.display-override__general[hidden],
+.display-override__karaoke[hidden] {
+  display: none !important;
+}
+
+.display-override__karaoke {
+  display: grid;
+  gap: clamp(0.85rem, 2.2vw, 1.2rem);
+  text-align: center;
+}
+
+.karaoke-card__title {
+  margin: 0;
+  font-size: clamp(2rem, 4.2vw, 3rem);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 22px rgba(255, 111, 60, 0.45);
+}
+
+.karaoke-card__subtitle {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.8vw, 1.65rem);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.karaoke-card__message {
+  margin: 0;
+  font-size: clamp(1rem, 2.4vw, 1.35rem);
+  color: rgba(244, 244, 248, 0.9);
+}
+
+.karaoke-card__content {
+  display: grid;
+  gap: clamp(1rem, 2.4vw, 1.5rem);
+  justify-items: center;
+}
+
+.karaoke-card__details {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.karaoke-card__label {
+  margin: 0;
+  font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 248, 0.75);
+}
+
+.karaoke-card__singer {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.5vw, 2.3rem);
+  font-weight: 700;
+}
+
+.karaoke-card__song {
+  margin: 0;
+  font-size: clamp(1rem, 2.4vw, 1.3rem);
+  color: rgba(244, 244, 248, 0.85);
+}
+
+.karaoke-card__preview {
+  width: min(640px, 100%);
+  aspect-ratio: 16 / 9;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.karaoke-card__preview iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.karaoke-card__note {
+  margin: 0;
+  font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+  color: rgba(255, 206, 166, 0.92);
+}
+
 .display-override__title {
   margin: 0;
   font-size: clamp(2rem, 4.4vw, 3.2rem);

@@ -35,6 +35,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeIframeElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-iframe]')
     : null;
+  const karaokeThumbnailLinkElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-thumbnail]')
+    : null;
+  const karaokeThumbnailImageElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-thumbnail-image]')
+    : null;
+  const karaokeThumbnailLabelElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-thumbnail-label]')
+    : null;
   const karaokeNoteElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-note]')
     : null;
@@ -114,6 +123,43 @@ document.addEventListener('DOMContentLoaded', () => {
       return numeric.toFixed(2);
     }
     return '0.00';
+  };
+
+  const extractYoutubeVideoId = (rawUrl) => {
+    if (!rawUrl || typeof rawUrl !== 'string') {
+      return '';
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(rawUrl);
+    } catch (error) {
+      return '';
+    }
+
+    const { hostname, pathname, searchParams } = parsed;
+    const cleanPathname = pathname || '';
+    let videoId = '';
+
+    if (hostname.includes('youtu.be')) {
+      const [, potentialId] = cleanPathname.split('/');
+      videoId = potentialId || '';
+    } else if (cleanPathname.startsWith('/embed/')) {
+      videoId = cleanPathname.replace('/embed/', '').split(/[/?&#]/)[0];
+    } else if (cleanPathname.startsWith('/shorts/')) {
+      videoId = cleanPathname.replace('/shorts/', '').split(/[/?&#]/)[0];
+    } else {
+      videoId = searchParams.get('v') || '';
+    }
+
+    if (!videoId && cleanPathname) {
+      const segments = cleanPathname.split('/').filter(Boolean);
+      if (segments.length) {
+        videoId = segments[segments.length - 1].split(/[?&#]/)[0];
+      }
+    }
+
+    return videoId;
   };
 
   const updateOverrideContent = () => {
@@ -222,21 +268,77 @@ document.addEventListener('DOMContentLoaded', () => {
         karaokePreviewElement.removeAttribute('hidden');
         const embedSrc = embedUrl.includes('?') ? `${embedUrl}&rel=0` : `${embedUrl}?rel=0`;
         karaokeIframeElement.setAttribute('src', embedSrc);
+        karaokeIframeElement.removeAttribute('hidden');
+        if (karaokeThumbnailLinkElement) {
+          karaokeThumbnailLinkElement.setAttribute('hidden', '');
+          karaokeThumbnailLinkElement.setAttribute('href', '#');
+        }
+        if (karaokeThumbnailImageElement) {
+          karaokeThumbnailImageElement.setAttribute('src', '');
+          karaokeThumbnailImageElement.setAttribute('alt', '');
+        }
         if (karaokeNoteElement) {
           karaokeNoteElement.textContent = '';
           karaokeNoteElement.setAttribute('hidden', '');
         }
       } else {
+        const youtubeLink = karaokeData.youtube_link || '';
+        const videoId =
+          extractYoutubeVideoId(karaokeData.youtube_embed_url || '') ||
+          extractYoutubeVideoId(youtubeLink);
+
         if (karaokePreviewElement) {
-          karaokePreviewElement.setAttribute('hidden', '');
+          if (videoId && youtubeLink) {
+            karaokePreviewElement.removeAttribute('hidden');
+          } else {
+            karaokePreviewElement.setAttribute('hidden', '');
+          }
         }
+
         if (karaokeIframeElement) {
           karaokeIframeElement.setAttribute('src', '');
+          karaokeIframeElement.setAttribute('hidden', '');
         }
-        if (karaokeNoteElement) {
-          karaokeNoteElement.textContent =
-            'Please give Tony the YouTube link so he can cast it to the TV.';
-          karaokeNoteElement.removeAttribute('hidden');
+
+        if (videoId && youtubeLink && karaokeThumbnailLinkElement) {
+          const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+          karaokeThumbnailLinkElement.setAttribute('href', youtubeLink);
+          karaokeThumbnailLinkElement.removeAttribute('hidden');
+          if (karaokeThumbnailImageElement) {
+            karaokeThumbnailImageElement.setAttribute('src', thumbnailUrl);
+            const descriptionParts = [];
+            if (karaokeData.song_title) {
+              descriptionParts.push(`“${karaokeData.song_title}”`);
+            }
+            if (karaokeData.artist) {
+              descriptionParts.push(`by ${karaokeData.artist}`);
+            }
+            const description = descriptionParts.length
+              ? `YouTube thumbnail for ${descriptionParts.join(' ')}`
+              : 'YouTube thumbnail preview';
+            karaokeThumbnailImageElement.setAttribute('alt', description);
+          }
+          if (karaokeThumbnailLabelElement) {
+            karaokeThumbnailLabelElement.textContent = 'Open on YouTube';
+          }
+          if (karaokeNoteElement) {
+            karaokeNoteElement.textContent = 'Embeds are disabled—open the video on YouTube to play it.';
+            karaokeNoteElement.removeAttribute('hidden');
+          }
+        } else {
+          if (karaokeThumbnailLinkElement) {
+            karaokeThumbnailLinkElement.setAttribute('hidden', '');
+            karaokeThumbnailLinkElement.setAttribute('href', '#');
+          }
+          if (karaokeThumbnailImageElement) {
+            karaokeThumbnailImageElement.setAttribute('src', '');
+            karaokeThumbnailImageElement.setAttribute('alt', '');
+          }
+          if (karaokeNoteElement) {
+            karaokeNoteElement.textContent =
+              'Please give Tony the YouTube link so he can cast it to the TV.';
+            karaokeNoteElement.removeAttribute('hidden');
+          }
         }
       }
     } else {
@@ -276,6 +378,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (karaokeIframeElement) {
         karaokeIframeElement.setAttribute('src', '');
+        karaokeIframeElement.setAttribute('hidden', '');
+      }
+
+      if (karaokeThumbnailLinkElement) {
+        karaokeThumbnailLinkElement.setAttribute('hidden', '');
+        karaokeThumbnailLinkElement.setAttribute('href', '#');
+      }
+
+      if (karaokeThumbnailImageElement) {
+        karaokeThumbnailImageElement.setAttribute('src', '');
+        karaokeThumbnailImageElement.setAttribute('alt', '');
+      }
+
+      if (karaokeThumbnailLabelElement) {
+        karaokeThumbnailLabelElement.textContent = 'Open on YouTube';
       }
 
       if (karaokeNoteElement) {

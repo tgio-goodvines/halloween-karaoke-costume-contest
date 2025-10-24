@@ -71,7 +71,27 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 "portal_note": "Type the address exactly as shown and add a bookmark for quick access later.",
                 "reminder": "",
             },
-        }
+        },
+        {
+            "category": "Event Spotlight",
+            "primary": "Tonight's Lineup",
+            "secondary": "Costume contest judging kicks off at 9:30 PM followed by karaoke at 11:00 PM. Make sure you're signed up!",
+        },
+        {
+            "category": "Event Spotlight",
+            "primary": "Welcome to the Halloween Bash!",
+            "secondary": "Check out the event schedule and make sure to submit your signups.",
+        },
+        {
+            "category": "Event Spotlight",
+            "primary": "Costume Contest",
+            "secondary": "Summon your most sinister look—compete for spine-tingling glory, devilish loot, and the Trophy of Terror.",
+        },
+        {
+            "category": "Event Spotlight",
+            "primary": "Karaoke Night",
+            "secondary": "Choose your eerie anthem and send shivers down the spine.",
+        },
     ]
 
     costume_entries = [

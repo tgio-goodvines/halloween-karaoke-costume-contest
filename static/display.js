@@ -44,6 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeThumbnailLabelElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-thumbnail-label]')
     : null;
+  const karaokeOpenLinkElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-open-link]')
+    : null;
   const karaokeNoteElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-note]')
     : null;
@@ -273,6 +276,10 @@ document.addEventListener('DOMContentLoaded', () => {
           karaokeThumbnailLinkElement.setAttribute('hidden', '');
           karaokeThumbnailLinkElement.setAttribute('href', '#');
         }
+        if (karaokeOpenLinkElement) {
+          karaokeOpenLinkElement.setAttribute('hidden', '');
+          karaokeOpenLinkElement.setAttribute('href', '#');
+        }
         if (karaokeThumbnailImageElement) {
           karaokeThumbnailImageElement.setAttribute('src', '');
           karaokeThumbnailImageElement.setAttribute('alt', '');
@@ -286,9 +293,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const videoId =
           extractYoutubeVideoId(karaokeData.youtube_embed_url || '') ||
           extractYoutubeVideoId(youtubeLink);
+        const hasYoutubeLink = Boolean(youtubeLink);
 
         if (karaokePreviewElement) {
-          if (videoId && youtubeLink) {
+          if (videoId && hasYoutubeLink) {
             karaokePreviewElement.removeAttribute('hidden');
           } else {
             karaokePreviewElement.setAttribute('hidden', '');
@@ -300,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
           karaokeIframeElement.setAttribute('hidden', '');
         }
 
-        if (videoId && youtubeLink && karaokeThumbnailLinkElement) {
+        if (videoId && hasYoutubeLink && karaokeThumbnailLinkElement) {
           const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
           karaokeThumbnailLinkElement.setAttribute('href', youtubeLink);
           karaokeThumbnailLinkElement.removeAttribute('hidden');
@@ -321,8 +329,29 @@ document.addEventListener('DOMContentLoaded', () => {
           if (karaokeThumbnailLabelElement) {
             karaokeThumbnailLabelElement.textContent = 'Open on YouTube';
           }
+          if (karaokeOpenLinkElement) {
+            karaokeOpenLinkElement.setAttribute('hidden', '');
+            karaokeOpenLinkElement.setAttribute('href', '#');
+          }
           if (karaokeNoteElement) {
             karaokeNoteElement.textContent = 'Embeds are disabled—open the video on YouTube to play it.';
+            karaokeNoteElement.removeAttribute('hidden');
+          }
+        } else if (hasYoutubeLink) {
+          if (karaokeThumbnailLinkElement) {
+            karaokeThumbnailLinkElement.setAttribute('hidden', '');
+            karaokeThumbnailLinkElement.setAttribute('href', '#');
+          }
+          if (karaokeThumbnailImageElement) {
+            karaokeThumbnailImageElement.setAttribute('src', '');
+            karaokeThumbnailImageElement.setAttribute('alt', '');
+          }
+          if (karaokeOpenLinkElement) {
+            karaokeOpenLinkElement.setAttribute('href', youtubeLink);
+            karaokeOpenLinkElement.removeAttribute('hidden');
+          }
+          if (karaokeNoteElement) {
+            karaokeNoteElement.textContent = 'Preview unavailable—open the video on YouTube to play it.';
             karaokeNoteElement.removeAttribute('hidden');
           }
         } else {
@@ -333,6 +362,10 @@ document.addEventListener('DOMContentLoaded', () => {
           if (karaokeThumbnailImageElement) {
             karaokeThumbnailImageElement.setAttribute('src', '');
             karaokeThumbnailImageElement.setAttribute('alt', '');
+          }
+          if (karaokeOpenLinkElement) {
+            karaokeOpenLinkElement.setAttribute('hidden', '');
+            karaokeOpenLinkElement.setAttribute('href', '#');
           }
           if (karaokeNoteElement) {
             karaokeNoteElement.textContent =
@@ -384,6 +417,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (karaokeThumbnailLinkElement) {
         karaokeThumbnailLinkElement.setAttribute('hidden', '');
         karaokeThumbnailLinkElement.setAttribute('href', '#');
+      }
+
+      if (karaokeOpenLinkElement) {
+        karaokeOpenLinkElement.setAttribute('hidden', '');
+        karaokeOpenLinkElement.setAttribute('href', '#');
       }
 
       if (karaokeThumbnailImageElement) {

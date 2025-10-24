@@ -79,15 +79,6 @@ karaoke_state: dict[str, object] = {
 }
 
 
-def get_next_karaoke_party_target() -> datetime:
-    mountain_offset = timezone(timedelta(hours=-7), name="MST")
-    now_mountain = datetime.now(mountain_offset)
-    countdown_target = now_mountain.replace(hour=23, minute=0, second=0, microsecond=0)
-    if countdown_target <= now_mountain:
-        countdown_target += timedelta(days=1)
-    return countdown_target
-
-
 def ensure_costume_votes_alignment() -> None:
     while len(costume_votes) < len(costume_signups):
         costume_votes.append([])
@@ -235,45 +226,27 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 "reminder": "",
             },
         },
+        {
+            "category": "Event Spotlight",
+            "primary": "Tonight's Lineup",
+            "secondary": "Costume contest judging kicks off at 9:30 PM followed by karaoke at 11:00 PM. Make sure you're signed up!",
+        },
+        {
+            "category": "Event Spotlight",
+            "primary": "Welcome to the Halloween Bash!",
+            "secondary": "Check out the event schedule and make sure to submit your signups.",
+        },
+        {
+            "category": "Event Spotlight",
+            "primary": "Costume Contest",
+            "secondary": "Summon your most sinister look—compete for spine-tingling glory, devilish loot, and the Trophy of Terror.",
+        },
+        {
+            "category": "Event Spotlight",
+            "primary": "Karaoke Night",
+            "secondary": "Choose your eerie anthem and send shivers down the spine.",
+        },
     ]
-
-    if not karaoke_state.get("party_started"):
-        rotation_entries.append(
-            {
-                "category": "Karaoke Countdown",
-                "primary": "Countdown to the Karaoke Party",
-                "secondary": "The singing showdown begins soon—warm up those vocals!",
-                "countdown": {
-                    "target": get_next_karaoke_party_target().isoformat(),
-                    "label": "Karaoke kickoff at 11:00 PM MST",
-                },
-            }
-        )
-
-    rotation_entries.extend(
-        [
-            {
-                "category": "Event Spotlight",
-                "primary": "Tonight's Lineup",
-                "secondary": "Costume contest judging kicks off at 9:30 PM followed by karaoke at 11:00 PM. Make sure you're signed up!",
-            },
-            {
-                "category": "Event Spotlight",
-                "primary": "Welcome to the Halloween Bash!",
-                "secondary": "Check out the event schedule and make sure to submit your signups.",
-            },
-            {
-                "category": "Event Spotlight",
-                "primary": "Costume Contest",
-                "secondary": "Summon your most sinister look—compete for spine-tingling glory, devilish loot, and the Trophy of Terror.",
-            },
-            {
-                "category": "Event Spotlight",
-                "primary": "Karaoke Night",
-                "secondary": "Choose your eerie anthem and send shivers down the spine.",
-            },
-        ]
-    )
 
     costume_entries = [
         {
@@ -663,7 +636,13 @@ def admin_portal():
                 karaoke_state["party_started"] = True
                 karaoke_state["current_singer_index"] = None
 
-                countdown_target = get_next_karaoke_party_target()
+                mountain_offset = timezone(timedelta(hours=-7), name="MST")
+                now_mountain = datetime.now(mountain_offset)
+                countdown_target = now_mountain.replace(
+                    hour=23, minute=0, second=0, microsecond=0
+                )
+                if countdown_target <= now_mountain:
+                    countdown_target += timedelta(days=1)
 
                 live_display_override = {
                     "type": "karaoke_start",

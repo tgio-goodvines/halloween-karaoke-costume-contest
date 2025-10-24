@@ -4,20 +4,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
   const overrideContainer = document.querySelector('[data-override-state]');
-  const overrideLayoutElement = overrideContainer
-    ? overrideContainer.querySelector('[data-override-layout]')
-    : null;
   const overrideCardElement = overrideContainer
-    ? overrideContainer.querySelector('[data-primary-override-card]')
+    ? overrideContainer.querySelector('.display-override__card')
     : null;
   const generalOverrideElement = overrideContainer
     ? overrideContainer.querySelector('[data-override-general]')
     : null;
   const karaokeOverrideElement = overrideContainer
     ? overrideContainer.querySelector('[data-override-karaoke]')
-    : null;
-  const karaokePerformersCardElement = overrideContainer
-    ? overrideContainer.querySelector('[data-karaoke-performers]')
     : null;
   const overrideTitleElement = overrideContainer ? overrideContainer.querySelector('[data-override-title]') : null;
   const overrideHighlightElement = overrideContainer ? overrideContainer.querySelector('[data-override-highlight]') : null;
@@ -44,17 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeEmptyElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-empty]')
     : null;
-  const karaokePerformersListElement = karaokePerformersCardElement
-    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-list]')
-    : null;
-  const karaokePerformersEmptyElement = karaokePerformersCardElement
-    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-empty]')
-    : null;
-  const karaokePerformersMetaElement = karaokePerformersCardElement
-    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-count]')
-    : null;
-  const karaokePerformersScrollerElement = karaokePerformersCardElement
-    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-scroller]')
+  const karaokeRotatorElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-rotator]')
     : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
@@ -120,22 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const scoreboardNoteElement = scoreboardLayout
     ? scoreboardLayout.querySelector('[data-scoreboard-note]')
     : null;
-  const countdownLayout = card.querySelector('[data-countdown-layout]');
-  const countdownCategoryElement = countdownLayout
-    ? countdownLayout.querySelector('[data-countdown-category]')
-    : null;
-  const countdownTitleElement = countdownLayout
-    ? countdownLayout.querySelector('[data-countdown-title]')
-    : null;
-  const countdownSubtitleElement = countdownLayout
-    ? countdownLayout.querySelector('[data-countdown-subtitle]')
-    : null;
-  const countdownTimerElement = countdownLayout
-    ? countdownLayout.querySelector('[data-countdown-timer]')
-    : null;
-  const countdownLabelElement = countdownLayout
-    ? countdownLayout.querySelector('[data-countdown-label]')
-    : null;
   const typeElement = card.querySelector('[data-entry-type]');
   const primaryElement = card.querySelector('[data-entry-primary]');
   const secondaryElement = card.querySelector('[data-entry-secondary]');
@@ -152,10 +121,141 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let karaokeCountdownTimerId = null;
   let karaokeCountdownTarget = null;
+  let karaokeRotatorPanels = [];
+  let karaokeRotatorIndex = 0;
+  let karaokeRotatorTimerId = null;
+  let karaokeRotatorResizeHandler = null;
+  const KARAOKE_ROTATOR_INTERVAL = 8000;
 
-  let rotationCountdownTimerId = null;
-  let rotationCountdownTarget = null;
-  let rotationCountdownLabelText = '';
+  const stopKaraokeRotator = () => {
+    if (karaokeRotatorTimerId) {
+      window.clearInterval(karaokeRotatorTimerId);
+      karaokeRotatorTimerId = null;
+    }
+
+    if (karaokeRotatorResizeHandler) {
+      window.removeEventListener('resize', karaokeRotatorResizeHandler);
+      karaokeRotatorResizeHandler = null;
+    }
+  };
+
+  const collectKaraokeRotatorPanels = () => {
+    if (!karaokeRotatorElement) {
+      karaokeRotatorPanels = [];
+      return;
+    }
+
+    karaokeRotatorPanels = Array.from(
+      karaokeRotatorElement.querySelectorAll('[data-karaoke-panel]')
+    ).filter((panel) => panel instanceof HTMLElement);
+  };
+
+  const applyKaraokeRotatorIndex = () => {
+    if (!karaokeRotatorPanels.length) {
+      return;
+    }
+
+    karaokeRotatorPanels.forEach((panel, panelIndex) => {
+      if (panelIndex === karaokeRotatorIndex) {
+        panel.classList.add('is-active');
+        panel.setAttribute('aria-hidden', 'false');
+      } else {
+        panel.classList.remove('is-active');
+        panel.setAttribute('aria-hidden', 'true');
+      }
+    });
+  };
+
+  const measureKaraokeRotatorHeight = () => {
+    if (!karaokeRotatorElement || !karaokeRotatorPanels.length) {
+      if (karaokeRotatorElement) {
+        karaokeRotatorElement.style.height = '';
+      }
+      return;
+    }
+
+    let maxHeight = 0;
+
+    karaokeRotatorPanels.forEach((panel) => {
+      panel.classList.add('is-measuring');
+      const panelHeight = panel.offsetHeight;
+      if (panelHeight > maxHeight) {
+        maxHeight = panelHeight;
+      }
+      panel.classList.remove('is-measuring');
+    });
+
+    if (maxHeight > 0) {
+      karaokeRotatorElement.style.height = `${Math.ceil(maxHeight)}px`;
+    } else {
+      karaokeRotatorElement.style.height = '';
+    }
+  };
+
+  const refreshKaraokeRotator = ({ resetIndex = false } = {}) => {
+    if (!karaokeRotatorElement) {
+      stopKaraokeRotator();
+      return;
+    }
+
+    collectKaraokeRotatorPanels();
+
+    if (!karaokeRotatorPanels.length) {
+      karaokeRotatorElement.style.height = '';
+      stopKaraokeRotator();
+      return;
+    }
+
+    if (resetIndex || karaokeRotatorIndex >= karaokeRotatorPanels.length) {
+      karaokeRotatorIndex = 0;
+    }
+
+    measureKaraokeRotatorHeight();
+    applyKaraokeRotatorIndex();
+  };
+
+  const queueKaraokeRotatorRefresh = ({ resetIndex = false } = {}) => {
+    if (!karaokeRotatorElement) {
+      return;
+    }
+
+    if (karaokeOverrideElement && karaokeOverrideElement.hasAttribute('hidden')) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      refreshKaraokeRotator({ resetIndex });
+    });
+  };
+
+  const startKaraokeRotator = () => {
+    if (!karaokeRotatorElement) {
+      return;
+    }
+
+    stopKaraokeRotator();
+    refreshKaraokeRotator({ resetIndex: true });
+
+    if (!karaokeRotatorPanels.length) {
+      return;
+    }
+
+    if (!karaokeRotatorResizeHandler) {
+      karaokeRotatorResizeHandler = () => {
+        queueKaraokeRotatorRefresh({ resetIndex: false });
+      };
+      window.addEventListener('resize', karaokeRotatorResizeHandler);
+    }
+
+    if (karaokeRotatorPanels.length <= 1) {
+      return;
+    }
+
+    karaokeRotatorTimerId = window.setInterval(() => {
+      karaokeRotatorIndex = (karaokeRotatorIndex + 1) % karaokeRotatorPanels.length;
+      applyKaraokeRotatorIndex();
+    }, KARAOKE_ROTATOR_INTERVAL);
+  };
 
   const stopKaraokeCountdown = () => {
     if (karaokeCountdownTimerId) {
@@ -163,79 +263,6 @@ document.addEventListener('DOMContentLoaded', () => {
       karaokeCountdownTimerId = null;
     }
     karaokeCountdownTarget = null;
-  };
-
-  const stopRotationCountdown = () => {
-    if (rotationCountdownTimerId) {
-      window.clearInterval(rotationCountdownTimerId);
-      rotationCountdownTimerId = null;
-    }
-    rotationCountdownTarget = null;
-    rotationCountdownLabelText = '';
-  };
-
-  const updateRotationCountdownDisplay = () => {
-    if (!countdownTimerElement || !rotationCountdownTarget) {
-      return;
-    }
-
-    const now = new Date();
-    const diffMs = rotationCountdownTarget.getTime() - now.getTime();
-    const remainingSeconds = Math.max(0, Math.floor(diffMs / 1000));
-    const hours = Math.floor(remainingSeconds / 3600);
-    const minutes = Math.floor((remainingSeconds % 3600) / 60);
-    const seconds = remainingSeconds % 60;
-
-    const hoursText = hours.toString().padStart(2, '0');
-    const minutesText = minutes.toString().padStart(2, '0');
-    const secondsText = seconds.toString().padStart(2, '0');
-
-    countdownTimerElement.textContent = `${hoursText}:${minutesText}:${secondsText}`;
-
-    if (countdownLabelElement) {
-      if (remainingSeconds === 0) {
-        countdownLabelElement.textContent = 'It\'s showtime!';
-        countdownLabelElement.removeAttribute('hidden');
-      } else if (rotationCountdownLabelText) {
-        countdownLabelElement.textContent = rotationCountdownLabelText;
-        countdownLabelElement.removeAttribute('hidden');
-      } else {
-        countdownLabelElement.textContent = '';
-        countdownLabelElement.setAttribute('hidden', '');
-      }
-    }
-  };
-
-  const startRotationCountdown = (targetIso, labelText = '') => {
-    if (!countdownTimerElement) {
-      return;
-    }
-
-    stopRotationCountdown();
-
-    if (!targetIso) {
-      countdownTimerElement.textContent = '—';
-      if (countdownLabelElement) {
-        countdownLabelElement.textContent = '';
-        countdownLabelElement.setAttribute('hidden', '');
-      }
-      return;
-    }
-
-    const parsedTarget = new Date(targetIso);
-    if (Number.isNaN(parsedTarget.getTime())) {
-      countdownTimerElement.textContent = '—';
-      if (countdownLabelElement) {
-        countdownLabelElement.textContent = '';
-        countdownLabelElement.setAttribute('hidden', '');
-      }
-      return;
-    }
-
-    rotationCountdownTarget = parsedTarget;
-    rotationCountdownLabelText = labelText;
-    updateRotationCountdownDisplay();
-    rotationCountdownTimerId = window.setInterval(updateRotationCountdownDisplay, 1000);
   };
 
   const formatPerformerSong = (entry) => {
@@ -272,10 +299,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (karaokeEmptyElement) {
         karaokeEmptyElement.removeAttribute('hidden');
       }
+      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
-    lineup.slice(0, 4).forEach((entry, index) => {
+    lineup.slice(0, 6).forEach((entry, index) => {
       const item = document.createElement('li');
       item.className = 'karaoke-card__list-item';
 
@@ -310,80 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (karaokeEmptyElement) {
       karaokeEmptyElement.setAttribute('hidden', '');
     }
-  };
 
-  const updateKaraokePerformers = (entries) => {
-    if (!karaokePerformersCardElement || !karaokePerformersListElement) {
-      return;
-    }
-
-    karaokePerformersListElement.innerHTML = '';
-
-    const lineup = Array.isArray(entries) ? entries.filter((entry) => entry && typeof entry === 'object') : [];
-
-    if (!lineup.length) {
-      karaokePerformersCardElement.setAttribute('hidden', '');
-      if (overrideLayoutElement) {
-        overrideLayoutElement.dataset.layout = 'single';
-      }
-      if (karaokePerformersMetaElement) {
-        karaokePerformersMetaElement.textContent = '';
-        karaokePerformersMetaElement.setAttribute('hidden', '');
-      }
-      if (karaokePerformersEmptyElement) {
-        karaokePerformersEmptyElement.removeAttribute('hidden');
-      }
-      if (karaokePerformersScrollerElement) {
-        karaokePerformersScrollerElement.scrollTop = 0;
-      }
-      return;
-    }
-
-    lineup.forEach((entry, index) => {
-      const item = document.createElement('li');
-      item.className = 'karaoke-card__list-item';
-
-      const rankElement = document.createElement('span');
-      rankElement.className = 'karaoke-card__list-rank';
-      rankElement.textContent = String(index + 1);
-
-      const infoElement = document.createElement('div');
-      infoElement.className = 'karaoke-card__list-info';
-
-      const nameElement = document.createElement('span');
-      nameElement.className = 'karaoke-card__list-name';
-      nameElement.textContent = entry.name ? String(entry.name).trim() || 'TBA' : 'TBA';
-      infoElement.appendChild(nameElement);
-
-      const songLine = formatPerformerSong(entry);
-      if (songLine) {
-        const songElement = document.createElement('span');
-        songElement.className = 'karaoke-card__list-song';
-        songElement.textContent = songLine;
-        infoElement.appendChild(songElement);
-      }
-
-      item.appendChild(rankElement);
-      item.appendChild(infoElement);
-
-      karaokePerformersListElement.appendChild(item);
-    });
-
-    karaokePerformersCardElement.removeAttribute('hidden');
-    if (overrideLayoutElement) {
-      overrideLayoutElement.dataset.layout = 'split';
-    }
-    if (karaokePerformersEmptyElement) {
-      karaokePerformersEmptyElement.setAttribute('hidden', '');
-    }
-    if (karaokePerformersMetaElement) {
-      const countText = lineup.length === 1 ? '1 singer queued' : `${lineup.length} singers queued`;
-      karaokePerformersMetaElement.textContent = countText;
-      karaokePerformersMetaElement.removeAttribute('hidden');
-    }
-    if (karaokePerformersScrollerElement) {
-      karaokePerformersScrollerElement.scrollTop = 0;
-    }
+    queueKaraokeRotatorRefresh({ resetIndex: false });
   };
 
   const startKaraokeCountdown = (targetIso, labelText = '') => {
@@ -405,12 +361,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!targetIso) {
       karaokeCountdownElement.textContent = '—';
+      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
     const parsedTarget = new Date(targetIso);
     if (Number.isNaN(parsedTarget.getTime())) {
       karaokeCountdownElement.textContent = '—';
+      queueKaraokeRotatorRefresh({ resetIndex: false });
       return;
     }
 
@@ -432,6 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
           karaokeCountdownNoteElement.removeAttribute('hidden');
         }
         stopKaraokeCountdown();
+        queueKaraokeRotatorRefresh({ resetIndex: false });
         return;
       }
 
@@ -449,6 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateDisplay();
     karaokeCountdownTimerId = window.setInterval(updateDisplay, 1000);
+    queueKaraokeRotatorRefresh({ resetIndex: false });
   };
 
   const updateOverrideContent = () => {
@@ -519,17 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
         );
       }
 
-      if (karaokePerformersCardElement) {
-        karaokePerformersCardElement.classList.add(
-          'display-override__card--inferno',
-          'display-override__card--karaoke'
-        );
-      }
-
-      if (overrideLayoutElement) {
-        overrideLayoutElement.dataset.layout = 'split';
-      }
-
       if (karaokeTitleElement) {
         karaokeTitleElement.textContent = titleText || 'Halloween Karaoke Party';
       }
@@ -570,8 +519,8 @@ document.addEventListener('DOMContentLoaded', () => {
           : '';
 
       updateKaraokeLineup(lineup);
-      updateKaraokePerformers(lineup);
       startKaraokeCountdown(countdownTarget, countdownLabel);
+      startKaraokeRotator();
     } else {
       if (generalOverrideElement) {
         generalOverrideElement.removeAttribute('hidden');
@@ -581,16 +530,9 @@ document.addEventListener('DOMContentLoaded', () => {
         karaokeOverrideElement.setAttribute('hidden', '');
       }
 
-      if (overrideLayoutElement) {
-        overrideLayoutElement.dataset.layout = 'single';
-      }
-
-      if (karaokePerformersCardElement) {
-        karaokePerformersCardElement.classList.remove(
-          'display-override__card--inferno',
-          'display-override__card--karaoke'
-        );
-        karaokePerformersCardElement.setAttribute('hidden', '');
+      stopKaraokeRotator();
+      if (karaokeRotatorElement) {
+        karaokeRotatorElement.style.height = '';
       }
 
       if (karaokeTitleElement) {
@@ -616,7 +558,6 @@ document.addEventListener('DOMContentLoaded', () => {
         karaokeCountdownNoteElement.setAttribute('hidden', '');
       }
       updateKaraokeLineup([]);
-      updateKaraokePerformers([]);
 
       if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride)) {
         overrideCardElement.classList.add('display-override__card--inferno');
@@ -657,76 +598,43 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const applyEntry = (entry) => {
-    const safeEntry = entry || {};
+    typeElement.textContent = entry.category || '';
+    primaryElement.textContent = entry.primary || '';
+    secondaryElement.textContent = entry.secondary || '';
 
-    typeElement.textContent = safeEntry.category || '';
-    primaryElement.textContent = safeEntry.primary || '';
-    secondaryElement.textContent = safeEntry.secondary || '';
-
-    if (safeEntry.tertiary) {
-      tertiaryElement.textContent = safeEntry.tertiary;
+    if (entry.tertiary) {
+      tertiaryElement.textContent = entry.tertiary;
       tertiaryElement.removeAttribute('hidden');
     } else {
       tertiaryElement.textContent = '';
       tertiaryElement.setAttribute('hidden', '');
     }
 
-    const ctaDetails = safeEntry.cta_details || {};
-    const countdownDetails =
-      safeEntry.countdown && typeof safeEntry.countdown === 'object' ? safeEntry.countdown : null;
+    const ctaDetails = entry.cta_details || {};
     const hasScoreboard = Boolean(
-      scoreboardLayout &&
-        safeEntry.scoreboard &&
-        Array.isArray(safeEntry.scoreboard.entries) &&
-        safeEntry.scoreboard.entries.length
+      scoreboardLayout && entry.scoreboard && Array.isArray(entry.scoreboard.entries) && entry.scoreboard.entries.length
     );
-    const hasCountdown = Boolean(
-      countdownLayout &&
-        countdownDetails &&
-        typeof countdownDetails.target === 'string' &&
-        countdownDetails.target
-    );
-    const shouldShowCtaLayout = Boolean(
-      safeEntry.cta && ctaLayout && defaultContent && !hasScoreboard && !hasCountdown
-    );
+    const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent && !hasScoreboard);
 
-    card.classList.remove(
-      'display-card--inferno',
-      'display-card--costume',
-      'display-card--winner',
-      'display-card--countdown'
-    );
-
-    if (countdownLayout) {
-      countdownLayout.setAttribute('hidden', '');
-    }
+    card.classList.remove('display-card--inferno', 'display-card--costume', 'display-card--winner');
 
     if (hasScoreboard) {
-      stopRotationCountdown();
-
       if (defaultContent) {
         defaultContent.setAttribute('hidden', '');
       }
       if (ctaLayout) {
         ctaLayout.setAttribute('hidden', '');
       }
-      if (countdownTimerElement) {
-        countdownTimerElement.textContent = '--:--:--';
-      }
-      if (countdownLabelElement) {
-        countdownLabelElement.textContent = '';
-        countdownLabelElement.setAttribute('hidden', '');
-      }
       scoreboardLayout.removeAttribute('hidden');
       card.classList.add('scoreboard');
       card.classList.remove('cta');
 
       if (scoreboardTitleElement) {
-        scoreboardTitleElement.textContent = safeEntry.primary || 'Top Costume Scores';
+        scoreboardTitleElement.textContent = entry.primary || 'Top Costume Scores';
       }
 
       if (scoreboardSubtitleElement) {
-        const subtitle = safeEntry.secondary || '';
+        const subtitle = entry.secondary || '';
         if (subtitle) {
           scoreboardSubtitleElement.textContent = subtitle;
           scoreboardSubtitleElement.removeAttribute('hidden');
@@ -737,7 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (scoreboardNoteElement) {
-        const note = safeEntry.tertiary || '';
+        const note = entry.tertiary || '';
         if (note) {
           scoreboardNoteElement.textContent = note;
           scoreboardNoteElement.removeAttribute('hidden');
@@ -749,7 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (scoreboardListElement) {
         scoreboardListElement.innerHTML = '';
-        const rows = safeEntry.scoreboard.entries || [];
+        const rows = entry.scoreboard.entries || [];
         rows.forEach((row, index) => {
           const item = document.createElement('li');
           item.className = 'display-scoreboard__item';
@@ -797,59 +705,12 @@ document.addEventListener('DOMContentLoaded', () => {
           scoreboardListElement.appendChild(item);
         });
       }
-    } else if (hasCountdown) {
-      if (defaultContent) {
-        defaultContent.setAttribute('hidden', '');
-      }
-      if (ctaLayout) {
-        ctaLayout.setAttribute('hidden', '');
-      }
-      if (scoreboardLayout) {
-        scoreboardLayout.setAttribute('hidden', '');
-        if (scoreboardListElement) {
-          scoreboardListElement.innerHTML = '';
-        }
-      }
-
-      if (countdownLayout) {
-        countdownLayout.removeAttribute('hidden');
-      }
-
-      card.classList.remove('scoreboard');
-      card.classList.remove('cta');
-      card.classList.add('display-card--countdown');
-
-      if (countdownCategoryElement) {
-        countdownCategoryElement.textContent = safeEntry.category || 'Karaoke Countdown';
-      }
-
-      if (countdownTitleElement) {
-        countdownTitleElement.textContent = safeEntry.primary || 'Countdown to Karaoke';
-      }
-
-      if (countdownSubtitleElement) {
-        const subtitle = safeEntry.secondary || '';
-        if (subtitle) {
-          countdownSubtitleElement.textContent = subtitle;
-          countdownSubtitleElement.removeAttribute('hidden');
-        } else {
-          countdownSubtitleElement.textContent = '';
-          countdownSubtitleElement.setAttribute('hidden', '');
-        }
-      }
-
-      const labelText =
-        countdownDetails && typeof countdownDetails.label === 'string' ? countdownDetails.label : '';
-      const targetValue = countdownDetails ? countdownDetails.target : '';
-      startRotationCountdown(targetValue, labelText);
     } else if (shouldShowCtaLayout) {
-      stopRotationCountdown();
-
       defaultContent.setAttribute('hidden', '');
       ctaLayout.removeAttribute('hidden');
 
       if (ctaLedeElement) {
-        ctaLedeElement.textContent = ctaDetails.lede || safeEntry.secondary || safeEntry.primary || '';
+        ctaLedeElement.textContent = ctaDetails.lede || entry.secondary || entry.primary || '';
       }
 
       if (ctaWifiNetworkElement) {
@@ -861,7 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (ctaPortalLinkElement) {
-        const portalUrl = ctaDetails.portal_url || safeEntry.link || '';
+        const portalUrl = ctaDetails.portal_url || entry.link || '';
         const portalLabel = ctaDetails.portal_label || portalUrl;
 
         if (portalUrl) {
@@ -878,7 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (ctaReminderElement) {
-        ctaReminderElement.textContent = ctaDetails.reminder || safeEntry.tertiary || '';
+        ctaReminderElement.textContent = ctaDetails.reminder || entry.tertiary || '';
       }
 
       if (scoreboardLayout) {
@@ -888,18 +749,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      if (countdownTimerElement) {
-        countdownTimerElement.textContent = '--:--:--';
-      }
-      if (countdownLabelElement) {
-        countdownLabelElement.textContent = '';
-        countdownLabelElement.setAttribute('hidden', '');
-      }
-
       card.classList.remove('scoreboard');
     } else {
-      stopRotationCountdown();
-
       if (defaultContent) {
         defaultContent.removeAttribute('hidden');
       }
@@ -931,25 +782,17 @@ document.addEventListener('DOMContentLoaded', () => {
           scoreboardListElement.innerHTML = '';
         }
       }
-      if (countdownTimerElement) {
-        countdownTimerElement.textContent = '--:--:--';
-      }
-      if (countdownLabelElement) {
-        countdownLabelElement.textContent = '';
-        countdownLabelElement.setAttribute('hidden', '');
-      }
 
       card.classList.remove('scoreboard');
-      card.classList.remove('cta');
     }
 
-    if (!hasScoreboard && safeEntry.cta && !hasCountdown) {
+    if (!hasScoreboard && entry.cta) {
       card.classList.add('cta');
-    } else if (!safeEntry.cta || hasScoreboard || hasCountdown) {
+    } else if (!entry.cta || hasScoreboard) {
       card.classList.remove('cta');
     }
 
-    const categoryText = (safeEntry.category || '').toLowerCase();
+    const categoryText = (entry.category || '').toLowerCase();
     const isWinnerCard = categoryText.includes('champion');
     const isCostumeCard = categoryText.includes('costume contest') && !hasScoreboard;
 
@@ -964,9 +807,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (linkElement) {
-      if (safeEntry.link && !safeEntry.cta && !hasScoreboard && !hasCountdown) {
-        linkElement.textContent = safeEntry.link_label || safeEntry.link;
-        linkElement.setAttribute('href', safeEntry.link);
+      if (entry.link && !entry.cta && !hasScoreboard) {
+        linkElement.textContent = entry.link_label || entry.link;
+        linkElement.setAttribute('href', entry.link);
         linkElement.removeAttribute('hidden');
       } else {
         linkElement.textContent = '';
@@ -1011,13 +854,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (overrideState) {
       stopRotation();
-      stopRotationCountdown();
       return;
     }
 
     if (entries.length === 0) {
       stopRotation();
-      stopRotationCountdown();
       emptyState.classList.add('is-visible');
       card.classList.remove('active');
       card.setAttribute('hidden', '');

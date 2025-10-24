@@ -4,14 +4,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
   const overrideContainer = document.querySelector('[data-override-state]');
+  const overrideLayoutElement = overrideContainer
+    ? overrideContainer.querySelector('[data-override-layout]')
+    : null;
   const overrideCardElement = overrideContainer
-    ? overrideContainer.querySelector('.display-override__card')
+    ? overrideContainer.querySelector('[data-primary-override-card]')
     : null;
   const generalOverrideElement = overrideContainer
     ? overrideContainer.querySelector('[data-override-general]')
     : null;
   const karaokeOverrideElement = overrideContainer
     ? overrideContainer.querySelector('[data-override-karaoke]')
+    : null;
+  const karaokePerformersCardElement = overrideContainer
+    ? overrideContainer.querySelector('[data-karaoke-performers]')
     : null;
   const overrideTitleElement = overrideContainer ? overrideContainer.querySelector('[data-override-title]') : null;
   const overrideHighlightElement = overrideContainer ? overrideContainer.querySelector('[data-override-highlight]') : null;
@@ -40,6 +46,18 @@ document.addEventListener('DOMContentLoaded', () => {
     : null;
   const karaokeRotatorElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-rotator]')
+    : null;
+  const karaokePerformersListElement = karaokePerformersCardElement
+    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-list]')
+    : null;
+  const karaokePerformersEmptyElement = karaokePerformersCardElement
+    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-empty]')
+    : null;
+  const karaokePerformersMetaElement = karaokePerformersCardElement
+    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-count]')
+    : null;
+  const karaokePerformersScrollerElement = karaokePerformersCardElement
+    ? karaokePerformersCardElement.querySelector('[data-karaoke-performers-scroller]')
     : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
@@ -126,6 +144,107 @@ document.addEventListener('DOMContentLoaded', () => {
   let karaokeRotatorTimerId = null;
   let karaokeRotatorResizeHandler = null;
   const KARAOKE_ROTATOR_INTERVAL = 8000;
+  const KARAOKE_PERFORMER_SCROLL_THRESHOLD = 10;
+  const KARAOKE_PERFORMER_SCROLL_STEP = 1;
+  const KARAOKE_PERFORMER_SCROLL_INTERVAL = 60;
+  const KARAOKE_PERFORMER_SCROLL_DELAY = 2000;
+  let karaokePerformersScrollIntervalId = null;
+  let karaokePerformersScrollStartTimeoutId = null;
+  let karaokePerformersScrollResetTimeoutId = null;
+
+  const stopKaraokePerformersScroll = () => {
+    if (karaokePerformersScrollIntervalId) {
+      window.clearInterval(karaokePerformersScrollIntervalId);
+      karaokePerformersScrollIntervalId = null;
+    }
+
+    if (karaokePerformersScrollStartTimeoutId) {
+      window.clearTimeout(karaokePerformersScrollStartTimeoutId);
+      karaokePerformersScrollStartTimeoutId = null;
+    }
+
+    if (karaokePerformersScrollResetTimeoutId) {
+      window.clearTimeout(karaokePerformersScrollResetTimeoutId);
+      karaokePerformersScrollResetTimeoutId = null;
+    }
+  };
+
+  const queueKaraokePerformersScroll = () => {
+    if (!karaokePerformersScrollerElement) {
+      return;
+    }
+
+    const maxScroll =
+      karaokePerformersScrollerElement.scrollHeight - karaokePerformersScrollerElement.clientHeight;
+
+    if (maxScroll <= 0) {
+      return;
+    }
+
+    const startInterval = () => {
+      karaokePerformersScrollStartTimeoutId = null;
+      if (!karaokePerformersScrollerElement) {
+        return;
+      }
+
+      const newMaxScroll =
+        karaokePerformersScrollerElement.scrollHeight - karaokePerformersScrollerElement.clientHeight;
+
+      if (newMaxScroll <= 0) {
+        return;
+      }
+
+      karaokePerformersScrollIntervalId = window.setInterval(() => {
+        if (!karaokePerformersScrollerElement) {
+          return;
+        }
+
+        const nextScrollTop = Math.min(
+          newMaxScroll,
+          karaokePerformersScrollerElement.scrollTop + KARAOKE_PERFORMER_SCROLL_STEP
+        );
+
+        karaokePerformersScrollerElement.scrollTop = nextScrollTop;
+
+        if (nextScrollTop >= newMaxScroll) {
+          if (karaokePerformersScrollIntervalId) {
+            window.clearInterval(karaokePerformersScrollIntervalId);
+            karaokePerformersScrollIntervalId = null;
+          }
+
+          karaokePerformersScrollResetTimeoutId = window.setTimeout(() => {
+            karaokePerformersScrollResetTimeoutId = null;
+            if (!karaokePerformersScrollerElement) {
+              return;
+            }
+
+            karaokePerformersScrollerElement.scrollTop = 0;
+
+            karaokePerformersScrollStartTimeoutId = window.setTimeout(() => {
+              karaokePerformersScrollStartTimeoutId = null;
+              queueKaraokePerformersScroll();
+            }, KARAOKE_PERFORMER_SCROLL_DELAY);
+          }, KARAOKE_PERFORMER_SCROLL_DELAY);
+        }
+      }, KARAOKE_PERFORMER_SCROLL_INTERVAL);
+    };
+
+    karaokePerformersScrollStartTimeoutId = window.setTimeout(startInterval, KARAOKE_PERFORMER_SCROLL_DELAY);
+  };
+
+  const startKaraokePerformersScroll = (shouldScroll) => {
+    stopKaraokePerformersScroll();
+
+    if (!shouldScroll || !karaokePerformersScrollerElement) {
+      if (karaokePerformersScrollerElement) {
+        karaokePerformersScrollerElement.scrollTop = 0;
+      }
+      return;
+    }
+
+    karaokePerformersScrollerElement.scrollTop = 0;
+    queueKaraokePerformersScroll();
+  };
 
   const stopKaraokeRotator = () => {
     if (karaokeRotatorTimerId) {
@@ -342,6 +461,86 @@ document.addEventListener('DOMContentLoaded', () => {
     queueKaraokeRotatorRefresh({ resetIndex: false });
   };
 
+  const updateKaraokePerformers = (entries) => {
+    if (!karaokePerformersCardElement || !karaokePerformersListElement) {
+      return;
+    }
+
+    karaokePerformersListElement.innerHTML = '';
+
+    const lineup = Array.isArray(entries) ? entries.filter((entry) => entry && typeof entry === 'object') : [];
+
+    if (!lineup.length) {
+      karaokePerformersCardElement.setAttribute('hidden', '');
+      if (overrideLayoutElement) {
+        overrideLayoutElement.dataset.layout = 'single';
+      }
+      if (karaokePerformersMetaElement) {
+        karaokePerformersMetaElement.textContent = '';
+        karaokePerformersMetaElement.setAttribute('hidden', '');
+      }
+      if (karaokePerformersEmptyElement) {
+        karaokePerformersEmptyElement.removeAttribute('hidden');
+      }
+      stopKaraokePerformersScroll();
+      if (karaokePerformersScrollerElement) {
+        karaokePerformersScrollerElement.scrollTop = 0;
+      }
+      return;
+    }
+
+    lineup.forEach((entry, index) => {
+      const item = document.createElement('li');
+      item.className = 'karaoke-card__list-item';
+
+      const rankElement = document.createElement('span');
+      rankElement.className = 'karaoke-card__list-rank';
+      rankElement.textContent = String(index + 1);
+
+      const infoElement = document.createElement('div');
+      infoElement.className = 'karaoke-card__list-info';
+
+      const nameElement = document.createElement('span');
+      nameElement.className = 'karaoke-card__list-name';
+      nameElement.textContent = entry.name ? String(entry.name).trim() || 'TBA' : 'TBA';
+      infoElement.appendChild(nameElement);
+
+      const songLine = formatPerformerSong(entry);
+      if (songLine) {
+        const songElement = document.createElement('span');
+        songElement.className = 'karaoke-card__list-song';
+        songElement.textContent = songLine;
+        infoElement.appendChild(songElement);
+      }
+
+      item.appendChild(rankElement);
+      item.appendChild(infoElement);
+
+      karaokePerformersListElement.appendChild(item);
+    });
+
+    karaokePerformersCardElement.removeAttribute('hidden');
+    if (overrideLayoutElement) {
+      overrideLayoutElement.dataset.layout = 'split';
+    }
+    if (karaokePerformersEmptyElement) {
+      karaokePerformersEmptyElement.setAttribute('hidden', '');
+    }
+    if (karaokePerformersMetaElement) {
+      const countText = lineup.length === 1 ? '1 singer queued' : `${lineup.length} singers queued`;
+      karaokePerformersMetaElement.textContent = countText;
+      karaokePerformersMetaElement.removeAttribute('hidden');
+    }
+
+    const shouldScroll = Boolean(
+      karaokePerformersScrollerElement &&
+        lineup.length > KARAOKE_PERFORMER_SCROLL_THRESHOLD &&
+        karaokePerformersScrollerElement.scrollHeight > karaokePerformersScrollerElement.clientHeight
+    );
+
+    startKaraokePerformersScroll(shouldScroll);
+  };
+
   const startKaraokeCountdown = (targetIso, labelText = '') => {
     if (!karaokeCountdownElement) {
       return;
@@ -479,6 +678,17 @@ document.addEventListener('DOMContentLoaded', () => {
         );
       }
 
+      if (karaokePerformersCardElement) {
+        karaokePerformersCardElement.classList.add(
+          'display-override__card--inferno',
+          'display-override__card--karaoke'
+        );
+      }
+
+      if (overrideLayoutElement) {
+        overrideLayoutElement.dataset.layout = 'split';
+      }
+
       if (karaokeTitleElement) {
         karaokeTitleElement.textContent = titleText || 'Halloween Karaoke Party';
       }
@@ -519,6 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
           : '';
 
       updateKaraokeLineup(lineup);
+      updateKaraokePerformers(lineup);
       startKaraokeCountdown(countdownTarget, countdownLabel);
       startKaraokeRotator();
     } else {
@@ -533,6 +744,17 @@ document.addEventListener('DOMContentLoaded', () => {
       stopKaraokeRotator();
       if (karaokeRotatorElement) {
         karaokeRotatorElement.style.height = '';
+      }
+
+      if (overrideLayoutElement) {
+        overrideLayoutElement.dataset.layout = 'single';
+      }
+
+      if (karaokePerformersCardElement) {
+        karaokePerformersCardElement.classList.remove(
+          'display-override__card--inferno',
+          'display-override__card--karaoke'
+        );
       }
 
       if (karaokeTitleElement) {
@@ -558,6 +780,7 @@ document.addEventListener('DOMContentLoaded', () => {
         karaokeCountdownNoteElement.setAttribute('hidden', '');
       }
       updateKaraokeLineup([]);
+      updateKaraokePerformers([]);
 
       if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride)) {
         overrideCardElement.classList.add('display-override__card--inferno');

@@ -296,12 +296,33 @@ body.display-mode {
   justify-content: center;
 }
 
+.display-override__layout {
+  width: min(900px, 92vw);
+  display: grid;
+  gap: clamp(1.4rem, 3vw, 2rem);
+  align-items: stretch;
+}
+
+.display-override__layout[data-layout='single'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.display-override__layout[data-layout='split'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 960px) {
+  .display-override__layout[data-layout='split'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .display-override[hidden] {
   display: none !important;
 }
 
 .display-override__card {
-  width: min(900px, 92vw);
+  width: 100%;
   margin: 0 auto;
   padding: clamp(2rem, 4vw, 3.5rem);
   border-radius: 1.75rem;
@@ -315,6 +336,51 @@ body.display-mode {
   overflow: hidden;
   isolation: isolate;
   transition: box-shadow 0.6s ease, border-color 0.6s ease, background 0.6s ease;
+}
+
+.display-override__card--karaoke-roster {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: start;
+}
+
+.display-override__card--karaoke-roster .karaoke-card__title {
+  margin-bottom: 0.25rem;
+}
+
+.karaoke-roster__meta {
+  margin: 0;
+  font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(244, 244, 248, 0.78);
+}
+
+.karaoke-roster__meta[hidden] {
+  display: none !important;
+}
+
+.karaoke-roster__scroller {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: clamp(0rem, 1vw, 0.35rem);
+  scrollbar-width: none;
+}
+
+.karaoke-roster__scroller::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.karaoke-roster__empty {
+  margin: 0;
+  font-size: clamp(1rem, 2.4vw, 1.3rem);
+  color: rgba(244, 244, 248, 0.85);
+}
+
+.karaoke-roster__empty[hidden] {
+  display: none !important;
 }
 
 .display-override__general[hidden],

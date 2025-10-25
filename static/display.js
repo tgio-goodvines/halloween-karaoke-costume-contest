@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
+  let hasRefreshedDisplayStylesheet = false;
   const bodyDataset = (document.body && document.body.dataset) || {};
   const dataEndpoint = bodyDataset.displayApi || '/api/display-data';
   const updatesEndpoint = bodyDataset.displayUpdates || null;
@@ -126,6 +127,38 @@ document.addEventListener('DOMContentLoaded', () => {
   let karaokeRotatorTimerId = null;
   let karaokeRotatorResizeHandler = null;
   const KARAOKE_ROTATOR_INTERVAL = 8000;
+
+  const refreshDisplayStylesheet = () => {
+    if (hasRefreshedDisplayStylesheet) {
+      return;
+    }
+
+    let displayStylesheetLink = null;
+
+    document.querySelectorAll('link[rel~="stylesheet"]').forEach((link) => {
+      if (displayStylesheetLink) {
+        return;
+      }
+
+      const href = link.getAttribute('href') || '';
+      if (href.includes('display.css')) {
+        displayStylesheetLink = link;
+      }
+    });
+
+    if (!displayStylesheetLink) {
+      return;
+    }
+
+    try {
+      const cacheBustingUrl = new URL(displayStylesheetLink.href, window.location.href);
+      cacheBustingUrl.searchParams.set('_', Date.now().toString());
+      displayStylesheetLink.href = cacheBustingUrl.toString();
+      hasRefreshedDisplayStylesheet = true;
+    } catch (error) {
+      console.error('Unable to refresh display stylesheet', error);
+    }
+  };
 
   const stopKaraokeRotator = () => {
     if (karaokeRotatorTimerId) {
@@ -577,6 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (overrideState) {
+      refreshDisplayStylesheet();
       overrideContainer.removeAttribute('hidden');
       if (card) {
         card.classList.remove('active');

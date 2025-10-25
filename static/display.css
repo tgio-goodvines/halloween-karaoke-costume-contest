@@ -452,7 +452,7 @@ body.display-mode {
   display: none !important;
 }
 
-.display-override__card {
+.display-override .display-override__card {
   width: min(760px, 88vw);
   margin: 0 auto;
   padding: clamp(1.4rem, 3.2vw, 2.2rem);
@@ -474,10 +474,10 @@ body.display-mode {
   text-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
 }
 
-.display-override__card--inferno,
-.display-override__card--contest,
-.display-override__card--winner,
-.display-override__card--karaoke {
+.display-override .display-override__card--inferno,
+.display-override .display-override__card--contest,
+.display-override .display-override__card--winner,
+.display-override .display-override__card--karaoke {
   border-color: rgba(255, 200, 200, 0.95);
   box-shadow: 0 0 60px rgba(255, 110, 110, 0.85), 0 0 120px rgba(255, 40, 40, 0.55);
 }

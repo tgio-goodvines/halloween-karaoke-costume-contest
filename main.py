@@ -824,6 +824,9 @@ def costume_voting_page():
 
     ensure_costume_votes_alignment()
 
+    if not contest_state.get("voting_open") or contest_state.get("winner_locked"):
+        return redirect(url_for("halloween_overview"))
+
     user_id = session.get("user_id")
     username = session.get("username")
 

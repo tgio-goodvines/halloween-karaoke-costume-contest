@@ -243,6 +243,12 @@ EOF
   systemctl reload nginx
 
   log "Checking Halloween host routing and GoodVines health after nginx reload."
+  for _ in $(seq 1 12); do
+    if curl -fsS --max-time 10 -H 'Host: tnq-halloween.com' "http://127.0.0.1/live-display" >/dev/null; then
+      break
+    fi
+    sleep 2
+  done
   curl -fsS --max-time 10 -H 'Host: tnq-halloween.com' "http://127.0.0.1/live-display" >/dev/null
   goodvines_health_check
 

@@ -440,16 +440,20 @@ On failure:
 
 ## Scaling and Recovery
 
-This workflow deploys the Halloween app to currently running API EC2 instances.
-If the API ASG replaces or scales out instances, each new instance needs the
-workflow rerun after it becomes `InService`, unless Halloween bootstrap is added
-to the API launch template/user-data or to the GoodVines bootstrap/deploy
-process.
+API ASG replacement nodes install Halloween automatically through launch-template
+user-data.
+
+- `goodvines-api-asg` is pinned to launch template version `2`.
+- Launch template version `2` runs the existing GoodVines bootstrap first.
+- After GoodVines services start, it installs the Halloween app under
+  `/opt/halloween`, writes `halloween-party.service`, writes
+  `/etc/nginx/conf.d/halloween.conf`, starts `halloween-party`, validates nginx,
+  reloads nginx, and checks GoodVines health.
 
 Redis DB `1` preserves Halloween event state across app restarts and EC2
-replacement, but app binaries, `halloween-party.service`, and
-`/etc/nginx/conf.d/halloween.conf` must still be installed on every active API
-EC2 instance.
+replacement. New nodes should install the app automatically; normal code
+deployments still happen through GitHub Actions and deploy the exact merged
+commit SHA.
 
 ## Success Criteria
 

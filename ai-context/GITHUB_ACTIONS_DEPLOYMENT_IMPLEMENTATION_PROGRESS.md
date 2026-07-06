@@ -83,19 +83,46 @@ and SSM.
 
 ## Scaling and Recovery Note
 
-The current implementation deploys Halloween onto API EC2 instances after they
-are already running by using GitHub Actions plus SSM. If the API ASG terminates
-or replaces an instance, the replacement instance will not automatically have
-the Halloween app unless one of these happens:
+API ASG replacement nodes now bootstrap Halloween from launch-template
+user-data.
 
-- rerun the GitHub Actions deployment workflow after the new instance is
-  `InService`, or
-- add Halloween bootstrap/deploy steps to the API launch template/user-data, or
-- add a GoodVines deploy/bootstrap hook that also installs Halloween.
+- Launch template: `goodvines-api-lt`
+- Launch template ID: `lt-0f899847971a77126`
+- Halloween bootstrap version: `2`
+- ASG `goodvines-api-asg` is pinned to launch template version `2`.
+- Version description:
+  `goodvines api bootstrap with halloween app install`
 
-Event state is designed to persist in Redis DB `1` with the `halloween:` prefix,
-so the important recovery gap is application installation on new EC2 nodes, not
-event data storage.
+The version 2 user-data keeps the existing GoodVines bootstrap flow, then runs
+`install_halloween_app` after `start_services`. The Halloween bootstrap:
+
+- creates a dedicated `halloween` system user/group,
+- reads `appsecrets/halloween_github` from Vault via AWS IAM auth,
+- clones/fetches the Halloween repo over HTTPS with the Vault-stored token,
+- installs a release under `/opt/halloween/releases/<sha>`,
+- points `/opt/halloween/current` at that release,
+- installs `halloween-party.service`,
+- installs `/etc/nginx/conf.d/halloween.conf`,
+- restarts only `halloween-party`,
+- validates nginx before reload,
+- reloads nginx,
+- verifies `Host: tnq-halloween.com` routes to Halloween, and
+- verifies `Host: appg-v.com` still routes to GoodVines health.
+
+Event state persists in Redis DB `1` with the `halloween:` prefix. Replacement
+nodes should install the app automatically, while the event state survives in
+Redis.
+
+Important nuance: launch-template bootstrap fetches the current Halloween
+`main` branch at instance boot time. The GitHub Actions workflow still deploys
+the exact merged commit SHA for normal deployments.
+
+Post-update verification on 2026-07-06:
+
+- ASG `goodvines-api-asg` is pinned to launch template version `2`.
+- Current instance `i-0573ac280edafdfe0` remained `InService` and `Healthy`.
+- `https://appg-v.com/health` returned `{"online":"true"}`.
+- `https://tnq-halloween.com/live-display` returned HTTP `200`.
 
 ## First Deployment Result
 

@@ -56,6 +56,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/FILE_INVENTORY.md` | Durable file-by-file inventory. |
 | `ai-context/AWS_EXISTING_INFRA_HOSTING_PLAN.md` | Hosting plan for reusing the existing GoodVines ALB/EC2 infrastructure for `tnq-halloween.com`. |
 | `ai-context/AWS_IMPLEMENTATION_CHECKLIST.md` | Step-by-step AWS, nginx, systemd, DNS, TLS, deploy, and smoke-test checklist. |
+| `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` | Launch template version 2 bootstrap details for installing Halloween automatically on replacement API EC2 instances. |
 | `ai-context/APP_HARDENING_FOR_AWS.md` | App changes needed before public AWS exposure, including gunicorn, admin auth, persistence, and secrets. |
 | `ai-context/NO_SQL_DATA_POLICY.md` | Explicit policy that Halloween must not use SQL and should persist state in Redis. |
 | `ai-context/REDIS_CONNECTION_REQUIREMENTS.md` | Redis connection requirements for using the existing GoodVines services EC2 Redis instance without key collisions. |
@@ -80,6 +81,7 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── APP_HARDENING_FOR_AWS.md
 │   ├── AWS_EXISTING_INFRA_HOSTING_PLAN.md
 │   ├── AWS_IMPLEMENTATION_CHECKLIST.md
+│   ├── AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md
 │   ├── FEATURES.md
 │   ├── FILE_INVENTORY.md
 │   ├── GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md

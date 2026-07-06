@@ -5,6 +5,7 @@
 - Party dashboard at `/halloween`.
 - Redis-backed attendee account registration at `/halloween/register`.
 - Password-backed attendee account sign-in at `/halloween/login`.
+- Attendee logout from the shared header clears regular session access.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
 - Logged-in user name is shown in the shared header.
 - Costume contest signup at `/costume-signup`.
@@ -53,7 +54,7 @@
 - Password-backed admin login at `/admin/login`.
 - Admin sessions can access admin routes and JSON exports but do not implicitly
   receive regular guest or live-display access.
-- Admin logout at `/admin/logout`.
+- Admin logout at `/admin/logout` clears only admin access.
 - Add, edit, delete, move up, and move down costume signups.
 - Add, edit, delete, move up, and move down karaoke signups.
 - Add-entry and existing-entry admin forms are collapsed disclosure rows by

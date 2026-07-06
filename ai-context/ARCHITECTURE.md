@@ -11,8 +11,9 @@
 - `GET /halloween` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
 - `GET|POST /halloween/login` -> attendee account sign-in; validates a Redis-stored password hash and grants the `regular` role.
 - `GET|POST /halloween/register` -> attendee account creation; stores a password hash in Redis app state and grants the `regular` role.
+- `POST /halloween/logout` -> clears the `regular` role and attendee session identity.
 - `GET|POST /admin/login` -> password-backed admin session login; grants the `admin` role.
-- `POST /admin/logout` -> clears admin auth session state.
+- `POST /admin/logout` -> clears only admin auth session state.
 - `GET|POST /admin` -> admin dashboard and all admin mutations.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.

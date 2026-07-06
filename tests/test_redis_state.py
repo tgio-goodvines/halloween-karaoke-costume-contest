@@ -143,7 +143,9 @@ class RedisStateTests(unittest.TestCase):
 
     def login_admin(self, client):
         with client.session_transaction() as session:
-            session["roles"] = ["admin"]
+            roles = set(session.get("roles", []))
+            roles.add("admin")
+            session["roles"] = sorted(roles)
             session["admin_authenticated"] = True
 
     def add_user_account(self, username="Jamie", password="party-password", user_id="user-1"):
@@ -560,6 +562,54 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotEqual("party-password", account["password_hash"])
         self.assertEqual("Morgan", state["registered_users"][user_id])
         self.assertIn("regular", roles)
+
+    def test_regular_user_logout_clears_regular_session(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            halloween_response = client.get("/halloween")
+            logout_response = client.post("/halloween/logout")
+            protected_response = client.get("/halloween")
+
+            with client.session_transaction() as session:
+                roles = session.get("roles", [])
+                username = session.get("username")
+
+        self.assertEqual(200, halloween_response.status_code)
+        self.assertIn("Log Out", halloween_response.get_data(as_text=True))
+        self.assertEqual(302, logout_response.status_code)
+        self.assertIn("/halloween/login", logout_response.headers["Location"])
+        self.assertEqual(302, protected_response.status_code)
+        self.assertIn("/halloween/login", protected_response.headers["Location"])
+        self.assertNotIn("regular", roles)
+        self.assertIsNone(username)
+
+    def test_admin_logout_keeps_regular_session_when_both_roles_exist(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            self.login_admin(client)
+            admin_response = client.get("/admin")
+            logout_response = client.post("/admin/logout")
+            halloween_response = client.get("/halloween")
+            admin_redirect = client.get("/admin")
+
+            with client.session_transaction() as session:
+                roles = session.get("roles", [])
+                username = session.get("username")
+
+        self.assertEqual(200, admin_response.status_code)
+        self.assertIn("Admin Logout", admin_response.get_data(as_text=True))
+        self.assertEqual(302, logout_response.status_code)
+        self.assertIn("/admin/login", logout_response.headers["Location"])
+        self.assertEqual(200, halloween_response.status_code)
+        self.assertEqual(302, admin_redirect.status_code)
+        self.assertIn("/admin/login", admin_redirect.headers["Location"])
+        self.assertIn("regular", roles)
+        self.assertNotIn("admin", roles)
+        self.assertEqual("Jamie", username)
 
     def test_admin_session_grants_display_route_access(self):
         self.save_current_state()

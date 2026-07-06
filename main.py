@@ -1306,6 +1306,7 @@ def inject_contest_state():
         },
         "csrf_token": get_csrf_token,
         "admin_authenticated": bool(session.get("admin_authenticated")),
+        "regular_authenticated": session_has_role("regular"),
     }
 
 
@@ -1418,6 +1419,14 @@ def halloween_register():
         next_page=next_page,
         show_admin_link=False,
     )
+
+
+@app.route("/halloween/logout", methods=["POST"])
+def halloween_logout():
+    revoke_session_role("regular")
+    session.pop("user_id", None)
+    session.pop("username", None)
+    return redirect(url_for("halloween_login"))
 
 
 @app.route("/admin/login", methods=["GET", "POST"])

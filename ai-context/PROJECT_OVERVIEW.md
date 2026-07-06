@@ -12,7 +12,7 @@ remaining as a process-local cache in `main.py`.
 
 - Python version: `.python-version` pins `3.11.9`.
 - Dependencies: `requirements.txt` requires `flask>=3.0,<4.0` and
-  `redis>=5.0,<6.0`.
+  `redis>=5.0,<6.0`; production also uses `gunicorn`.
 - Entrypoint: `main.py`.
 - Local run behavior: `python main.py` starts Flask debug mode on `0.0.0.0:80`.
 - Secret key: `HALLOWEEN_APP_SECRET`, falling back to `dev-secret-key`.
@@ -20,6 +20,23 @@ remaining as a process-local cache in `main.py`.
   admin routes remain open when this is unset; in production it must be set.
 
 Because the app binds to port 80, local execution may require elevated privileges or a port change for development.
+
+## Production Deployment
+
+Merged `main` commits deploy through GitHub Actions to the existing GoodVines
+API EC2 Auto Scaling Group using AWS OIDC, AWS CLI, and SSM. The production
+service runs as `halloween-party.service` behind nginx on `127.0.0.1:8081`.
+Runtime secrets come from Vault through AWS IAM auth.
+
+Public routes are hosted at `tnq-halloween.com` and
+`www.tnq-halloween.com`. GoodVines isolation is a hard guardrail: deployment
+must not restart GoodVines services, edit GoodVines source directories, or
+change GoodVines nginx server blocks.
+
+API ASG replacement instances are covered by launch template version `2`, which
+preserves the existing GoodVines bootstrap and then installs Halloween from the
+current `main` branch. Normal GitHub Actions deploys still install the exact
+merged commit SHA on currently running API instances.
 
 ## Local Redis Development
 
@@ -89,3 +106,7 @@ This is intentionally a simple Flask/Jinja app:
 - `static/slides.js` rotates dashboard highlight slides.
 
 The visual style is dark Halloween-themed: black backgrounds, red accents, glowing borders, and large display typography.
+The responsive UX pass is complete: live-display cards scale for normal browser
+windows, attendee pages use a compact mobile nav and touch-safe forms, and admin
+add/edit forms collapse into disclosure rows by default on mobile-friendly
+layouts.

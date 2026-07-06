@@ -146,3 +146,19 @@ Post-update verification on 2026-07-06:
   - `https://tnq-halloween.com/live-display` returns HTTP `200`.
   - `https://www.tnq-halloween.com/live-display` returns HTTP `200`.
   - `https://appg-v.com/health` returns `{"online":"true"}`.
+
+## Latest Repository Updates
+
+After the successful deployment, the repo received follow-up commits on `main`
+to document and harden deployment knowledge:
+
+- `2d32704` added the GitHub Actions EC2 deployment workflow and deploy scripts.
+- `1e39b66` fixed the workflow test import path with `pytest.ini`.
+- `9a42b42` added retry behavior around the nginx host-routing smoke test.
+- `c765134` recorded the successful public deployment result with `[skip ci]`.
+- `504a752` documented launch template version `2` Halloween bootstrap behavior
+  with `[skip ci]`.
+
+Current durable deployment context should be read from this file,
+`ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md`, and
+`ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md`.

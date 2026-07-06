@@ -77,6 +77,8 @@ The base rotation always starts with signup instructions and event spotlight car
 - Connecting and reconnecting to SSE updates.
 - Rendering override content.
 - Running karaoke countdown timers and karaoke panel rotation.
+- Scaling live-display cards for normal desktop/laptop browser windows and
+  narrow browser widths.
 
 `static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds.
 
@@ -88,20 +90,28 @@ The base rotation always starts with signup instructions and event spotlight car
 - `costume_signup.html`: costume entry form and submitted costume list.
 - `karaoke_signup.html`: karaoke entry form and submitted karaoke lineup.
 - `costume_voting.html`: complete ballot form and post-vote state.
-- `admin.html`: all admin actions and live contest/karaoke state.
-- `display.html`: standalone live-display page without `base.html`.
+- `admin_login.html`: admin password form when production admin auth is configured.
+- `admin.html`: all admin actions and live contest/karaoke state; add/edit
+  entry forms are disclosure rows to keep mobile admin scanning manageable.
+- `display.html`: standalone live-display page without `base.html`; includes
+  default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
+  panel markup.
 
 ## Known Constraints And Risks
 
-- No persistence: process restart clears all event data.
+- Redis persistence is available and expected in production. If Redis is
+  unavailable, the app falls back to process memory and a process restart clears
+  signups, votes, sessions, contest state, and live-display overrides.
 - Admin authentication is available through `HALLOWEEN_ADMIN_PASSWORD`; development remains open when it is unset.
 - CSRF protection is enforced for POST forms outside testing mode.
 - Redis state and route persistence tests are present in `tests/test_redis_state.py`.
 - No app factory pattern.
 - Vote identity depends on Flask session plus the in-memory `registered_users` map.
 - Costume votes are stored as ID-keyed ballots; destructive costume lineup changes are blocked while voting is open.
-- The karaoke display JavaScript has support for a lineup list, but the current `display.html` markup includes only the countdown panel inside the karaoke override section.
 - `main.py` runs on port 80 in debug mode when executed directly.
+- Production deploys are GitHub Actions -> AWS SSM -> EC2 and must preserve the
+  GoodVines service. Do not use S3, ECS, ECR, CodeDeploy, or new hosting
+  infrastructure for the current deployment path.
 
 ## Extension Guidance
 

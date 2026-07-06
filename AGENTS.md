@@ -8,8 +8,10 @@ Start future repo work by reading these persistent context files:
 - `ai-context/FEATURES.md` - all supported user/admin/live-display features.
 - `ai-context/FILE_INVENTORY.md` - file-by-file purpose and ownership map.
 - `ai-context/ARCHITECTURE.md` - route map, data structures, frontend behavior, and extension guidance.
+- `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
+- `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 2 details for automatic Halloween install on replacement API EC2 instances.
 
 Important working notes:
 
@@ -18,5 +20,7 @@ Important working notes:
 - Admin controls are protected through `/admin/login`.
 - Live-display clients update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`.
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.
+- Responsive UX updates are complete: live-display cards scale for normal browser windows, attendee/admin pages are mobile-oriented, and admin add/edit forms are collapsed disclosure rows by default.
+- GitHub Actions deployment to EC2 has succeeded, and future API ASG replacement instances should bootstrap Halloween automatically from launch template version `2`.
 - Do not disrupt GoodVines when working on deployment: do not restart GoodVines services, edit GoodVines source directories, or change GoodVines nginx server blocks.
 - Keep changes compact and consistent with the existing Flask/Jinja/static-file structure unless a larger refactor is explicitly requested.

@@ -52,6 +52,8 @@
 - Admin logout at `/admin/logout`.
 - Add, edit, delete, move up, and move down costume signups.
 - Add, edit, delete, move up, and move down karaoke signups.
+- Add-entry and existing-entry admin forms are collapsed disclosure rows by
+  default to improve mobile scanning and reduce scroll fatigue.
 - Admin mutations validate required fields.
 - Admin mutations broadcast live-display updates when they affect display content.
 - Admin can start costume contest, lock winner, show winner, restore display, and start karaoke party.
@@ -76,12 +78,20 @@ variable.
 - Display also updates immediately through server-sent events from `/api/display-updates`.
 - SSE endpoint sends keep-alive comments on idle intervals.
 - Display supports full-screen override cards for contest start, winner announcement, and karaoke start.
+- Live-display cards use dynamic browser-size scaling, long/dense text classes,
+  and overflow wrapping so normal desktop/laptop browser windows and narrow
+  browsers do not clip cards.
+- Karaoke start override includes countdown and upcoming-singer panel markup for
+  the existing client-side karaoke rotator.
 - Display client can cache-bust `display.css` once when an override becomes active.
 
 ## Styling And UX Features
 
 - Shared dark Halloween visual system in `static/styles.css`.
 - Dedicated TV/projector display styling in `static/display.css`.
-- Responsive layouts for mobile and large display screens.
+- Responsive layouts for mobile, normal browser windows, and large display
+  screens.
 - Sticky site header for attendee/admin pages.
+- Attendee/admin mobile header uses compact disclosure navigation with shorter
+  labels and touch-friendly controls.
 - Red glowing cards, buttons, banners, score bars, and display panels.

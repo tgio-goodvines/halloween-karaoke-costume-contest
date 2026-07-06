@@ -6,6 +6,12 @@
 | --- | --- |
 | `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, admin auth, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
 | `requirements.txt` | Python dependency declaration; includes Flask 3.x and redis-py for the Redis migration. |
+| `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
+| `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
+| `deploy/start_halloween.sh` | systemd start wrapper that authenticates to Vault using AWS IAM auth, exports Halloween app/Redis secrets, and execs gunicorn. |
+| `deploy/halloween-party.service` | systemd unit for running the Halloween Flask app through gunicorn on `127.0.0.1:8081`. |
+| `deploy/nginx-halloween.conf` | nginx host-routing config for `tnq-halloween.com` and `www.tnq-halloween.com`, including SSE-friendly proxy settings. |
+| `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
 | `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, and the `halloween` prefix. |
 | `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, display update publishing, and JSON exports using an in-memory Redis fake. |
 | `static/styles.css` | Shared Halloween-themed styles for attendee and admin pages. |
@@ -56,7 +62,9 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/REDIS_STATE_DESIGN.md` | Redis key, locking, pub/sub, backup, and persistence design for Halloween event state. |
 | `ai-context/REDIS_MIGRATION_PLAN.md` | Durable progress tracker for the in-progress process-memory to Redis refactor. |
 | `ai-context/REDIS_ENHANCEMENT_IMPLEMENTATION_PLAN.md` | Durable progress tracker for schema v2, ID-keyed ballots, auth/CSRF, and Redis interaction enhancements. |
-| `ai-context/GITLAB_AWS_DEPLOYMENT_DESIGN.md` | GitLab CI/CD design for deploying through AWS CLI and SSM to the existing EC2 ASG. |
+| `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` | Active GitHub Actions plan for deploying merged `main` commits to the existing EC2 ASG through AWS CLI and SSM, without S3 or GoodVines disruption. |
+| `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` | Durable progress tracker for the GitHub Actions deployment implementation, validation status, and external setup requirements. |
+| `ai-context/GITLAB_AWS_DEPLOYMENT_DESIGN.md` | Legacy GitLab CI/CD design; superseded by the GitHub Actions deployment plan. |
 | `ai-context/VAULT_SECRETS_DESIGN.md` | Design for obtaining Halloween app secrets from the existing GoodVines Vault using AWS IAM auth. |
 
 ## Repository Organization
@@ -64,6 +72,9 @@ These files are present locally but not tracked by Git at the time this context 
 ```text
 .
 ├── AGENTS.md
+├── .github/
+│   └── workflows/
+│       └── deploy-aws.yml
 ├── ai-context/
 │   ├── ARCHITECTURE.md
 │   ├── APP_HARDENING_FOR_AWS.md
@@ -71,6 +82,8 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── AWS_IMPLEMENTATION_CHECKLIST.md
 │   ├── FEATURES.md
 │   ├── FILE_INVENTORY.md
+│   ├── GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md
+│   ├── GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md
 │   ├── GITLAB_AWS_DEPLOYMENT_DESIGN.md
 │   ├── NO_SQL_DATA_POLICY.md
 │   ├── PROJECT_OVERVIEW.md
@@ -79,6 +92,12 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── REDIS_MIGRATION_PLAN.md
 │   ├── REDIS_STATE_DESIGN.md
 │   └── VAULT_SECRETS_DESIGN.md
+├── deploy/
+│   ├── ec2_deploy_from_github.sh
+│   ├── halloween-party.service
+│   ├── nginx-halloween.conf
+│   ├── start_halloween.sh
+│   └── validate_goodvines_health.sh
 ├── main.py
 ├── .env.example
 ├── requirements.txt

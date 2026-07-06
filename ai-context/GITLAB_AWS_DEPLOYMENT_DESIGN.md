@@ -1,4 +1,9 @@
-# GitLab AWS Deployment Design
+# Legacy GitLab AWS Deployment Design
+
+This file is legacy context only. The current deployment direction is GitHub
+Actions, not GitLab. Use
+`ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` for the active deployment
+plan.
 
 Deploy the Halloween app with GitLab CI/CD, using AWS CLI and SSM to operate on
 the existing GoodVines EC2 infrastructure. The app must obtain runtime secrets

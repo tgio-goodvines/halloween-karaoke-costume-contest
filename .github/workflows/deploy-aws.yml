@@ -1,0 +1,252 @@
+name: Deploy Halloween to EC2
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: "Git ref to deploy"
+        required: true
+        default: "main"
+        type: string
+
+concurrency:
+  group: halloween-production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  validate:
+    name: Validate app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: pytest
+
+      - name: Compile Python
+        run: python -m py_compile main.py
+
+      - name: Validate deploy scripts
+        run: |
+          bash -n deploy/ec2_deploy_from_github.sh
+          bash -n deploy/start_halloween.sh
+          bash -n deploy/validate_goodvines_health.sh
+
+  deploy:
+    name: Deploy through SSM
+    runs-on: ubuntu-latest
+    needs: validate
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'us-east-1' }}
+      API_ASG_NAME: ${{ vars.API_ASG_NAME || 'goodvines-api-asg' }}
+      API_TARGET_GROUP_ARN: ${{ vars.API_TARGET_GROUP_ARN || 'arn:aws:elasticloadbalancing:us-east-1:152923357640:targetgroup/goodvines-api-http/c0e4914b65049592' }}
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+      REPO_URL: ${{ vars.HALLOWEEN_REPO_URL || 'https://github.com/tgio-goodvines/halloween-karaoke-costume-contest.git' }}
+      REPO_REF: ${{ inputs.deploy_ref || 'main' }}
+      HALLOWEEN_DOMAIN: ${{ vars.HALLOWEEN_DOMAIN || 'tnq-halloween.com' }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REPO_REF }}
+
+      - name: Validate deploy configuration
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID_VALUE: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY_VALUE: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+
+          fail=0
+          if [ -z "${AWS_ROLE_TO_ASSUME:-}" ]; then
+            [ -z "${AWS_ACCESS_KEY_ID_VALUE:-}" ] && echo "Missing secret: AWS_ACCESS_KEY_ID or var/secret: AWS_ROLE_TO_ASSUME" && fail=1
+            [ -z "${AWS_SECRET_ACCESS_KEY_VALUE:-}" ] && echo "Missing secret: AWS_SECRET_ACCESS_KEY or var/secret: AWS_ROLE_TO_ASSUME" && fail=1
+          fi
+          [ -z "${AWS_REGION:-}" ] && echo "Missing var/secret: AWS_REGION" && fail=1
+          [ -z "${API_ASG_NAME:-}" ] && echo "Missing var: API_ASG_NAME" && fail=1
+          [ -z "${API_TARGET_GROUP_ARN:-}" ] && echo "Missing var: API_TARGET_GROUP_ARN" && fail=1
+          [ -z "${REPO_URL:-}" ] && echo "Missing var: HALLOWEEN_REPO_URL" && fail=1
+
+          if [ "${fail}" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Configure AWS credentials with OIDC
+        if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials with access keys
+        if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve deployment revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "${REPO_REF}"
+          deploy_sha="$(git rev-parse FETCH_HEAD)"
+          echo "DEPLOY_SHA=${deploy_sha}" >> "${GITHUB_ENV}"
+          echo "Deploying ${REPO_REF} at ${deploy_sha}"
+
+      - name: Discover API instances
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t in_service_ids < <(aws autoscaling describe-auto-scaling-groups \
+            --region "${AWS_REGION}" \
+            --auto-scaling-group-names "${API_ASG_NAME}" \
+            --query "AutoScalingGroups[0].Instances[?LifecycleState=='InService'].InstanceId" \
+            --output text | tr '\t' '\n' | sed '/^$/d' | sort)
+
+          if [ "${#in_service_ids[@]}" -eq 0 ]; then
+            echo "No InService instances found in ${API_ASG_NAME}." >&2
+            exit 1
+          fi
+
+          mapfile -t healthy_ids < <(aws elbv2 describe-target-health \
+            --region "${AWS_REGION}" \
+            --target-group-arn "${API_TARGET_GROUP_ARN}" \
+            --query "TargetHealthDescriptions[?TargetHealth.State=='healthy'].Target.Id" \
+            --output text | tr '\t' '\n' | sed '/^$/d' | sort)
+
+          deploy_ids=()
+          for instance_id in "${in_service_ids[@]}"; do
+            for healthy_id in "${healthy_ids[@]}"; do
+              if [ "${instance_id}" = "${healthy_id}" ]; then
+                deploy_ids+=("${instance_id}")
+              fi
+            done
+          done
+
+          if [ "${#deploy_ids[@]}" -eq 0 ]; then
+            echo "No healthy ALB targets found; using all InService API instances: ${in_service_ids[*]}"
+            deploy_ids=("${in_service_ids[@]}")
+          fi
+
+          {
+            echo "DEPLOY_INSTANCE_IDS=${deploy_ids[*]}"
+          } >> "${GITHUB_ENV}"
+
+          echo "Deploy targets: ${deploy_ids[*]}"
+
+      - name: Deploy each API instance through SSM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          script_b64="$(base64 -w 0 deploy/ec2_deploy_from_github.sh)"
+
+          for instance_id in ${DEPLOY_INSTANCE_IDS}; do
+            echo "Deploying ${DEPLOY_SHA} to ${instance_id}"
+
+            command_payload="$(jq -cn \
+              --arg script "${script_b64}" \
+              --arg deploy_sha "${DEPLOY_SHA}" \
+              --arg repo_ref "${REPO_REF}" \
+              --arg repo_url "${REPO_URL}" \
+              '[ "set -euo pipefail",
+                 "tmp_script=$(mktemp /tmp/halloween-deploy.XXXXXX.sh)",
+                 "trap '\''rm -f \"$tmp_script\"'\'' EXIT",
+                 "printf %s " + ($script | @sh) + " | base64 -d > \"$tmp_script\"",
+                 "chmod 0700 \"$tmp_script\"",
+                 "DEPLOY_SHA=" + ($deploy_sha | @sh) + " REPO_REF=" + ($repo_ref | @sh) + " REPO_URL=" + ($repo_url | @sh) + " \"$tmp_script\""
+               ]')"
+
+            command_id="$(aws ssm send-command \
+              --region "${AWS_REGION}" \
+              --instance-ids "${instance_id}" \
+              --document-name AWS-RunShellScript \
+              --comment "halloween-ec2-deploy" \
+              --parameters "commands=${command_payload}" \
+              --query 'Command.CommandId' \
+              --output text)"
+
+            echo "SSM command id for ${instance_id}: ${command_id}"
+
+            for attempt in $(seq 1 90); do
+              status="$(aws ssm get-command-invocation \
+                --region "${AWS_REGION}" \
+                --command-id "${command_id}" \
+                --instance-id "${instance_id}" \
+                --query 'Status' \
+                --output text 2>/dev/null || true)"
+
+              echo "${instance_id} SSM status: ${status:-pending}"
+              case "${status}" in
+                Success)
+                  break
+                  ;;
+                Failed|Cancelled|TimedOut|Cancelling)
+                  aws ssm get-command-invocation \
+                    --region "${AWS_REGION}" \
+                    --command-id "${command_id}" \
+                    --instance-id "${instance_id}" \
+                    --query '{stdout:StandardOutputContent,stderr:StandardErrorContent}' \
+                    --output json
+                  exit 1
+                  ;;
+              esac
+
+              sleep 10
+            done
+
+            final_status="$(aws ssm get-command-invocation \
+              --region "${AWS_REGION}" \
+              --command-id "${command_id}" \
+              --instance-id "${instance_id}" \
+              --query 'Status' \
+              --output text)"
+
+            if [ "${final_status}" != "Success" ]; then
+              echo "${instance_id} deployment did not finish successfully: ${final_status}" >&2
+              aws ssm get-command-invocation \
+                --region "${AWS_REGION}" \
+                --command-id "${command_id}" \
+                --instance-id "${instance_id}" \
+                --query '{stdout:StandardOutputContent,stderr:StandardErrorContent}' \
+                --output json
+              exit 1
+            fi
+
+            aws ssm get-command-invocation \
+              --region "${AWS_REGION}" \
+              --command-id "${command_id}" \
+              --instance-id "${instance_id}" \
+              --query 'StandardOutputContent' \
+              --output text
+          done
+
+      - name: Public smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 "https://${HALLOWEEN_DOMAIN}/live-display" >/dev/null
+          curl -fsS --max-time 15 "https://www.${HALLOWEEN_DOMAIN}/live-display" >/dev/null
+          curl -fsS --max-time 15 "https://appg-v.com/health" >/dev/null

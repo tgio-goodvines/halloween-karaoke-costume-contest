@@ -79,7 +79,7 @@ Recommended paths:
 ```text
 appsecrets/halloween_app
 appsecrets/halloween_redis
-appsecrets/halloween_gitlab
+appsecrets/halloween_github
 ```
 
 ### `appsecrets/halloween_app`
@@ -126,22 +126,22 @@ copy the password value from `appsecrets/redis` into
 `appsecrets/halloween_redis` rather than having the Halloween app read
 `appsecrets/redis` directly. This keeps the app's secret contract explicit.
 
-### `appsecrets/halloween_gitlab`
+### `appsecrets/halloween_github`
 
-Purpose: optional GitLab deploy-token metadata fetched by EC2 during SSM deploys.
+Purpose: GitHub repo read credentials fetched by EC2 during SSM deploys.
 
 Recommended keys:
 
 ```json
 {
-  "username": "<deploy-token-username>",
-  "token": "<gitlab-deploy-token>",
-  "repo_url": "https://gitlab.com/<group>/<project>.git"
+  "repo_url": "https://github.com/tgio-goodvines/halloween-karaoke-costume-contest.git",
+  "username": "x-access-token",
+  "token": "<fine-grained-read-only-github-token>"
 }
 ```
 
-This secret is for EC2-side repository checkout during deployment. GitLab CI
-should not store or print this token.
+This secret is for EC2-side repository checkout during deployment. GitHub
+Actions should not store or print this token.
 
 ## Environment Contract
 
@@ -188,8 +188,8 @@ def get_app_secret() -> dict:
 def get_redis_secret() -> dict:
     return get_secret("halloween_redis")
 
-def get_gitlab_secret() -> dict:
-    return get_secret("halloween_gitlab")
+def get_github_secret() -> dict:
+    return get_secret("halloween_github")
 ```
 
 Because the app already has simple single-file shape, it is also acceptable to
@@ -235,10 +235,10 @@ halloween_app
 halloween_redis
 ```
 
-Optional secret path for EC2-side GitLab repo checkout:
+Optional secret path for EC2-side GitHub repo checkout:
 
 ```text
-halloween_gitlab
+halloween_github
 ```
 
 If production required secrets are missing, app startup should fail. Silent
@@ -311,13 +311,13 @@ vault kv put appsecrets/halloween_redis \
   prefix='halloween'
 ```
 
-If EC2 should fetch the GitLab repo with a deploy token:
+If EC2 should fetch the GitHub repo with a fine-grained token:
 
 ```bash
-vault kv put appsecrets/halloween_gitlab \
-  username='<deploy-token-username>' \
-  token='<gitlab-deploy-token>' \
-  repo_url='https://gitlab.com/<group>/<project>.git'
+vault kv put appsecrets/halloween_github \
+  username='x-access-token' \
+  token='<fine-grained-read-only-github-token>' \
+  repo_url='https://github.com/tgio-goodvines/halloween-karaoke-costume-contest.git'
 ```
 
 ## Security Notes
@@ -327,7 +327,7 @@ vault kv put appsecrets/halloween_gitlab \
 - For tighter isolation later, create a dedicated Vault policy and role for the
   Halloween app.
 - Never log Vault tokens, Redis passwords, Flask secret keys, admin passwords,
-  or GitLab deploy tokens.
+  or GitHub fine-grained tokens.
 - Prefer generated high-entropy secrets.
 - Rotate the admin password before each event if the app is reused.
 

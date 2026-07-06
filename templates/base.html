@@ -23,6 +23,13 @@
               {% if show_admin_link is not defined or show_admin_link %}
                 <a href="{{ url_for('admin_portal') }}">Admin</a>
               {% endif %}
+            </nav>
+          </details>
+          {% if session.username or regular_authenticated or admin_authenticated %}
+            <div class="site-header__session">
+              {% if session.username %}
+                <span class="site-header__user">Signed in as {{ session.username }}</span>
+              {% endif %}
               {% if regular_authenticated %}
                 <form method="post" action="{{ url_for('halloween_logout') }}" class="site-header__logout">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -35,10 +42,7 @@
                   <button type="submit">Admin Logout</button>
                 </form>
               {% endif %}
-            </nav>
-          </details>
-          {% if session.username %}
-            <span class="site-header__user">Signed in as {{ session.username }}</span>
+            </div>
           {% endif %}
         </div>
       </div>

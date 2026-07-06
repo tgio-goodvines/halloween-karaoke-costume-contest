@@ -69,6 +69,14 @@ a:focus {
   color: var(--muted);
 }
 
+.site-header__session {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .site-header h1 {
   margin: 0;
   font-size: clamp(1.15rem, 2.5vw, 2rem);
@@ -209,15 +217,29 @@ a:focus {
   }
 
   .site-nav nav a,
-  .site-header__logout button {
+  .site-nav .site-header__logout button {
     width: 100%;
     min-height: 44px;
     text-align: center;
     border-color: rgba(255, 59, 59, 0.22);
   }
 
-  .site-header__user {
-    display: none;
+  .site-header__session {
+    max-width: calc(100vw - 2rem);
+    justify-content: flex-end;
+  }
+
+  .site-header__session .site-header__logout button {
+    min-height: 40px;
+    padding: 0.45rem 0.75rem;
+    border-color: rgba(255, 59, 59, 0.35);
+  }
+
+  .site-header__session .site-header__user {
+    max-width: min(52vw, 16rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

@@ -120,6 +120,17 @@ document.addEventListener('DOMContentLoaded', () => {
     return '0.00';
   };
 
+  const getEntryTextLength = (entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return 0;
+    }
+
+    return ['category', 'primary', 'secondary', 'tertiary', 'link_label']
+      .map((key) => (entry[key] ? String(entry[key]) : ''))
+      .join(' ')
+      .length;
+  };
+
   let karaokeCountdownTimerId = null;
   let karaokeCountdownTarget = null;
   let karaokeRotatorPanels = [];
@@ -650,7 +661,20 @@ document.addEventListener('DOMContentLoaded', () => {
     );
     const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent && !hasScoreboard);
 
-    card.classList.remove('display-card--inferno', 'display-card--costume', 'display-card--winner');
+    card.classList.remove(
+      'display-card--inferno',
+      'display-card--costume',
+      'display-card--winner',
+      'display-card--long',
+      'display-card--dense'
+    );
+
+    const entryTextLength = getEntryTextLength(entry);
+    if (entryTextLength > 150) {
+      card.classList.add('display-card--dense');
+    } else if (entryTextLength > 95) {
+      card.classList.add('display-card--long');
+    }
 
     if (hasScoreboard) {
       if (defaultContent) {

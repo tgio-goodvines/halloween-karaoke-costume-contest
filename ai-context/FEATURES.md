@@ -25,7 +25,7 @@
 - Each guest/session can vote once.
 - Voting requires a score for every costume entry.
 - Scores must be whole numbers from 1 to 10.
-- Votes are stored per costume entry.
+- Votes are stored as ID-keyed ballots per checked-in guest.
 - Scoreboard calculates total, vote count, average, leader, and percent-of-current-max values.
 - Tie handling for leader favors higher average, then higher vote count.
 - Admin can view vote tally bars and current leader.
@@ -48,6 +48,8 @@
 ## Admin Features
 
 - Admin dashboard at `/admin`.
+- Admin login at `/admin/login` when `HALLOWEEN_ADMIN_PASSWORD` is configured.
+- Admin logout at `/admin/logout`.
 - Add, edit, delete, move up, and move down costume signups.
 - Add, edit, delete, move up, and move down karaoke signups.
 - Admin mutations validate required fields.
@@ -57,8 +59,11 @@
 - Admin JSON export routes are available for full Redis state, costume results,
   and karaoke lineup at `/admin/export/state`,
   `/admin/export/costume-results`, and `/admin/export/karaoke-lineup`.
+- POST forms include CSRF tokens outside testing mode.
 
-Important caveat: `/admin` has no authentication or authorization in the current code.
+Important caveat: In non-production development, `/admin` remains open when
+`HALLOWEEN_ADMIN_PASSWORD` is unset. Production should set that environment
+variable.
 
 ## Live Display Features
 

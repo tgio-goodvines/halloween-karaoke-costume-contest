@@ -11,6 +11,8 @@ class FakeLock:
         self.released = False
 
     def acquire(self, blocking=True):
+        if not self.redis_client.lock_should_acquire:
+            return False
         self.acquired = True
         self.redis_client.acquired_locks.append(self)
         return True
@@ -27,6 +29,7 @@ class FakeRedis:
         self.published_messages = []
         self.acquired_locks = []
         self.released_locks = []
+        self.lock_should_acquire = True
 
     def ping(self):
         return True
@@ -78,6 +81,8 @@ class RedisStateTests(unittest.TestCase):
         self.original_redis_client = main.redis_client
         self.original_redis_available = main.redis_state_available
         self.original_config = main.REDIS_CONFIG
+        self.original_testing = main.app.config["TESTING"]
+        self.original_admin_password = main.app.config["ADMIN_PASSWORD"]
 
         main.redis_client = self.fake_redis
         main.redis_state_available = True
@@ -96,12 +101,15 @@ class RedisStateTests(unittest.TestCase):
         main.redis_client = self.original_redis_client
         main.redis_state_available = self.original_redis_available
         main.REDIS_CONFIG = self.original_config
+        main.app.config["TESTING"] = self.original_testing
+        main.app.config["ADMIN_PASSWORD"] = self.original_admin_password
         self.reset_state()
 
     def reset_state(self):
         main.costume_signups = []
         main.karaoke_signups = []
         main.costume_votes = []
+        main.costume_ballots = {}
         main.registered_users = {}
         main.submitted_costume_votes = set()
         main.live_display_override = None
@@ -119,15 +127,23 @@ class RedisStateTests(unittest.TestCase):
 
     def test_serialization_round_trip_preserves_state(self):
         main.costume_signups = [
-            main.CostumeSignup("Ada", "Vampire", "ada@example.com"),
-            main.CostumeSignup("Grace", "Ghost", ""),
+            main.CostumeSignup("Ada", "Vampire", "ada@example.com", "costume-1"),
+            main.CostumeSignup("Grace", "Ghost", "", "costume-2"),
         ]
         main.karaoke_signups = [
-            main.KaraokeSignup("Lin", "Thriller", "Michael Jackson", "https://example.test/video")
+            main.KaraokeSignup("Lin", "Thriller", "Michael Jackson", "https://example.test/video", "karaoke-1")
         ]
-        main.costume_votes = [[8, "9"], [10]]
+        main.costume_ballots = {
+            "user-1": {
+                "costume-1": 8,
+                "costume-2": 10,
+            },
+            "user-2": {
+                "costume-1": 9,
+            },
+        }
         main.registered_users = {"user-1": "Ada"}
-        main.submitted_costume_votes = {"user-1"}
+        main.submitted_costume_votes = {"user-1", "user-2"}
         main.contest_state["voting_open"] = True
         main.karaoke_state["party_started"] = True
         main.live_display_override = {"type": "notice", "title": "Tonight"}
@@ -139,9 +155,17 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(["Ada", "Grace"], [signup.name for signup in main.costume_signups])
         self.assertEqual("Thriller", main.karaoke_signups[0].song_title)
+        self.assertEqual(["costume-1", "costume-2"], [signup.id for signup in main.costume_signups])
         self.assertEqual([[8, 9], [10]], main.costume_votes)
+        self.assertEqual(
+            {
+                "user-1": {"costume-1": 8, "costume-2": 10},
+                "user-2": {"costume-1": 9},
+            },
+            main.costume_ballots,
+        )
         self.assertEqual({"user-1": "Ada"}, main.registered_users)
-        self.assertEqual({"user-1"}, main.submitted_costume_votes)
+        self.assertEqual({"user-1", "user-2"}, main.submitted_costume_votes)
         self.assertTrue(main.contest_state["voting_open"])
         self.assertTrue(main.karaoke_state["party_started"])
         self.assertEqual({"type": "notice", "title": "Tonight"}, main.live_display_override)
@@ -169,6 +193,42 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Grace", main.costume_signups[0].name)
         self.assertEqual("Monster Mash", main.karaoke_signups[0].song_title)
         self.assertEqual(3, main.display_update_version)
+
+    def test_load_state_from_redis_migrates_legacy_index_votes_to_ballots(self):
+        legacy_state = {
+            "schema_version": 1,
+            "costume_signups": [
+                {"name": "Ada", "costume": "Vampire", "contact": ""},
+                {"name": "Grace", "costume": "Ghost", "contact": ""},
+            ],
+            "karaoke_signups": [],
+            "costume_votes": [[9, 8], [7, 10]],
+            "registered_users": {"user-1": "Jamie", "user-2": "Morgan"},
+            "submitted_costume_votes": ["user-1", "user-2"],
+            "contest_state": {},
+            "karaoke_state": {},
+            "live_display_override": None,
+            "display_update_version": 4,
+        }
+        self.fake_redis.set(main.redis_key("state"), json.dumps(legacy_state))
+
+        self.assertTrue(main.load_state_from_redis())
+
+        costume_ids = [signup.id for signup in main.costume_signups]
+        self.assertEqual(
+            {
+                "user-1": {
+                    costume_ids[0]: 9,
+                    costume_ids[1]: 7,
+                },
+                "user-2": {
+                    costume_ids[0]: 8,
+                    costume_ids[1]: 10,
+                },
+            },
+            main.costume_ballots,
+        )
+        self.assertEqual([[9, 8], [7, 10]], main.costume_votes)
 
     def test_attendee_signups_persist_and_publish_display_updates(self):
         self.save_current_state()
@@ -198,10 +258,9 @@ class RedisStateTests(unittest.TestCase):
 
     def test_voting_persists_scores_and_blocks_second_vote(self):
         main.costume_signups = [
-            main.CostumeSignup("Ada", "Vampire", ""),
-            main.CostumeSignup("Grace", "Ghost", ""),
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+            main.CostumeSignup("Grace", "Ghost", "", "costume-2"),
         ]
-        main.costume_votes = [[], []]
         main.registered_users = {"user-1": "Jamie"}
         main.contest_state["voting_open"] = True
         self.save_current_state()
@@ -213,25 +272,25 @@ class RedisStateTests(unittest.TestCase):
 
             first_response = client.post(
                 "/costume-voting",
-                data={"rating_0": "9", "rating_1": "7"},
+                data={"rating_costume-1": "9", "rating_costume-2": "7"},
             )
             second_response = client.post(
                 "/costume-voting",
-                data={"rating_0": "1", "rating_1": "1"},
+                data={"rating_costume-1": "1", "rating_costume-2": "1"},
             )
 
         state = self.redis_state()
         self.assertEqual(302, first_response.status_code)
         self.assertEqual(200, second_response.status_code)
-        self.assertEqual([[9], [7]], state["costume_votes"])
+        self.assertEqual({"costume-1": 9, "costume-2": 7}, state["costume_ballots"]["user-1"])
         self.assertEqual(["user-1"], state["submitted_costume_votes"])
 
     def test_admin_reorder_keeps_votes_aligned_with_costumes(self):
         main.costume_signups = [
-            main.CostumeSignup("Ada", "Vampire", ""),
-            main.CostumeSignup("Grace", "Ghost", ""),
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+            main.CostumeSignup("Grace", "Ghost", "", "costume-2"),
         ]
-        main.costume_votes = [[1], [9]]
+        main.costume_ballots = {"user-1": {"costume-1": 1, "costume-2": 9}}
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -240,7 +299,7 @@ class RedisStateTests(unittest.TestCase):
         state = self.redis_state()
         self.assertEqual(200, response.status_code)
         self.assertEqual(["Grace", "Ada"], [entry["name"] for entry in state["costume_signups"]])
-        self.assertEqual([[9], [1]], state["costume_votes"])
+        self.assertEqual({"costume-1": 1, "costume-2": 9}, state["costume_ballots"]["user-1"])
 
     def test_display_data_reflects_persisted_state_and_update_version_publish(self):
         self.save_current_state()
@@ -260,6 +319,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual(1, payload["costume_count"])
         self.assertEqual(0, payload["karaoke_count"])
+        self.assertEqual(1, payload["display_update_version"])
         self.assertTrue(any(entry["primary"] == "Ada" for entry in payload["entries"]))
         self.assertEqual(1, state["display_update_version"])
         self.assertEqual(main.redis_key("display:pubsub"), published_channel)
@@ -267,10 +327,10 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("state-change", published_payload["reason"])
 
     def test_admin_exports_return_json_and_manual_state_backup(self):
-        main.costume_signups = [main.CostumeSignup("Ada", "Vampire", "")]
-        main.costume_votes = [[10]]
+        main.costume_signups = [main.CostumeSignup("Ada", "Vampire", "", "costume-1")]
+        main.costume_ballots = {"user-1": {"costume-1": 10}}
         main.karaoke_signups = [
-            main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "")
+            main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "", "karaoke-1")
         ]
         self.save_current_state()
 
@@ -294,3 +354,73 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("manual-export", json.loads(self.fake_redis.store[backup_keys[0]])["backup_reason"])
         self.assertEqual("Ada", results_export["results"][0]["name"])
         self.assertEqual("Grace", lineup_export["lineup"][0]["name"])
+
+    def test_admin_blocks_destructive_costume_lineup_changes_while_voting_is_open(self):
+        main.costume_signups = [
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+            main.CostumeSignup("Grace", "Ghost", "", "costume-2"),
+        ]
+        main.registered_users = {"user-1": "Jamie"}
+        main.costume_ballots = {"user-1": {"costume-1": 8, "costume-2": 9}}
+        main.contest_state["voting_open"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            response = client.post(
+                "/admin",
+                data={"action": "move_costume_down", "entry_id": "costume-1"},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(["Ada", "Grace"], [entry["name"] for entry in state["costume_signups"]])
+        self.assertIn("disabled while costume voting is open", response.get_data(as_text=True))
+
+    def test_lock_contention_returns_busy_response(self):
+        self.save_current_state()
+        self.fake_redis.lock_should_acquire = False
+
+        with main.app.test_client() as client:
+            response = client.post(
+                "/costume-signup",
+                data={"name": "Ada", "costume": "Vampire", "contact": ""},
+            )
+
+        self.assertEqual(503, response.status_code)
+        self.assertIn("state store is busy", response.get_data(as_text=True))
+
+    def test_admin_auth_requires_password_when_configured(self):
+        main.app.config["ADMIN_PASSWORD"] = "secret"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            login_redirect = client.get("/admin")
+            bad_login = client.post(
+                "/admin/login",
+                data={"password": "wrong", "next": "/admin"},
+            )
+            good_login = client.post(
+                "/admin/login",
+                data={"password": "secret", "next": "/admin"},
+            )
+            admin_response = client.get("/admin")
+
+        self.assertEqual(302, login_redirect.status_code)
+        self.assertIn("/admin/login", login_redirect.headers["Location"])
+        self.assertEqual(200, bad_login.status_code)
+        self.assertIn("Incorrect admin password", bad_login.get_data(as_text=True))
+        self.assertEqual(302, good_login.status_code)
+        self.assertEqual(200, admin_response.status_code)
+
+    def test_csrf_rejects_post_without_token_outside_testing_mode(self):
+        main.app.config["TESTING"] = False
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            response = client.post(
+                "/costume-signup",
+                data={"name": "Ada", "costume": "Vampire", "contact": ""},
+            )
+
+        self.assertEqual(400, response.status_code)
+        self.assertIn("form expired", response.get_data(as_text=True))

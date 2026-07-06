@@ -2,9 +2,11 @@
 
 ## Purpose
 
-This repo contains a single-process Flask web app for "Qiana and Tony's 2nd Annual Halloween Party." It supports attendee check-in, costume contest signup and voting, karaoke signup, admin management, and a large-format live display for a TV/projector.
+This repo contains a Flask web app for "Qiana and Tony's 2nd Annual Halloween Party." It supports attendee check-in, costume contest signup and voting, karaoke signup, admin management, and a large-format live display for a TV/projector.
 
-The app is optimized for a short-lived party environment, not durable production hosting. All signups, votes, logged-in guests, contest status, karaoke status, and live-display overrides are stored in module-level Python globals in `main.py`.
+The app is optimized for a short-lived party environment. Event state is
+persisted in Redis as a compact JSON document, with module-level Python globals
+remaining as a process-local cache in `main.py`.
 
 ## Runtime
 
@@ -14,6 +16,8 @@ The app is optimized for a short-lived party environment, not durable production
 - Entrypoint: `main.py`.
 - Local run behavior: `python main.py` starts Flask debug mode on `0.0.0.0:80`.
 - Secret key: `HALLOWEEN_APP_SECRET`, falling back to `dev-secret-key`.
+- Admin password: `HALLOWEEN_ADMIN_PASSWORD`. In non-production development,
+  admin routes remain open when this is unset; in production it must be set.
 
 Because the app binds to port 80, local execution may require elevated privileges or a port change for development.
 
@@ -56,11 +60,13 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 
 ## State Model
 
-The app has no database. The following globals in `main.py` are the source of truth:
+Redis is the database. The canonical state document is stored at
+`halloween:state` with schema version 2. The following globals in `main.py` are
+the process-local cache:
 
-- `costume_signups`: list of `CostumeSignup` dataclass instances.
-- `karaoke_signups`: list of `KaraokeSignup` dataclass instances.
-- `costume_votes`: list of vote lists, aligned by index with `costume_signups`.
+- `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
+- `karaoke_signups`: list of `KaraokeSignup` dataclass instances with stable IDs.
+- `costume_ballots`: maps `user_id` to `{costume_id: score}`.
 - `registered_users`: maps session `user_id` to display name.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
 - `live_display_override`: current full-screen override card, or `None`.
@@ -68,7 +74,8 @@ The app has no database. The following globals in `main.py` are the source of tr
 - `karaoke_state`: whether karaoke has been started and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.
 
-The helper `ensure_costume_votes_alignment()` keeps `costume_votes` aligned when costume entries are added, removed, or reordered.
+Schema version 1 Redis state with index-aligned `costume_votes` is upgraded on
+load into ID-keyed `costume_ballots`.
 
 ## Design Shape
 

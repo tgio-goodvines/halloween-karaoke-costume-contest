@@ -26,6 +26,7 @@
 
   {% if costume_signups and not user_has_voted %}
     <form method="post" class="voting-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="voting-grid">
         {% for signup in costume_signups %}
           <fieldset class="voting-card">
@@ -37,8 +38,8 @@
               Score (1-10)
               <input
                 type="number"
-                id="rating_{{ loop.index0 }}"
-                name="rating_{{ loop.index0 }}"
+                id="rating_{{ signup.id }}"
+                name="rating_{{ signup.id }}"
                 min="1"
                 max="10"
                 inputmode="numeric"

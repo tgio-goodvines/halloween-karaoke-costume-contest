@@ -65,10 +65,10 @@ Shape:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "costume_signups": [],
   "karaoke_signups": [],
-  "costume_votes": [],
+  "costume_ballots": {},
   "registered_users": {},
   "submitted_costume_votes": [],
   "contest_state": {},
@@ -80,6 +80,22 @@ Shape:
 ```
 
 Use JSON serialization that round-trips the existing dataclass state cleanly.
+Costume and karaoke signups include stable `id` values. Costume votes are stored
+as ID-keyed ballots, not index-aligned vote rows:
+
+```json
+{
+  "costume_ballots": {
+    "user-id": {
+      "costume-id": 8
+    }
+  }
+}
+```
+
+Schema version 1 state with `costume_votes` rows is upgraded on load by assigning
+signup IDs and mapping each submitted voter's row position into
+`costume_ballots`.
 
 ### `halloween:lock:state`
 

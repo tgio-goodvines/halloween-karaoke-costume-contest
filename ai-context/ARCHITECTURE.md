@@ -8,6 +8,8 @@
 - `GET /api/display-data` -> JSON payload for live-display refreshes.
 - `GET /halloween` -> attendee dashboard; requires `session.user_id` and `session.username`.
 - `GET|POST /halloween/login` -> session check-in; stores a generated `user_id` and provided `username`.
+- `GET|POST /admin/login` -> admin password form when `HALLOWEEN_ADMIN_PASSWORD` is configured.
+- `POST /admin/logout` -> clears admin auth session state.
 - `GET|POST /admin` -> admin dashboard and all admin mutations.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
@@ -24,7 +26,7 @@
 
 - Flask app setup and route definitions.
 - Dataclasses: `CostumeSignup`, `KaraokeSignup`.
-- Global in-memory stores and event state.
+- Redis-backed state serialization/hydration, with process-local global caches.
 - Display update broadcasting via `threading.Condition`.
 - Scoreboard construction, ranking, and winner card creation.
 - Rotation-entry construction for the live display.
@@ -92,12 +94,12 @@ The base rotation always starts with signup instructions and event spotlight car
 ## Known Constraints And Risks
 
 - No persistence: process restart clears all event data.
-- No admin authentication.
-- No CSRF protection.
-- No tests are present.
-- No database migrations or app factory pattern.
+- Admin authentication is available through `HALLOWEEN_ADMIN_PASSWORD`; development remains open when it is unset.
+- CSRF protection is enforced for POST forms outside testing mode.
+- Redis state and route persistence tests are present in `tests/test_redis_state.py`.
+- No app factory pattern.
 - Vote identity depends on Flask session plus the in-memory `registered_users` map.
-- `/costume-voting` appends ratings by index, so costume reorder/delete during active voting can affect interpretation of existing votes.
+- Costume votes are stored as ID-keyed ballots; destructive costume lineup changes are blocked while voting is open.
 - The karaoke display JavaScript has support for a lineup list, but the current `display.html` markup includes only the countdown panel inside the karaoke override section.
 - `main.py` runs on port 80 in debug mode when executed directly.
 

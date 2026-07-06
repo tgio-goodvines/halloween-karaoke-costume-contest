@@ -17,6 +17,7 @@ import redis
 from flask import (
     Flask,
     Response,
+    has_request_context,
     jsonify,
     redirect,
     render_template,
@@ -31,6 +32,7 @@ from flask import (
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("HALLOWEEN_APP_SECRET", "dev-secret-key")
+app.config["ADMIN_PASSWORD"] = os.environ.get("HALLOWEEN_ADMIN_PASSWORD", "")
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -141,7 +143,7 @@ def verify_redis_connection() -> bool:
     return bool(redis_client.ping())
 
 
-STATE_SCHEMA_VERSION = 1
+STATE_SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -149,6 +151,7 @@ class CostumeSignup:
     name: str
     costume: str
     contact: str = ""
+    id: str = ""
 
 
 @dataclass
@@ -157,6 +160,7 @@ class KaraokeSignup:
     song_title: str
     artist: str
     youtube_link: str = ""
+    id: str = ""
 
 
 DEFAULT_CONTEST_STATE: dict[str, object] = {
@@ -171,6 +175,7 @@ DEFAULT_CONTEST_STATE: dict[str, object] = {
 DEFAULT_KARAOKE_STATE: dict[str, object] = {
     "party_started": False,
     "current_singer_index": None,
+    "current_singer_id": None,
 }
 
 
@@ -179,6 +184,7 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
 costume_signups: List[CostumeSignup] = []
 karaoke_signups: List[KaraokeSignup] = []
 costume_votes: List[List[int]] = []
+costume_ballots: dict[str, dict[str, int]] = {}
 registered_users: dict[str, str] = {}
 submitted_costume_votes: set[str] = set()
 live_display_override: dict[str, object] | None = None
@@ -198,7 +204,23 @@ STATE_MUTATION_ENDPOINTS = {
     "karaoke_signup",
     "costume_voting_page",
 }
+STATE_REFRESH_ENDPOINTS = {
+    "admin_portal",
+    "halloween_overview",
+    "costume_signup",
+    "karaoke_signup",
+    "costume_voting_page",
+    "live_display",
+    "display_data",
+}
+ADMIN_ENDPOINTS = {
+    "admin_portal",
+    "export_state",
+    "export_costume_results",
+    "export_karaoke_lineup",
+}
 STATE_LOCK_TIMEOUT_SECONDS = 10
+STATE_LOCK_BLOCKING_TIMEOUT_SECONDS = 5
 STATE_BACKUP_TTL_SECONDS = 60 * 60 * 24 * 30
 
 
@@ -206,16 +228,30 @@ def broadcast_display_update() -> None:
     global display_update_version
     with display_update_condition:
         display_update_version += 1
-        persist_state_if_available()
+        if persist_state_if_available() and has_request_context():
+            g.redis_state_saved_during_request = True
         publish_display_update("state-change")
         display_update_condition.notify_all()
 
 
+def ensure_signup_ids() -> None:
+    for signup in costume_signups:
+        if not signup.id:
+            signup.id = uuid4().hex
+
+    for signup in karaoke_signups:
+        if not signup.id:
+            signup.id = uuid4().hex
+
+
 def ensure_costume_votes_alignment() -> None:
-    while len(costume_votes) < len(costume_signups):
-        costume_votes.append([])
-    while len(costume_votes) > len(costume_signups):
-        costume_votes.pop()
+    ensure_signup_ids()
+    rebuild_legacy_vote_rows_from_ballots()
+
+
+def ensure_submitted_vote_tracking() -> None:
+    submitted_costume_votes.clear()
+    submitted_costume_votes.update(costume_ballots.keys())
 
 
 def _utc_now_iso() -> str:
@@ -224,6 +260,7 @@ def _utc_now_iso() -> str:
 
 def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
     return {
+        "id": signup.id,
         "name": signup.name,
         "costume": signup.costume,
         "contact": signup.contact,
@@ -232,6 +269,7 @@ def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
 
 def costume_signup_from_dict(data: dict[str, object]) -> CostumeSignup:
     return CostumeSignup(
+        id=str(data.get("id", "") or uuid4().hex),
         name=str(data.get("name", "") or ""),
         costume=str(data.get("costume", "") or ""),
         contact=str(data.get("contact", "") or ""),
@@ -240,6 +278,7 @@ def costume_signup_from_dict(data: dict[str, object]) -> CostumeSignup:
 
 def karaoke_signup_to_dict(signup: KaraokeSignup) -> dict[str, str]:
     return {
+        "id": signup.id,
         "name": signup.name,
         "song_title": signup.song_title,
         "artist": signup.artist,
@@ -249,6 +288,7 @@ def karaoke_signup_to_dict(signup: KaraokeSignup) -> dict[str, str]:
 
 def karaoke_signup_from_dict(data: dict[str, object]) -> KaraokeSignup:
     return KaraokeSignup(
+        id=str(data.get("id", "") or uuid4().hex),
         name=str(data.get("name", "") or ""),
         song_title=str(data.get("song_title", "") or ""),
         artist=str(data.get("artist", "") or ""),
@@ -277,8 +317,82 @@ def _normalize_vote_rows(raw_votes: object) -> List[List[int]]:
     return normalized_votes
 
 
+def _normalize_costume_ballots(raw_ballots: object) -> dict[str, dict[str, int]]:
+    if not isinstance(raw_ballots, dict):
+        return {}
+
+    normalized_ballots: dict[str, dict[str, int]] = {}
+    for raw_user_id, raw_scores in raw_ballots.items():
+        if not isinstance(raw_scores, dict):
+            continue
+
+        user_id = str(raw_user_id)
+        normalized_scores: dict[str, int] = {}
+        for raw_costume_id, raw_score in raw_scores.items():
+            try:
+                score = int(raw_score)
+            except (TypeError, ValueError):
+                continue
+
+            if 1 <= score <= 10:
+                normalized_scores[str(raw_costume_id)] = score
+
+        if normalized_scores:
+            normalized_ballots[user_id] = normalized_scores
+
+    return normalized_ballots
+
+
+def migrate_index_votes_to_ballots(
+    raw_votes: object,
+    raw_submitted_votes: object,
+) -> dict[str, dict[str, int]]:
+    vote_rows = _normalize_vote_rows(raw_votes)
+    if not isinstance(raw_submitted_votes, list):
+        return {}
+
+    submitted_user_ids = [str(user_id) for user_id in raw_submitted_votes]
+    if not submitted_user_ids:
+        return {}
+
+    migrated_ballots: dict[str, dict[str, int]] = {}
+    costume_ids = [signup.id for signup in costume_signups]
+
+    for vote_number, user_id in enumerate(submitted_user_ids):
+        scores: dict[str, int] = {}
+        for costume_index, costume_id in enumerate(costume_ids):
+            if costume_index >= len(vote_rows):
+                continue
+
+            row = vote_rows[costume_index]
+            if vote_number < len(row):
+                score = row[vote_number]
+                if 1 <= score <= 10:
+                    scores[costume_id] = score
+
+        if scores:
+            migrated_ballots[user_id] = scores
+
+    return migrated_ballots
+
+
+def rebuild_legacy_vote_rows_from_ballots() -> None:
+    global costume_votes
+
+    costume_ids = [signup.id for signup in costume_signups]
+    costume_votes = [[] for _ in costume_ids]
+
+    for ballot in costume_ballots.values():
+        for index, costume_id in enumerate(costume_ids):
+            score = ballot.get(costume_id)
+            if isinstance(score, int):
+                costume_votes[index].append(score)
+
+
 def snapshot_state() -> dict[str, object]:
-    ensure_costume_votes_alignment()
+    ensure_signup_ids()
+    ensure_submitted_vote_tracking()
+    rebuild_legacy_vote_rows_from_ballots()
 
     return {
         "schema_version": STATE_SCHEMA_VERSION,
@@ -288,7 +402,7 @@ def snapshot_state() -> dict[str, object]:
         "karaoke_signups": [
             karaoke_signup_to_dict(signup) for signup in karaoke_signups
         ],
-        "costume_votes": copy.deepcopy(costume_votes),
+        "costume_ballots": copy.deepcopy(costume_ballots),
         "registered_users": copy.deepcopy(registered_users),
         "submitted_costume_votes": sorted(submitted_costume_votes),
         "contest_state": copy.deepcopy(contest_state),
@@ -301,7 +415,7 @@ def snapshot_state() -> dict[str, object]:
 
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users
-    global submitted_costume_votes, live_display_override, display_update_version
+    global costume_ballots, submitted_costume_votes, live_display_override, display_update_version
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -317,7 +431,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         if isinstance(signup, dict)
     ]
 
-    costume_votes = _normalize_vote_rows(data.get("costume_votes"))
+    ensure_signup_ids()
 
     raw_registered_users = data.get("registered_users", {})
     if isinstance(raw_registered_users, dict):
@@ -334,6 +448,21 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     else:
         submitted_costume_votes = set()
 
+    try:
+        schema_version = int(data.get("schema_version", 1) or 1)
+    except (TypeError, ValueError):
+        schema_version = 1
+
+    if schema_version >= 2:
+        costume_ballots = _normalize_costume_ballots(data.get("costume_ballots"))
+    else:
+        costume_ballots = migrate_index_votes_to_ballots(
+            data.get("costume_votes"),
+            raw_submitted_votes,
+        )
+
+    ensure_submitted_vote_tracking()
+
     raw_contest_state = data.get("contest_state", {})
     contest_state.clear()
     contest_state.update(copy.deepcopy(DEFAULT_CONTEST_STATE))
@@ -345,6 +474,13 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     karaoke_state.update(copy.deepcopy(DEFAULT_KARAOKE_STATE))
     if isinstance(raw_karaoke_state, dict):
         karaoke_state.update(copy.deepcopy(raw_karaoke_state))
+    if not karaoke_state.get("current_singer_id"):
+        try:
+            current_index = int(karaoke_state.get("current_singer_index"))
+        except (TypeError, ValueError):
+            current_index = -1
+        if 0 <= current_index < len(karaoke_signups):
+            karaoke_state["current_singer_id"] = karaoke_signups[current_index].id
 
     raw_override = data.get("live_display_override")
     live_display_override = copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
@@ -354,7 +490,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     except (TypeError, ValueError):
         display_update_version = 0
 
-    ensure_costume_votes_alignment()
+    rebuild_legacy_vote_rows_from_ballots()
 
 
 def save_state_to_redis() -> None:
@@ -408,7 +544,7 @@ def build_karaoke_lineup_export() -> dict[str, object]:
         "schema_version": STATE_SCHEMA_VERSION,
         "exported_at": _utc_now_iso(),
         "party_started": bool(karaoke_state.get("party_started")),
-        "current_singer_index": karaoke_state.get("current_singer_index"),
+        "current_singer_id": karaoke_state.get("current_singer_id"),
         "lineup": [
             {
                 "position": index + 1,
@@ -541,11 +677,12 @@ def acquire_state_lock() -> redis.lock.Lock | None:
     state_lock = redis_client.lock(
         redis_key("lock:state"),
         timeout=STATE_LOCK_TIMEOUT_SECONDS,
-        blocking_timeout=None,
+        blocking_timeout=STATE_LOCK_BLOCKING_TIMEOUT_SECONDS,
         thread_local=False,
     )
 
-    state_lock.acquire(blocking=True)
+    if not state_lock.acquire(blocking=True):
+        return None
 
     return state_lock
 
@@ -604,6 +741,66 @@ if initialize_state_store():
     start_display_pubsub_listener()
 
 
+def get_csrf_token() -> str:
+    token = session.get("csrf_token")
+    if not token:
+        token = uuid4().hex
+        session["csrf_token"] = token
+    return token
+
+
+@app.before_request
+def protect_admin_routes():
+    if request.endpoint not in ADMIN_ENDPOINTS:
+        return None
+
+    admin_password = app.config.get("ADMIN_PASSWORD", "")
+    if not admin_password and os.environ.get("APP_ENV") != "production":
+        return None
+
+    if not admin_password:
+        return Response("Admin password is not configured.", status=503)
+
+    if session.get("admin_authenticated"):
+        return None
+
+    return redirect(url_for("admin_login", next=request.full_path or url_for("admin_portal")))
+
+
+@app.before_request
+def validate_csrf_token():
+    if request.method != "POST" or app.config.get("TESTING"):
+        return None
+
+    expected_token = session.get("csrf_token")
+    provided_token = request.form.get("csrf_token")
+    if not expected_token or provided_token != expected_token:
+        return Response("The form expired. Please go back, refresh, and try again.", status=400)
+
+    return None
+
+
+@app.before_request
+def refresh_state_for_reads():
+    if request.method != "GET" or request.endpoint not in STATE_REFRESH_ENDPOINTS:
+        return None
+
+    if not redis_state_available:
+        return None
+
+    try:
+        load_state_from_redis()
+    except redis.RedisError as exc:
+        app.logger.warning("Unable to refresh Redis state before read: %s", exc)
+        if os.environ.get("APP_ENV") == "production":
+            return Response(
+                "The event state store is temporarily unavailable. Please try again.",
+                status=503,
+            )
+
+    return None
+
+
 @app.before_request
 def lock_state_for_mutation():
     if request.method != "POST" or request.endpoint not in STATE_MUTATION_ENDPOINTS:
@@ -631,6 +828,12 @@ def lock_state_for_mutation():
             )
         return None
 
+    if state_lock is None:
+        return Response(
+            "The event state store is busy. Please try again in a moment.",
+            status=503,
+        )
+
     g.redis_state_lock = state_lock
     g.redis_state_lock_owned = True
 
@@ -656,29 +859,36 @@ def save_and_unlock_state_after_mutation(response):
 
     if lock_owned:
         try:
-            persist_state_if_available()
+            if not bool(getattr(g, "redis_state_saved_during_request", False)):
+                persist_state_if_available()
         finally:
             release_state_lock(state_lock)
             g.redis_state_lock = None
             g.redis_state_lock_owned = False
+            g.redis_state_saved_during_request = False
 
     return response
 
 
 def build_costume_scoreboard() -> Tuple[List[dict[str, object]], dict[str, object] | None]:
-    ensure_costume_votes_alignment()
+    ensure_signup_ids()
 
     scoreboard: List[dict[str, object]] = []
     max_average = 0.0
     leader_index: int | None = None
 
     for index, signup in enumerate(costume_signups):
-        votes = costume_votes[index] if index < len(costume_votes) else []
+        votes = [
+            int(ballot[signup.id])
+            for ballot in costume_ballots.values()
+            if signup.id in ballot
+        ]
         total = sum(votes)
         vote_count = len(votes)
         average = total / vote_count if vote_count else 0.0
 
         entry = {
+            "id": signup.id,
             "name": signup.name,
             "costume": signup.costume,
             "total": total,
@@ -731,6 +941,7 @@ def create_scoreboard_card(top_entries: List[dict[str, object]]) -> dict[str, ob
     scoreboard_rows = [
         {
             "rank": index + 1,
+            "id": entry.get("id", ""),
             "name": entry.get("name", ""),
             "costume": entry.get("costume", ""),
             "average": float(entry.get("average", 0.0) or 0.0),
@@ -762,6 +973,22 @@ def build_winner_entry() -> dict[str, object] | None:
         "secondary": f"Crowned for {winner.get('costume', '').strip()}".strip(),
         "tertiary": f"Average score: {winner.get('average', 0):.2f} | Votes: {winner.get('count', 0)}",
     }
+
+
+def find_signup_index_by_id(signups: list[object], signup_id: str | None) -> int | None:
+    if not signup_id:
+        return None
+
+    for index, signup in enumerate(signups):
+        if getattr(signup, "id", None) == signup_id:
+            return index
+
+    return None
+
+
+def is_costume_lineup_locked_for_voting() -> bool:
+    return bool(contest_state.get("voting_open")) and not bool(contest_state.get("winner_locked"))
+
 
 # Demo slides to rotate on the home page
 SLIDES = [
@@ -829,6 +1056,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
 
     costume_entries = [
         {
+            "id": signup.id,
             "category": "Costume Contest",
             "primary": signup.name,
             "secondary": f"Dressed as {signup.costume}",
@@ -839,6 +1067,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
 
     karaoke_entries = [
         {
+            "id": signup.id,
             "category": "Karaoke Stage",
             "primary": signup.name,
             "secondary": f'Performing "{signup.song_title}"',
@@ -923,6 +1152,7 @@ def display_data():
             "costume_count": len(costume_signups),
             "karaoke_count": len(karaoke_signups),
             "override": live_display_override,
+            "display_update_version": display_update_version,
         }
     )
 
@@ -934,7 +1164,9 @@ def inject_contest_state():
             "voting_open": bool(contest_state.get("voting_open")),
             "winner_locked": bool(contest_state.get("winner_locked")),
             "winner": contest_state.get("winner"),
-        }
+        },
+        "csrf_token": get_csrf_token,
+        "admin_authenticated": bool(session.get("admin_authenticated")),
     }
 
 
@@ -996,11 +1228,45 @@ def halloween_login():
     )
 
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    errors: List[str] = []
+    next_page = request.args.get("next") or request.form.get("next") or url_for("admin_portal")
+
+    if session.get("admin_authenticated"):
+        return redirect(next_page)
+
+    if request.method == "POST":
+        admin_password = app.config.get("ADMIN_PASSWORD", "")
+        provided_password = request.form.get("password", "")
+
+        if not admin_password and os.environ.get("APP_ENV") == "production":
+            errors.append("Admin password is not configured.")
+        elif not admin_password or provided_password == admin_password:
+            session["admin_authenticated"] = True
+            return redirect(next_page)
+        else:
+            errors.append("Incorrect admin password.")
+
+    return render_template(
+        "admin_login.html",
+        errors=errors,
+        next_page=next_page,
+        show_admin_link=False,
+    )
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.pop("admin_authenticated", None)
+    return redirect(url_for("admin_login"))
+
+
 @app.route("/admin", methods=["GET", "POST"])
 def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
-    global live_display_override, submitted_costume_votes, karaoke_state
+    global live_display_override, submitted_costume_votes, costume_ballots, karaoke_state
 
     ensure_costume_votes_alignment()
 
@@ -1018,12 +1284,42 @@ def admin_portal():
             return None
         return index_value
 
+    def parse_entry_index(
+        signups: list[object],
+        label: str,
+        raw_id: str | None,
+        raw_index: str | None,
+    ) -> int | None:
+        entry_index = find_signup_index_by_id(signups, raw_id)
+        if entry_index is not None:
+            return entry_index
+
+        if raw_id:
+            errors.append(f"{label.capitalize()} entry could not be found.")
+            return None
+
+        return parse_index(raw_index, len(signups), label)
+
+    def block_if_voting_locked(action_label: str) -> bool:
+        if not is_costume_lineup_locked_for_voting():
+            return False
+
+        errors.append(
+            f"{action_label} is disabled while costume voting is open. Lock a winner or restart voting before changing the lineup."
+        )
+        return True
+
     if request.method == "POST":
         action = request.form.get("action", "")
         should_broadcast = False
 
         if action == "update_costume":
-            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
+            index = parse_entry_index(
+                costume_signups,
+                "costume signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
             name = request.form.get("name", "").strip()
             costume = request.form.get("costume", "").strip()
             contact = request.form.get("contact", "").strip()
@@ -1034,15 +1330,26 @@ def admin_portal():
                 errors.append("Costume description is required.")
 
             if index is not None and name and costume:
-                costume_signups[index] = CostumeSignup(name=name, costume=costume, contact=contact)
+                costume_signups[index] = CostumeSignup(
+                    id=costume_signups[index].id,
+                    name=name,
+                    costume=costume,
+                    contact=contact,
+                )
                 messages.append(f"Updated costume signup for {name}.")
                 should_broadcast = True
 
         elif action == "delete_costume":
-            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
-            if index is not None:
+            index = parse_entry_index(
+                costume_signups,
+                "costume signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
+            if index is not None and not block_if_voting_locked("Removing costume signups"):
                 removed = costume_signups.pop(index)
-                costume_votes.pop(index)
+                for ballot in costume_ballots.values():
+                    ballot.pop(removed.id, None)
                 messages.append(f"Removed costume signup for {removed.name}.")
                 should_broadcast = True
 
@@ -1056,14 +1363,25 @@ def admin_portal():
             if not costume:
                 errors.append("Costume description is required to add a new entry.")
 
-            if name and costume:
-                costume_signups.append(CostumeSignup(name=name, costume=costume, contact=contact))
-                costume_votes.append([])
+            if name and costume and not block_if_voting_locked("Adding costume signups"):
+                costume_signups.append(
+                    CostumeSignup(
+                        id=uuid4().hex,
+                        name=name,
+                        costume=costume,
+                        contact=contact,
+                    )
+                )
                 messages.append(f"Added costume signup for {name}.")
                 should_broadcast = True
 
         elif action == "update_karaoke":
-            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            index = parse_entry_index(
+                karaoke_signups,
+                "karaoke signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
             name = request.form.get("name", "").strip()
             song_title = request.form.get("song_title", "").strip()
             artist = request.form.get("artist", "").strip()
@@ -1078,6 +1396,7 @@ def admin_portal():
 
             if index is not None and name and song_title and artist:
                 karaoke_signups[index] = KaraokeSignup(
+                    id=karaoke_signups[index].id,
                     name=name,
                     song_title=song_title,
                     artist=artist,
@@ -1087,9 +1406,17 @@ def admin_portal():
                 should_broadcast = True
 
         elif action == "delete_karaoke":
-            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            index = parse_entry_index(
+                karaoke_signups,
+                "karaoke signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
             if index is not None:
                 removed = karaoke_signups.pop(index)
+                if karaoke_state.get("current_singer_id") == removed.id:
+                    karaoke_state["current_singer_id"] = None
+                    karaoke_state["current_singer_index"] = None
                 messages.append(f"Removed karaoke signup for {removed.name}.")
                 should_broadcast = True
 
@@ -1109,6 +1436,7 @@ def admin_portal():
             if name and song_title and artist:
                 karaoke_signups.append(
                     KaraokeSignup(
+                        id=uuid4().hex,
                         name=name,
                         song_title=song_title,
                         artist=artist,
@@ -1119,8 +1447,13 @@ def admin_portal():
                 should_broadcast = True
 
         elif action == "move_costume_up":
-            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
-            if index is not None:
+            index = parse_entry_index(
+                costume_signups,
+                "costume signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
+            if index is not None and not block_if_voting_locked("Reordering costume signups"):
                 if index == 0:
                     messages.append("Costume signup is already at the top.")
                 else:
@@ -1129,16 +1462,17 @@ def admin_portal():
                         costume_signups[index],
                         costume_signups[index - 1],
                     )
-                    costume_votes[index - 1], costume_votes[index] = (
-                        costume_votes[index],
-                        costume_votes[index - 1],
-                    )
                     messages.append(f"Moved costume signup for {moved_signup.name} up.")
                     should_broadcast = True
 
         elif action == "move_costume_down":
-            index = parse_index(request.form.get("index"), len(costume_signups), "costume signup")
-            if index is not None:
+            index = parse_entry_index(
+                costume_signups,
+                "costume signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
+            if index is not None and not block_if_voting_locked("Reordering costume signups"):
                 if index == len(costume_signups) - 1:
                     messages.append("Costume signup is already at the bottom.")
                 else:
@@ -1146,10 +1480,6 @@ def admin_portal():
                     costume_signups[index + 1], costume_signups[index] = (
                         costume_signups[index],
                         costume_signups[index + 1],
-                    )
-                    costume_votes[index + 1], costume_votes[index] = (
-                        costume_votes[index],
-                        costume_votes[index + 1],
                     )
                     messages.append(f"Moved costume signup for {moved_signup.name} down.")
                     should_broadcast = True
@@ -1171,6 +1501,7 @@ def admin_portal():
             contest_state["winner_locked"] = False
             contest_state["scoreboard_card"] = None
             contest_state["show_scoreboard_card"] = False
+            costume_ballots.clear()
             submitted_costume_votes.clear()
             write_state_backup_if_available("contest-start")
             should_broadcast = True
@@ -1206,6 +1537,7 @@ def admin_portal():
             if karaoke_signups:
                 lineup_entries = [
                     {
+                        "id": signup.id,
                         "name": signup.name,
                         "song_title": signup.song_title,
                         "artist": signup.artist,
@@ -1215,6 +1547,7 @@ def admin_portal():
 
                 karaoke_state["party_started"] = True
                 karaoke_state["current_singer_index"] = None
+                karaoke_state["current_singer_id"] = karaoke_signups[0].id if karaoke_signups else None
 
                 mountain_offset = timezone(timedelta(hours=-7), name="MST")
                 now_mountain = datetime.now(mountain_offset)
@@ -1249,10 +1582,12 @@ def admin_portal():
             scoreboard, leader = build_costume_scoreboard()
             if leader and leader["count"]:
                 contest_state["winner"] = {
+                    "id": leader["id"],
                     "name": leader["name"],
                     "costume": leader["costume"],
                     "average": leader["average"],
                     "count": leader["count"],
+                    "total": leader["total"],
                 }
                 contest_state["winner_locked"] = True
                 contest_state["voting_open"] = False
@@ -1270,7 +1605,12 @@ def admin_portal():
                 errors.append("No votes have been submitted yet, so a winner cannot be locked in.")
 
         elif action == "move_karaoke_up":
-            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            index = parse_entry_index(
+                karaoke_signups,
+                "karaoke signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
             if index is not None:
                 if index == 0:
                     messages.append("Karaoke signup is already at the top.")
@@ -1284,7 +1624,12 @@ def admin_portal():
                     should_broadcast = True
 
         elif action == "move_karaoke_down":
-            index = parse_index(request.form.get("index"), len(karaoke_signups), "karaoke signup")
+            index = parse_entry_index(
+                karaoke_signups,
+                "karaoke signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
             if index is not None:
                 if index == len(karaoke_signups) - 1:
                     messages.append("Karaoke signup is already at the bottom.")
@@ -1320,6 +1665,7 @@ def admin_portal():
         live_override=live_display_override,
         top_costume_rankings=top_costume_rankings,
         karaoke_state=karaoke_state,
+        costume_lineup_locked=is_costume_lineup_locked_for_voting(),
     )
 
 
@@ -1371,8 +1717,14 @@ def costume_signup():
             errors.append("Costume description is required.")
 
         if not errors:
-            costume_signups.append(CostumeSignup(name=name, costume=costume, contact=contact))
-            costume_votes.append([])
+            costume_signups.append(
+                CostumeSignup(
+                    id=uuid4().hex,
+                    name=name,
+                    costume=costume,
+                    contact=contact,
+                )
+            )
             submitted = True
             broadcast_display_update()
             return redirect(url_for("costume_signup", success="1"))
@@ -1410,6 +1762,7 @@ def karaoke_signup():
         if not errors:
             karaoke_signups.append(
                 KaraokeSignup(
+                    id=uuid4().hex,
                     name=name,
                     song_title=song_title,
                     artist=artist,
@@ -1457,9 +1810,9 @@ def costume_voting_page():
         elif not costume_signups:
             errors.append("There are no costume entries to rate yet.")
         else:
-            ratings: List[int] = []
+            ratings_by_costume_id: dict[str, int] = {}
             for index, signup in enumerate(costume_signups):
-                field_name = f"rating_{index}"
+                field_name = f"rating_{signup.id}"
                 raw_value = request.form.get(field_name, "").strip()
 
                 if not raw_value:
@@ -1476,12 +1829,10 @@ def costume_voting_page():
                     errors.append(f"Scores for {signup.name} must be between 1 and 10.")
                     continue
 
-                ratings.append(rating_value)
+                ratings_by_costume_id[signup.id] = rating_value
 
             if not errors:
-                for index, rating in enumerate(ratings):
-                    costume_votes[index].append(rating)
-
+                costume_ballots[user_id] = ratings_by_costume_id
                 submitted_costume_votes.add(user_id)
                 broadcast_display_update()
 

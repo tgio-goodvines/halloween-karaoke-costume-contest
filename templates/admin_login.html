@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% set title = "Welcome" %}
+{% set title = "Admin Login" %}
 
 {% block content %}
 <section class="form-section">
-  <h2>Welcome to the Halloween Hub</h2>
-  <p>Tell us who you are so we can keep the contest fair. You'll only need to do this once per device.</p>
+  <h2>Admin Login</h2>
+  <p>Enter the admin password to manage the party controls.</p>
 
   {% if errors %}
     <div class="errors">
@@ -18,10 +18,12 @@
 
   <form method="post" class="login-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="username">Your Name</label>
-    <input type="text" id="username" name="username" placeholder="e.g., Jamie" required value="{{ request.form.username }}">
     <input type="hidden" name="next" value="{{ next_page }}">
-    <button type="submit" class="button button--primary">Continue</button>
+
+    <label for="password">Admin Password</label>
+    <input type="password" id="password" name="password" required>
+
+    <button type="submit">Sign In</button>
   </form>
 </section>
 {% endblock %}

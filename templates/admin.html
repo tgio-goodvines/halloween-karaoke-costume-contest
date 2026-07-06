@@ -35,21 +35,25 @@
 
     <div class="contest-actions">
       <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" name="action" value="start_costume_contest" class="button button--primary">
           Start the Costume Contest
         </button>
       </form>
       <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" name="action" value="lock_costume_winner" class="button button--accent">
           Lock In Winner
         </button>
       </form>
       <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" name="action" value="show_costume_winner" class="button">
           Show Winner on Live Display
         </button>
       </form>
       <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" name="action" value="clear_display_override" class="button button--outline">
           Restore Live Display
         </button>
@@ -144,6 +148,7 @@
 
     <div class="contest-actions">
       <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" name="action" value="start_karaoke_party" class="button button--primary">
           Start the Halloween Karaoke Party
         </button>
@@ -175,51 +180,74 @@
     <section class="admin-section">
       <h3>Costume Contest Signups</h3>
 
-      <form method="post" class="admin-entry admin-entry--new">
-        <h4>Add a new entry</h4>
-        <div class="admin-entry__fields">
-          <label>
-            Name
-            <input type="text" name="name" required>
-          </label>
-          <label>
-            Costume Description
-            <input type="text" name="costume" required>
-          </label>
-          <label>
-            Contact Details
-            <input type="text" name="contact" placeholder="Optional">
-          </label>
-        </div>
-        <button type="submit" name="action" value="add_costume" class="button button--primary">Add Costume Signup</button>
-      </form>
+      <details class="admin-entry admin-entry--new">
+        <summary class="admin-entry__summary">
+          <span class="admin-entry__rank">+</span>
+          <span class="admin-entry__summary-text">
+            <strong>Add a costume entry</strong>
+            <span>Create a new contestant record</span>
+          </span>
+        </summary>
+        {% if costume_lineup_locked %}
+          <p class="contest-status contest-status--inactive">Costume lineup changes are paused while voting is open.</p>
+        {% endif %}
+        <form method="post" class="admin-entry__form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="admin-entry__fields">
+            <label>
+              Name
+              <input type="text" name="name" required>
+            </label>
+            <label>
+              Costume Description
+              <input type="text" name="costume" required>
+            </label>
+            <label>
+              Contact Details
+              <input type="text" name="contact" placeholder="Optional">
+            </label>
+          </div>
+          <button type="submit" name="action" value="add_costume" class="button button--primary" {% if costume_lineup_locked %}disabled{% endif %}>Add Costume Signup</button>
+        </form>
+      </details>
 
       {% if costume_signups %}
         <div class="admin-entry-list">
           {% for signup in costume_signups %}
-            <form method="post" class="admin-entry">
-              <input type="hidden" name="index" value="{{ loop.index0 }}">
-              <div class="admin-entry__fields">
-                <label>
-                  Name
-                  <input type="text" name="name" value="{{ signup.name }}" required>
-                </label>
-                <label>
-                  Costume Description
-                  <input type="text" name="costume" value="{{ signup.costume }}" required>
-                </label>
-                <label>
-                  Contact Details
-                  <input type="text" name="contact" value="{{ signup.contact }}" placeholder="Optional">
-                </label>
-              </div>
-              <div class="admin-entry__actions">
-                <button type="submit" name="action" value="move_costume_up" class="button">Move Up</button>
-                <button type="submit" name="action" value="move_costume_down" class="button">Move Down</button>
-                <button type="submit" name="action" value="update_costume" class="button button--primary">Save Changes</button>
-                <button type="submit" name="action" value="delete_costume" class="button button--danger">Remove</button>
-              </div>
-            </form>
+            <details class="admin-entry admin-entry--editable">
+              <summary class="admin-entry__summary">
+                <span class="admin-entry__rank">#{{ loop.index }}</span>
+                <span class="admin-entry__summary-text">
+                  <strong>{{ signup.name }}</strong>
+                  <span>as {{ signup.costume }}</span>
+                </span>
+              </summary>
+              <form method="post" class="admin-entry__form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="entry_id" value="{{ signup.id }}">
+                <input type="hidden" name="index" value="{{ loop.index0 }}">
+                <div class="admin-entry__fields">
+                  <label>
+                    Name
+                    <input type="text" name="name" value="{{ signup.name }}" required>
+                  </label>
+                  <label>
+                    Costume Description
+                    <input type="text" name="costume" value="{{ signup.costume }}" required>
+                  </label>
+                  <label>
+                    Contact Details
+                    <input type="text" name="contact" value="{{ signup.contact }}" placeholder="Optional">
+                  </label>
+                </div>
+                <div class="admin-entry__actions">
+                  <button type="submit" name="action" value="move_costume_up" class="button" {% if costume_lineup_locked %}disabled{% endif %}>Move Up</button>
+                  <button type="submit" name="action" value="move_costume_down" class="button" {% if costume_lineup_locked %}disabled{% endif %}>Move Down</button>
+                  <button type="submit" name="action" value="update_costume" class="button button--primary">Save Changes</button>
+                  <button type="submit" name="action" value="delete_costume" class="button button--danger" {% if costume_lineup_locked %}disabled{% endif %}>Remove</button>
+                </div>
+              </form>
+            </details>
           {% endfor %}
         </div>
       {% else %}
@@ -230,59 +258,79 @@
     <section class="admin-section">
       <h3>Karaoke Signups</h3>
 
-      <form method="post" class="admin-entry admin-entry--new">
-        <h4>Add a new entry</h4>
-        <div class="admin-entry__fields">
-          <label>
-            Name
-            <input type="text" name="name" required>
-          </label>
-          <label>
-            Song Title
-            <input type="text" name="song_title" required>
-          </label>
-          <label>
-            Artist
-            <input type="text" name="artist" required>
-          </label>
-          <label>
-            YouTube Link
-            <input type="url" name="youtube_link" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
-          </label>
-        </div>
-        <button type="submit" name="action" value="add_karaoke" class="button button--primary">Add Karaoke Signup</button>
-      </form>
+      <details class="admin-entry admin-entry--new">
+        <summary class="admin-entry__summary">
+          <span class="admin-entry__rank">+</span>
+          <span class="admin-entry__summary-text">
+            <strong>Add a karaoke entry</strong>
+            <span>Create a new song in the queue</span>
+          </span>
+        </summary>
+        <form method="post" class="admin-entry__form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="admin-entry__fields">
+            <label>
+              Name
+              <input type="text" name="name" required>
+            </label>
+            <label>
+              Song Title
+              <input type="text" name="song_title" required>
+            </label>
+            <label>
+              Artist
+              <input type="text" name="artist" required>
+            </label>
+            <label>
+              YouTube Link
+              <input type="url" name="youtube_link" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
+            </label>
+          </div>
+          <button type="submit" name="action" value="add_karaoke" class="button button--primary">Add Karaoke Signup</button>
+        </form>
+      </details>
 
       {% if karaoke_signups %}
         <div class="admin-entry-list">
           {% for signup in karaoke_signups %}
-            <form method="post" class="admin-entry">
-              <input type="hidden" name="index" value="{{ loop.index0 }}">
-              <div class="admin-entry__fields">
-                <label>
-                  Name
-                  <input type="text" name="name" value="{{ signup.name }}" required>
-                </label>
-                <label>
-                  Song Title
-                  <input type="text" name="song_title" value="{{ signup.song_title }}" required>
-                </label>
-                <label>
-                  Artist
-                  <input type="text" name="artist" value="{{ signup.artist }}" required>
-                </label>
-                <label>
-                  YouTube Link
-                  <input type="url" name="youtube_link" value="{{ signup.youtube_link }}" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
-                </label>
-              </div>
-              <div class="admin-entry__actions">
-                <button type="submit" name="action" value="move_karaoke_up" class="button">Move Up</button>
-                <button type="submit" name="action" value="move_karaoke_down" class="button">Move Down</button>
-                <button type="submit" name="action" value="update_karaoke" class="button button--primary">Save Changes</button>
-                <button type="submit" name="action" value="delete_karaoke" class="button button--danger">Remove</button>
-              </div>
-            </form>
+            <details class="admin-entry admin-entry--editable">
+              <summary class="admin-entry__summary">
+                <span class="admin-entry__rank">#{{ loop.index }}</span>
+                <span class="admin-entry__summary-text">
+                  <strong>{{ signup.name }}</strong>
+                  <span>{{ signup.song_title }}{% if signup.artist %} by {{ signup.artist }}{% endif %}</span>
+                </span>
+              </summary>
+              <form method="post" class="admin-entry__form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="entry_id" value="{{ signup.id }}">
+                <input type="hidden" name="index" value="{{ loop.index0 }}">
+                <div class="admin-entry__fields">
+                  <label>
+                    Name
+                    <input type="text" name="name" value="{{ signup.name }}" required>
+                  </label>
+                  <label>
+                    Song Title
+                    <input type="text" name="song_title" value="{{ signup.song_title }}" required>
+                  </label>
+                  <label>
+                    Artist
+                    <input type="text" name="artist" value="{{ signup.artist }}" required>
+                  </label>
+                  <label>
+                    YouTube Link
+                    <input type="url" name="youtube_link" value="{{ signup.youtube_link }}" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
+                  </label>
+                </div>
+                <div class="admin-entry__actions">
+                  <button type="submit" name="action" value="move_karaoke_up" class="button">Move Up</button>
+                  <button type="submit" name="action" value="move_karaoke_down" class="button">Move Down</button>
+                  <button type="submit" name="action" value="update_karaoke" class="button button--primary">Save Changes</button>
+                  <button type="submit" name="action" value="delete_karaoke" class="button button--danger">Remove</button>
+                </div>
+              </form>
+            </details>
           {% endfor %}
         </div>
       {% else %}

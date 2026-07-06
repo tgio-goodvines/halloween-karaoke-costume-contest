@@ -71,9 +71,19 @@ a:focus {
 
 .site-header h1 {
   margin: 0;
+  font-size: clamp(1.15rem, 2.5vw, 2rem);
+  line-height: 1.15;
 }
 
-nav {
+.site-nav {
+  display: block;
+}
+
+.site-nav__toggle {
+  display: none;
+}
+
+.site-nav nav {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -81,20 +91,30 @@ nav {
   margin-top: 0.25rem;
 }
 
-nav a {
+.site-nav nav a,
+.site-header__logout button {
   color: var(--text);
   text-decoration: none;
   padding: 0.55rem 0.9rem;
   border-radius: 0.6rem;
   border: 1px solid transparent;
+  font: inherit;
+  background: transparent;
+  cursor: pointer;
   transition: border-color 0.2s ease-in-out, transform 0.2s ease-in-out, background-color 0.2s;
 }
 
-nav a:hover,
-nav a:focus {
+.site-nav nav a:hover,
+.site-nav nav a:focus,
+.site-header__logout button:hover,
+.site-header__logout button:focus {
   border-color: rgba(255, 59, 59, 0.6);
   background-color: rgba(255, 59, 59, 0.18);
   transform: translateY(-1px);
+}
+
+.site-header__logout {
+  margin: 0;
 }
 
 :is(
@@ -136,32 +156,78 @@ nav a:focus {
 
 @media (max-width: 720px) {
   .site-header__inner {
-    justify-content: center;
+    justify-content: space-between;
+    gap: 0.65rem;
   }
 
   .site-header__meta {
-    width: 100%;
+    width: auto;
     align-items: stretch;
-    order: 3;
+    order: initial;
   }
 
-  nav {
-    justify-content: stretch;
+  .site-header h1 {
+    max-width: calc(100% - 6.5rem);
   }
 
-  nav a {
-    flex: 1 1 calc(50% - 0.5rem);
+  .site-nav {
+    position: relative;
+  }
+
+  .site-nav__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.65rem 0.9rem;
+    border: 1px solid rgba(255, 59, 59, 0.55);
+    border-radius: 0.7rem;
+    color: var(--text);
+    background: rgba(0, 0, 0, 0.72);
+    box-shadow: 0 0 18px rgba(255, 59, 59, 0.28);
+    cursor: pointer;
+  }
+
+  .site-nav nav {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 20;
+    width: min(78vw, 18rem);
+    margin: 0;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.5rem;
+    border: 1px solid rgba(255, 59, 59, 0.55);
+    border-radius: 0.85rem;
+    background: rgba(5, 5, 5, 0.98);
+    box-shadow: 0 0 28px rgba(255, 59, 59, 0.38);
+  }
+
+  .site-nav:not([open]) nav {
+    display: none;
+  }
+
+  .site-nav nav a,
+  .site-header__logout button {
+    width: 100%;
+    min-height: 44px;
     text-align: center;
+    border-color: rgba(255, 59, 59, 0.22);
   }
 
   .site-header__user {
-    text-align: center;
+    display: none;
   }
 }
 
 @media (max-width: 480px) {
-  nav a {
-    flex-basis: 100%;
+  .container {
+    width: min(100% - 1rem, 1100px);
+  }
+
+  .site-header h1 {
+    font-size: 1rem;
   }
 }
 
@@ -318,25 +384,34 @@ main.container {
   padding: 1.5rem;
 }
 
-.signup-form {
+.signup-form,
+.login-form {
   display: grid;
   gap: 0.75rem;
   margin-top: 1rem;
 }
 
-.signup-form label {
+.signup-form label,
+.login-form label {
   font-weight: 600;
 }
 
-.signup-form input {
+.signup-form input,
+.login-form input,
+.admin-entry__fields input,
+.voting-card__label input {
+  width: 100%;
+  min-height: 44px;
   padding: 0.75rem;
   border-radius: 0.6rem;
   border: 1px solid rgba(255, 59, 59, 0.35);
   background: #111;
   color: var(--text);
+  font-size: 1rem;
 }
 
-.signup-form button {
+.signup-form button,
+.login-form button {
   margin-top: 0.5rem;
   padding: 0.9rem 1.2rem;
   border: none;
@@ -350,7 +425,9 @@ main.container {
 }
 
 .signup-form button:hover,
-.signup-form button:focus {
+.signup-form button:focus,
+.login-form button:hover,
+.login-form button:focus {
   transform: translateY(-2px);
   box-shadow: 0 0 30px rgba(255, 59, 59, 0.6);
 }
@@ -438,8 +515,63 @@ main.container {
   gap: 1rem;
 }
 
+.admin-entry-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
 .admin-entry--new {
   border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.admin-entry--editable {
+  display: block;
+}
+
+.admin-entry__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 48px;
+  cursor: pointer;
+}
+
+.admin-entry__summary::marker {
+  color: var(--primary);
+}
+
+.admin-entry__rank {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 59, 59, 0.45);
+  color: #fff;
+  background: rgba(255, 59, 59, 0.12);
+  font-weight: 700;
+}
+
+.admin-entry__summary-text {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.admin-entry__summary-text strong,
+.admin-entry__summary-text span {
+  overflow-wrap: anywhere;
+}
+
+.admin-entry__summary-text span {
+  color: var(--muted);
+}
+
+.admin-entry__form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
 .admin-entry__fields {
@@ -474,6 +606,7 @@ main.container {
   justify-content: center;
   gap: 0.35rem;
   padding: 0.75rem 1.2rem;
+  min-height: 44px;
   border-radius: 0.75rem;
   border: 1px solid rgba(255, 59, 59, 0.6);
   font-weight: 600;
@@ -513,6 +646,13 @@ main.container {
   transform: translateY(-2px);
   filter: brightness(1.05);
   box-shadow: 0 0 26px rgba(255, 59, 59, 0.55);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  filter: grayscale(0.3);
+  box-shadow: none;
 }
 
 .admin-section--contest {
@@ -859,9 +999,115 @@ main.container {
 }
 
 @media (max-width: 600px) {
-  nav {
-    flex-direction: column;
-    align-items: flex-start;
+  main.container {
+    gap: 1rem;
+    padding: 1rem 0;
+  }
+
+  .signup-callout,
+  .contest-banner,
+  .slides,
+  .signup-summary > div,
+  .form-section,
+  .submitted-list,
+  .admin-panel,
+  .admin-section,
+  .admin-entry,
+  .voting-card {
+    border-radius: 0.85rem;
+    padding: 1rem;
+  }
+
+  .contest-banner {
+    display: grid;
+    text-align: left;
+  }
+
+  .contest-banner__body {
+    min-width: 0;
+  }
+
+  .contest-banner__button,
+  .signup-form button,
+  .login-form button,
+  .button,
+  .voting-form__submit .button {
+    width: 100%;
+  }
+
+  .signup-summary {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .signup-summary ul,
+  .signup-summary ol,
+  .submitted-list ul,
+  .submitted-list ol {
+    padding-left: 1rem;
+  }
+
+  .signup-summary li,
+  .submitted-list li {
+    margin-block: 0.55rem;
+    overflow-wrap: anywhere;
+  }
+
+  .form-section h2,
+  .submitted-list h3,
+  .slides h2,
+  .signup-summary h2 {
+    margin-top: 0;
+  }
+
+  .voting-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-panel {
+    gap: 1rem;
+  }
+
+  .admin-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .contest-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .contest-actions form,
+  .contest-actions button {
+    width: 100%;
+  }
+
+  .admin-entry__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+
+  .admin-entry__actions .button--primary,
+  .admin-entry__actions .button--danger {
+    grid-column: 1 / -1;
+  }
+
+  .contest-chart__meta,
+  .contest-top-card__item {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .contest-top-card__item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .contest-top-card__score {
+    grid-column: 1 / -1;
+    justify-items: start;
+    text-align: left;
   }
 
   .slides-wrapper {

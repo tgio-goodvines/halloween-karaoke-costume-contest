@@ -225,7 +225,8 @@ On production startup:
 - Load required secrets into an in-memory cache.
 - Validate required keys.
 - Configure Flask `secret_key` from `halloween_app.secret_key`.
-- Configure admin auth from `halloween_app.admin_password`.
+- Configure admin and live-display auth from `halloween_app.admin_password`.
+- Store regular attendee account password hashes in Redis app state, not Vault.
 - Configure Redis from `halloween_redis`; Redis is the Halloween app database.
 
 Required secret paths for initial public AWS deployment:

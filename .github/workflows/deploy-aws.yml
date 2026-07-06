@@ -249,6 +249,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --max-time 15 "https://${HALLOWEEN_DOMAIN}/live-display" >/dev/null
-          curl -fsS --max-time 15 "https://www.${HALLOWEEN_DOMAIN}/live-display" >/dev/null
+          curl -fsS --max-time 15 "https://${HALLOWEEN_DOMAIN}/health" >/dev/null
+          curl -fsS --max-time 15 "https://www.${HALLOWEEN_DOMAIN}/health" >/dev/null
           curl -fsS --max-time 15 "https://appg-v.com/health" >/dev/null

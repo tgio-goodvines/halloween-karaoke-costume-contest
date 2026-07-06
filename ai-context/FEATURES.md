@@ -3,7 +3,9 @@
 ## Public And Attendee Features
 
 - Party dashboard at `/halloween`.
-- Device/session check-in at `/halloween/login`.
+- Redis-backed attendee account registration at `/halloween/register`.
+- Password-backed attendee account sign-in at `/halloween/login`.
+- Regular guest sessions can access attendee UI routes but not admin or live-display routes.
 - Logged-in user name is shown in the shared header.
 - Costume contest signup at `/costume-signup`.
 - Costume signup validation for required name and costume description.
@@ -48,7 +50,9 @@
 ## Admin Features
 
 - Admin dashboard at `/admin`.
-- Admin login at `/admin/login` when `HALLOWEEN_ADMIN_PASSWORD` is configured.
+- Password-backed admin login at `/admin/login`.
+- Admin sessions can access admin routes and JSON exports but do not implicitly
+  receive regular guest or live-display access.
 - Admin logout at `/admin/logout`.
 - Add, edit, delete, move up, and move down costume signups.
 - Add, edit, delete, move up, and move down karaoke signups.
@@ -63,13 +67,18 @@
   `/admin/export/costume-results`, and `/admin/export/karaoke-lineup`.
 - POST forms include CSRF tokens outside testing mode.
 
-Important caveat: In non-production development, `/admin` remains open when
-`HALLOWEEN_ADMIN_PASSWORD` is unset. Production should set that environment
-variable.
+Important caveat: UI role passwords must be configured for normal use:
+`HALLOWEEN_ADMIN_PASSWORD` is the only UI password loaded from Vault. Regular
+attendee passwords are account-specific and stored as password hashes in Redis
+app state.
 
 ## Live Display Features
 
 - `/live-display` is the default root destination via `/` redirect.
+- `/live-display`, `/api/display-data`, and `/api/display-updates` require a
+  signed-in admin session from `/admin/login`.
+- `/health` returns JSON service and Redis readiness for production health
+  checks.
 - Shows event title and live counts for costume and karaoke signups.
 - Rotates through signup portal instructions, event spotlight cards, winner/scoreboard cards, costume entries, and karaoke entries.
 - Signup portal card includes WiFi network, WiFi password, and portal link.

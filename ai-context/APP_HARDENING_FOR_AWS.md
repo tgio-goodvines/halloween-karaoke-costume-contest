@@ -87,6 +87,7 @@ Implementation detail:
   "costume_signups": [],
   "karaoke_signups": [],
   "costume_votes": [],
+  "user_accounts": {},
   "registered_users": {},
   "submitted_costume_votes": [],
   "contest_state": {},

@@ -4,7 +4,7 @@
 {% block content %}
 <section class="form-section">
   <h2>Welcome to the Halloween Hub</h2>
-  <p>Tell us who you are so we can keep the contest fair. You'll only need to do this once per device.</p>
+  <p>Sign in with your Halloween account so we can keep signups and voting tied to you.</p>
 
   {% if errors %}
     <div class="errors">
@@ -19,9 +19,17 @@
   <form method="post" class="login-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="username">Your Name</label>
-    <input type="text" id="username" name="username" placeholder="e.g., Jamie" required value="{{ request.form.username }}">
+    <input type="text" id="username" name="username" autocomplete="username" required value="{{ request.form.username }}">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+
     <input type="hidden" name="next" value="{{ next_page }}">
-    <button type="submit" class="button button--primary">Continue</button>
+    <button type="submit" class="button button--primary">Sign In</button>
   </form>
+
+  <p class="form-helper">
+    New here? <a href="{{ url_for('halloween_register', next=next_page) }}">Create an account</a>.
+  </p>
 </section>
 {% endblock %}

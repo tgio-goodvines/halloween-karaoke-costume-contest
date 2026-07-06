@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set title = "Create Account" %}
+
+{% block content %}
+<section class="form-section">
+  <h2>Create Your Halloween Account</h2>
+  <p>Register once on this device, then use the same account for signups and costume voting.</p>
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post" class="login-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ next_page }}">
+
+    <label for="username">Name</label>
+    <input type="text" id="username" name="username" autocomplete="username" required value="{{ request.form.username }}">
+
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
+
+    <label for="confirm_password">Confirm Password</label>
+    <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required minlength="8">
+
+    <button type="submit" class="button button--primary">Create Account</button>
+  </form>
+
+  <p class="form-helper">
+    Already registered? <a href="{{ url_for('halloween_login', next=next_page) }}">Sign in</a>.
+  </p>
+</section>
+{% endblock %}

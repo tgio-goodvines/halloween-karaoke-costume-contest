@@ -24,6 +24,7 @@ and SSM.
 - GitHub remote: `git@github.com:tgio-goodvines/halloween-karaoke-costume-contest.git`
 - Flask entrypoint: `main:app`
 - Production local port: `127.0.0.1:8081`
+- Halloween health API: `/health`
 - Public domain: `tnq-halloween.com`
 - GoodVines health guardrail:
   `curl -fsS -H 'Host: appg-v.com' http://127.0.0.1/health`
@@ -69,6 +70,8 @@ and SSM.
 - Created Halloween runtime Vault secrets:
   - `appsecrets/halloween_app`
   - `appsecrets/halloween_redis`
+- `appsecrets/halloween_app` must include `secret_key` and `admin_password`;
+  attendee account passwords are stored as hashes in Redis app state.
 - Verified the API EC2 can read required fields from both Halloween runtime
   secret paths through Vault AWS IAM auth.
 
@@ -158,6 +161,14 @@ to document and harden deployment knowledge:
 - `c765134` recorded the successful public deployment result with `[skip ci]`.
 - `504a752` documented launch template version `2` Halloween bootstrap behavior
   with `[skip ci]`.
+
+Pending local update:
+
+- Added a real Halloween `/health` JSON API that pings Redis and returns `503`
+  in production when Redis is unreachable.
+- Updated EC2 deploy and GitHub Actions public smoke checks to probe Halloween
+  `/health` instead of `/live-display`, while preserving the GoodVines
+  `appg-v.com/health` guardrail.
 
 Current durable deployment context should be read from this file,
 `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md`, and

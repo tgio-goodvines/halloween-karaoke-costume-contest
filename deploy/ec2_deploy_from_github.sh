@@ -18,7 +18,7 @@ VAULT_AWS_AUTH_ROLE="${VAULT_AWS_AUTH_ROLE:-goodvines-api}"
 GITHUB_SECRET_PATH="${GITHUB_SECRET_PATH:-appsecrets/halloween_github}"
 GOODVINES_HOST="${GOODVINES_HOST:-appg-v.com}"
 GOODVINES_HEALTH_URL="${GOODVINES_HEALTH_URL:-http://127.0.0.1/health}"
-HALLOWEEN_LOCAL_HEALTH_URL="${HALLOWEEN_LOCAL_HEALTH_URL:-http://127.0.0.1:${APP_PORT}/live-display}"
+HALLOWEEN_LOCAL_HEALTH_URL="${HALLOWEEN_LOCAL_HEALTH_URL:-http://127.0.0.1:${APP_PORT}/health}"
 NGINX_CONF_PATH="${NGINX_CONF_PATH:-/etc/nginx/conf.d/halloween.conf}"
 LOCK_FILE="${LOCK_FILE:-/var/lock/halloween-deploy.lock}"
 
@@ -244,12 +244,12 @@ EOF
 
   log "Checking Halloween host routing and GoodVines health after nginx reload."
   for _ in $(seq 1 12); do
-    if curl -fsS --max-time 10 -H 'Host: tnq-halloween.com' "http://127.0.0.1/live-display" >/dev/null; then
+    if curl -fsS --max-time 10 -H 'Host: tnq-halloween.com' "http://127.0.0.1/health" >/dev/null; then
       break
     fi
     sleep 2
   done
-  curl -fsS --max-time 10 -H 'Host: tnq-halloween.com' "http://127.0.0.1/live-display" >/dev/null
+  curl -fsS --max-time 10 -H 'Host: tnq-halloween.com' "http://127.0.0.1/health" >/dev/null
   goodvines_health_check
 
   actual_sha="$(sudo -u "${APP_USER}" git -C "${APP_REPO_DIR}" rev-parse HEAD)"

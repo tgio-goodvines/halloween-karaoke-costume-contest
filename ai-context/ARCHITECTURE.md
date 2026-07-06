@@ -3,12 +3,15 @@
 ## Route Map
 
 - `GET /` -> redirects to `live_display`.
-- `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, and override state.
-- `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`.
-- `GET /api/display-data` -> JSON payload for live-display refreshes.
-- `GET /halloween` -> attendee dashboard; requires `session.user_id` and `session.username`.
-- `GET|POST /halloween/login` -> session check-in; stores a generated `user_id` and provided `username`.
-- `GET|POST /admin/login` -> admin password form when `HALLOWEEN_ADMIN_PASSWORD` is configured.
+- `GET /health` -> JSON health API for service and Redis readiness; returns
+  `503` in production if Redis cannot be reached.
+- `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, and override state; requires an `admin` role session.
+- `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`; requires an `admin` role session.
+- `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
+- `GET /halloween` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
+- `GET|POST /halloween/login` -> attendee account sign-in; validates a Redis-stored password hash and grants the `regular` role.
+- `GET|POST /halloween/register` -> attendee account creation; stores a password hash in Redis app state and grants the `regular` role.
+- `GET|POST /admin/login` -> password-backed admin session login; grants the `admin` role.
 - `POST /admin/logout` -> clears admin auth session state.
 - `GET|POST /admin` -> admin dashboard and all admin mutations.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
@@ -32,7 +35,9 @@
 - Rotation-entry construction for the live display.
 - Form validation and admin actions.
 
-The app uses Flask sessions for attendee identity, but session identity is only meaningful while the process-level `registered_users` dictionary still contains the generated `user_id`.
+The app uses Flask sessions for role and attendee identity. Regular attendee
+accounts live in Redis app state as `user_accounts`; active session display
+names are also tracked in `registered_users` by account ID.
 
 ## Display Update Flow
 
@@ -86,7 +91,8 @@ The base rotation always starts with signup instructions and event spotlight car
 
 - `base.html`: shared shell, title, CSS include, header nav, signed-in user, footer, script block.
 - `index.html`: attendee dashboard, contest status banners, event highlights, signup summaries.
-- `halloween_login.html`: simple check-in form.
+- `halloween_login.html`: attendee account sign-in form.
+- `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
 - `karaoke_signup.html`: karaoke entry form and submitted karaoke lineup.
 - `costume_voting.html`: complete ballot form and post-vote state.
@@ -102,7 +108,10 @@ The base rotation always starts with signup instructions and event spotlight car
 - Redis persistence is available and expected in production. If Redis is
   unavailable, the app falls back to process memory and a process restart clears
   signups, votes, sessions, contest state, and live-display overrides.
-- Admin authentication is available through `HALLOWEEN_ADMIN_PASSWORD`; development remains open when it is unset.
+- UI route access is role-based through Flask sessions. Configure
+  `HALLOWEEN_ADMIN_PASSWORD` for admin and display access; regular attendee
+  accounts are created through `/halloween/register` and stored in Redis app
+  state.
 - CSRF protection is enforced for POST forms outside testing mode.
 - Redis state and route persistence tests are present in `tests/test_redis_state.py`.
 - No app factory pattern.

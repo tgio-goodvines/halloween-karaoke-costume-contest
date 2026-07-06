@@ -16,8 +16,10 @@ remaining as a process-local cache in `main.py`.
 - Entrypoint: `main.py`.
 - Local run behavior: `python main.py` starts Flask debug mode on `0.0.0.0:80`.
 - Secret key: `HALLOWEEN_APP_SECRET`, falling back to `dev-secret-key`.
-- Admin password: `HALLOWEEN_ADMIN_PASSWORD`. In non-production development,
-  admin routes remain open when this is unset; in production it must be set.
+- UI access is role-based through Flask sessions. Regular attendees register
+  accounts stored in Redis app state. Only the admin password is loaded from
+  Vault through `HALLOWEEN_ADMIN_PASSWORD`; the live display uses the same admin
+  session.
 
 Because the app binds to port 80, local execution may require elevated privileges or a port change for development.
 
@@ -66,11 +68,15 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## User Flows
 
 1. `/` redirects to `/live-display`.
-2. `/live-display` shows rotating event cards and current signup counts.
-3. Attendees visit `/halloween`, are redirected to `/halloween/login` if not checked in, then see the party dashboard.
+2. `/live-display` redirects to `/admin/login` until the browser session has
+   the `admin` role, then shows rotating event cards and current signup counts.
+3. Attendees visit `/halloween`, are redirected to `/halloween/login` if not
+   signed in, can create an account at `/halloween/register`, then see the
+   party dashboard.
 4. Attendees can submit costume entries at `/costume-signup`.
 5. Attendees can submit karaoke songs at `/karaoke-signup`.
-6. Admins manage entries and event state at `/admin`.
+6. Admins sign in at `/admin/login` and manage entries and event state at
+   `/admin`.
 7. When the admin starts the costume contest, `/costume-voting` becomes available to logged-in guests.
 8. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
 9. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
@@ -84,6 +90,8 @@ the process-local cache:
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
 - `karaoke_signups`: list of `KaraokeSignup` dataclass instances with stable IDs.
 - `costume_ballots`: maps `user_id` to `{costume_id: score}`.
+- `user_accounts`: maps normalized usernames to Redis-backed attendee account
+  records with stable IDs and password hashes.
 - `registered_users`: maps session `user_id` to display name.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
 - `live_display_override`: current full-screen override card, or `None`.

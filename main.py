@@ -13,6 +13,7 @@ import os
 import time
 
 import redis
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask import (
     Flask,
@@ -143,6 +144,40 @@ def verify_redis_connection() -> bool:
     return bool(redis_client.ping())
 
 
+def build_health_payload() -> tuple[dict[str, object], int]:
+    redis_ok = False
+    redis_error = None
+
+    try:
+        redis_ok = verify_redis_connection()
+    except redis.RedisError as exc:
+        redis_error = exc.__class__.__name__
+
+    production = os.environ.get("APP_ENV") == "production"
+    healthy = bool(redis_ok) or not production
+    payload: dict[str, object] = {
+        "app": "halloween-party",
+        "status": "ok" if healthy else "unhealthy",
+        "instance": APP_INSTANCE_ID,
+        "redis": {
+            "ok": bool(redis_ok),
+            "required": production,
+            "db": REDIS_CONFIG.db,
+            "prefix": REDIS_CONFIG.prefix,
+        },
+        "state": {
+            "available": bool(redis_state_available),
+            "display_update_version": display_update_version,
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if redis_error:
+        payload["redis"]["error"] = redis_error
+
+    return payload, 200 if healthy else 503
+
+
 STATE_SCHEMA_VERSION = 2
 
 
@@ -186,6 +221,7 @@ karaoke_signups: List[KaraokeSignup] = []
 costume_votes: List[List[int]] = []
 costume_ballots: dict[str, dict[str, int]] = {}
 registered_users: dict[str, str] = {}
+user_accounts: dict[str, dict[str, str]] = {}
 submitted_costume_votes: set[str] = set()
 live_display_override: dict[str, object] | None = None
 
@@ -199,6 +235,7 @@ redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
     "halloween_login",
+    "halloween_register",
     "admin_portal",
     "costume_signup",
     "karaoke_signup",
@@ -218,6 +255,21 @@ ADMIN_ENDPOINTS = {
     "export_state",
     "export_costume_results",
     "export_karaoke_lineup",
+}
+REGULAR_USER_ENDPOINTS = {
+    "halloween_overview",
+    "costume_signup",
+    "karaoke_signup",
+    "costume_voting_page",
+}
+DISPLAY_ENDPOINTS = {
+    "live_display",
+    "display_updates",
+    "display_data",
+}
+ROLE_LOGIN_ENDPOINTS = {
+    "regular": "halloween_login",
+    "admin": "admin_login",
 }
 STATE_LOCK_TIMEOUT_SECONDS = 10
 STATE_LOCK_BLOCKING_TIMEOUT_SECONDS = 5
@@ -256,6 +308,19 @@ def ensure_submitted_vote_tracking() -> None:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def normalize_username(username: str) -> str:
+    return " ".join(username.strip().lower().split())
+
+
+def create_user_account(username: str, password: str) -> dict[str, str]:
+    return {
+        "id": uuid4().hex,
+        "username": username.strip(),
+        "password_hash": generate_password_hash(password),
+        "created_at": _utc_now_iso(),
+    }
 
 
 def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
@@ -403,6 +468,7 @@ def snapshot_state() -> dict[str, object]:
             karaoke_signup_to_dict(signup) for signup in karaoke_signups
         ],
         "costume_ballots": copy.deepcopy(costume_ballots),
+        "user_accounts": copy.deepcopy(user_accounts),
         "registered_users": copy.deepcopy(registered_users),
         "submitted_costume_votes": sorted(submitted_costume_votes),
         "contest_state": copy.deepcopy(contest_state),
@@ -415,7 +481,7 @@ def snapshot_state() -> dict[str, object]:
 
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users
-    global costume_ballots, submitted_costume_votes, live_display_override, display_update_version
+    global user_accounts, costume_ballots, submitted_costume_votes, live_display_override, display_update_version
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -441,6 +507,27 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         }
     else:
         registered_users = {}
+
+    raw_user_accounts = data.get("user_accounts", {})
+    if isinstance(raw_user_accounts, dict):
+        user_accounts = {}
+        for raw_username, raw_account in raw_user_accounts.items():
+            if not isinstance(raw_account, dict):
+                continue
+
+            normalized_username = normalize_username(str(raw_username))
+            username = str(raw_account.get("username", "") or raw_username).strip()
+            password_hash = str(raw_account.get("password_hash", "") or "")
+            account_id = str(raw_account.get("id", "") or uuid4().hex)
+            if normalized_username and username and password_hash:
+                user_accounts[normalized_username] = {
+                    "id": account_id,
+                    "username": username,
+                    "password_hash": password_hash,
+                    "created_at": str(raw_account.get("created_at", "") or ""),
+                }
+    else:
+        user_accounts = {}
 
     raw_submitted_votes = data.get("submitted_costume_votes", [])
     if isinstance(raw_submitted_votes, list):
@@ -749,22 +836,68 @@ def get_csrf_token() -> str:
     return token
 
 
-@app.before_request
-def protect_admin_routes():
-    if request.endpoint not in ADMIN_ENDPOINTS:
-        return None
+def is_safe_next_path(next_page: str | None) -> bool:
+    if not next_page:
+        return False
 
-    admin_password = app.config.get("ADMIN_PASSWORD", "")
-    if not admin_password and os.environ.get("APP_ENV") != "production":
-        return None
+    parsed_next = urlparse(next_page)
+    return not parsed_next.scheme and not parsed_next.netloc and next_page.startswith("/")
 
-    if not admin_password:
-        return Response("Admin password is not configured.", status=503)
 
+def normalize_next_page(next_page: str | None, fallback: str) -> str:
+    return next_page if is_safe_next_path(next_page) else fallback
+
+
+def session_roles() -> set[str]:
+    raw_roles = session.get("roles", [])
+    roles = {str(role) for role in raw_roles if role}
     if session.get("admin_authenticated"):
+        roles.add("admin")
+    return roles
+
+
+def session_has_role(role: str) -> bool:
+    return role in session_roles()
+
+
+def grant_session_role(role: str) -> None:
+    roles = session_roles()
+    roles.add(role)
+    session["roles"] = sorted(roles)
+    if role == "admin":
+        session["admin_authenticated"] = True
+
+
+def revoke_session_role(role: str) -> None:
+    roles = session_roles()
+    roles.discard(role)
+    session["roles"] = sorted(roles)
+    if role == "admin":
+        session.pop("admin_authenticated", None)
+
+
+def required_role_for_endpoint(endpoint: str | None) -> str | None:
+    if endpoint in ADMIN_ENDPOINTS:
+        return "admin"
+    if endpoint in DISPLAY_ENDPOINTS:
+        return "admin"
+    if endpoint in REGULAR_USER_ENDPOINTS:
+        return "regular"
+    return None
+
+
+@app.before_request
+def protect_role_routes():
+    required_role = required_role_for_endpoint(request.endpoint)
+    if not required_role:
         return None
 
-    return redirect(url_for("admin_login", next=request.full_path or url_for("admin_portal")))
+    if session_has_role(required_role):
+        return None
+
+    login_endpoint = ROLE_LOGIN_ENDPOINTS[required_role]
+    next_page = normalize_next_page(request.full_path, url_for(login_endpoint))
+    return redirect(url_for(login_endpoint, next=next_page))
 
 
 @app.before_request
@@ -1101,6 +1234,12 @@ def index():
     return redirect(url_for("live_display"))
 
 
+@app.route("/health")
+def health():
+    payload, status_code = build_health_payload()
+    return jsonify(payload), status_code
+
+
 @app.route("/live-display")
 def live_display():
     rotation_entries = build_rotation_entries()
@@ -1197,25 +1336,34 @@ def halloween_overview():
 @app.route("/halloween/login", methods=["GET", "POST"])
 def halloween_login():
     errors: List[str] = []
-    next_page = request.args.get("next") or url_for("halloween_overview")
+    next_page = normalize_next_page(
+        request.args.get("next") or request.form.get("next"),
+        url_for("halloween_overview"),
+    )
 
     if request.method == "POST":
-        provided_next = request.form.get("next")
-        if provided_next:
-            next_page = provided_next
-
         username = request.form.get("username", "").strip()
+        provided_password = request.form.get("password", "")
+        normalized_username = normalize_username(username)
+        account = user_accounts.get(normalized_username)
 
         if not username:
-            errors.append("Please share your name so we know who has checked in.")
-        else:
-            user_id = session.get("user_id")
-            if not user_id:
-                user_id = uuid4().hex
+            errors.append("Username is required.")
+        if not provided_password:
+            errors.append("Password is required.")
+        if not errors and (
+            not account
+            or not check_password_hash(account.get("password_hash", ""), provided_password)
+        ):
+            errors.append("Incorrect username or password.")
+        if not errors:
+            user_id = account["id"]
+            display_name = account["username"]
 
             session["user_id"] = user_id
-            session["username"] = username
-            registered_users[user_id] = username
+            session["username"] = display_name
+            grant_session_role("regular")
+            registered_users[user_id] = display_name
             persist_state_if_available()
 
             return redirect(next_page)
@@ -1228,22 +1376,69 @@ def halloween_login():
     )
 
 
+@app.route("/halloween/register", methods=["GET", "POST"])
+def halloween_register():
+    errors: List[str] = []
+    next_page = normalize_next_page(
+        request.args.get("next") or request.form.get("next"),
+        url_for("halloween_overview"),
+    )
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        provided_password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        normalized_username = normalize_username(username)
+
+        if not username:
+            errors.append("Username is required.")
+        elif len(username) > 80:
+            errors.append("Username must be 80 characters or fewer.")
+        elif normalized_username in user_accounts:
+            errors.append("That username is already registered.")
+
+        if len(provided_password) < 8:
+            errors.append("Password must be at least 8 characters.")
+        elif provided_password != confirm_password:
+            errors.append("Passwords do not match.")
+
+        if not errors:
+            account = create_user_account(username, provided_password)
+            user_accounts[normalized_username] = account
+            session["user_id"] = account["id"]
+            session["username"] = account["username"]
+            grant_session_role("regular")
+            registered_users[account["id"]] = account["username"]
+            persist_state_if_available()
+            return redirect(next_page)
+
+    return render_template(
+        "halloween_register.html",
+        errors=errors,
+        next_page=next_page,
+        show_admin_link=False,
+    )
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     errors: List[str] = []
-    next_page = request.args.get("next") or request.form.get("next") or url_for("admin_portal")
+    next_page = normalize_next_page(
+        request.args.get("next") or request.form.get("next"),
+        url_for("admin_portal"),
+    )
 
-    if session.get("admin_authenticated"):
+    if session_has_role("admin"):
         return redirect(next_page)
 
     if request.method == "POST":
         admin_password = app.config.get("ADMIN_PASSWORD", "")
         provided_password = request.form.get("password", "")
 
-        if not admin_password and os.environ.get("APP_ENV") == "production":
+        if not admin_password:
             errors.append("Admin password is not configured.")
-        elif not admin_password or provided_password == admin_password:
-            session["admin_authenticated"] = True
+        elif provided_password == admin_password:
+            grant_session_role("admin")
             return redirect(next_page)
         else:
             errors.append("Incorrect admin password.")
@@ -1258,7 +1453,7 @@ def admin_login():
 
 @app.route("/admin/logout", methods=["POST"])
 def admin_logout():
-    session.pop("admin_authenticated", None)
+    revoke_session_role("admin")
     return redirect(url_for("admin_login"))
 
 

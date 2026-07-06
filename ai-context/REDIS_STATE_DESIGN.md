@@ -69,6 +69,7 @@ Shape:
   "costume_signups": [],
   "karaoke_signups": [],
   "costume_ballots": {},
+  "user_accounts": {},
   "registered_users": {},
   "submitted_costume_votes": [],
   "contest_state": {},

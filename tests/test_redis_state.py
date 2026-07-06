@@ -1,5 +1,8 @@
 import json
+import os
 import unittest
+
+import redis
 
 import main
 
@@ -75,6 +78,11 @@ class FakeRedis:
         return FakeLock(self)
 
 
+class FailingRedis(FakeRedis):
+    def ping(self):
+        raise redis.RedisError("redis unavailable")
+
+
 class RedisStateTests(unittest.TestCase):
     def setUp(self):
         self.fake_redis = FakeRedis()
@@ -83,6 +91,7 @@ class RedisStateTests(unittest.TestCase):
         self.original_config = main.REDIS_CONFIG
         self.original_testing = main.app.config["TESTING"]
         self.original_admin_password = main.app.config["ADMIN_PASSWORD"]
+        self.original_app_env = os.environ.get("APP_ENV")
 
         main.redis_client = self.fake_redis
         main.redis_state_available = True
@@ -95,6 +104,7 @@ class RedisStateTests(unittest.TestCase):
             prefix="test-halloween",
         )
         main.app.config["TESTING"] = True
+        main.app.config["ADMIN_PASSWORD"] = "admin-secret"
         self.reset_state()
 
     def tearDown(self):
@@ -103,6 +113,10 @@ class RedisStateTests(unittest.TestCase):
         main.REDIS_CONFIG = self.original_config
         main.app.config["TESTING"] = self.original_testing
         main.app.config["ADMIN_PASSWORD"] = self.original_admin_password
+        if self.original_app_env is None:
+            os.environ.pop("APP_ENV", None)
+        else:
+            os.environ["APP_ENV"] = self.original_app_env
         self.reset_state()
 
     def reset_state(self):
@@ -111,6 +125,7 @@ class RedisStateTests(unittest.TestCase):
         main.costume_votes = []
         main.costume_ballots = {}
         main.registered_users = {}
+        main.user_accounts = {}
         main.submitted_costume_votes = set()
         main.live_display_override = None
         main.display_update_version = 0
@@ -118,6 +133,24 @@ class RedisStateTests(unittest.TestCase):
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
         main.karaoke_state.clear()
         main.karaoke_state.update(main.copy.deepcopy(main.DEFAULT_KARAOKE_STATE))
+
+    def login_regular(self, client, user_id="user-1", username="Jamie"):
+        main.registered_users[user_id] = username
+        with client.session_transaction() as session:
+            session["user_id"] = user_id
+            session["username"] = username
+            session["roles"] = ["regular"]
+
+    def login_admin(self, client):
+        with client.session_transaction() as session:
+            session["roles"] = ["admin"]
+            session["admin_authenticated"] = True
+
+    def add_user_account(self, username="Jamie", password="party-password", user_id="user-1"):
+        account = main.create_user_account(username, password)
+        account["id"] = user_id
+        main.user_accounts[main.normalize_username(username)] = account
+        return account
 
     def redis_state(self):
         return json.loads(self.fake_redis.store[main.redis_key("state")])
@@ -143,6 +176,14 @@ class RedisStateTests(unittest.TestCase):
             },
         }
         main.registered_users = {"user-1": "Ada"}
+        main.user_accounts = {
+            "ada": {
+                "id": "user-1",
+                "username": "Ada",
+                "password_hash": main.generate_password_hash("party-password"),
+                "created_at": "2026-07-06T00:00:00Z",
+            }
+        }
         main.submitted_costume_votes = {"user-1", "user-2"}
         main.contest_state["voting_open"] = True
         main.karaoke_state["party_started"] = True
@@ -165,6 +206,8 @@ class RedisStateTests(unittest.TestCase):
             main.costume_ballots,
         )
         self.assertEqual({"user-1": "Ada"}, main.registered_users)
+        self.assertEqual("Ada", main.user_accounts["ada"]["username"])
+        self.assertTrue(main.check_password_hash(main.user_accounts["ada"]["password_hash"], "party-password"))
         self.assertEqual({"user-1", "user-2"}, main.submitted_costume_votes)
         self.assertTrue(main.contest_state["voting_open"])
         self.assertTrue(main.karaoke_state["party_started"])
@@ -234,6 +277,7 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
+            self.login_regular(client)
             costume_response = client.post(
                 "/costume-signup",
                 data={"name": "Ada", "costume": "Vampire", "contact": "ada@example.com"},
@@ -266,9 +310,7 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
-            with client.session_transaction() as session:
-                session["user_id"] = "user-1"
-                session["username"] = "Jamie"
+            self.login_regular(client)
 
             first_response = client.post(
                 "/costume-voting",
@@ -294,6 +336,7 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
+            self.login_admin(client)
             response = client.post("/admin", data={"action": "move_costume_down", "index": "0"})
 
         state = self.redis_state()
@@ -305,10 +348,12 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
+            self.login_regular(client)
             client.post(
                 "/costume-signup",
                 data={"name": "Ada", "costume": "Vampire", "contact": ""},
             )
+            self.login_admin(client)
             response = client.get("/api/display-data")
 
         payload = response.get_json()
@@ -326,6 +371,37 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(1, published_payload["version"])
         self.assertEqual("state-change", published_payload["reason"])
 
+    def test_health_returns_state_store_status(self):
+        main.display_update_version = 5
+        main.redis_state_available = True
+
+        with main.app.test_client() as client:
+            response = client.get("/health")
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("halloween-party", payload["app"])
+        self.assertEqual("ok", payload["status"])
+        self.assertTrue(payload["redis"]["ok"])
+        self.assertEqual("test-halloween", payload["redis"]["prefix"])
+        self.assertTrue(payload["state"]["available"])
+        self.assertEqual(5, payload["state"]["display_update_version"])
+
+    def test_health_fails_when_production_redis_ping_fails(self):
+        main.redis_client = FailingRedis()
+        main.redis_state_available = False
+        os.environ["APP_ENV"] = "production"
+
+        with main.app.test_client() as client:
+            response = client.get("/health")
+
+        payload = response.get_json()
+        self.assertEqual(503, response.status_code)
+        self.assertEqual("unhealthy", payload["status"])
+        self.assertFalse(payload["redis"]["ok"])
+        self.assertTrue(payload["redis"]["required"])
+        self.assertEqual("RedisError", payload["redis"]["error"])
+
     def test_admin_exports_return_json_and_manual_state_backup(self):
         main.costume_signups = [main.CostumeSignup("Ada", "Vampire", "", "costume-1")]
         main.costume_ballots = {"user-1": {"costume-1": 10}}
@@ -335,6 +411,7 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
+            self.login_admin(client)
             state_response = client.get("/admin/export/state")
             results_response = client.get("/admin/export/costume-results")
             lineup_response = client.get("/admin/export/karaoke-lineup")
@@ -366,6 +443,7 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
+            self.login_admin(client)
             response = client.post(
                 "/admin",
                 data={"action": "move_costume_down", "entry_id": "costume-1"},
@@ -381,6 +459,7 @@ class RedisStateTests(unittest.TestCase):
         self.fake_redis.lock_should_acquire = False
 
         with main.app.test_client() as client:
+            self.login_regular(client)
             response = client.post(
                 "/costume-signup",
                 data={"name": "Ada", "costume": "Vampire", "contact": ""},
@@ -412,11 +491,97 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(302, good_login.status_code)
         self.assertEqual(200, admin_response.status_code)
 
+    def test_regular_user_login_grants_only_regular_route_access(self):
+        self.add_user_account()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            protected_response = client.get("/halloween")
+            bad_login = client.post(
+                "/halloween/login",
+                data={
+                    "username": "Jamie",
+                    "password": "wrong",
+                    "next": "/halloween",
+                },
+            )
+            good_login = client.post(
+                "/halloween/login",
+                data={
+                    "username": "Jamie",
+                    "password": "party-password",
+                    "next": "/halloween",
+                },
+            )
+            halloween_response = client.get("/halloween")
+            admin_response = client.get("/admin")
+            display_response = client.get("/live-display")
+
+            with client.session_transaction() as session:
+                roles = session.get("roles", [])
+
+        self.assertEqual(302, protected_response.status_code)
+        self.assertIn("/halloween/login", protected_response.headers["Location"])
+        self.assertEqual(200, bad_login.status_code)
+        self.assertIn("Incorrect username or password", bad_login.get_data(as_text=True))
+        self.assertEqual(302, good_login.status_code)
+        self.assertEqual(200, halloween_response.status_code)
+        self.assertIn("regular", roles)
+        self.assertNotIn("admin", roles)
+        self.assertEqual(302, admin_response.status_code)
+        self.assertIn("/admin/login", admin_response.headers["Location"])
+        self.assertEqual(302, display_response.status_code)
+        self.assertIn("/admin/login", display_response.headers["Location"])
+
+    def test_regular_user_registration_creates_account_and_signs_in(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            register_response = client.post(
+                "/halloween/register",
+                data={
+                    "username": "Morgan",
+                    "password": "party-password",
+                    "confirm_password": "party-password",
+                    "next": "/halloween",
+                },
+            )
+            halloween_response = client.get("/halloween")
+
+            with client.session_transaction() as session:
+                roles = session.get("roles", [])
+                user_id = session.get("user_id")
+
+        state = self.redis_state()
+        account = state["user_accounts"]["morgan"]
+        self.assertEqual(302, register_response.status_code)
+        self.assertEqual(200, halloween_response.status_code)
+        self.assertEqual("Morgan", account["username"])
+        self.assertNotEqual("party-password", account["password_hash"])
+        self.assertEqual("Morgan", state["registered_users"][user_id])
+        self.assertIn("regular", roles)
+
+    def test_admin_session_grants_display_route_access(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            protected_response = client.get("/api/display-data")
+            self.login_admin(client)
+            display_response = client.get("/api/display-data")
+            halloween_response = client.get("/halloween")
+
+        self.assertEqual(302, protected_response.status_code)
+        self.assertIn("/admin/login", protected_response.headers["Location"])
+        self.assertEqual(200, display_response.status_code)
+        self.assertEqual(302, halloween_response.status_code)
+        self.assertIn("/halloween/login", halloween_response.headers["Location"])
+
     def test_csrf_rejects_post_without_token_outside_testing_mode(self):
         main.app.config["TESTING"] = False
         self.save_current_state()
 
         with main.app.test_client() as client:
+            self.login_regular(client)
             response = client.post(
                 "/costume-signup",
                 data={"name": "Ada", "costume": "Vampire", "contact": ""},

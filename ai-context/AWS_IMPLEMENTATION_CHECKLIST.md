@@ -21,6 +21,7 @@ Recommended minimum persistence:
   - `costume_signups`
   - `karaoke_signups`
   - `costume_votes`
+  - `user_accounts`
   - `registered_users`
   - `submitted_costume_votes`
   - `live_display_override`

@@ -219,8 +219,8 @@ Jobs:
    - Verify the Halloween domain after deploy:
 
 ```bash
-curl -fsS https://tnq-halloween.com/live-display >/dev/null
-curl -fsS https://www.tnq-halloween.com/live-display >/dev/null
+curl -fsS https://tnq-halloween.com/health >/dev/null
+curl -fsS https://www.tnq-halloween.com/health >/dev/null
 ```
 
    - Verify GoodVines is still healthy:
@@ -289,7 +289,7 @@ curl -fsS -H 'Host: appg-v.com' http://127.0.0.1/health >/dev/null
 13. Restart only `halloween-party`.
 14. Run `nginx -t`.
 15. Gracefully reload nginx only if config validation passes.
-16. Check Halloween local health.
+16. Check Halloween local health at `/health`.
 17. Check GoodVines local health again.
 
 The deployment must never run `git pull` inside a GoodVines directory.
@@ -463,7 +463,7 @@ Deployment is successful when:
 - GitHub Actions deploys the exact merged commit SHA.
 - `halloween-party.service` is active on the API EC2.
 - nginx routes `tnq-halloween.com` to `127.0.0.1:8081`.
-- `https://tnq-halloween.com/live-display` returns the Halloween app.
+- `https://tnq-halloween.com/health` returns the Halloween app health API.
 - `https://appg-v.com/health` still passes.
 - GoodVines was not restarted by the Halloween deploy.
 - Halloween reads secrets from Vault and writes only Redis DB `1` keys with the

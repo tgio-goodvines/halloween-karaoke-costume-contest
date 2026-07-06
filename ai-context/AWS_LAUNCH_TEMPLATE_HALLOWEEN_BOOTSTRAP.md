@@ -38,7 +38,7 @@ The Halloween bootstrap:
 - installs `/etc/nginx/conf.d/halloween.conf`,
 - updates `/opt/halloween/current`,
 - starts/restarts only `halloween-party`,
-- verifies Halloween locally on `127.0.0.1:8081`,
+- verifies Halloween locally on `127.0.0.1:8081/health`,
 - runs `nginx -t` before reloading nginx,
 - reloads nginx, and
 - checks both Halloween host routing and GoodVines host routing locally.

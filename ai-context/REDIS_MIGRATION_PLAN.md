@@ -40,6 +40,7 @@ Store the full application state as one JSON document at `halloween:state`:
   "costume_signups": [],
   "karaoke_signups": [],
   "costume_votes": [],
+  "user_accounts": {},
   "registered_users": {},
   "submitted_costume_votes": [],
   "contest_state": {},
@@ -89,7 +90,8 @@ Status: complete
 
 Status: complete
 
-- [x] Save after attendee check-in/login updates `registered_users`.
+- [x] Save after attendee registration/login updates `user_accounts` and
+  `registered_users`.
 - [x] Save and broadcast after costume signup.
 - [x] Save and broadcast after karaoke signup.
 - [x] Save after all admin add/update/delete/reorder actions.

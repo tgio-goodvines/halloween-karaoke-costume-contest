@@ -9,6 +9,9 @@
 - `GET /halloween` -> attendee dashboard; requires `session.user_id` and `session.username`.
 - `GET|POST /halloween/login` -> session check-in; stores a generated `user_id` and provided `username`.
 - `GET|POST /admin` -> admin dashboard and all admin mutations.
+- `GET /admin/export/state` -> JSON export of current Redis-backed app state.
+- `GET /admin/export/costume-results` -> JSON export of costume contest scores.
+- `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
 - `GET|POST /costume-signup` -> public costume signup form.
 - `GET|POST /karaoke-signup` -> public karaoke signup form.
 - `GET|POST /costume-voting` -> logged-in one-ballot-per-session voting while contest is open.

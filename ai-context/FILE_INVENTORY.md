@@ -7,6 +7,7 @@
 | `main.py` | Flask app entrypoint, route definitions, in-memory state, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
 | `requirements.txt` | Python dependency declaration; includes Flask 3.x and redis-py for the Redis migration. |
 | `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, and the `halloween` prefix. |
+| `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, display update publishing, and JSON exports using an in-memory Redis fake. |
 | `static/styles.css` | Shared Halloween-themed styles for attendee and admin pages. |
 | `static/display.css` | Dedicated large-format live-display styles, override cards, CTA layout, scoreboard layout, and karaoke display panels. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, override rendering, scoreboard rendering, karaoke countdown and panel rotation. |
@@ -52,6 +53,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/NO_SQL_DATA_POLICY.md` | Explicit policy that Halloween must not use SQL and should persist state in Redis. |
 | `ai-context/REDIS_CONNECTION_REQUIREMENTS.md` | Redis connection requirements for using the existing GoodVines services EC2 Redis instance without key collisions. |
 | `ai-context/REDIS_STATE_DESIGN.md` | Redis key, locking, pub/sub, backup, and persistence design for Halloween event state. |
+| `ai-context/REDIS_MIGRATION_PLAN.md` | Durable progress tracker for the in-progress process-memory to Redis refactor. |
 | `ai-context/GITLAB_AWS_DEPLOYMENT_DESIGN.md` | GitLab CI/CD design for deploying through AWS CLI and SSM to the existing EC2 ASG. |
 | `ai-context/VAULT_SECRETS_DESIGN.md` | Design for obtaining Halloween app secrets from the existing GoodVines Vault using AWS IAM auth. |
 
@@ -71,6 +73,7 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── NO_SQL_DATA_POLICY.md
 │   ├── PROJECT_OVERVIEW.md
 │   ├── REDIS_CONNECTION_REQUIREMENTS.md
+│   ├── REDIS_MIGRATION_PLAN.md
 │   ├── REDIS_STATE_DESIGN.md
 │   └── VAULT_SECRETS_DESIGN.md
 ├── main.py
@@ -81,6 +84,8 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── display.js
 │   ├── slides.js
 │   └── styles.css
+├── tests/
+│   └── test_redis_state.py
 └── templates/
     ├── admin.html
     ├── base.html

@@ -54,6 +54,9 @@
 - Admin mutations broadcast live-display updates when they affect display content.
 - Admin can start costume contest, lock winner, show winner, restore display, and start karaoke party.
 - Admin receives inline success/error messages.
+- Admin JSON export routes are available for full Redis state, costume results,
+  and karaoke lineup at `/admin/export/state`,
+  `/admin/export/costume-results`, and `/admin/export/karaoke-lineup`.
 
 Important caveat: `/admin` has no authentication or authorization in the current code.
 

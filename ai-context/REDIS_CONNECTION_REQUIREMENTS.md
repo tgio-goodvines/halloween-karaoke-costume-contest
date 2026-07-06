@@ -103,6 +103,9 @@ Local machine context from July 2026:
   user/password from `/opt/homebrew/etc/redis.conf`.
 - The app-specific local Redis target is `127.0.0.1:6379`, DB `1`, prefix
   `halloween:`, using those ACL credentials.
+- Redis pub/sub requires channel ACL access. The local Redis user must include a
+  channel pattern such as `&*` (or at minimum `&halloween:*`) in addition to key
+  access such as `~*`.
 - Avoid committing the local Redis password into repo files.
 
 Use these local environment values:
@@ -126,6 +129,8 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
   -a '<local-redis-acl-password>' --no-auth-warning -n 1 set halloween:connection-test ok ex 60
 redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
   -a '<local-redis-acl-password>' --no-auth-warning -n 1 get halloween:connection-test
+redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
+  -a '<local-redis-acl-password>' --no-auth-warning ACL GETUSER '<local-redis-acl-user>'
 ```
 
 ## Secret Source
@@ -220,6 +225,13 @@ Suggested channel/key:
 ```text
 halloween:display:pubsub
 halloween:display:update-version
+```
+
+The Redis user must have permission to publish and subscribe to the display
+channel. With Redis ACLs, grant a channel pattern such as:
+
+```text
+&halloween:*
 ```
 
 Keep the message payload small:

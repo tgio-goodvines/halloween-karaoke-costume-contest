@@ -98,6 +98,10 @@ Suggested behavior:
 Publish live-display updates on every state mutation that currently calls
 `broadcast_display_update()`.
 
+Redis ACL users must include a channel pattern that permits this pub/sub
+channel, for example `&halloween:*`. Key patterns such as `~halloween:*` do not
+grant channel access by themselves.
+
 Message shape:
 
 ```json
@@ -151,6 +155,15 @@ Recommended admin-only routes or operator commands:
 - export current `halloween:state` as JSON
 - export final costume results
 - export final karaoke lineup
+
+Implemented export routes:
+
+- `/admin/export/state`
+- `/admin/export/costume-results`
+- `/admin/export/karaoke-lineup`
+
+These currently inherit the existing `/admin` authentication caveat; add admin
+auth before public exposure.
 
 Recommended automatic backup behavior:
 

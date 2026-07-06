@@ -96,3 +96,26 @@ the Halloween app unless one of these happens:
 Event state is designed to persist in Redis DB `1` with the `halloween:` prefix,
 so the important recovery gap is application installation on new EC2 nodes, not
 event data storage.
+
+## First Deployment Result
+
+- Initial pushed workflow run `28765387717` failed in validation because pytest
+  could not import `main`.
+- Follow-up workflow run `28765460043` passed validation but failed the EC2
+  deploy because the post-reload nginx host-routing smoke test was too eager.
+- Final workflow run `28765586567` succeeded after adding a retry around the
+  nginx host-routing smoke test.
+- Deployed commit:
+  `9a42b422e46216c456c456689eebe2ff7767d6c6`.
+- EC2 verification on `i-0573ac280edafdfe0` confirmed:
+  - `halloween-party` is active.
+  - `nginx` is active.
+  - `/opt/halloween/current` points to
+    `/opt/halloween/releases/9a42b422e46216c456c456689eebe2ff7767d6c6`.
+  - `http://127.0.0.1:8081/live-display` returns successfully.
+  - `Host: tnq-halloween.com` through local nginx returns successfully.
+  - `Host: appg-v.com` through local nginx returns successfully.
+- Public smoke tests confirmed:
+  - `https://tnq-halloween.com/live-display` returns HTTP `200`.
+  - `https://www.tnq-halloween.com/live-display` returns HTTP `200`.
+  - `https://appg-v.com/health` returns `{"online":"true"}`.

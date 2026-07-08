@@ -92,24 +92,23 @@
     </article>
   </div>
 
-  <div class="rsvp-landing__stats" aria-label="Current party activity">
-    <div>
-      <strong>{{ rsvp_count }}</strong>
-      <span>RSVP{{ 's' if rsvp_count != 1 else '' }}</span>
-    </div>
-    <div>
-      <strong>{{ rsvp_guest_total }}</strong>
-      <span>Total guest{{ 's' if rsvp_guest_total != 1 else '' }}</span>
-    </div>
-    <div>
-      <strong>{{ costume_count }}</strong>
-      <span>Costume{{ 's' if costume_count != 1 else '' }}</span>
-    </div>
-    <div>
-      <strong>{{ karaoke_count }}</strong>
-      <span>Karaoke song{{ 's' if karaoke_count != 1 else '' }}</span>
-    </div>
-  </div>
+  {% if maps_urls %}
+    <section class="rsvp-map" aria-label="Party location map">
+      <div class="rsvp-map__heading">
+        <h3>Find the Party</h3>
+        <a class="button button--primary" href="{{ maps_urls.directions }}" target="_blank" rel="noopener noreferrer">
+          Get Directions
+        </a>
+      </div>
+      <iframe
+        title="Google map for the party location"
+        src="{{ maps_urls.embed }}"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen>
+      </iframe>
+    </section>
+  {% endif %}
 
   <section class="rsvp-updates" aria-label="Host updates">
     <h3>Latest Updates</h3>

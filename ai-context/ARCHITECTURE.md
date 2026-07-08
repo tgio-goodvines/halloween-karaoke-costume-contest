@@ -11,8 +11,9 @@
 - `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
 - `GET|POST /rsvp` -> public RSVP landing page; requires the party code before
   showing party details and an independent RSVP form; successful RSVPs are saved
-  to the host-visible RSVP list and do not create attendee accounts. Party info
-  cards are shown first, then RSVP updates are shown newest-to-oldest.
+  to the host-visible RSVP list and do not create attendee accounts. Admin-editable
+  party info cards and a Google Maps location embed are shown first, then RSVP
+  updates are shown newest-to-oldest.
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
 - `GET|POST /party/login` -> attendee account sign-in; requires party-code
   verification before showing the login form, then validates a Redis-stored
@@ -144,13 +145,14 @@ karaoke signup/event cards are withheld until the configured party start time.
 - `costume_voting.html`: complete ballot form and post-vote state.
 - `admin_login.html`: admin password form when production admin auth is configured.
 - `rsvp.html`: standalone guest RSVP landing page with party-code unlock,
-  RSVP prompt, party details, event counts, newest-to-oldest update cards, RSVP
+  RSVP prompt, party details, Google Maps directions/embed, newest-to-oldest update cards, RSVP
   form, and optional portal account links.
 - `party_code_gate.html`: invite-code gate shown before direct login/register
   pages reveal their forms.
 - `admin.html`: all admin actions, public landing/party-code settings, RSVP
-  list, RSVP update posting/removal, and live contest/karaoke state; add/edit
-  entry forms are disclosure rows to keep mobile admin scanning manageable.
+  list, party detail/map address editing, RSVP update posting/removal, and live
+  contest/karaoke state; add/edit entry forms are disclosure rows to keep mobile
+  admin scanning manageable.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
   panel markup.

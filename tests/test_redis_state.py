@@ -140,6 +140,7 @@ class RedisStateTests(unittest.TestCase):
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
         main.karaoke_state.clear()
         main.karaoke_state.update(main.copy.deepcopy(main.DEFAULT_KARAOKE_STATE))
+        main.party_details = main.copy.deepcopy(main.DEFAULT_PARTY_DETAILS)
 
     def login_regular(self, client, user_id="user-1", username="Jamie"):
         main.registered_users[user_id] = username
@@ -222,6 +223,13 @@ class RedisStateTests(unittest.TestCase):
         main.landing_page_target = "party_login"
         main.party_code_hash = main.generate_password_hash("secret-code")
         main.party_code_hint = "On your invite"
+        main.party_details = {
+            "date": "Friday, October 31",
+            "time": "8:00 PM",
+            "location": "The haunted house",
+            "map_address": "123 Pumpkin Lane, Denver, CO",
+            "overview": "Bring a costume.",
+        }
         main.display_update_version = 7
 
         snapshot = main.snapshot_state()
@@ -254,6 +262,11 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("party_login", main.landing_page_target)
         self.assertTrue(main.check_password_hash(main.party_code_hash, "secret-code"))
         self.assertEqual("On your invite", main.party_code_hint)
+        self.assertEqual("Friday, October 31", main.party_details["date"])
+        self.assertEqual("8:00 PM", main.party_details["time"])
+        self.assertEqual("The haunted house", main.party_details["location"])
+        self.assertEqual("123 Pumpkin Lane, Denver, CO", main.party_details["map_address"])
+        self.assertEqual("Bring a costume.", main.party_details["overview"])
         self.assertEqual(7, main.display_update_version)
 
     def test_load_state_from_redis_initializes_missing_state_and_hydrates_existing_state(self):
@@ -649,6 +662,42 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("casey", state["user_accounts"])
         self.assertNotIn("regular", roles)
         self.assertIn("You're on the RSVP list", confirmation_response.get_data(as_text=True))
+        self.assertNotIn("Total guest", confirmation_response.get_data(as_text=True))
+        self.assertNotIn("Karaoke song", confirmation_response.get_data(as_text=True))
+
+    def test_admin_can_update_party_details_on_rsvp_page(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_party_details",
+                    "party_date": "Friday, October 31",
+                    "party_time": "8:00 PM",
+                    "party_location": "The haunted house",
+                    "party_map_address": "123 Pumpkin Lane, Denver, CO",
+                    "party_overview": "Bring a costume and your best karaoke song.",
+                },
+            )
+            self.verify_party_code(client)
+            rsvp_response = client.get("/rsvp")
+
+        state = self.redis_state()
+        body = rsvp_response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("Friday, October 31", state["party_details"]["date"])
+        self.assertEqual("8:00 PM", state["party_details"]["time"])
+        self.assertEqual("The haunted house", state["party_details"]["location"])
+        self.assertEqual("123 Pumpkin Lane, Denver, CO", state["party_details"]["map_address"])
+        self.assertIn("Friday, October 31", body)
+        self.assertIn("8:00 PM", body)
+        self.assertIn("The haunted house", body)
+        self.assertIn("Bring a costume and your best karaoke song.", body)
+        self.assertIn("Get Directions", body)
+        self.assertIn("https://www.google.com/maps/dir/?api=1&amp;destination=123+Pumpkin+Lane%2C+Denver%2C+CO", body)
+        self.assertIn("https://www.google.com/maps?q=123+Pumpkin+Lane%2C+Denver%2C+CO&amp;output=embed", body)
 
     def test_admin_page_shows_rsvp_list(self):
         main.rsvp_signups = [
@@ -707,6 +756,25 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(2, len(state["rsvp_updates"]))
         self.assertLess(parking_index, costume_index)
         self.assertIn("Latest update", body)
+
+    def test_rsvp_update_message_allows_longer_host_updates(self):
+        self.save_current_state()
+        long_message = "Bring your costume. " * 40
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "add_rsvp_update",
+                    "title": "Long update",
+                    "message": long_message,
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(long_message.strip(), state["rsvp_updates"][0]["message"])
 
     def test_pre_party_display_rotates_only_rsvp_cards_and_updates(self):
         main.costume_signups = [

@@ -5,8 +5,8 @@
 - `/` redirects to the admin-selected public landing target and defaults to
   `/rsvp`.
 - RSVP landing page at `/rsvp` opens with an RSVP prompt, account creation/login
-  alternatives, static party detail cards, current RSVP/guest/costume/karaoke
-  counts, and update cards.
+  alternatives, admin-editable static party detail cards, Google Maps location
+  embed/directions button, and update cards.
 - `/rsvp`, `/party/login`, and `/party/register` require the party code before
   RSVP, sign-in, or account creation forms are visible.
 - Successful RSVP adds an independent host-visible RSVP entry with name,
@@ -70,6 +70,8 @@
 - Admin can set or replace the party code and optional code hint. The party code
   is stored as a hash, not plaintext.
 - Admin can see the RSVP list and total guest count.
+- Admin can edit the static party detail cards and map address shown on the RSVP
+  page.
 - Admin can post and remove RSVP updates. Updates appear on `/rsvp` newest first
   after the static party detail cards.
 - Admins use the same `/logout` action as attendees; logout clears the current

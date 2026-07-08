@@ -72,9 +72,10 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 2. `/rsvp`, `/party/login`, and `/party/register` require the party code before
    guests can see RSVP, sign-in, or account creation forms.
 3. `/rsvp` asks guests to RSVP, offers account creation/login as optional next
-   steps, shows static party detail cards, then shows host update cards from
-   newest to oldest. RSVP submissions save independent entries for the admin
-   RSVP list and do not create attendee portal accounts.
+   steps, shows static party detail cards, renders a Google Maps embed and
+   directions button when a map address is configured, then shows host update
+   cards from newest to oldest. RSVP submissions save independent entries for
+   the admin RSVP list and do not create attendee portal accounts.
 4. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
@@ -108,6 +109,8 @@ the process-local cache:
 - `rsvp_updates`: admin-posted update cards with title, message, timestamp, and
   stable ID, displayed newest-to-oldest on `/rsvp` and in pre-party display
   rotation.
+- `party_details`: admin-editable static RSVP cards for date, time, location,
+  map address, and overview.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
 - `live_display_override`: current full-screen override card, or `None`.
 - `landing_page_target`: admin-selected root redirect target, defaulting to

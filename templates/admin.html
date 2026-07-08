@@ -100,6 +100,28 @@
     {% endif %}
   </section>
 
+  <section class="admin-section admin-section--party-details">
+    <h3>Party Details</h3>
+    <p>Update the static cards shown on the RSVP page.</p>
+
+    <form method="post" class="access-settings__form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="party_date">Date</label>
+      <input type="text" id="party_date" name="party_date" maxlength="240" required value="{{ party_details.date }}">
+      <label for="party_time">Time</label>
+      <input type="text" id="party_time" name="party_time" maxlength="240" required value="{{ party_details.time }}">
+      <label for="party_location">Location</label>
+      <input type="text" id="party_location" name="party_location" maxlength="240" required value="{{ party_details.location }}">
+      <label for="party_map_address">Google Maps Address</label>
+      <input type="text" id="party_map_address" name="party_map_address" maxlength="240" value="{{ party_details.map_address }}" placeholder="Street address for map and directions">
+      <label for="party_overview">Overview</label>
+      <textarea id="party_overview" name="party_overview" maxlength="1000" required>{{ party_details.overview }}</textarea>
+      <button type="submit" name="action" value="update_party_details" class="button button--primary">
+        Save Party Details
+      </button>
+    </form>
+  </section>
+
   <section class="admin-section admin-section--rsvp-updates">
     <h3>RSVP Updates</h3>
     <p>Post updates for guests to see on the RSVP page. The newest update appears first.</p>
@@ -109,7 +131,7 @@
       <label for="rsvp_update_title">Title</label>
       <input type="text" id="rsvp_update_title" name="title" maxlength="100" required>
       <label for="rsvp_update_message">Message</label>
-      <textarea id="rsvp_update_message" name="message" maxlength="500" required></textarea>
+      <textarea id="rsvp_update_message" name="message" maxlength="2000" required></textarea>
       <button type="submit" name="action" value="add_rsvp_update" class="button button--primary">
         Post RSVP Update
       </button>

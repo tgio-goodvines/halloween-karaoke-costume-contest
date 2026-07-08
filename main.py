@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
 from threading import Condition, Thread
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote_plus, unquote, urlparse
 from uuid import uuid4
 import copy
 import io
@@ -39,6 +39,10 @@ app.config["PARTY_START"] = os.environ.get("HALLOWEEN_PARTY_START", "2026-10-31T
 app.config["PARTY_DATE_LABEL"] = os.environ.get("HALLOWEEN_PARTY_DATE_LABEL", "Saturday, October 31")
 app.config["PARTY_TIME_LABEL"] = os.environ.get("HALLOWEEN_PARTY_TIME_LABEL", "7:00 PM until late")
 app.config["PARTY_LOCATION_LABEL"] = os.environ.get("HALLOWEEN_PARTY_LOCATION_LABEL", "Qiana and Tony's place")
+app.config["PARTY_OVERVIEW"] = os.environ.get(
+    "HALLOWEEN_PARTY_OVERVIEW",
+    "Costumes encouraged, karaoke expected, dramatic entrances welcomed.",
+)
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -236,6 +240,14 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
     "current_singer_id": None,
 }
 
+DEFAULT_PARTY_DETAILS: dict[str, str] = {
+    "date": app.config["PARTY_DATE_LABEL"],
+    "time": app.config["PARTY_TIME_LABEL"],
+    "location": app.config["PARTY_LOCATION_LABEL"],
+    "map_address": app.config["PARTY_LOCATION_LABEL"],
+    "overview": app.config["PARTY_OVERVIEW"],
+}
+
 DEFAULT_LANDING_PAGE_TARGET = "rsvp"
 LANDING_PAGE_TARGETS: dict[str, dict[str, str]] = {
     "rsvp": {
@@ -288,6 +300,7 @@ display_update_version = 0
 
 contest_state: dict[str, object] = copy.deepcopy(DEFAULT_CONTEST_STATE)
 karaoke_state: dict[str, object] = copy.deepcopy(DEFAULT_KARAOKE_STATE)
+party_details: dict[str, str] = copy.deepcopy(DEFAULT_PARTY_DETAILS)
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -389,17 +402,33 @@ def party_info_cards() -> list[dict[str, str]]:
     return [
         {
             "title": "Date",
-            "message": str(app.config.get("PARTY_DATE_LABEL", "Saturday, October 31")),
+            "message": party_details.get("date", DEFAULT_PARTY_DETAILS["date"]),
         },
         {
             "title": "Time",
-            "message": str(app.config.get("PARTY_TIME_LABEL", "7:00 PM until late")),
+            "message": party_details.get("time", DEFAULT_PARTY_DETAILS["time"]),
         },
         {
             "title": "Location",
-            "message": str(app.config.get("PARTY_LOCATION_LABEL", "Qiana and Tony's place")),
+            "message": party_details.get("location", DEFAULT_PARTY_DETAILS["location"]),
+        },
+        {
+            "title": "Party Details",
+            "message": party_details.get("overview", DEFAULT_PARTY_DETAILS["overview"]),
         },
     ]
+
+
+def google_maps_urls(address: str) -> dict[str, str]:
+    cleaned_address = address.strip()
+    if not cleaned_address:
+        return {}
+
+    encoded_address = quote_plus(cleaned_address)
+    return {
+        "directions": f"https://www.google.com/maps/dir/?api=1&destination={encoded_address}",
+        "embed": f"https://www.google.com/maps?q={encoded_address}&output=embed",
+    }
 
 
 def normalize_username(username: str) -> str:
@@ -665,6 +694,7 @@ def snapshot_state() -> dict[str, object]:
         "submitted_costume_votes": sorted(submitted_costume_votes),
         "contest_state": copy.deepcopy(contest_state),
         "karaoke_state": copy.deepcopy(karaoke_state),
+        "party_details": copy.deepcopy(party_details),
         "live_display_override": copy.deepcopy(live_display_override),
         "landing_page_target": normalize_landing_page_target(landing_page_target),
         "party_code_hash": party_code_hash,
@@ -677,7 +707,7 @@ def snapshot_state() -> dict[str, object]:
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
-    global landing_page_target, party_code_hash, party_code_hint, display_update_version
+    global landing_page_target, party_code_hash, party_code_hint, party_details, display_update_version
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -778,6 +808,12 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
             current_index = -1
         if 0 <= current_index < len(karaoke_signups):
             karaoke_state["current_singer_id"] = karaoke_signups[current_index].id
+
+    raw_party_details = data.get("party_details", {})
+    party_details = copy.deepcopy(DEFAULT_PARTY_DETAILS)
+    if isinstance(raw_party_details, dict):
+        for key in DEFAULT_PARTY_DETAILS:
+            party_details[key] = str(raw_party_details.get(key, party_details[key]) or "").strip()
 
     raw_override = data.get("live_display_override")
     live_display_override = copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
@@ -1597,12 +1633,9 @@ def rsvp():
             party_code_configured=party_code_is_configured(),
             party_code_hint=party_code_hint,
             submitted_rsvp=submitted_rsvp,
-            rsvp_count=len(rsvp_signups),
-            rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
             party_info_cards=party_info_cards(),
+            maps_urls=google_maps_urls(party_details.get("map_address", "")),
             rsvp_updates=sorted_rsvp_updates(),
-            costume_count=len(costume_signups),
-            karaoke_count=len(karaoke_signups),
             show_admin_link=False,
         )
 
@@ -1647,12 +1680,9 @@ def rsvp():
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
         submitted_rsvp=submitted_rsvp,
-        rsvp_count=len(rsvp_signups),
-        rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
         party_info_cards=party_info_cards(),
+        maps_urls=google_maps_urls(party_details.get("map_address", "")),
         rsvp_updates=sorted_rsvp_updates(),
-        costume_count=len(costume_signups),
-        karaoke_count=len(karaoke_signups),
         show_admin_link=False,
     )
 
@@ -1891,7 +1921,7 @@ def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
     global live_display_override, submitted_costume_votes, costume_ballots, karaoke_state
-    global landing_page_target, party_code_hash, party_code_hint
+    global landing_page_target, party_code_hash, party_code_hint, party_details
 
     ensure_costume_votes_alignment()
 
@@ -1990,6 +2020,31 @@ def admin_portal():
                 party_code_hint = new_party_code_hint
                 messages.append("Party code settings updated.")
 
+        elif action == "update_party_details":
+            updated_details = {
+                "date": request.form.get("party_date", "").strip(),
+                "time": request.form.get("party_time", "").strip(),
+                "location": request.form.get("party_location", "").strip(),
+                "map_address": request.form.get("party_map_address", "").strip(),
+                "overview": request.form.get("party_overview", "").strip(),
+            }
+            if not updated_details["date"]:
+                errors.append("Party date is required.")
+            if not updated_details["time"]:
+                errors.append("Party time is required.")
+            if not updated_details["location"]:
+                errors.append("Party location is required.")
+            if not updated_details["overview"]:
+                errors.append("Party overview is required.")
+            if any(len(updated_details[key]) > 240 for key in ("date", "time", "location", "map_address")):
+                errors.append("Party date, time, location, and map address must each be 240 characters or fewer.")
+            if len(updated_details["overview"]) > 1000:
+                errors.append("Party overview must be 1000 characters or fewer.")
+            if not errors:
+                party_details = updated_details
+                messages.append("Party details updated on the RSVP page.")
+                should_broadcast = True
+
         elif action == "add_rsvp_update":
             title = request.form.get("title", "").strip()
             message = request.form.get("message", "").strip()
@@ -1999,8 +2054,8 @@ def admin_portal():
                 errors.append("RSVP update title must be 100 characters or fewer.")
             if not message:
                 errors.append("RSVP update message is required.")
-            elif len(message) > 500:
-                errors.append("RSVP update message must be 500 characters or fewer.")
+            elif len(message) > 2000:
+                errors.append("RSVP update message must be 2000 characters or fewer.")
             if not errors:
                 rsvp_updates.append(
                     RSVPUpdate(
@@ -2357,6 +2412,7 @@ def admin_portal():
         landing_page_targets=LANDING_PAGE_TARGETS,
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
+        party_details=party_details,
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
         rsvp_updates=sorted_rsvp_updates(),

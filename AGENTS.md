@@ -20,7 +20,7 @@ Important working notes:
 - The root route redirects to the admin-selected public landing page and defaults to `/rsvp`; attendee-facing portal flow continues at `/party` after separate registration/login.
 - `/rsvp`, `/party/register`, and `/party/login` require the admin-configured party code before showing RSVP, account creation, or sign-in forms.
 - `/rsvp` is an independent host RSVP list, not account creation; attendee portal accounts are created/signed in through Redis-backed accounts at `/party/register` and `/party/login`.
-- Admin controls can set the root landing target, replace the party code, and post RSVP updates; store only the party code hash, never plaintext.
+- Admin controls can set the root landing target, replace the party code, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
 - Before `HALLOWEEN_PARTY_START`, live-display rotation is limited to RSVP/static party info/update cards and should not show costume or karaoke signup entries.
 - Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`.
 - Header logout is a single button tucked inside the `Menu` disclosure; do not add separate regular/admin logout controls.

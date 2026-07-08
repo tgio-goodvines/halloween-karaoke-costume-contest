@@ -1083,12 +1083,6 @@ main.container {
   text-transform: uppercase;
 }
 
-.rsvp-landing__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.75rem;
-}
-
 .rsvp-details {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1109,25 +1103,6 @@ main.container {
 
 .rsvp-details h3 {
   margin-bottom: 0.4rem;
-}
-
-.rsvp-landing__stats div {
-  display: grid;
-  gap: 0.2rem;
-  padding: 1rem;
-  border: 1px solid rgba(255, 59, 59, 0.25);
-  border-radius: 0.85rem;
-  background: rgba(0, 0, 0, 0.28);
-  text-align: center;
-}
-
-.rsvp-landing__stats strong {
-  font-size: 1.6rem;
-}
-
-.rsvp-landing__stats span {
-  color: var(--muted);
-  font-size: 0.92rem;
 }
 
 .rsvp-card {
@@ -1164,6 +1139,30 @@ main.container {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.rsvp-map {
+  display: grid;
+  gap: 1rem;
+}
+
+.rsvp-map__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rsvp-map__heading h3 {
+  margin: 0;
+}
+
+.rsvp-map iframe {
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid rgba(255, 59, 59, 0.25);
+  border-radius: 0.85rem;
+  background: #111;
 }
 
 .rsvp-updates {
@@ -1299,9 +1298,13 @@ main.container {
     width: 100%;
   }
 
-  .access-settings,
-  .rsvp-landing__stats {
+  .access-settings {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rsvp-map__heading {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .admin-entry__actions {

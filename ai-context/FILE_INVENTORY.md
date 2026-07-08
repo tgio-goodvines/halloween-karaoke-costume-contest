@@ -14,11 +14,11 @@
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
 | `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, and the `halloween` prefix. |
 | `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, display update publishing, and JSON exports using an in-memory Redis fake. |
-| `static/styles.css` | Shared Halloween-themed styles for attendee and admin pages. |
+| `static/styles.css` | Shared Halloween-themed styles for attendee/admin pages, including the visible header session/logout row. |
 | `static/display.css` | Dedicated large-format live-display styles, override cards, CTA layout, scoreboard layout, and karaoke display panels. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, override rendering, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
-| `templates/base.html` | Shared attendee/admin layout with header navigation, signed-in user display, footer, and script block. |
+| `templates/base.html` | Shared attendee/admin layout with header navigation, visible signed-in session/logout controls, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/halloween`: contest banners, welcome callout, slides, costume and karaoke summaries. |
 | `templates/halloween_login.html` | Attendee account sign-in form. |
 | `templates/halloween_register.html` | Attendee account registration form. |
@@ -68,6 +68,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` | Active GitHub Actions plan for deploying merged `main` commits to the existing EC2 ASG through AWS CLI and SSM, without S3 or GoodVines disruption. |
 | `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` | Durable progress tracker for the GitHub Actions deployment implementation, validation status, and external setup requirements. |
 | `ai-context/GITLAB_AWS_DEPLOYMENT_DESIGN.md` | Legacy GitLab CI/CD design; superseded by the GitHub Actions deployment plan. |
+| `ai-context/VAULT_ADMIN_TOKEN_RECOVERY.md` | Operator-only recovery note for using the services EC2 Vault init material without storing or printing root-token secrets. |
 | `ai-context/VAULT_SECRETS_DESIGN.md` | Design for obtaining Halloween app secrets from the existing GoodVines Vault using AWS IAM auth. |
 
 ## Repository Organization
@@ -96,6 +97,7 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── REDIS_MIGRATION_PLAN.md
 │   ├── REDIS_STATE_DESIGN.md
 │   ├── RESPONSIVE_UX_PROGRESS.md
+│   ├── VAULT_ADMIN_TOKEN_RECOVERY.md
 │   └── VAULT_SECRETS_DESIGN.md
 ├── deploy/
 │   ├── ec2_deploy_from_github.sh

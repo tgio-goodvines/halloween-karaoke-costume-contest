@@ -90,7 +90,8 @@ The base rotation always starts with signup instructions and event spotlight car
 
 ## Template Responsibilities
 
-- `base.html`: shared shell, title, CSS include, header nav, signed-in user, footer, script block.
+- `base.html`: shared shell, title, CSS include, header nav, visible signed-in
+  session/logout row, footer, and script block.
 - `index.html`: attendee dashboard, contest status banners, event highlights, signup summaries.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.

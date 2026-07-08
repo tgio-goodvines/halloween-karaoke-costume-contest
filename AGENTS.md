@@ -12,13 +12,15 @@ Start future repo work by reading these persistent context files:
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
 - `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 2 details for automatic Halloween install on replacement API EC2 instances.
+- `ai-context/VAULT_ADMIN_TOKEN_RECOVERY.md` - operator-only note for using the services EC2 Vault init file without printing or committing root-token material.
 
 Important working notes:
 
 - The app stores Halloween event data in Redis DB `1` using the `halloween:` key prefix, with process-local state as a runtime cache.
 - The root route redirects to `/live-display`; attendee-facing flow begins at `/halloween`.
-- Admin controls are protected through `/admin/login`.
-- Live-display clients update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`.
+- Attendees register/sign in through Redis-backed accounts at `/halloween/register` and `/halloween/login`; attendee logout is `/halloween/logout`.
+- Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`.
+- Header logout controls are intentionally outside the mobile disclosure menu so regular and admin users can see them without opening `Menu`.
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.
 - Responsive UX updates are complete: live-display cards scale for normal browser windows, attendee/admin pages are mobile-oriented, and admin add/edit forms are collapsed disclosure rows by default.
 - GitHub Actions deployment to EC2 has succeeded, and future API ASG replacement instances should bootstrap Halloween automatically from launch template version `2`.

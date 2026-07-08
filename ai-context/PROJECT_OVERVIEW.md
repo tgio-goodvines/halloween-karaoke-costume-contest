@@ -80,6 +80,9 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 7. When the admin starts the costume contest, `/costume-voting` becomes available to logged-in guests.
 8. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
 9. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
+10. Regular and admin sessions have visible header logout controls; regular
+    logout clears attendee identity, while admin logout clears only admin
+    access.
 
 ## State Model
 
@@ -115,6 +118,7 @@ This is intentionally a simple Flask/Jinja app:
 
 The visual style is dark Halloween-themed: black backgrounds, red accents, glowing borders, and large display typography.
 The responsive UX pass is complete: live-display cards scale for normal browser
-windows, attendee pages use a compact mobile nav and touch-safe forms, and admin
+windows, attendee pages use a compact mobile nav and touch-safe forms, visible
+session logout controls sit outside the mobile disclosure menu, and admin
 add/edit forms collapse into disclosure rows by default on mobile-friendly
 layouts.

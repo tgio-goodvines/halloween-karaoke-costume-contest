@@ -152,8 +152,8 @@ Post-update verification on 2026-07-06:
 
 ## Latest Repository Updates
 
-After the successful deployment, the repo received follow-up commits on `main`
-to document and harden deployment knowledge:
+After the first successful deployment, the repo received follow-up commits on
+`main` to document and harden deployment knowledge:
 
 - `2d32704` added the GitHub Actions EC2 deployment workflow and deploy scripts.
 - `1e39b66` fixed the workflow test import path with `pytest.ini`.
@@ -161,14 +161,36 @@ to document and harden deployment knowledge:
 - `c765134` recorded the successful public deployment result with `[skip ci]`.
 - `504a752` documented launch template version `2` Halloween bootstrap behavior
   with `[skip ci]`.
+- `88dd7fc` refreshed durable context after adding the Halloween `/health` API
+  and health-based deployment smoke checks.
+- `5abb20e` documented Vault admin token recovery guidance with `[skip ci]`.
+- `045d42a` added Redis-backed attendee account registration/sign-in,
+  role-based UI access, admin-gated live display access, and `/health`
+  deployment smoke checks.
+- `ce5ac15` added regular and admin logout routes/tests.
+- `2efb427` moved logout controls into a visible header session row outside
+  the mobile disclosure menu.
 
-Pending local update:
+Current deployed app behavior:
 
-- Added a real Halloween `/health` JSON API that pings Redis and returns `503`
-  in production when Redis is unreachable.
-- Updated EC2 deploy and GitHub Actions public smoke checks to probe Halloween
-  `/health` instead of `/live-display`, while preserving the GoodVines
-  `appg-v.com/health` guardrail.
+- Halloween `/health` pings Redis and returns `503` in production when Redis is
+  unreachable.
+- EC2 deploy and GitHub Actions public smoke checks probe Halloween `/health`
+  instead of `/live-display`, while preserving the GoodVines `appg-v.com/health`
+  guardrail.
+- Regular attendee accounts are persisted in Redis as `user_accounts` with
+  password hashes. The admin password remains the only UI auth secret stored in
+  Vault.
+- `/live-display`, `/api/display-data`, and `/api/display-updates` require an
+  admin session.
+- Header logout controls are visible outside the mobile disclosure menu.
+
+## Vault Admin Password Rotation
+
+The Halloween admin password was rotated in July 2026 by using the services EC2
+Vault init material in place, without printing or committing token/password
+values. Operational details are documented in
+`ai-context/VAULT_ADMIN_TOKEN_RECOVERY.md`.
 
 Current durable deployment context should be read from this file,
 `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md`, and

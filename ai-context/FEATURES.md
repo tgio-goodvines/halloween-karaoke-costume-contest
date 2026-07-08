@@ -52,8 +52,8 @@
 
 - Admin dashboard at `/admin`.
 - Password-backed admin login at `/admin/login`.
-- Admin sessions can access admin routes and JSON exports but do not implicitly
-  receive regular guest or live-display access.
+- Admin sessions can access admin routes, JSON exports, and the live-display
+  routes; they do not implicitly receive regular guest access.
 - Admin logout at `/admin/logout` clears only admin access.
 - Add, edit, delete, move up, and move down costume signups.
 - Add, edit, delete, move up, and move down karaoke signups.
@@ -104,4 +104,6 @@ app state.
 - Sticky site header for attendee/admin pages.
 - Attendee/admin mobile header uses compact disclosure navigation with shorter
   labels and touch-friendly controls.
+- Regular and admin logout controls are visible in the header session row, not
+  hidden inside the mobile disclosure navigation.
 - Red glowing cards, buttons, banners, score bars, and display panels.

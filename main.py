@@ -234,19 +234,19 @@ karaoke_state: dict[str, object] = copy.deepcopy(DEFAULT_KARAOKE_STATE)
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
-    "halloween_login",
-    "halloween_register",
+    "party_login",
+    "party_register",
     "admin_portal",
-    "costume_signup",
-    "karaoke_signup",
-    "costume_voting_page",
+    "party_costumes",
+    "party_karaoke",
+    "party_costume_voting",
 }
 STATE_REFRESH_ENDPOINTS = {
     "admin_portal",
-    "halloween_overview",
-    "costume_signup",
-    "karaoke_signup",
-    "costume_voting_page",
+    "party_dashboard",
+    "party_costumes",
+    "party_karaoke",
+    "party_costume_voting",
     "live_display",
     "display_data",
 }
@@ -257,10 +257,10 @@ ADMIN_ENDPOINTS = {
     "export_karaoke_lineup",
 }
 REGULAR_USER_ENDPOINTS = {
-    "halloween_overview",
-    "costume_signup",
-    "karaoke_signup",
-    "costume_voting_page",
+    "party_dashboard",
+    "party_costumes",
+    "party_karaoke",
+    "party_costume_voting",
 }
 DISPLAY_ENDPOINTS = {
     "live_display",
@@ -268,7 +268,7 @@ DISPLAY_ENDPOINTS = {
     "display_data",
 }
 ROLE_LOGIN_ENDPOINTS = {
-    "regular": "halloween_login",
+    "regular": "party_login",
     "admin": "admin_login",
 }
 STATE_LOCK_TIMEOUT_SECONDS = 10
@@ -1153,14 +1153,14 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "primary": "Get guests connected and ready to register.",
             "secondary": "Share the WiFi credentials and direct them to the Halloween signup page.",
             "cta": True,
-            "link": "http://tnq.com/halloween",
+            "link": "http://tnq.com/party",
             "link_label": "Open the signup portal",
             "cta_details": {
                 "lede": "Sign Up Instructions!",
                 "wifi_network": "Halloween Party WiFi",
                 "wifi_password": "halloween",
-                "portal_url": "http://tnq.com/halloween",
-                "portal_label": "http://tnq.com/halloween",
+                "portal_url": "http://tnq.com/party",
+                "portal_label": "http://tnq.com/party",
                 "portal_note": "Type the address exactly as shown and add a bookmark for quick access later.",
                 "reminder": "",
             },
@@ -1311,9 +1311,59 @@ def inject_contest_state():
 
 
 @app.route("/halloween")
-def halloween_overview():
+def legacy_halloween_overview():
+    return redirect(url_for("party_dashboard"), code=301)
+
+
+@app.route("/halloween/login", methods=["GET", "POST"])
+def legacy_halloween_login():
+    return redirect(
+        url_for("party_login", **request.args.to_dict(flat=True)),
+        code=308 if request.method == "POST" else 301,
+    )
+
+
+@app.route("/halloween/register", methods=["GET", "POST"])
+def legacy_halloween_register():
+    return redirect(
+        url_for("party_register", **request.args.to_dict(flat=True)),
+        code=308 if request.method == "POST" else 301,
+    )
+
+
+@app.route("/halloween/logout", methods=["POST"])
+def legacy_halloween_logout():
+    return party_logout()
+
+
+@app.route("/costume-signup", methods=["GET", "POST"])
+def legacy_costume_signup():
+    return redirect(
+        url_for("party_costumes", **request.args.to_dict(flat=True)),
+        code=308 if request.method == "POST" else 301,
+    )
+
+
+@app.route("/karaoke-signup", methods=["GET", "POST"])
+def legacy_karaoke_signup():
+    return redirect(
+        url_for("party_karaoke", **request.args.to_dict(flat=True)),
+        code=308 if request.method == "POST" else 301,
+    )
+
+
+@app.route("/costume-voting", methods=["GET", "POST"])
+def legacy_costume_voting():
+    return redirect(
+        url_for("party_costume_voting", **request.args.to_dict(flat=True)),
+        code=308 if request.method == "POST" else 301,
+    )
+
+
+@app.route("/party")
+def party_dashboard():
     if "user_id" not in session or "username" not in session:
-        return redirect(url_for("halloween_login", next=url_for("halloween_overview")))
+        return redirect(url_for("party_login", next=url_for("party_dashboard")))
 
     slides = list(SLIDES)
     winner = contest_state.get("winner")
@@ -1334,12 +1384,12 @@ def halloween_overview():
     )
 
 
-@app.route("/halloween/login", methods=["GET", "POST"])
-def halloween_login():
+@app.route("/party/login", methods=["GET", "POST"])
+def party_login():
     errors: List[str] = []
     next_page = normalize_next_page(
         request.args.get("next") or request.form.get("next"),
-        url_for("halloween_overview"),
+        url_for("party_dashboard"),
     )
 
     if request.method == "POST":
@@ -1377,12 +1427,12 @@ def halloween_login():
     )
 
 
-@app.route("/halloween/register", methods=["GET", "POST"])
-def halloween_register():
+@app.route("/party/register", methods=["GET", "POST"])
+def party_register():
     errors: List[str] = []
     next_page = normalize_next_page(
         request.args.get("next") or request.form.get("next"),
-        url_for("halloween_overview"),
+        url_for("party_dashboard"),
     )
 
     if request.method == "POST":
@@ -1421,12 +1471,12 @@ def halloween_register():
     )
 
 
-@app.route("/halloween/logout", methods=["POST"])
-def halloween_logout():
+@app.route("/party/logout", methods=["POST"])
+def party_logout():
     revoke_session_role("regular")
     session.pop("user_id", None)
     session.pop("username", None)
-    return redirect(url_for("halloween_login"))
+    return redirect(url_for("party_login"))
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -1689,7 +1739,7 @@ def admin_portal():
                     should_broadcast = True
 
         elif action == "start_costume_contest":
-            voting_url = url_for("costume_voting_page", _external=True)
+            voting_url = url_for("party_costume_voting", _external=True)
             live_display_override = {
                 "type": "contest_start",
                 "title": "The Costume Contest Has Begun!",
@@ -1903,8 +1953,8 @@ def export_karaoke_lineup():
     )
 
 
-@app.route("/costume-signup", methods=["GET", "POST"])
-def costume_signup():
+@app.route("/party/costumes", methods=["GET", "POST"])
+def party_costumes():
     errors: List[str] = []
     submitted = False
 
@@ -1931,7 +1981,7 @@ def costume_signup():
             )
             submitted = True
             broadcast_display_update()
-            return redirect(url_for("costume_signup", success="1"))
+            return redirect(url_for("party_costumes", success="1"))
 
     if request.args.get("success") == "1":
         submitted = True
@@ -1945,8 +1995,8 @@ def costume_signup():
     )
 
 
-@app.route("/karaoke-signup", methods=["GET", "POST"])
-def karaoke_signup():
+@app.route("/party/karaoke", methods=["GET", "POST"])
+def party_karaoke():
     errors: List[str] = []
     submitted = False
 
@@ -1975,7 +2025,7 @@ def karaoke_signup():
             )
             submitted = True
             broadcast_display_update()
-            return redirect(url_for("karaoke_signup", success="1"))
+            return redirect(url_for("party_karaoke", success="1"))
 
     if request.args.get("success") == "1":
         submitted = True
@@ -1989,21 +2039,21 @@ def karaoke_signup():
     )
 
 
-@app.route("/costume-voting", methods=["GET", "POST"])
-def costume_voting_page():
+@app.route("/party/costumes/vote", methods=["GET", "POST"])
+def party_costume_voting():
     errors: List[str] = []
     submitted = False
 
     ensure_costume_votes_alignment()
 
     if not contest_state.get("voting_open") or contest_state.get("winner_locked"):
-        return redirect(url_for("halloween_overview"))
+        return redirect(url_for("party_dashboard"))
 
     user_id = session.get("user_id")
     username = session.get("username")
 
     if not user_id or user_id not in registered_users:
-        return redirect(url_for("halloween_login", next=url_for("costume_voting_page")))
+        return redirect(url_for("party_login", next=url_for("party_costume_voting")))
 
     user_has_voted = user_id in submitted_costume_votes
     submitted = user_has_voted
@@ -2040,7 +2090,7 @@ def costume_voting_page():
                 submitted_costume_votes.add(user_id)
                 broadcast_display_update()
 
-                return redirect(url_for("costume_voting_page", success="1"))
+                return redirect(url_for("party_costume_voting", success="1"))
 
     if request.args.get("success") == "1":
         submitted = True

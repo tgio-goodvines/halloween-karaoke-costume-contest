@@ -171,9 +171,9 @@ curl -I https://www.tnq-halloween.com/live-display
 Manual browser checks:
 
 - `/` redirects to `/live-display`.
-- `/halloween/login` accepts attendee check-in.
-- `/costume-signup` can create a costume entry.
-- `/karaoke-signup` can create a karaoke entry.
+- `/party/login` accepts attendee check-in.
+- `/party/costumes` can create a costume entry.
+- `/party/karaoke` can create a karaoke entry.
 - `/admin` is password protected.
 - Admin changes update `/live-display`.
 - SSE updates work through `/api/display-updates`.

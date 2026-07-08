@@ -8,7 +8,7 @@
       <h2>Voting Has Begun!</h2>
       <p>Grab a ballot and score every costume from 1-10 to help choose the champion.</p>
     </div>
-    <a class="contest-banner__button" href="{{ url_for('costume_voting_page') }}">Cast Your Votes</a>
+    <a class="contest-banner__button" href="{{ url_for('party_costume_voting') }}">Cast Your Votes</a>
   </section>
 {% elif costume_contest_state.winner_locked and costume_contest_state.winner %}
   <section class="contest-banner contest-banner--winner">

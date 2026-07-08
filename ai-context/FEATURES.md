@@ -2,17 +2,17 @@
 
 ## Public And Attendee Features
 
-- Party dashboard at `/halloween`.
-- Redis-backed attendee account registration at `/halloween/register`.
-- Password-backed attendee account sign-in at `/halloween/login`.
+- Party dashboard at `/party`.
+- Redis-backed attendee account registration at `/party/register`.
+- Password-backed attendee account sign-in at `/party/login`.
 - Attendee logout from the shared header clears regular session access.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
 - Logged-in user name is shown in the shared header.
-- Costume contest signup at `/costume-signup`.
+- Costume contest signup at `/party/costumes`.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.
-- Karaoke signup at `/karaoke-signup`.
+- Karaoke signup at `/party/karaoke`.
 - Karaoke signup validation for required name, song title, and artist.
 - Optional YouTube link field for karaoke entries.
 - Karaoke signup success redirect and lineup display.

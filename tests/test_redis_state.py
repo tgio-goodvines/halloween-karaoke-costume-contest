@@ -281,11 +281,11 @@ class RedisStateTests(unittest.TestCase):
         with main.app.test_client() as client:
             self.login_regular(client)
             costume_response = client.post(
-                "/costume-signup",
+                "/party/costumes",
                 data={"name": "Ada", "costume": "Vampire", "contact": "ada@example.com"},
             )
             karaoke_response = client.post(
-                "/karaoke-signup",
+                "/party/karaoke",
                 data={
                     "name": "Grace",
                     "song_title": "Thriller",
@@ -315,11 +315,11 @@ class RedisStateTests(unittest.TestCase):
             self.login_regular(client)
 
             first_response = client.post(
-                "/costume-voting",
+                "/party/costumes/vote",
                 data={"rating_costume-1": "9", "rating_costume-2": "7"},
             )
             second_response = client.post(
-                "/costume-voting",
+                "/party/costumes/vote",
                 data={"rating_costume-1": "1", "rating_costume-2": "1"},
             )
 
@@ -352,7 +352,7 @@ class RedisStateTests(unittest.TestCase):
         with main.app.test_client() as client:
             self.login_regular(client)
             client.post(
-                "/costume-signup",
+                "/party/costumes",
                 data={"name": "Ada", "costume": "Vampire", "contact": ""},
             )
             self.login_admin(client)
@@ -463,7 +463,7 @@ class RedisStateTests(unittest.TestCase):
         with main.app.test_client() as client:
             self.login_regular(client)
             response = client.post(
-                "/costume-signup",
+                "/party/costumes",
                 data={"name": "Ada", "costume": "Vampire", "contact": ""},
             )
 
@@ -498,24 +498,24 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
-            protected_response = client.get("/halloween")
+            protected_response = client.get("/party")
             bad_login = client.post(
-                "/halloween/login",
+                "/party/login",
                 data={
                     "username": "Jamie",
                     "password": "wrong",
-                    "next": "/halloween",
+                    "next": "/party",
                 },
             )
             good_login = client.post(
-                "/halloween/login",
+                "/party/login",
                 data={
                     "username": "Jamie",
                     "password": "party-password",
-                    "next": "/halloween",
+                    "next": "/party",
                 },
             )
-            halloween_response = client.get("/halloween")
+            halloween_response = client.get("/party")
             admin_response = client.get("/admin")
             display_response = client.get("/live-display")
 
@@ -523,7 +523,7 @@ class RedisStateTests(unittest.TestCase):
                 roles = session.get("roles", [])
 
         self.assertEqual(302, protected_response.status_code)
-        self.assertIn("/halloween/login", protected_response.headers["Location"])
+        self.assertIn("/party/login", protected_response.headers["Location"])
         self.assertEqual(200, bad_login.status_code)
         self.assertIn("Incorrect username or password", bad_login.get_data(as_text=True))
         self.assertEqual(302, good_login.status_code)
@@ -535,20 +535,44 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(302, display_response.status_code)
         self.assertIn("/admin/login", display_response.headers["Location"])
 
+    def test_legacy_attendee_routes_redirect_to_party_paths(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            overview_response = client.get("/halloween")
+            login_response = client.get("/halloween/login?next=/halloween")
+            register_response = client.get("/halloween/register?next=/halloween")
+            costume_response = client.get("/costume-signup?success=1")
+            karaoke_response = client.get("/karaoke-signup?success=1")
+            voting_response = client.get("/costume-voting")
+
+        self.assertEqual(301, overview_response.status_code)
+        self.assertEqual("/party", overview_response.headers["Location"])
+        self.assertEqual(301, login_response.status_code)
+        self.assertIn("/party/login", login_response.headers["Location"])
+        self.assertEqual(301, register_response.status_code)
+        self.assertIn("/party/register", register_response.headers["Location"])
+        self.assertEqual(301, costume_response.status_code)
+        self.assertIn("/party/costumes", costume_response.headers["Location"])
+        self.assertEqual(301, karaoke_response.status_code)
+        self.assertIn("/party/karaoke", karaoke_response.headers["Location"])
+        self.assertEqual(301, voting_response.status_code)
+        self.assertEqual("/party/costumes/vote", voting_response.headers["Location"])
+
     def test_regular_user_registration_creates_account_and_signs_in(self):
         self.save_current_state()
 
         with main.app.test_client() as client:
             register_response = client.post(
-                "/halloween/register",
+                "/party/register",
                 data={
                     "username": "Morgan",
                     "password": "party-password",
                     "confirm_password": "party-password",
-                    "next": "/halloween",
+                    "next": "/party",
                 },
             )
-            halloween_response = client.get("/halloween")
+            halloween_response = client.get("/party")
 
             with client.session_transaction() as session:
                 roles = session.get("roles", [])
@@ -568,9 +592,9 @@ class RedisStateTests(unittest.TestCase):
 
         with main.app.test_client() as client:
             self.login_regular(client)
-            halloween_response = client.get("/halloween")
-            logout_response = client.post("/halloween/logout")
-            protected_response = client.get("/halloween")
+            halloween_response = client.get("/party")
+            logout_response = client.post("/party/logout")
+            protected_response = client.get("/party")
 
             with client.session_transaction() as session:
                 roles = session.get("roles", [])
@@ -579,9 +603,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, halloween_response.status_code)
         self.assertIn("Log Out", halloween_response.get_data(as_text=True))
         self.assertEqual(302, logout_response.status_code)
-        self.assertIn("/halloween/login", logout_response.headers["Location"])
+        self.assertIn("/party/login", logout_response.headers["Location"])
         self.assertEqual(302, protected_response.status_code)
-        self.assertIn("/halloween/login", protected_response.headers["Location"])
+        self.assertIn("/party/login", protected_response.headers["Location"])
         self.assertNotIn("regular", roles)
         self.assertIsNone(username)
 
@@ -593,7 +617,7 @@ class RedisStateTests(unittest.TestCase):
             self.login_admin(client)
             admin_response = client.get("/admin")
             logout_response = client.post("/admin/logout")
-            halloween_response = client.get("/halloween")
+            halloween_response = client.get("/party")
             admin_redirect = client.get("/admin")
 
             with client.session_transaction() as session:
@@ -618,13 +642,13 @@ class RedisStateTests(unittest.TestCase):
             protected_response = client.get("/api/display-data")
             self.login_admin(client)
             display_response = client.get("/api/display-data")
-            halloween_response = client.get("/halloween")
+            halloween_response = client.get("/party")
 
         self.assertEqual(302, protected_response.status_code)
         self.assertIn("/admin/login", protected_response.headers["Location"])
         self.assertEqual(200, display_response.status_code)
         self.assertEqual(302, halloween_response.status_code)
-        self.assertIn("/halloween/login", halloween_response.headers["Location"])
+        self.assertIn("/party/login", halloween_response.headers["Location"])
 
     def test_csrf_rejects_post_without_token_outside_testing_mode(self):
         main.app.config["TESTING"] = False
@@ -633,7 +657,7 @@ class RedisStateTests(unittest.TestCase):
         with main.app.test_client() as client:
             self.login_regular(client)
             response = client.post(
-                "/costume-signup",
+                "/party/costumes",
                 data={"name": "Ada", "costume": "Vampire", "contact": ""},
             )
 

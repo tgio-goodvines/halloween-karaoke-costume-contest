@@ -14,12 +14,12 @@
           <details class="site-nav">
             <summary class="site-nav__toggle">Menu</summary>
             <nav>
-              <a href="{{ url_for('halloween_overview') }}">Overview</a>
-              <a href="{{ url_for('costume_signup') }}">Costume</a>
+              <a href="{{ url_for('party_dashboard') }}">Overview</a>
+              <a href="{{ url_for('party_costumes') }}">Costume</a>
               {% if costume_contest_state.voting_open %}
-                <a href="{{ url_for('costume_voting_page') }}">Voting</a>
+                <a href="{{ url_for('party_costume_voting') }}">Voting</a>
               {% endif %}
-              <a href="{{ url_for('karaoke_signup') }}">Karaoke</a>
+              <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
               {% if show_admin_link is not defined or show_admin_link %}
                 <a href="{{ url_for('admin_portal') }}">Admin</a>
               {% endif %}
@@ -31,7 +31,7 @@
                 <span class="site-header__user">Signed in as {{ session.username }}</span>
               {% endif %}
               {% if regular_authenticated %}
-                <form method="post" action="{{ url_for('halloween_logout') }}" class="site-header__logout">
+                <form method="post" action="{{ url_for('party_logout') }}" class="site-header__logout">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit">Log Out</button>
                 </form>

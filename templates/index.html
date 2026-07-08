@@ -8,7 +8,7 @@
       <h2>Cast Your Costume Contest Votes</h2>
       <p>The contest is underway! Score each costume from 1-10 to help choose tonight's champion.</p>
     </div>
-    <a class="contest-banner__button" href="{{ url_for('costume_voting_page') }}">Start Voting</a>
+    <a class="contest-banner__button" href="{{ url_for('party_costume_voting') }}">Start Voting</a>
   </section>
 {% elif costume_contest_state.winner_locked and costume_contest_state.winner %}
   <section class="contest-banner contest-banner--winner">
@@ -60,7 +60,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <p>No costume signups yet. <a href="{{ url_for('costume_signup') }}">Be the first!</a></p>
+      <p>No costume signups yet. <a href="{{ url_for('party_costumes') }}">Be the first!</a></p>
     {% endif %}
   </div>
   <div>
@@ -74,7 +74,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <p>No karaoke signups yet. <a href="{{ url_for('karaoke_signup') }}">Choose a song!</a></p>
+      <p>No karaoke signups yet. <a href="{{ url_for('party_karaoke') }}">Choose a song!</a></p>
     {% endif %}
   </div>
 </section>

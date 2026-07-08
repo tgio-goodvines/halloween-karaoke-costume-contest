@@ -8,19 +8,22 @@
 - `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, and override state; requires an `admin` role session.
 - `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`; requires an `admin` role session.
 - `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
-- `GET /halloween` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
-- `GET|POST /halloween/login` -> attendee account sign-in; validates a Redis-stored password hash and grants the `regular` role.
-- `GET|POST /halloween/register` -> attendee account creation; stores a password hash in Redis app state and grants the `regular` role.
-- `POST /halloween/logout` -> clears the `regular` role and attendee session identity.
+- `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
+- `GET|POST /party/login` -> attendee account sign-in; validates a Redis-stored password hash and grants the `regular` role.
+- `GET|POST /party/register` -> attendee account creation; stores a password hash in Redis app state and grants the `regular` role.
+- `POST /party/logout` -> clears the `regular` role and attendee session identity.
 - `GET|POST /admin/login` -> password-backed admin session login; grants the `admin` role.
 - `POST /admin/logout` -> clears only admin auth session state.
 - `GET|POST /admin` -> admin dashboard and all admin mutations.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
-- `GET|POST /costume-signup` -> public costume signup form.
-- `GET|POST /karaoke-signup` -> public karaoke signup form.
-- `GET|POST /costume-voting` -> logged-in one-ballot-per-session voting while contest is open.
+- `GET|POST /party/costumes` -> attendee costume signup form.
+- `GET|POST /party/karaoke` -> attendee karaoke signup form.
+- `GET|POST /party/costumes/vote` -> logged-in one-ballot-per-session voting while contest is open.
+- Legacy attendee paths redirect to the canonical `/party` paths:
+  `/halloween`, `/halloween/login`, `/halloween/register`,
+  `/costume-signup`, `/karaoke-signup`, and `/costume-voting`.
 
 `app.url_map.strict_slashes = False` allows both trailing and non-trailing slash route variants.
 
@@ -112,7 +115,7 @@ The base rotation always starts with signup instructions and event spotlight car
   signups, votes, sessions, contest state, and live-display overrides.
 - UI route access is role-based through Flask sessions. Configure
   `HALLOWEEN_ADMIN_PASSWORD` for admin and display access; regular attendee
-  accounts are created through `/halloween/register` and stored in Redis app
+  accounts are created through `/party/register` and stored in Redis app
   state.
 - CSRF protection is enforced for POST forms outside testing mode.
 - Redis state and route persistence tests are present in `tests/test_redis_state.py`.

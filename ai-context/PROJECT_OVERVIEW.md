@@ -70,14 +70,14 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 1. `/` redirects to `/live-display`.
 2. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
-3. Attendees visit `/halloween`, are redirected to `/halloween/login` if not
-   signed in, can create an account at `/halloween/register`, then see the
+3. Attendees visit `/party`, are redirected to `/party/login` if not
+   signed in, can create an account at `/party/register`, then see the
    party dashboard.
-4. Attendees can submit costume entries at `/costume-signup`.
-5. Attendees can submit karaoke songs at `/karaoke-signup`.
+4. Attendees can submit costume entries at `/party/costumes`.
+5. Attendees can submit karaoke songs at `/party/karaoke`.
 6. Admins sign in at `/admin/login` and manage entries and event state at
    `/admin`.
-7. When the admin starts the costume contest, `/costume-voting` becomes available to logged-in guests.
+7. When the admin starts the costume contest, `/party/costumes/vote` becomes available to logged-in guests.
 8. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
 9. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
 10. Regular and admin sessions have visible header logout controls; regular

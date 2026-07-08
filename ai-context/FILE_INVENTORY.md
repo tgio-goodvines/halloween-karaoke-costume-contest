@@ -19,7 +19,7 @@
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, override rendering, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header navigation, visible signed-in session/logout controls, footer, and script block. |
-| `templates/index.html` | Attendee dashboard for `/halloween`: contest banners, welcome callout, slides, costume and karaoke summaries. |
+| `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, slides, costume and karaoke summaries. |
 | `templates/halloween_login.html` | Attendee account sign-in form. |
 | `templates/halloween_register.html` | Attendee account registration form. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |

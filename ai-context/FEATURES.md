@@ -4,11 +4,14 @@
 
 - `/` redirects to the admin-selected public landing target and defaults to
   `/rsvp`.
-- RSVP landing page at `/rsvp` shows the party entry point and current RSVP,
-  costume, and karaoke counts.
+- RSVP landing page at `/rsvp` opens with an RSVP prompt, account creation/login
+  alternatives, static party detail cards, current RSVP/guest/costume/karaoke
+  counts, and update cards.
 - `/rsvp`, `/party/login`, and `/party/register` require the party code before
   RSVP, sign-in, or account creation forms are visible.
-- Successful RSVP creates a Redis-backed attendee account and signs the guest in.
+- Successful RSVP adds an independent host-visible RSVP entry with name,
+  optional contact, guest count, and note; it does not create an attendee
+  account.
 - Party dashboard at `/party`.
 - Redis-backed attendee account registration at `/party/register`.
 - Password-backed attendee account sign-in at `/party/login`.
@@ -66,6 +69,9 @@
   party account signup, party portal, or live display.
 - Admin can set or replace the party code and optional code hint. The party code
   is stored as a hash, not plaintext.
+- Admin can see the RSVP list and total guest count.
+- Admin can post and remove RSVP updates. Updates appear on `/rsvp` newest first
+  after the static party detail cards.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.
@@ -95,6 +101,8 @@ app state.
 - `/health` returns JSON service and Redis readiness for production health
   checks.
 - Shows event title and live counts for costume and karaoke signups.
+- Before `HALLOWEEN_PARTY_START`, live display rotates only RSVP, static party
+  detail, and RSVP update cards.
 - Rotates through signup portal instructions, event spotlight cards, winner/scoreboard cards, costume entries, and karaoke entries.
 - Signup portal card includes WiFi network, WiFi password, and portal link.
 - Display entries rotate every 8 seconds with fade/slide transitions.

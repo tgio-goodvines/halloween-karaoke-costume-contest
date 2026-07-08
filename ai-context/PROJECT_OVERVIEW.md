@@ -71,20 +71,24 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    `/rsvp`.
 2. `/rsvp`, `/party/login`, and `/party/register` require the party code before
    guests can see RSVP, sign-in, or account creation forms.
-3. `/live-display` redirects to `/admin/login` until the browser session has
+3. `/rsvp` asks guests to RSVP, offers account creation/login as optional next
+   steps, shows static party detail cards, then shows host update cards from
+   newest to oldest. RSVP submissions save independent entries for the admin
+   RSVP list and do not create attendee portal accounts.
+4. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
-4. Attendees visit `/party`, are redirected to `/party/login` if not
+5. Attendees visit `/party`, are redirected to `/party/login` if not
    signed in, can create an account at `/party/register`, then see the
    party dashboard.
-5. Attendees can submit costume entries at `/party/costumes`.
-6. Attendees can submit karaoke songs at `/party/karaoke`.
-7. Admins sign in at `/admin/login` and manage entries, public landing settings,
+6. Attendees can submit costume entries at `/party/costumes`.
+7. Attendees can submit karaoke songs at `/party/karaoke`.
+8. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
    party code settings, and event state at
    `/admin`.
-8. When the admin starts the costume contest, `/party/costumes/vote` becomes available to logged-in guests.
-9. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
-10. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
-11. Regular and admin sessions use one logout action in the header menu; it
+9. When the admin starts the costume contest, `/party/costumes/vote` becomes available to logged-in guests.
+10. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
+11. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
+12. Regular and admin sessions use one logout action in the header menu; it
     clears the current browser session regardless of role.
 
 ## State Model
@@ -99,6 +103,11 @@ the process-local cache:
 - `user_accounts`: maps normalized usernames to Redis-backed attendee account
   records with stable IDs and password hashes.
 - `registered_users`: maps session `user_id` to display name.
+- `rsvp_signups`: independent host RSVP list entries with name, optional
+  contact, guest count, note, created timestamp, and stable ID.
+- `rsvp_updates`: admin-posted update cards with title, message, timestamp, and
+  stable ID, displayed newest-to-oldest on `/rsvp` and in pre-party display
+  rotation.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
 - `live_display_override`: current full-screen override card, or `None`.
 - `landing_page_target`: admin-selected root redirect target, defaulting to
@@ -109,6 +118,11 @@ the process-local cache:
 - `contest_state`: voting open/closed, winner lock, scoreboard card visibility.
 - `karaoke_state`: whether karaoke has been started and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.
+
+`HALLOWEEN_PARTY_START` controls when the live display switches from pre-party
+RSVP/update rotation to the full party-night costume/karaoke/event rotation.
+Before that timestamp, the display does not show costume or karaoke signup
+entries.
 
 Schema version 1 Redis state with index-aligned `costume_votes` is upgraded on
 load into ID-keyed `costume_ballots`.

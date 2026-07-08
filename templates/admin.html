@@ -68,6 +68,79 @@
     </div>
   </section>
 
+  <section class="admin-section admin-section--rsvps">
+    <h3>RSVP List</h3>
+    <p>
+      {{ rsvp_signups|length }} RSVP{{ 's' if rsvp_signups|length != 1 else '' }}
+      for {{ rsvp_guest_total }} guest{{ 's' if rsvp_guest_total != 1 else '' }} total.
+    </p>
+
+    {% if rsvp_signups %}
+      <div class="rsvp-admin-list">
+        {% for signup in rsvp_signups %}
+          <article class="rsvp-admin-item">
+            <div>
+              <h4>{{ signup.name }}</h4>
+              <p>{{ signup.guest_count }} guest{{ 's' if signup.guest_count != 1 else '' }}</p>
+            </div>
+            {% if signup.contact %}
+              <p><strong>Contact:</strong> {{ signup.contact }}</p>
+            {% endif %}
+            {% if signup.note %}
+              <p><strong>Note:</strong> {{ signup.note }}</p>
+            {% endif %}
+            {% if signup.created_at %}
+              <p class="rsvp-admin-item__meta">{{ signup.created_at }}</p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="admin-empty">No RSVPs yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="admin-section admin-section--rsvp-updates">
+    <h3>RSVP Updates</h3>
+    <p>Post updates for guests to see on the RSVP page. The newest update appears first.</p>
+
+    <form method="post" class="access-settings__form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="rsvp_update_title">Title</label>
+      <input type="text" id="rsvp_update_title" name="title" maxlength="100" required>
+      <label for="rsvp_update_message">Message</label>
+      <textarea id="rsvp_update_message" name="message" maxlength="500" required></textarea>
+      <button type="submit" name="action" value="add_rsvp_update" class="button button--primary">
+        Post RSVP Update
+      </button>
+    </form>
+
+    {% if rsvp_updates %}
+      <div class="rsvp-admin-list">
+        {% for update in rsvp_updates %}
+          <article class="rsvp-admin-item">
+            <div>
+              <h4>{{ update.title }}</h4>
+              {% if update.created_at %}
+                <p class="rsvp-admin-item__meta">{{ update.created_at }}</p>
+              {% endif %}
+            </div>
+            <p>{{ update.message }}</p>
+            <form method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="update_id" value="{{ update.id }}">
+              <button type="submit" name="action" value="delete_rsvp_update" class="button button--danger">
+                Remove Update
+              </button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="admin-empty">No RSVP updates have been posted yet.</p>
+    {% endif %}
+  </section>
+
   <section class="admin-section admin-section--contest">
     <h3>Costume Contest Controls</h3>
     <p>Kick off the contest, monitor live voting, and announce the winner straight from this dashboard.</p>

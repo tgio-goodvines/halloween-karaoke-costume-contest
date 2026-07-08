@@ -35,6 +35,10 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("HALLOWEEN_APP_SECRET", "dev-secret-key")
 app.config["ADMIN_PASSWORD"] = os.environ.get("HALLOWEEN_ADMIN_PASSWORD", "")
 app.config["PARTY_CODE"] = os.environ.get("HALLOWEEN_PARTY_CODE", "")
+app.config["PARTY_START"] = os.environ.get("HALLOWEEN_PARTY_START", "2026-10-31T19:00:00-06:00")
+app.config["PARTY_DATE_LABEL"] = os.environ.get("HALLOWEEN_PARTY_DATE_LABEL", "Saturday, October 31")
+app.config["PARTY_TIME_LABEL"] = os.environ.get("HALLOWEEN_PARTY_TIME_LABEL", "7:00 PM until late")
+app.config["PARTY_LOCATION_LABEL"] = os.environ.get("HALLOWEEN_PARTY_LOCATION_LABEL", "Qiana and Tony's place")
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -199,6 +203,24 @@ class KaraokeSignup:
     id: str = ""
 
 
+@dataclass
+class RSVPSignup:
+    name: str
+    contact: str = ""
+    guest_count: int = 1
+    note: str = ""
+    created_at: str = ""
+    id: str = ""
+
+
+@dataclass
+class RSVPUpdate:
+    title: str
+    message: str
+    created_at: str = ""
+    id: str = ""
+
+
 DEFAULT_CONTEST_STATE: dict[str, object] = {
     "voting_open": False,
     "winner": None,
@@ -252,6 +274,8 @@ costume_votes: List[List[int]] = []
 costume_ballots: dict[str, dict[str, int]] = {}
 registered_users: dict[str, str] = {}
 user_accounts: dict[str, dict[str, str]] = {}
+rsvp_signups: List[RSVPSignup] = []
+rsvp_updates: List[RSVPUpdate] = []
 submitted_costume_votes: set[str] = set()
 live_display_override: dict[str, object] | None = None
 landing_page_target = DEFAULT_LANDING_PAGE_TARGET
@@ -345,6 +369,39 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def parse_party_start() -> datetime:
+    raw_start = str(app.config.get("PARTY_START", "") or "")
+    try:
+        parsed_start = datetime.fromisoformat(raw_start)
+    except ValueError:
+        parsed_start = datetime(2026, 10, 31, 19, 0, tzinfo=timezone(timedelta(hours=-6)))
+
+    if parsed_start.tzinfo is None:
+        return parsed_start.replace(tzinfo=timezone(timedelta(hours=-6)))
+    return parsed_start
+
+
+def party_has_started() -> bool:
+    return datetime.now(timezone.utc) >= parse_party_start().astimezone(timezone.utc)
+
+
+def party_info_cards() -> list[dict[str, str]]:
+    return [
+        {
+            "title": "Date",
+            "message": str(app.config.get("PARTY_DATE_LABEL", "Saturday, October 31")),
+        },
+        {
+            "title": "Time",
+            "message": str(app.config.get("PARTY_TIME_LABEL", "7:00 PM until late")),
+        },
+        {
+            "title": "Location",
+            "message": str(app.config.get("PARTY_LOCATION_LABEL", "Qiana and Tony's place")),
+        },
+    ]
+
+
 def normalize_username(username: str) -> str:
     return " ".join(username.strip().lower().split())
 
@@ -396,6 +453,59 @@ def render_party_code_gate(
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
         show_admin_link=False,
+    )
+
+
+def rsvp_signup_to_dict(signup: RSVPSignup) -> dict[str, object]:
+    return {
+        "id": signup.id,
+        "name": signup.name,
+        "contact": signup.contact,
+        "guest_count": signup.guest_count,
+        "note": signup.note,
+        "created_at": signup.created_at,
+    }
+
+
+def rsvp_signup_from_dict(data: dict[str, object]) -> RSVPSignup:
+    try:
+        guest_count = int(data.get("guest_count", 1) or 1)
+    except (TypeError, ValueError):
+        guest_count = 1
+
+    return RSVPSignup(
+        id=str(data.get("id", "") or uuid4().hex),
+        name=str(data.get("name", "") or ""),
+        contact=str(data.get("contact", "") or ""),
+        guest_count=max(1, min(12, guest_count)),
+        note=str(data.get("note", "") or ""),
+        created_at=str(data.get("created_at", "") or ""),
+    )
+
+
+def rsvp_update_to_dict(update: RSVPUpdate) -> dict[str, str]:
+    return {
+        "id": update.id,
+        "title": update.title,
+        "message": update.message,
+        "created_at": update.created_at,
+    }
+
+
+def rsvp_update_from_dict(data: dict[str, object]) -> RSVPUpdate:
+    return RSVPUpdate(
+        id=str(data.get("id", "") or uuid4().hex),
+        title=str(data.get("title", "") or ""),
+        message=str(data.get("message", "") or ""),
+        created_at=str(data.get("created_at", "") or ""),
+    )
+
+
+def sorted_rsvp_updates() -> list[RSVPUpdate]:
+    return sorted(
+        rsvp_updates,
+        key=lambda update: update.created_at or "",
+        reverse=True,
     )
 
 
@@ -546,6 +656,12 @@ def snapshot_state() -> dict[str, object]:
         "costume_ballots": copy.deepcopy(costume_ballots),
         "user_accounts": copy.deepcopy(user_accounts),
         "registered_users": copy.deepcopy(registered_users),
+        "rsvp_signups": [
+            rsvp_signup_to_dict(signup) for signup in rsvp_signups
+        ],
+        "rsvp_updates": [
+            rsvp_update_to_dict(update) for update in rsvp_updates
+        ],
         "submitted_costume_votes": sorted(submitted_costume_votes),
         "contest_state": copy.deepcopy(contest_state),
         "karaoke_state": copy.deepcopy(karaoke_state),
@@ -559,7 +675,7 @@ def snapshot_state() -> dict[str, object]:
 
 
 def apply_state_snapshot(data: dict[str, object]) -> None:
-    global costume_signups, karaoke_signups, costume_votes, registered_users
+    global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
     global landing_page_target, party_code_hash, party_code_hint, display_update_version
 
@@ -575,6 +691,20 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         karaoke_signup_from_dict(signup)
         for signup in raw_karaoke_signups
         if isinstance(signup, dict)
+    ]
+
+    raw_rsvp_signups = data.get("rsvp_signups", [])
+    rsvp_signups = [
+        rsvp_signup_from_dict(signup)
+        for signup in raw_rsvp_signups
+        if isinstance(signup, dict)
+    ]
+
+    raw_rsvp_updates = data.get("rsvp_updates", [])
+    rsvp_updates = [
+        rsvp_update_from_dict(update)
+        for update in raw_rsvp_updates
+        if isinstance(update, dict)
     ]
 
     ensure_signup_ids()
@@ -1230,6 +1360,46 @@ SLIDES = [
 def build_rotation_entries() -> List[dict[str, object]]:
     ensure_costume_votes_alignment()
 
+    if not party_has_started():
+        pre_party_entries: List[dict[str, object]] = [
+            {
+                "category": "RSVP",
+                "primary": "RSVP for Qiana and Tony's Halloween Party",
+                "secondary": "Visit tnq-halloween.com, enter the party code, and let the hosts know you are coming.",
+                "cta": True,
+                "link": "https://tnq-halloween.com",
+                "link_label": "Open the RSVP page",
+                "cta_details": {
+                    "lede": "RSVP before party night",
+                    "wifi_network": "",
+                    "wifi_password": "",
+                    "portal_url": "tnq-halloween.com",
+                    "portal_label": "tnq-halloween.com",
+                    "portal_note": "Use the party code from your invite to see details and RSVP.",
+                    "reminder": "",
+                },
+            }
+        ]
+        for card in party_info_cards():
+            pre_party_entries.append(
+                {
+                    "category": "Party Details",
+                    "primary": card["title"],
+                    "secondary": card["message"],
+                }
+            )
+        for update in sorted_rsvp_updates():
+            pre_party_entries.append(
+                {
+                    "id": update.id,
+                    "category": "RSVP Update",
+                    "primary": update.title,
+                    "secondary": update.message,
+                    "tertiary": update.created_at,
+                }
+            )
+        return pre_party_entries
+
     rotation_entries: List[dict[str, object]] = [
         {
             "category": "Signup Portal",
@@ -1401,20 +1571,20 @@ def legacy_halloween_overview():
 @app.route("/rsvp", methods=["GET", "POST"])
 def rsvp():
     errors: List[str] = []
-    next_page = normalize_next_page(
-        request.args.get("next") or request.form.get("next"),
-        url_for("party_dashboard"),
-    )
-
-    if session_has_role("regular") and session.get("user_id") and session.get("username"):
-        return redirect(next_page)
+    submitted_rsvp = None
+    session_rsvp_id = session.get("rsvp_id")
+    if session_rsvp_id:
+        submitted_rsvp = next(
+            (signup for signup in rsvp_signups if signup.id == session_rsvp_id),
+            None,
+        )
 
     if not party_code_is_verified():
         if request.method == "POST":
             provided_code = request.form.get("party_code", "").strip()
             if verify_party_code(provided_code):
                 session["party_code_verified"] = True
-                return redirect(url_for("rsvp", next=next_page))
+                return redirect(url_for("rsvp"))
             if not party_code_is_configured():
                 errors.append("The party code is not configured yet. Please ask the hosts.")
             else:
@@ -1423,52 +1593,64 @@ def rsvp():
         return render_template(
             "rsvp.html",
             errors=errors,
-            next_page=next_page,
             party_code_verified=False,
             party_code_configured=party_code_is_configured(),
             party_code_hint=party_code_hint,
-            registered_guest_count=len(user_accounts),
+            submitted_rsvp=submitted_rsvp,
+            rsvp_count=len(rsvp_signups),
+            rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
+            party_info_cards=party_info_cards(),
+            rsvp_updates=sorted_rsvp_updates(),
             costume_count=len(costume_signups),
             karaoke_count=len(karaoke_signups),
             show_admin_link=False,
         )
 
-    if request.method == "POST":
+    if request.method == "POST" and request.form.get("action") == "submit_rsvp":
         username = request.form.get("username", "").strip()
-        provided_password = request.form.get("password", "")
-        confirm_password = request.form.get("confirm_password", "")
-        normalized_username = normalize_username(username)
+        contact = request.form.get("contact", "").strip()
+        note = request.form.get("note", "").strip()
+        try:
+            guest_count = int(request.form.get("guest_count", "1") or 1)
+        except ValueError:
+            guest_count = 1
 
         if not username:
             errors.append("Name is required.")
         elif len(username) > 80:
             errors.append("Name must be 80 characters or fewer.")
-        elif normalized_username in user_accounts:
-            errors.append("That name is already registered. Sign in instead.")
-
-        if len(provided_password) < 8:
-            errors.append("Password must be at least 8 characters.")
-        elif provided_password != confirm_password:
-            errors.append("Passwords do not match.")
+        if len(contact) > 120:
+            errors.append("Contact must be 120 characters or fewer.")
+        if not 1 <= guest_count <= 12:
+            errors.append("Guest count must be between 1 and 12.")
+        if len(note) > 240:
+            errors.append("Note must be 240 characters or fewer.")
 
         if not errors:
-            account = create_user_account(username, provided_password)
-            user_accounts[normalized_username] = account
-            session["user_id"] = account["id"]
-            session["username"] = account["username"]
-            grant_session_role("regular")
-            registered_users[account["id"]] = account["username"]
+            submitted_rsvp = RSVPSignup(
+                id=uuid4().hex,
+                name=username,
+                contact=contact,
+                guest_count=guest_count,
+                note=note,
+                created_at=_utc_now_iso(),
+            )
+            rsvp_signups.append(submitted_rsvp)
+            session["rsvp_id"] = submitted_rsvp.id
             persist_state_if_available()
-            return redirect(next_page)
+            return redirect(url_for("rsvp", success="1"))
 
     return render_template(
         "rsvp.html",
         errors=errors,
-        next_page=next_page,
         party_code_verified=True,
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
-        registered_guest_count=len(user_accounts),
+        submitted_rsvp=submitted_rsvp,
+        rsvp_count=len(rsvp_signups),
+        rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
+        party_info_cards=party_info_cards(),
+        rsvp_updates=sorted_rsvp_updates(),
         costume_count=len(costume_signups),
         karaoke_count=len(karaoke_signups),
         show_admin_link=False,
@@ -1808,6 +1990,42 @@ def admin_portal():
                 party_code_hint = new_party_code_hint
                 messages.append("Party code settings updated.")
 
+        elif action == "add_rsvp_update":
+            title = request.form.get("title", "").strip()
+            message = request.form.get("message", "").strip()
+            if not title:
+                errors.append("RSVP update title is required.")
+            elif len(title) > 100:
+                errors.append("RSVP update title must be 100 characters or fewer.")
+            if not message:
+                errors.append("RSVP update message is required.")
+            elif len(message) > 500:
+                errors.append("RSVP update message must be 500 characters or fewer.")
+            if not errors:
+                rsvp_updates.append(
+                    RSVPUpdate(
+                        id=uuid4().hex,
+                        title=title,
+                        message=message,
+                        created_at=_utc_now_iso(),
+                    )
+                )
+                messages.append("RSVP update posted.")
+                should_broadcast = True
+
+        elif action == "delete_rsvp_update":
+            update_id = request.form.get("update_id", "")
+            update_index = next(
+                (index for index, update in enumerate(rsvp_updates) if update.id == update_id),
+                None,
+            )
+            if update_index is None:
+                errors.append("RSVP update could not be found.")
+            else:
+                removed_update = rsvp_updates.pop(update_index)
+                messages.append(f"Removed RSVP update: {removed_update.title}.")
+                should_broadcast = True
+
         elif action == "delete_costume":
             index = parse_entry_index(
                 costume_signups,
@@ -2139,6 +2357,9 @@ def admin_portal():
         landing_page_targets=LANDING_PAGE_TARGETS,
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
+        rsvp_signups=rsvp_signups,
+        rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
+        rsvp_updates=sorted_rsvp_updates(),
     )
 
 

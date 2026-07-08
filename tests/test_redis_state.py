@@ -91,6 +91,7 @@ class RedisStateTests(unittest.TestCase):
         self.original_config = main.REDIS_CONFIG
         self.original_testing = main.app.config["TESTING"]
         self.original_admin_password = main.app.config["ADMIN_PASSWORD"]
+        self.original_party_start = main.app.config["PARTY_START"]
         self.original_app_env = os.environ.get("APP_ENV")
 
         main.redis_client = self.fake_redis
@@ -113,6 +114,7 @@ class RedisStateTests(unittest.TestCase):
         main.REDIS_CONFIG = self.original_config
         main.app.config["TESTING"] = self.original_testing
         main.app.config["ADMIN_PASSWORD"] = self.original_admin_password
+        main.app.config["PARTY_START"] = self.original_party_start
         if self.original_app_env is None:
             os.environ.pop("APP_ENV", None)
         else:
@@ -126,6 +128,8 @@ class RedisStateTests(unittest.TestCase):
         main.costume_ballots = {}
         main.registered_users = {}
         main.user_accounts = {}
+        main.rsvp_signups = []
+        main.rsvp_updates = []
         main.submitted_costume_votes = set()
         main.live_display_override = None
         main.landing_page_target = main.DEFAULT_LANDING_PAGE_TARGET
@@ -193,6 +197,24 @@ class RedisStateTests(unittest.TestCase):
                 "created_at": "2026-07-06T00:00:00Z",
             }
         }
+        main.rsvp_signups = [
+            main.RSVPSignup(
+                "Morgan",
+                "morgan@example.com",
+                2,
+                "Bringing cider",
+                "2026-07-06T00:00:00Z",
+                "rsvp-1",
+            )
+        ]
+        main.rsvp_updates = [
+            main.RSVPUpdate(
+                "Parking",
+                "Use the west side of the street.",
+                "2026-07-07T00:00:00Z",
+                "update-1",
+            )
+        ]
         main.submitted_costume_votes = {"user-1", "user-2"}
         main.contest_state["voting_open"] = True
         main.karaoke_state["party_started"] = True
@@ -220,6 +242,11 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual({"user-1": "Ada"}, main.registered_users)
         self.assertEqual("Ada", main.user_accounts["ada"]["username"])
         self.assertTrue(main.check_password_hash(main.user_accounts["ada"]["password_hash"], "party-password"))
+        self.assertEqual("Morgan", main.rsvp_signups[0].name)
+        self.assertEqual(2, main.rsvp_signups[0].guest_count)
+        self.assertEqual("Bringing cider", main.rsvp_signups[0].note)
+        self.assertEqual("Parking", main.rsvp_updates[0].title)
+        self.assertEqual("Use the west side of the street.", main.rsvp_updates[0].message)
         self.assertEqual({"user-1", "user-2"}, main.submitted_costume_votes)
         self.assertTrue(main.contest_state["voting_open"])
         self.assertTrue(main.karaoke_state["party_started"])
@@ -360,6 +387,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual({"costume-1": 1, "costume-2": 9}, state["costume_ballots"]["user-1"])
 
     def test_display_data_reflects_persisted_state_and_update_version_publish(self):
+        main.app.config["PARTY_START"] = "2026-01-01T00:00:00+00:00"
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -580,39 +608,125 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("/party/login", good_code.headers["Location"])
         self.assertIn("Welcome to the Halloween Hub", login_form.get_data(as_text=True))
 
-    def test_rsvp_requires_party_code_and_creates_account_after_unlock(self):
+    def test_rsvp_requires_party_code_and_creates_independent_rsvp_after_unlock(self):
         self.save_current_state()
 
         with main.app.test_client() as client:
             locked_rsvp = client.get("/rsvp")
             unlock_response = client.post(
                 "/rsvp",
-                data={"party_code": "invite-code", "next": "/party"},
+                data={"party_code": "invite-code"},
             )
-            rsvp_form = client.get("/rsvp?next=/party")
+            rsvp_form = client.get("/rsvp")
             signup_response = client.post(
                 "/rsvp",
                 data={
+                    "action": "submit_rsvp",
                     "username": "Casey",
-                    "password": "party-password",
-                    "confirm_password": "party-password",
-                    "next": "/party",
+                    "contact": "casey@example.com",
+                    "guest_count": "3",
+                    "note": "Arriving after 8",
                 },
             )
+            confirmation_response = client.get("/rsvp")
 
             with client.session_transaction() as session:
                 roles = session.get("roles", [])
-                user_id = session.get("user_id")
+                rsvp_id = session.get("rsvp_id")
 
         state = self.redis_state()
         self.assertEqual(200, locked_rsvp.status_code)
         self.assertIn("Unlock RSVP", locked_rsvp.get_data(as_text=True))
         self.assertEqual(302, unlock_response.status_code)
         self.assertIn("Save your RSVP", rsvp_form.get_data(as_text=True))
+        self.assertNotIn("Password", rsvp_form.get_data(as_text=True))
         self.assertEqual(302, signup_response.status_code)
-        self.assertEqual("Casey", state["user_accounts"]["casey"]["username"])
-        self.assertEqual("Casey", state["registered_users"][user_id])
-        self.assertIn("regular", roles)
+        self.assertEqual("Casey", state["rsvp_signups"][0]["name"])
+        self.assertEqual("casey@example.com", state["rsvp_signups"][0]["contact"])
+        self.assertEqual(3, state["rsvp_signups"][0]["guest_count"])
+        self.assertEqual("Arriving after 8", state["rsvp_signups"][0]["note"])
+        self.assertEqual(state["rsvp_signups"][0]["id"], rsvp_id)
+        self.assertNotIn("casey", state["user_accounts"])
+        self.assertNotIn("regular", roles)
+        self.assertIn("You're on the RSVP list", confirmation_response.get_data(as_text=True))
+
+    def test_admin_page_shows_rsvp_list(self):
+        main.rsvp_signups = [
+            main.RSVPSignup(
+                id="rsvp-1",
+                name="Casey",
+                contact="casey@example.com",
+                guest_count=2,
+                note="Vegetarian",
+                created_at="2026-07-07T00:00:00Z",
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/admin")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("RSVP List", body)
+        self.assertIn("Casey", body)
+        self.assertIn("casey@example.com", body)
+        self.assertIn("Vegetarian", body)
+
+    def test_admin_can_post_rsvp_updates_and_rsvp_page_shows_newest_first(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            first_response = client.post(
+                "/admin",
+                data={
+                    "action": "add_rsvp_update",
+                    "title": "Costume reminder",
+                    "message": "Bring your costume contest energy.",
+                },
+            )
+            second_response = client.post(
+                "/admin",
+                data={
+                    "action": "add_rsvp_update",
+                    "title": "Parking",
+                    "message": "Use the west side of the street.",
+                },
+            )
+            self.verify_party_code(client)
+            rsvp_response = client.get("/rsvp")
+
+        state = self.redis_state()
+        body = rsvp_response.get_data(as_text=True)
+        parking_index = body.index("Parking")
+        costume_index = body.index("Costume reminder")
+        self.assertEqual(200, first_response.status_code)
+        self.assertEqual(200, second_response.status_code)
+        self.assertEqual(2, len(state["rsvp_updates"]))
+        self.assertLess(parking_index, costume_index)
+        self.assertIn("Latest update", body)
+
+    def test_pre_party_display_rotates_only_rsvp_cards_and_updates(self):
+        main.costume_signups = [
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+        ]
+        main.karaoke_signups = [
+            main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "", "karaoke-1"),
+        ]
+        main.rsvp_updates = [
+            main.RSVPUpdate("Parking", "Use the west side of the street.", "2026-07-07T00:00:00Z", "update-1")
+        ]
+
+        entries = main.build_rotation_entries()
+        serialized_entries = json.dumps(entries)
+
+        self.assertIn("RSVP", {entry["category"] for entry in entries})
+        self.assertIn("RSVP Update", {entry["category"] for entry in entries})
+        self.assertIn("Parking", serialized_entries)
+        self.assertNotIn("Dressed as Vampire", serialized_entries)
+        self.assertNotIn("Thriller", serialized_entries)
 
     def test_regular_user_login_grants_only_regular_route_access(self):
         self.add_user_account()

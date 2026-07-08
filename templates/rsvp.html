@@ -7,23 +7,8 @@
     <p class="rsvp-landing__eyebrow">Qiana and Tony's Halloween Party</p>
     <h2>RSVP for the party</h2>
     <p>
-      Use the party code from your invite to unlock RSVP, costume contest signup, karaoke signup, and voting on party night.
+      Use the party code from your invite to unlock the details, RSVP, and read the latest host updates.
     </p>
-  </div>
-
-  <div class="rsvp-landing__stats" aria-label="Current party activity">
-    <div>
-      <strong>{{ registered_guest_count }}</strong>
-      <span>RSVP{{ 's' if registered_guest_count != 1 else '' }}</span>
-    </div>
-    <div>
-      <strong>{{ costume_count }}</strong>
-      <span>Costume{{ 's' if costume_count != 1 else '' }}</span>
-    </div>
-    <div>
-      <strong>{{ karaoke_count }}</strong>
-      <span>Karaoke song{{ 's' if karaoke_count != 1 else '' }}</span>
-    </div>
   </div>
 
   {% if errors %}
@@ -39,7 +24,6 @@
   {% if not party_code_verified %}
     <form method="post" class="rsvp-card">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="next" value="{{ next_page }}">
       <h3>Enter the party code</h3>
       {% if party_code_hint %}
         <p class="form-helper">Hint: {{ party_code_hint }}</p>
@@ -52,27 +36,103 @@
         <p class="form-helper">The hosts have not set the party code yet.</p>
       {% endif %}
     </form>
+  {% elif submitted_rsvp %}
+    <div class="rsvp-card rsvp-card--confirmed">
+      <h3>You're on the RSVP list</h3>
+      <p>
+        Thanks, {{ submitted_rsvp.name }}. We have you down for
+        {{ submitted_rsvp.guest_count }} guest{{ 's' if submitted_rsvp.guest_count != 1 else '' }}.
+      </p>
+      <div class="rsvp-card__actions">
+        <a class="button button--primary" href="{{ url_for('party_register') }}">Create Party Portal Account</a>
+        <a class="button button--outline" href="{{ url_for('party_login') }}">Sign In</a>
+      </div>
+      <p class="form-helper">If you already have an account, sign in. Otherwise, create one to get a head start on costume signup, karaoke signup, and voting.</p>
+    </div>
   {% else %}
     <form method="post" class="rsvp-card">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="next" value="{{ next_page }}">
+      <input type="hidden" name="action" value="submit_rsvp">
       <h3>Save your RSVP</h3>
-      <p class="form-helper">This creates your Halloween account so signups and costume voting stay tied to you.</p>
+      <p class="form-helper">
+        Already RSVP'd? <a href="{{ url_for('party_register') }}">Create a party account</a> to get a head start, or
+        <a href="{{ url_for('party_login') }}">sign in</a> if you already have one.
+      </p>
 
       <label for="username">Your Name</label>
       <input type="text" id="username" name="username" autocomplete="username" required value="{{ request.form.username }}">
 
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
+      <label for="contact">Contact</label>
+      <input type="text" id="contact" name="contact" autocomplete="email" maxlength="120" placeholder="Optional email or phone" value="{{ request.form.contact }}">
 
-      <label for="confirm_password">Confirm Password</label>
-      <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required minlength="8">
+      <label for="guest_count">Number of Guests</label>
+      <input type="number" id="guest_count" name="guest_count" min="1" max="12" required value="{{ request.form.guest_count or 1 }}">
 
-      <button type="submit" class="button button--primary">RSVP and Enter Party Portal</button>
-      <p class="form-helper">
-        Already RSVP'd? <a href="{{ url_for('party_login', next=next_page) }}">Sign in</a>.
-      </p>
+      <label for="note">Note</label>
+      <textarea id="note" name="note" maxlength="240" placeholder="Optional costume, food, or arrival note">{{ request.form.note }}</textarea>
+
+      <button type="submit" class="button button--primary">Add Me to the RSVP List</button>
     </form>
   {% endif %}
+
+  <div class="rsvp-details" aria-label="Party details">
+    {% for card in party_info_cards %}
+      <article>
+        <h3>{{ card.title }}</h3>
+        <p>{{ card.message }}</p>
+      </article>
+    {% endfor %}
+    <article>
+      <h3>Costume Contest</h3>
+      <p>Judging kicks off at 9:30 PM. Guests can vote from the party portal.</p>
+    </article>
+    <article>
+      <h3>Karaoke</h3>
+      <p>The karaoke party starts at 11:00 PM. Add your song once you are in the portal.</p>
+    </article>
+  </div>
+
+  <div class="rsvp-landing__stats" aria-label="Current party activity">
+    <div>
+      <strong>{{ rsvp_count }}</strong>
+      <span>RSVP{{ 's' if rsvp_count != 1 else '' }}</span>
+    </div>
+    <div>
+      <strong>{{ rsvp_guest_total }}</strong>
+      <span>Total guest{{ 's' if rsvp_guest_total != 1 else '' }}</span>
+    </div>
+    <div>
+      <strong>{{ costume_count }}</strong>
+      <span>Costume{{ 's' if costume_count != 1 else '' }}</span>
+    </div>
+    <div>
+      <strong>{{ karaoke_count }}</strong>
+      <span>Karaoke song{{ 's' if karaoke_count != 1 else '' }}</span>
+    </div>
+  </div>
+
+  <section class="rsvp-updates" aria-label="Host updates">
+    <h3>Latest Updates</h3>
+    {% if rsvp_updates %}
+      <div class="rsvp-update-list">
+        {% for update in rsvp_updates %}
+          <article class="rsvp-update-card{% if loop.first %} rsvp-update-card--latest{% endif %}">
+            <p class="rsvp-update-card__eyebrow">{{ 'Latest update' if loop.first else 'Update' }}</p>
+            <h4>{{ update.title }}</h4>
+            <p>{{ update.message }}</p>
+            {% if update.created_at %}
+              <p class="rsvp-update-card__meta">{{ update.created_at }}</p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <article class="rsvp-update-card rsvp-update-card--latest">
+        <p class="rsvp-update-card__eyebrow">Latest update</p>
+        <h4>RSVP is open</h4>
+        <p>Use this page to let the hosts know you are coming. More updates will appear here as party night gets closer.</p>
+      </article>
+    {% endif %}
+  </section>
 </section>
 {% endblock %}

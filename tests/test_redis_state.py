@@ -587,13 +587,13 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Morgan", state["registered_users"][user_id])
         self.assertIn("regular", roles)
 
-    def test_regular_user_logout_clears_regular_session(self):
+    def test_logout_clears_current_session(self):
         self.save_current_state()
 
         with main.app.test_client() as client:
             self.login_regular(client)
             halloween_response = client.get("/party")
-            logout_response = client.post("/party/logout")
+            logout_response = client.post("/logout")
             protected_response = client.get("/party")
 
             with client.session_transaction() as session:
@@ -602,6 +602,8 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(200, halloween_response.status_code)
         self.assertIn("Log Out", halloween_response.get_data(as_text=True))
+        self.assertEqual(1, halloween_response.get_data(as_text=True).count("Log Out"))
+        self.assertIn('action="/logout"', halloween_response.get_data(as_text=True))
         self.assertEqual(302, logout_response.status_code)
         self.assertIn("/party/login", logout_response.headers["Location"])
         self.assertEqual(302, protected_response.status_code)
@@ -609,14 +611,14 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("regular", roles)
         self.assertIsNone(username)
 
-    def test_admin_logout_keeps_regular_session_when_both_roles_exist(self):
+    def test_logout_clears_regular_and_admin_roles_when_both_exist(self):
         self.save_current_state()
 
         with main.app.test_client() as client:
             self.login_regular(client)
             self.login_admin(client)
             admin_response = client.get("/admin")
-            logout_response = client.post("/admin/logout")
+            logout_response = client.post("/logout")
             halloween_response = client.get("/party")
             admin_redirect = client.get("/admin")
 
@@ -625,15 +627,18 @@ class RedisStateTests(unittest.TestCase):
                 username = session.get("username")
 
         self.assertEqual(200, admin_response.status_code)
-        self.assertIn("Admin Logout", admin_response.get_data(as_text=True))
+        self.assertEqual(1, admin_response.get_data(as_text=True).count("Log Out"))
+        self.assertNotIn("Admin Logout", admin_response.get_data(as_text=True))
+        self.assertIn('action="/logout"', admin_response.get_data(as_text=True))
         self.assertEqual(302, logout_response.status_code)
-        self.assertIn("/admin/login", logout_response.headers["Location"])
-        self.assertEqual(200, halloween_response.status_code)
+        self.assertIn("/party/login", logout_response.headers["Location"])
+        self.assertEqual(302, halloween_response.status_code)
+        self.assertIn("/party/login", halloween_response.headers["Location"])
         self.assertEqual(302, admin_redirect.status_code)
         self.assertIn("/admin/login", admin_redirect.headers["Location"])
-        self.assertIn("regular", roles)
+        self.assertNotIn("regular", roles)
         self.assertNotIn("admin", roles)
-        self.assertEqual("Jamie", username)
+        self.assertIsNone(username)
 
     def test_admin_session_grants_display_route_access(self):
         self.save_current_state()

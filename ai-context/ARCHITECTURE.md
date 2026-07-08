@@ -11,9 +11,10 @@
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
 - `GET|POST /party/login` -> attendee account sign-in; validates a Redis-stored password hash and grants the `regular` role.
 - `GET|POST /party/register` -> attendee account creation; stores a password hash in Redis app state and grants the `regular` role.
-- `POST /party/logout` -> clears the `regular` role and attendee session identity.
+- `POST /logout` -> clears the current browser session regardless of regular/admin role.
+- `POST /party/logout` and `POST /admin/logout` -> compatibility aliases for
+  the single logout behavior.
 - `GET|POST /admin/login` -> password-backed admin session login; grants the `admin` role.
-- `POST /admin/logout` -> clears only admin auth session state.
 - `GET|POST /admin` -> admin dashboard and all admin mutations.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
@@ -42,6 +43,33 @@
 The app uses Flask sessions for role and attendee identity. Regular attendee
 accounts live in Redis app state as `user_accounts`; active session display
 names are also tracked in `registered_users` by account ID.
+
+## Session Management
+
+The app uses Flask's default signed-cookie session model. Each browser/profile
+stores its own session cookie, and every request is authorized from only the
+cookie sent with that request. Session fields currently include:
+
+- `roles`: granted UI roles such as `regular` and `admin`.
+- `user_id`: the Redis-backed attendee account ID for regular users.
+- `username`: the attendee display name shown in the menu.
+- `admin_authenticated`: legacy-compatible admin role marker.
+- `csrf_token`: per-session token for POST forms outside testing mode.
+
+Regular attendee accounts and password hashes live in Redis `user_accounts`;
+Redis does not hold the active Flask session. Logging out posts to `/logout`,
+which calls `session.clear()` and redirects to `/party/login`. That clears only
+the current browser/profile cookie payload, so it does not remove Redis account
+records and does not affect any other browser's session. The compatibility
+routes `/party/logout`, `/admin/logout`, and `/halloween/logout` all execute the
+same single-session logout behavior.
+
+Templates display the signed-in name from the current request's session only.
+Another attendee's name can appear only if the same browser/profile cookie is
+being shared. Separate browsers, private windows, devices, or profiles have
+separate session cookies. If the same attendee account signs in on multiple
+devices, those devices have separate sessions, but voting remains account-bound
+through `user_id` and `submitted_costume_votes`.
 
 ## Display Update Flow
 
@@ -93,8 +121,8 @@ The base rotation always starts with signup instructions and event spotlight car
 
 ## Template Responsibilities
 
-- `base.html`: shared shell, title, CSS include, header nav, visible signed-in
-  session/logout row, footer, and script block.
+- `base.html`: shared shell, title, CSS include, header menu with signed-in
+  identity and single logout action, footer, and script block.
 - `index.html`: attendee dashboard, contest status banners, event highlights, signup summaries.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.

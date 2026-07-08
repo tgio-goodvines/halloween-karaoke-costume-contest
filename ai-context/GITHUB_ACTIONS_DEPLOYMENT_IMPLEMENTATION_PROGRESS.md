@@ -183,7 +183,8 @@ Current deployed app behavior:
   Vault.
 - `/live-display`, `/api/display-data`, and `/api/display-updates` require an
   admin session.
-- Header logout controls are visible outside the mobile disclosure menu.
+- Header logout is a single `/logout` action inside the disclosure menu and
+  clears the current browser session regardless of role.
 
 ## Vault Admin Password Rotation
 

@@ -64,17 +64,14 @@ a:focus {
   gap: 0.5rem;
 }
 
-.site-header__user {
+.site-nav__user {
+  display: block;
+  max-width: 16rem;
   font-size: 0.9rem;
   color: var(--muted);
-}
-
-.site-header__session {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .site-header h1 {
@@ -84,23 +81,45 @@ a:focus {
 }
 
 .site-nav {
-  display: block;
+  position: relative;
 }
 
 .site-nav__toggle {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid rgba(255, 59, 59, 0.55);
+  border-radius: 0.7rem;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.72);
+  box-shadow: 0 0 18px rgba(255, 59, 59, 0.28);
+  cursor: pointer;
 }
 
 .site-nav nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 20;
+  width: min(78vw, 18rem);
+  padding: 0.75rem;
+  display: grid;
   gap: 0.5rem;
-  margin-top: 0.25rem;
+  margin: 0;
+  border: 1px solid rgba(255, 59, 59, 0.55);
+  border-radius: 0.85rem;
+  background: rgba(5, 5, 5, 0.98);
+  box-shadow: 0 0 28px rgba(255, 59, 59, 0.38);
+}
+
+.site-nav:not([open]) nav {
+  display: none;
 }
 
 .site-nav nav a,
-.site-header__logout button {
+.site-nav__logout button {
   color: var(--text);
   text-decoration: none;
   padding: 0.55rem 0.9rem;
@@ -114,15 +133,23 @@ a:focus {
 
 .site-nav nav a:hover,
 .site-nav nav a:focus,
-.site-header__logout button:hover,
-.site-header__logout button:focus {
+.site-nav__logout button:hover,
+.site-nav__logout button:focus {
   border-color: rgba(255, 59, 59, 0.6);
   background-color: rgba(255, 59, 59, 0.18);
   transform: translateY(-1px);
 }
 
-.site-header__logout {
+.site-nav__logout {
   margin: 0;
+}
+
+.site-nav nav a,
+.site-nav__logout button {
+  width: 100%;
+  min-height: 44px;
+  text-align: center;
+  border-color: rgba(255, 59, 59, 0.22);
 }
 
 :is(
@@ -178,68 +205,8 @@ a:focus {
     max-width: calc(100% - 6.5rem);
   }
 
-  .site-nav {
-    position: relative;
-  }
-
-  .site-nav__toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 44px;
-    padding: 0.65rem 0.9rem;
-    border: 1px solid rgba(255, 59, 59, 0.55);
-    border-radius: 0.7rem;
-    color: var(--text);
-    background: rgba(0, 0, 0, 0.72);
-    box-shadow: 0 0 18px rgba(255, 59, 59, 0.28);
-    cursor: pointer;
-  }
-
-  .site-nav nav {
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 0;
-    z-index: 20;
-    width: min(78vw, 18rem);
-    margin: 0;
-    padding: 0.75rem;
-    display: grid;
-    gap: 0.5rem;
-    border: 1px solid rgba(255, 59, 59, 0.55);
-    border-radius: 0.85rem;
-    background: rgba(5, 5, 5, 0.98);
-    box-shadow: 0 0 28px rgba(255, 59, 59, 0.38);
-  }
-
-  .site-nav:not([open]) nav {
-    display: none;
-  }
-
-  .site-nav nav a,
-  .site-nav .site-header__logout button {
-    width: 100%;
-    min-height: 44px;
-    text-align: center;
-    border-color: rgba(255, 59, 59, 0.22);
-  }
-
-  .site-header__session {
-    max-width: calc(100vw - 2rem);
-    justify-content: flex-end;
-  }
-
-  .site-header__session .site-header__logout button {
-    min-height: 40px;
-    padding: 0.45rem 0.75rem;
-    border-color: rgba(255, 59, 59, 0.35);
-  }
-
-  .site-header__session .site-header__user {
+  .site-nav__user {
     max-width: min(52vw, 16rem);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }
 

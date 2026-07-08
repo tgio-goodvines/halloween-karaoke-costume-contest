@@ -1333,7 +1333,7 @@ def legacy_halloween_register():
 
 @app.route("/halloween/logout", methods=["POST"])
 def legacy_halloween_logout():
-    return party_logout()
+    return logout()
 
 
 @app.route("/costume-signup", methods=["GET", "POST"])
@@ -1472,10 +1472,10 @@ def party_register():
 
 
 @app.route("/party/logout", methods=["POST"])
-def party_logout():
-    revoke_session_role("regular")
-    session.pop("user_id", None)
-    session.pop("username", None)
+@app.route("/admin/logout", methods=["POST"])
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
     return redirect(url_for("party_login"))
 
 
@@ -1508,12 +1508,6 @@ def admin_login():
         next_page=next_page,
         show_admin_link=False,
     )
-
-
-@app.route("/admin/logout", methods=["POST"])
-def admin_logout():
-    revoke_session_role("admin")
-    return redirect(url_for("admin_login"))
 
 
 @app.route("/admin", methods=["GET", "POST"])

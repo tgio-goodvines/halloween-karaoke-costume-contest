@@ -5,9 +5,10 @@
 - Party dashboard at `/party`.
 - Redis-backed attendee account registration at `/party/register`.
 - Password-backed attendee account sign-in at `/party/login`.
-- Attendee logout from the shared header clears regular session access.
+- A single logout action inside the shared header menu clears the current
+  browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
-- Logged-in user name is shown in the shared header.
+- Logged-in user name is shown in the shared header menu.
 - Costume contest signup at `/party/costumes`.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
@@ -54,7 +55,8 @@
 - Password-backed admin login at `/admin/login`.
 - Admin sessions can access admin routes, JSON exports, and the live-display
   routes; they do not implicitly receive regular guest access.
-- Admin logout at `/admin/logout` clears only admin access.
+- Admins use the same `/logout` action as attendees; logout clears the current
+  browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.
 - Add, edit, delete, move up, and move down karaoke signups.
 - Add-entry and existing-entry admin forms are collapsed disclosure rows by
@@ -104,6 +106,5 @@ app state.
 - Sticky site header for attendee/admin pages.
 - Attendee/admin mobile header uses compact disclosure navigation with shorter
   labels and touch-friendly controls.
-- Regular and admin logout controls are visible in the header session row, not
-  hidden inside the mobile disclosure navigation.
+- The single logout control is tucked into the disclosure navigation menu.
 - Red glowing cards, buttons, banners, score bars, and display panels.

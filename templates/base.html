@@ -14,6 +14,11 @@
           <details class="site-nav">
             <summary class="site-nav__toggle">Menu</summary>
             <nav>
+              {% if session.username %}
+                <span class="site-nav__user">Signed in as {{ session.username }}</span>
+              {% elif admin_authenticated %}
+                <span class="site-nav__user">Signed in as Admin</span>
+              {% endif %}
               <a href="{{ url_for('party_dashboard') }}">Overview</a>
               <a href="{{ url_for('party_costumes') }}">Costume</a>
               {% if costume_contest_state.voting_open %}
@@ -23,27 +28,14 @@
               {% if show_admin_link is not defined or show_admin_link %}
                 <a href="{{ url_for('admin_portal') }}">Admin</a>
               {% endif %}
-            </nav>
-          </details>
-          {% if session.username or regular_authenticated or admin_authenticated %}
-            <div class="site-header__session">
-              {% if session.username %}
-                <span class="site-header__user">Signed in as {{ session.username }}</span>
-              {% endif %}
-              {% if regular_authenticated %}
-                <form method="post" action="{{ url_for('party_logout') }}" class="site-header__logout">
+              {% if session.username or regular_authenticated or admin_authenticated %}
+                <form method="post" action="{{ url_for('logout') }}" class="site-nav__logout">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit">Log Out</button>
                 </form>
               {% endif %}
-              {% if admin_authenticated %}
-                <form method="post" action="{{ url_for('admin_logout') }}" class="site-header__logout">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit">Admin Logout</button>
-                </form>
-              {% endif %}
-            </div>
-          {% endif %}
+            </nav>
+          </details>
         </div>
       </div>
     </header>

@@ -14,11 +14,11 @@
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
 | `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, and the `halloween` prefix. |
 | `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, display update publishing, and JSON exports using an in-memory Redis fake. |
-| `static/styles.css` | Shared Halloween-themed styles for attendee/admin pages, including the visible header session/logout row. |
+| `static/styles.css` | Shared Halloween-themed styles for attendee/admin pages, including the header menu and single logout action. |
 | `static/display.css` | Dedicated large-format live-display styles, override cards, CTA layout, scoreboard layout, and karaoke display panels. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, override rendering, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
-| `templates/base.html` | Shared attendee/admin layout with header navigation, visible signed-in session/logout controls, footer, and script block. |
+| `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, slides, costume and karaoke summaries. |
 | `templates/halloween_login.html` | Attendee account sign-in form. |
 | `templates/halloween_register.html` | Attendee account registration form. |

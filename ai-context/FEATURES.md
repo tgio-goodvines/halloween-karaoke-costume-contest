@@ -2,6 +2,13 @@
 
 ## Public And Attendee Features
 
+- `/` redirects to the admin-selected public landing target and defaults to
+  `/rsvp`.
+- RSVP landing page at `/rsvp` shows the party entry point and current RSVP,
+  costume, and karaoke counts.
+- `/rsvp`, `/party/login`, and `/party/register` require the party code before
+  RSVP, sign-in, or account creation forms are visible.
+- Successful RSVP creates a Redis-backed attendee account and signs the guest in.
 - Party dashboard at `/party`.
 - Redis-backed attendee account registration at `/party/register`.
 - Password-backed attendee account sign-in at `/party/login`.
@@ -55,6 +62,10 @@
 - Password-backed admin login at `/admin/login`.
 - Admin sessions can access admin routes, JSON exports, and the live-display
   routes; they do not implicitly receive regular guest access.
+- Admin can choose which page `/` redirects to: RSVP landing, party login,
+  party account signup, party portal, or live display.
+- Admin can set or replace the party code and optional code hint. The party code
+  is stored as a hash, not plaintext.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.
@@ -77,7 +88,8 @@ app state.
 
 ## Live Display Features
 
-- `/live-display` is the default root destination via `/` redirect.
+- `/live-display` can be selected as the root destination from admin public
+  access controls, but `/` defaults to `/rsvp`.
 - `/live-display`, `/api/display-data`, and `/api/display-updates` require a
   signed-in admin session from `/admin/login`.
 - `/health` returns JSON service and Redis readiness for production health

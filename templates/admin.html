@@ -29,6 +29,45 @@
     </div>
   {% endif %}
 
+  <section class="admin-section admin-section--access">
+    <h3>Public Access</h3>
+    <p>Control what guests see at tnq-halloween.com and require the party code before RSVP, login, or account signup.</p>
+
+    <div class="access-settings">
+      <form method="post" class="access-settings__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="landing_page_target">Landing page</label>
+        <select id="landing_page_target" name="landing_page_target">
+          {% for key, option in landing_page_targets.items() %}
+            <option value="{{ key }}" {% if key == landing_page_target %}selected{% endif %}>
+              {{ option.label }}
+            </option>
+          {% endfor %}
+        </select>
+        <p class="contest-status">
+          {{ landing_page_targets[landing_page_target].description }}
+        </p>
+        <button type="submit" name="action" value="update_landing_page" class="button button--primary">
+          Save Landing Page
+        </button>
+      </form>
+
+      <form method="post" class="access-settings__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p class="contest-status {% if party_code_configured %}contest-status--active{% else %}contest-status--inactive{% endif %}">
+          Party code is {% if party_code_configured %}set{% else %}not set{% endif %}.
+        </p>
+        <label for="party_code">New party code</label>
+        <input type="password" id="party_code" name="party_code" autocomplete="new-password" minlength="4" placeholder="Leave blank to keep current code">
+        <label for="party_code_hint">Code hint</label>
+        <input type="text" id="party_code_hint" name="party_code_hint" maxlength="120" value="{{ party_code_hint }}" placeholder="Optional hint for invited guests">
+        <button type="submit" name="action" value="update_party_code" class="button">
+          Save Party Code
+        </button>
+      </form>
+    </div>
+  </section>
+
   <section class="admin-section admin-section--contest">
     <h3>Costume Contest Controls</h3>
     <p>Kick off the contest, monitor live voting, and announce the winner straight from this dashboard.</p>

@@ -67,20 +67,24 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 
 ## User Flows
 
-1. `/` redirects to `/live-display`.
-2. `/live-display` redirects to `/admin/login` until the browser session has
+1. `/` redirects to the admin-configured public landing page, defaulting to
+   `/rsvp`.
+2. `/rsvp`, `/party/login`, and `/party/register` require the party code before
+   guests can see RSVP, sign-in, or account creation forms.
+3. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
-3. Attendees visit `/party`, are redirected to `/party/login` if not
+4. Attendees visit `/party`, are redirected to `/party/login` if not
    signed in, can create an account at `/party/register`, then see the
    party dashboard.
-4. Attendees can submit costume entries at `/party/costumes`.
-5. Attendees can submit karaoke songs at `/party/karaoke`.
-6. Admins sign in at `/admin/login` and manage entries and event state at
+5. Attendees can submit costume entries at `/party/costumes`.
+6. Attendees can submit karaoke songs at `/party/karaoke`.
+7. Admins sign in at `/admin/login` and manage entries, public landing settings,
+   party code settings, and event state at
    `/admin`.
-7. When the admin starts the costume contest, `/party/costumes/vote` becomes available to logged-in guests.
-8. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
-9. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
-10. Regular and admin sessions use one logout action in the header menu; it
+8. When the admin starts the costume contest, `/party/costumes/vote` becomes available to logged-in guests.
+9. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
+10. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
+11. Regular and admin sessions use one logout action in the header menu; it
     clears the current browser session regardless of role.
 
 ## State Model
@@ -97,6 +101,11 @@ the process-local cache:
 - `registered_users`: maps session `user_id` to display name.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
 - `live_display_override`: current full-screen override card, or `None`.
+- `landing_page_target`: admin-selected root redirect target, defaulting to
+  `/rsvp`.
+- `party_code_hash` and `party_code_hint`: invite-code gate settings for RSVP,
+  attendee login, and attendee account creation. The code itself is not stored
+  in plaintext.
 - `contest_state`: voting open/closed, winner lock, scoreboard card visibility.
 - `karaoke_state`: whether karaoke has been started and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.

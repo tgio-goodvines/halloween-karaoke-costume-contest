@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set title = "RSVP" %}
+
+{% block content %}
+<section class="rsvp-landing">
+  <div class="rsvp-landing__intro">
+    <p class="rsvp-landing__eyebrow">Qiana and Tony's Halloween Party</p>
+    <h2>RSVP for the party</h2>
+    <p>
+      Use the party code from your invite to unlock RSVP, costume contest signup, karaoke signup, and voting on party night.
+    </p>
+  </div>
+
+  <div class="rsvp-landing__stats" aria-label="Current party activity">
+    <div>
+      <strong>{{ registered_guest_count }}</strong>
+      <span>RSVP{{ 's' if registered_guest_count != 1 else '' }}</span>
+    </div>
+    <div>
+      <strong>{{ costume_count }}</strong>
+      <span>Costume{{ 's' if costume_count != 1 else '' }}</span>
+    </div>
+    <div>
+      <strong>{{ karaoke_count }}</strong>
+      <span>Karaoke song{{ 's' if karaoke_count != 1 else '' }}</span>
+    </div>
+  </div>
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if not party_code_verified %}
+    <form method="post" class="rsvp-card">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next_page }}">
+      <h3>Enter the party code</h3>
+      {% if party_code_hint %}
+        <p class="form-helper">Hint: {{ party_code_hint }}</p>
+      {% endif %}
+      {% if party_code_configured %}
+        <label for="party_code">Party Code</label>
+        <input type="password" id="party_code" name="party_code" autocomplete="one-time-code" required>
+        <button type="submit" class="button button--primary">Unlock RSVP</button>
+      {% else %}
+        <p class="form-helper">The hosts have not set the party code yet.</p>
+      {% endif %}
+    </form>
+  {% else %}
+    <form method="post" class="rsvp-card">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next_page }}">
+      <h3>Save your RSVP</h3>
+      <p class="form-helper">This creates your Halloween account so signups and costume voting stay tied to you.</p>
+
+      <label for="username">Your Name</label>
+      <input type="text" id="username" name="username" autocomplete="username" required value="{{ request.form.username }}">
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
+
+      <label for="confirm_password">Confirm Password</label>
+      <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required minlength="8">
+
+      <button type="submit" class="button button--primary">RSVP and Enter Party Portal</button>
+      <p class="form-helper">
+        Already RSVP'd? <a href="{{ url_for('party_login', next=next_page) }}">Sign in</a>.
+      </p>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

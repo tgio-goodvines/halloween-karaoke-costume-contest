@@ -34,6 +34,7 @@ from flask import (
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("HALLOWEEN_APP_SECRET", "dev-secret-key")
 app.config["ADMIN_PASSWORD"] = os.environ.get("HALLOWEEN_ADMIN_PASSWORD", "")
+app.config["PARTY_CODE"] = os.environ.get("HALLOWEEN_PARTY_CODE", "")
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -213,6 +214,35 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
     "current_singer_id": None,
 }
 
+DEFAULT_LANDING_PAGE_TARGET = "rsvp"
+LANDING_PAGE_TARGETS: dict[str, dict[str, str]] = {
+    "rsvp": {
+        "endpoint": "rsvp",
+        "label": "RSVP landing page",
+        "description": "Show the public RSVP page with signup and sign-in options.",
+    },
+    "party_login": {
+        "endpoint": "party_login",
+        "label": "Party login",
+        "description": "Send guests directly to the Halloween account sign-in page.",
+    },
+    "party_register": {
+        "endpoint": "party_register",
+        "label": "Party account signup",
+        "description": "Send guests directly to the account creation form.",
+    },
+    "party_dashboard": {
+        "endpoint": "party_dashboard",
+        "label": "Party portal",
+        "description": "Send signed-in guests to the party portal, with login required.",
+    },
+    "live_display": {
+        "endpoint": "live_display",
+        "label": "Live display",
+        "description": "Use the big-screen live display as the public root route.",
+    },
+}
+
 
 # Redis is the persistence target. These globals remain as the process-local
 # state cache while the app is migrated route by route.
@@ -224,6 +254,9 @@ registered_users: dict[str, str] = {}
 user_accounts: dict[str, dict[str, str]] = {}
 submitted_costume_votes: set[str] = set()
 live_display_override: dict[str, object] | None = None
+landing_page_target = DEFAULT_LANDING_PAGE_TARGET
+party_code_hash = generate_password_hash(app.config["PARTY_CODE"]) if app.config["PARTY_CODE"] else ""
+party_code_hint = ""
 
 display_update_condition = Condition()
 display_update_version = 0
@@ -236,12 +269,14 @@ display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
     "party_login",
     "party_register",
+    "rsvp",
     "admin_portal",
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
 }
 STATE_REFRESH_ENDPOINTS = {
+    "rsvp",
     "admin_portal",
     "party_dashboard",
     "party_costumes",
@@ -321,6 +356,47 @@ def create_user_account(username: str, password: str) -> dict[str, str]:
         "password_hash": generate_password_hash(password),
         "created_at": _utc_now_iso(),
     }
+
+
+def normalize_landing_page_target(raw_target: object) -> str:
+    target = str(raw_target or "").strip()
+    if target in LANDING_PAGE_TARGETS:
+        return target
+    return DEFAULT_LANDING_PAGE_TARGET
+
+
+def landing_page_endpoint() -> str:
+    target = normalize_landing_page_target(landing_page_target)
+    return LANDING_PAGE_TARGETS[target]["endpoint"]
+
+
+def party_code_is_configured() -> bool:
+    return bool(party_code_hash)
+
+
+def party_code_is_verified() -> bool:
+    return session_has_role("regular") or bool(session.get("party_code_verified"))
+
+
+def verify_party_code(raw_code: str) -> bool:
+    return bool(raw_code) and party_code_is_configured() and check_password_hash(party_code_hash, raw_code)
+
+
+def render_party_code_gate(
+    *,
+    errors: list[str] | None = None,
+    next_page: str | None = None,
+    destination: str = "party",
+) -> str:
+    return render_template(
+        "party_code_gate.html",
+        errors=errors or [],
+        next_page=next_page or url_for("party_dashboard"),
+        destination=destination,
+        party_code_configured=party_code_is_configured(),
+        party_code_hint=party_code_hint,
+        show_admin_link=False,
+    )
 
 
 def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
@@ -474,6 +550,9 @@ def snapshot_state() -> dict[str, object]:
         "contest_state": copy.deepcopy(contest_state),
         "karaoke_state": copy.deepcopy(karaoke_state),
         "live_display_override": copy.deepcopy(live_display_override),
+        "landing_page_target": normalize_landing_page_target(landing_page_target),
+        "party_code_hash": party_code_hash,
+        "party_code_hint": party_code_hint,
         "display_update_version": display_update_version,
         "updated_at": _utc_now_iso(),
     }
@@ -481,7 +560,8 @@ def snapshot_state() -> dict[str, object]:
 
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users
-    global user_accounts, costume_ballots, submitted_costume_votes, live_display_override, display_update_version
+    global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
+    global landing_page_target, party_code_hash, party_code_hint, display_update_version
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -571,6 +651,9 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
 
     raw_override = data.get("live_display_override")
     live_display_override = copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
+    landing_page_target = normalize_landing_page_target(data.get("landing_page_target"))
+    party_code_hash = str(data.get("party_code_hash", party_code_hash) or "")
+    party_code_hint = str(data.get("party_code_hint", party_code_hint) or "").strip()
 
     try:
         display_update_version = int(data.get("display_update_version", 0) or 0)
@@ -1231,7 +1314,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
 
 @app.route("/")
 def index():
-    return redirect(url_for("live_display"))
+    return redirect(url_for(landing_page_endpoint()))
 
 
 @app.route("/health")
@@ -1315,6 +1398,83 @@ def legacy_halloween_overview():
     return redirect(url_for("party_dashboard"), code=301)
 
 
+@app.route("/rsvp", methods=["GET", "POST"])
+def rsvp():
+    errors: List[str] = []
+    next_page = normalize_next_page(
+        request.args.get("next") or request.form.get("next"),
+        url_for("party_dashboard"),
+    )
+
+    if session_has_role("regular") and session.get("user_id") and session.get("username"):
+        return redirect(next_page)
+
+    if not party_code_is_verified():
+        if request.method == "POST":
+            provided_code = request.form.get("party_code", "").strip()
+            if verify_party_code(provided_code):
+                session["party_code_verified"] = True
+                return redirect(url_for("rsvp", next=next_page))
+            if not party_code_is_configured():
+                errors.append("The party code is not configured yet. Please ask the hosts.")
+            else:
+                errors.append("That party code did not match. Please try again.")
+
+        return render_template(
+            "rsvp.html",
+            errors=errors,
+            next_page=next_page,
+            party_code_verified=False,
+            party_code_configured=party_code_is_configured(),
+            party_code_hint=party_code_hint,
+            registered_guest_count=len(user_accounts),
+            costume_count=len(costume_signups),
+            karaoke_count=len(karaoke_signups),
+            show_admin_link=False,
+        )
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        provided_password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        normalized_username = normalize_username(username)
+
+        if not username:
+            errors.append("Name is required.")
+        elif len(username) > 80:
+            errors.append("Name must be 80 characters or fewer.")
+        elif normalized_username in user_accounts:
+            errors.append("That name is already registered. Sign in instead.")
+
+        if len(provided_password) < 8:
+            errors.append("Password must be at least 8 characters.")
+        elif provided_password != confirm_password:
+            errors.append("Passwords do not match.")
+
+        if not errors:
+            account = create_user_account(username, provided_password)
+            user_accounts[normalized_username] = account
+            session["user_id"] = account["id"]
+            session["username"] = account["username"]
+            grant_session_role("regular")
+            registered_users[account["id"]] = account["username"]
+            persist_state_if_available()
+            return redirect(next_page)
+
+    return render_template(
+        "rsvp.html",
+        errors=errors,
+        next_page=next_page,
+        party_code_verified=True,
+        party_code_configured=party_code_is_configured(),
+        party_code_hint=party_code_hint,
+        registered_guest_count=len(user_accounts),
+        costume_count=len(costume_signups),
+        karaoke_count=len(karaoke_signups),
+        show_admin_link=False,
+    )
+
+
 @app.route("/halloween/login", methods=["GET", "POST"])
 def legacy_halloween_login():
     return redirect(
@@ -1392,6 +1552,23 @@ def party_login():
         url_for("party_dashboard"),
     )
 
+    if not party_code_is_verified():
+        if request.method == "POST":
+            provided_code = request.form.get("party_code", "").strip()
+            if verify_party_code(provided_code):
+                session["party_code_verified"] = True
+                return redirect(url_for("party_login", next=next_page))
+            if not party_code_is_configured():
+                errors.append("The party code is not configured yet. Please ask the hosts.")
+            else:
+                errors.append("That party code did not match. Please try again.")
+
+        return render_party_code_gate(
+            errors=errors,
+            next_page=next_page,
+            destination="sign in",
+        )
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         provided_password = request.form.get("password", "")
@@ -1434,6 +1611,23 @@ def party_register():
         request.args.get("next") or request.form.get("next"),
         url_for("party_dashboard"),
     )
+
+    if not party_code_is_verified():
+        if request.method == "POST":
+            provided_code = request.form.get("party_code", "").strip()
+            if verify_party_code(provided_code):
+                session["party_code_verified"] = True
+                return redirect(url_for("party_register", next=next_page))
+            if not party_code_is_configured():
+                errors.append("The party code is not configured yet. Please ask the hosts.")
+            else:
+                errors.append("That party code did not match. Please try again.")
+
+        return render_party_code_gate(
+            errors=errors,
+            next_page=next_page,
+            destination="create an account",
+        )
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -1515,6 +1709,7 @@ def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
     global live_display_override, submitted_costume_votes, costume_ballots, karaoke_state
+    global landing_page_target, party_code_hash, party_code_hint
 
     ensure_costume_votes_alignment()
 
@@ -1586,6 +1781,32 @@ def admin_portal():
                 )
                 messages.append(f"Updated costume signup for {name}.")
                 should_broadcast = True
+
+        elif action == "update_landing_page":
+            requested_target = request.form.get("landing_page_target", "").strip()
+            normalized_target = normalize_landing_page_target(requested_target)
+            if requested_target != normalized_target:
+                errors.append("Choose a valid landing page.")
+            else:
+                landing_page_target = normalized_target
+                messages.append(
+                    f"Public landing page set to {LANDING_PAGE_TARGETS[landing_page_target]['label']}."
+                )
+
+        elif action == "update_party_code":
+            new_party_code = request.form.get("party_code", "").strip()
+            new_party_code_hint = request.form.get("party_code_hint", "").strip()
+            if len(new_party_code_hint) > 120:
+                errors.append("Party code hint must be 120 characters or fewer.")
+            if not new_party_code and not party_code_hash:
+                errors.append("Enter a party code before opening guest RSVP or login.")
+            if new_party_code and len(new_party_code) < 4:
+                errors.append("Party code must be at least 4 characters.")
+            if not errors:
+                if new_party_code:
+                    party_code_hash = generate_password_hash(new_party_code)
+                party_code_hint = new_party_code_hint
+                messages.append("Party code settings updated.")
 
         elif action == "delete_costume":
             index = parse_entry_index(
@@ -1914,6 +2135,10 @@ def admin_portal():
         top_costume_rankings=top_costume_rankings,
         karaoke_state=karaoke_state,
         costume_lineup_locked=is_costume_lineup_locked_for_voting(),
+        landing_page_target=normalize_landing_page_target(landing_page_target),
+        landing_page_targets=LANDING_PAGE_TARGETS,
+        party_code_configured=party_code_is_configured(),
+        party_code_hint=party_code_hint,
     )
 
 

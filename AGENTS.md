@@ -17,8 +17,10 @@ Start future repo work by reading these persistent context files:
 Important working notes:
 
 - The app stores Halloween event data in Redis DB `1` using the `halloween:` key prefix, with process-local state as a runtime cache.
-- The root route redirects to `/live-display`; attendee-facing flow begins at `/party`.
-- Attendees register/sign in through Redis-backed accounts at `/party/register` and `/party/login`; the single logout action is `/logout` and clears the current browser session regardless of role.
+- The root route redirects to the admin-selected public landing page and defaults to `/rsvp`; attendee-facing flow continues at `/party` after RSVP/login.
+- `/rsvp`, `/party/register`, and `/party/login` require the admin-configured party code before showing RSVP, account creation, or sign-in forms.
+- Attendees RSVP/register/sign in through Redis-backed accounts at `/rsvp`, `/party/register`, and `/party/login`; the single logout action is `/logout` and clears the current browser session regardless of role.
+- Admin controls can set the root landing target and replace the party code; store only the party code hash, never plaintext.
 - Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`.
 - Header logout is a single button tucked inside the `Menu` disclosure; do not add separate regular/admin logout controls.
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.

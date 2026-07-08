@@ -2,15 +2,23 @@
 
 ## Route Map
 
-- `GET /` -> redirects to `live_display`.
+- `GET /` -> redirects to the admin-configured public landing target; defaults
+  to `/rsvp`.
 - `GET /health` -> JSON health API for service and Redis readiness; returns
   `503` in production if Redis cannot be reached.
 - `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, and override state; requires an `admin` role session.
 - `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`; requires an `admin` role session.
 - `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
+- `GET|POST /rsvp` -> public RSVP landing page; requires the party code before
+  showing the RSVP/account form and creates a regular attendee session on
+  success.
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
-- `GET|POST /party/login` -> attendee account sign-in; validates a Redis-stored password hash and grants the `regular` role.
-- `GET|POST /party/register` -> attendee account creation; stores a password hash in Redis app state and grants the `regular` role.
+- `GET|POST /party/login` -> attendee account sign-in; requires party-code
+  verification before showing the login form, then validates a Redis-stored
+  password hash and grants the `regular` role.
+- `GET|POST /party/register` -> attendee account creation; requires party-code
+  verification before showing the registration form, then stores a password hash
+  in Redis app state and grants the `regular` role.
 - `POST /logout` -> clears the current browser session regardless of regular/admin role.
 - `POST /party/logout` and `POST /admin/logout` -> compatibility aliases for
   the single logout behavior.
@@ -130,8 +138,13 @@ The base rotation always starts with signup instructions and event spotlight car
 - `karaoke_signup.html`: karaoke entry form and submitted karaoke lineup.
 - `costume_voting.html`: complete ballot form and post-vote state.
 - `admin_login.html`: admin password form when production admin auth is configured.
-- `admin.html`: all admin actions and live contest/karaoke state; add/edit
-  entry forms are disclosure rows to keep mobile admin scanning manageable.
+- `rsvp.html`: standalone guest RSVP landing page with party-code unlock,
+  event counts, and RSVP/account creation after unlock.
+- `party_code_gate.html`: invite-code gate shown before direct login/register
+  pages reveal their forms.
+- `admin.html`: all admin actions, public landing/party-code settings, and live
+  contest/karaoke state; add/edit entry forms are disclosure rows to keep mobile
+  admin scanning manageable.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
   panel markup.

@@ -158,6 +158,8 @@ a:focus {
     .slides,
     .signup-summary > div,
     .form-section,
+    .rsvp-landing,
+    .rsvp-card,
     .submitted-list,
     .voting-reminder,
     .voting-card,
@@ -648,6 +650,39 @@ main.container {
   gap: 1.25rem;
 }
 
+.admin-section--access {
+  gap: 1.25rem;
+}
+
+.access-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.access-settings__form {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 59, 59, 0.25);
+  border-radius: 0.85rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.access-settings__form label {
+  font-weight: 700;
+}
+
+.access-settings__form input,
+.access-settings__form select {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(255, 59, 59, 0.35);
+  background: #111;
+  color: var(--text);
+}
+
 .contest-actions {
   display: flex;
   flex-wrap: wrap;
@@ -987,6 +1022,86 @@ main.container {
   text-align: center;
 }
 
+.rsvp-landing {
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  display: grid;
+  gap: 1.5rem;
+}
+
+.rsvp-landing__intro {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.rsvp-landing__intro h2 {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 4rem);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.rsvp-landing__intro p {
+  margin: 0;
+  max-width: 44rem;
+  color: rgba(244, 244, 248, 0.86);
+}
+
+.rsvp-landing__eyebrow {
+  color: var(--primary);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rsvp-landing__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.rsvp-landing__stats div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 59, 59, 0.25);
+  border-radius: 0.85rem;
+  background: rgba(0, 0, 0, 0.28);
+  text-align: center;
+}
+
+.rsvp-landing__stats strong {
+  font-size: 1.6rem;
+}
+
+.rsvp-landing__stats span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.rsvp-card {
+  max-width: 36rem;
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.rsvp-card h3 {
+  margin: 0;
+}
+
+.rsvp-card label {
+  font-weight: 700;
+}
+
+.rsvp-card input {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(255, 59, 59, 0.35);
+  background: #111;
+  color: var(--text);
+}
+
 @media (max-width: 600px) {
   main.container {
     gap: 1rem;
@@ -998,6 +1113,8 @@ main.container {
   .slides,
   .signup-summary > div,
   .form-section,
+  .rsvp-landing,
+  .rsvp-card,
   .submitted-list,
   .admin-panel,
   .admin-section,
@@ -1070,6 +1187,11 @@ main.container {
   .contest-actions form,
   .contest-actions button {
     width: 100%;
+  }
+
+  .access-settings,
+  .rsvp-landing__stats {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-entry__actions {

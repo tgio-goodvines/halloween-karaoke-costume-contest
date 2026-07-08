@@ -4,7 +4,7 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, role-based session auth, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, role-based session auth, party-code gate, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
 | `requirements.txt` | Python dependency declaration; includes Flask 3.x and redis-py for the Redis migration. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
@@ -20,13 +20,15 @@
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, slides, costume and karaoke summaries. |
-| `templates/halloween_login.html` | Attendee account sign-in form. |
-| `templates/halloween_register.html` | Attendee account registration form. |
+| `templates/rsvp.html` | Public RSVP landing page with party-code unlock, event counts, and RSVP/account creation after unlock. |
+| `templates/party_code_gate.html` | Party-code gate displayed before direct attendee login/register forms. |
+| `templates/halloween_login.html` | Attendee account sign-in form shown after party-code verification. |
+| `templates/halloween_register.html` | Attendee account registration form shown after party-code verification. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
 | `templates/karaoke_signup.html` | Karaoke signup form and submitted karaoke lineup. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
-| `templates/admin.html` | Admin dashboard for entry CRUD/reordering, contest controls, vote tally, winner state, and karaoke launch. |
+| `templates/admin.html` | Admin dashboard for public landing and party-code controls, entry CRUD/reordering, contest controls, vote tally, winner state, and karaoke launch. |
 | `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap. |
 
 ## Untracked Local Files Present During Review
@@ -125,5 +127,7 @@ These files are present locally but not tracked by Git at the time this context 
     ├── halloween_login.html
     ├── halloween_register.html
     ├── index.html
-    └── karaoke_signup.html
+    ├── karaoke_signup.html
+    ├── party_code_gate.html
+    └── rsvp.html
 ```

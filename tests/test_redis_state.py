@@ -128,6 +128,9 @@ class RedisStateTests(unittest.TestCase):
         main.user_accounts = {}
         main.submitted_costume_votes = set()
         main.live_display_override = None
+        main.landing_page_target = main.DEFAULT_LANDING_PAGE_TARGET
+        main.party_code_hash = main.generate_password_hash("invite-code")
+        main.party_code_hint = ""
         main.display_update_version = 0
         main.contest_state.clear()
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
@@ -147,6 +150,10 @@ class RedisStateTests(unittest.TestCase):
             roles.add("admin")
             session["roles"] = sorted(roles)
             session["admin_authenticated"] = True
+
+    def verify_party_code(self, client):
+        with client.session_transaction() as session:
+            session["party_code_verified"] = True
 
     def add_user_account(self, username="Jamie", password="party-password", user_id="user-1"):
         account = main.create_user_account(username, password)
@@ -190,6 +197,9 @@ class RedisStateTests(unittest.TestCase):
         main.contest_state["voting_open"] = True
         main.karaoke_state["party_started"] = True
         main.live_display_override = {"type": "notice", "title": "Tonight"}
+        main.landing_page_target = "party_login"
+        main.party_code_hash = main.generate_password_hash("secret-code")
+        main.party_code_hint = "On your invite"
         main.display_update_version = 7
 
         snapshot = main.snapshot_state()
@@ -214,6 +224,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(main.contest_state["voting_open"])
         self.assertTrue(main.karaoke_state["party_started"])
         self.assertEqual({"type": "notice", "title": "Tonight"}, main.live_display_override)
+        self.assertEqual("party_login", main.landing_page_target)
+        self.assertTrue(main.check_password_hash(main.party_code_hash, "secret-code"))
+        self.assertEqual("On your invite", main.party_code_hint)
         self.assertEqual(7, main.display_update_version)
 
     def test_load_state_from_redis_initializes_missing_state_and_hydrates_existing_state(self):
@@ -493,12 +506,121 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(302, good_login.status_code)
         self.assertEqual(200, admin_response.status_code)
 
+    def test_root_defaults_to_rsvp_landing_page(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            response = client.get("/")
+
+        self.assertEqual(302, response.status_code)
+        self.assertEqual("/rsvp", response.headers["Location"])
+
+    def test_admin_can_update_public_landing_page(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_landing_page",
+                    "landing_page_target": "party_login",
+                },
+            )
+            root_response = client.get("/")
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("party_login", state["landing_page_target"])
+        self.assertEqual(302, root_response.status_code)
+        self.assertEqual("/party/login", root_response.headers["Location"])
+
+    def test_admin_can_set_party_code_without_exposing_plaintext(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_party_code",
+                    "party_code": "new-invite-code",
+                    "party_code_hint": "Ask Tony",
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertTrue(main.check_password_hash(state["party_code_hash"], "new-invite-code"))
+        self.assertNotIn("new-invite-code", state["party_code_hash"])
+        self.assertEqual("Ask Tony", state["party_code_hint"])
+
+    def test_party_code_required_before_login_form_is_visible(self):
+        self.add_user_account()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            login_gate = client.get("/party/login")
+            bad_code = client.post(
+                "/party/login",
+                data={"party_code": "wrong", "next": "/party"},
+            )
+            good_code = client.post(
+                "/party/login",
+                data={"party_code": "invite-code", "next": "/party"},
+            )
+            login_form = client.get("/party/login?next=/party")
+
+        self.assertEqual(200, login_gate.status_code)
+        self.assertIn("Enter the Party Code", login_gate.get_data(as_text=True))
+        self.assertNotIn("Your Name", login_gate.get_data(as_text=True))
+        self.assertEqual(200, bad_code.status_code)
+        self.assertIn("did not match", bad_code.get_data(as_text=True))
+        self.assertEqual(302, good_code.status_code)
+        self.assertIn("/party/login", good_code.headers["Location"])
+        self.assertIn("Welcome to the Halloween Hub", login_form.get_data(as_text=True))
+
+    def test_rsvp_requires_party_code_and_creates_account_after_unlock(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            locked_rsvp = client.get("/rsvp")
+            unlock_response = client.post(
+                "/rsvp",
+                data={"party_code": "invite-code", "next": "/party"},
+            )
+            rsvp_form = client.get("/rsvp?next=/party")
+            signup_response = client.post(
+                "/rsvp",
+                data={
+                    "username": "Casey",
+                    "password": "party-password",
+                    "confirm_password": "party-password",
+                    "next": "/party",
+                },
+            )
+
+            with client.session_transaction() as session:
+                roles = session.get("roles", [])
+                user_id = session.get("user_id")
+
+        state = self.redis_state()
+        self.assertEqual(200, locked_rsvp.status_code)
+        self.assertIn("Unlock RSVP", locked_rsvp.get_data(as_text=True))
+        self.assertEqual(302, unlock_response.status_code)
+        self.assertIn("Save your RSVP", rsvp_form.get_data(as_text=True))
+        self.assertEqual(302, signup_response.status_code)
+        self.assertEqual("Casey", state["user_accounts"]["casey"]["username"])
+        self.assertEqual("Casey", state["registered_users"][user_id])
+        self.assertIn("regular", roles)
+
     def test_regular_user_login_grants_only_regular_route_access(self):
         self.add_user_account()
         self.save_current_state()
 
         with main.app.test_client() as client:
             protected_response = client.get("/party")
+            self.verify_party_code(client)
             bad_login = client.post(
                 "/party/login",
                 data={
@@ -563,6 +685,7 @@ class RedisStateTests(unittest.TestCase):
         self.save_current_state()
 
         with main.app.test_client() as client:
+            self.verify_party_code(client)
             register_response = client.post(
                 "/party/register",
                 data={

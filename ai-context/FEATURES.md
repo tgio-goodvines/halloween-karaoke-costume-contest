@@ -9,6 +9,9 @@
   embed/directions button, and update cards.
 - `/rsvp`, `/party/login`, and `/party/register` require the party code before
   RSVP, sign-in, or account creation forms are visible.
+- Locked `/rsvp` sessions show only the code prompt; party details, map, updates,
+  and party navigation stay hidden until the current browser session enters the
+  correct code.
 - Successful RSVP adds an independent host-visible RSVP entry with name,
   optional contact, guest count, and note; it does not create an attendee
   account.

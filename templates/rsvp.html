@@ -75,63 +75,57 @@
     </form>
   {% endif %}
 
-  <div class="rsvp-details" aria-label="Party details">
-    {% for card in party_info_cards %}
-      <article>
-        <h3>{{ card.title }}</h3>
-        <p>{{ card.message }}</p>
-      </article>
-    {% endfor %}
-    <article>
-      <h3>Costume Contest</h3>
-      <p>Judging kicks off at 9:30 PM. Guests can vote from the party portal.</p>
-    </article>
-    <article>
-      <h3>Karaoke</h3>
-      <p>The karaoke party starts at 11:00 PM. Add your song once you are in the portal.</p>
-    </article>
-  </div>
+  {% if party_code_verified %}
+    <div class="rsvp-details" aria-label="Party details">
+      {% for card in party_info_cards %}
+        <article>
+          <h3>{{ card.title }}</h3>
+          <p>{{ card.message }}</p>
+        </article>
+      {% endfor %}
+    </div>
 
-  {% if maps_urls %}
-    <section class="rsvp-map" aria-label="Party location map">
-      <div class="rsvp-map__heading">
-        <h3>Find the Party</h3>
-        <a class="button button--primary" href="{{ maps_urls.directions }}" target="_blank" rel="noopener noreferrer">
-          Get Directions
-        </a>
-      </div>
-      <iframe
-        title="Google map for the party location"
-        src="{{ maps_urls.embed }}"
-        loading="lazy"
-        referrerpolicy="no-referrer-when-downgrade"
-        allowfullscreen>
-      </iframe>
+    {% if maps_urls %}
+      <section class="rsvp-map" aria-label="Party location map">
+        <div class="rsvp-map__heading">
+          <h3>Find the Party</h3>
+          <a class="button button--primary" href="{{ maps_urls.directions }}" target="_blank" rel="noopener noreferrer">
+            Get Directions
+          </a>
+        </div>
+        <iframe
+          title="Google map for the party location"
+          src="{{ maps_urls.embed }}"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          allowfullscreen>
+        </iframe>
+      </section>
+    {% endif %}
+
+    <section class="rsvp-updates" aria-label="Host updates">
+      <h3>Latest Updates</h3>
+      {% if rsvp_updates %}
+        <div class="rsvp-update-list">
+          {% for update in rsvp_updates %}
+            <article class="rsvp-update-card{% if loop.first %} rsvp-update-card--latest{% endif %}">
+              <p class="rsvp-update-card__eyebrow">{{ 'Latest update' if loop.first else 'Update' }}</p>
+              <h4>{{ update.title }}</h4>
+              <p>{{ update.message }}</p>
+              {% if update.created_at %}
+                <p class="rsvp-update-card__meta">{{ update.created_at }}</p>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <article class="rsvp-update-card rsvp-update-card--latest">
+          <p class="rsvp-update-card__eyebrow">Latest update</p>
+          <h4>RSVP is open</h4>
+          <p>Use this page to let the hosts know you are coming. More updates will appear here as party night gets closer.</p>
+        </article>
+      {% endif %}
     </section>
   {% endif %}
-
-  <section class="rsvp-updates" aria-label="Host updates">
-    <h3>Latest Updates</h3>
-    {% if rsvp_updates %}
-      <div class="rsvp-update-list">
-        {% for update in rsvp_updates %}
-          <article class="rsvp-update-card{% if loop.first %} rsvp-update-card--latest{% endif %}">
-            <p class="rsvp-update-card__eyebrow">{{ 'Latest update' if loop.first else 'Update' }}</p>
-            <h4>{{ update.title }}</h4>
-            <p>{{ update.message }}</p>
-            {% if update.created_at %}
-              <p class="rsvp-update-card__meta">{{ update.created_at }}</p>
-            {% endif %}
-          </article>
-        {% endfor %}
-      </div>
-    {% else %}
-      <article class="rsvp-update-card rsvp-update-card--latest">
-        <p class="rsvp-update-card__eyebrow">Latest update</p>
-        <h4>RSVP is open</h4>
-        <p>Use this page to let the hosts know you are coming. More updates will appear here as party night gets closer.</p>
-      </article>
-    {% endif %}
-  </section>
 </section>
 {% endblock %}

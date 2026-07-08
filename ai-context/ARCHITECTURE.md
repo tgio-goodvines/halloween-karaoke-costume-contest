@@ -14,6 +14,9 @@
   to the host-visible RSVP list and do not create attendee accounts. Admin-editable
   party info cards and a Google Maps location embed are shown first, then RSVP
   updates are shown newest-to-oldest.
+  Locked RSVP sessions show only the code prompt; party details, map, updates,
+  and party navigation stay hidden until that browser session enters the correct
+  code.
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
 - `GET|POST /party/login` -> attendee account sign-in; requires party-code
   verification before showing the login form, then validates a Redis-stored

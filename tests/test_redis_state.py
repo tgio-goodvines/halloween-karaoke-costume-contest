@@ -622,6 +622,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Welcome to the Halloween Hub", login_form.get_data(as_text=True))
 
     def test_rsvp_requires_party_code_and_creates_independent_rsvp_after_unlock(self):
+        main.rsvp_updates = [
+            main.RSVPUpdate("Parking", "Use the west side of the street.", "2026-07-07T00:00:00Z", "update-1")
+        ]
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -649,10 +652,22 @@ class RedisStateTests(unittest.TestCase):
 
         state = self.redis_state()
         self.assertEqual(200, locked_rsvp.status_code)
-        self.assertIn("Unlock RSVP", locked_rsvp.get_data(as_text=True))
+        locked_body = locked_rsvp.get_data(as_text=True)
+        self.assertIn("Unlock RSVP", locked_body)
+        self.assertNotIn("Date", locked_body)
+        self.assertNotIn("Time", locked_body)
+        self.assertNotIn("Location", locked_body)
+        self.assertNotIn("Latest Updates", locked_body)
+        self.assertNotIn("Get Directions", locked_body)
+        self.assertNotIn("Costume Contest", locked_body)
+        self.assertNotIn("Karaoke", locked_body)
         self.assertEqual(302, unlock_response.status_code)
         self.assertIn("Save your RSVP", rsvp_form.get_data(as_text=True))
         self.assertNotIn("Password", rsvp_form.get_data(as_text=True))
+        self.assertIn("Date", rsvp_form.get_data(as_text=True))
+        self.assertIn("Latest Updates", rsvp_form.get_data(as_text=True))
+        self.assertNotIn("<h3>Costume Contest</h3>", rsvp_form.get_data(as_text=True))
+        self.assertNotIn("<h3>Karaoke</h3>", rsvp_form.get_data(as_text=True))
         self.assertEqual(302, signup_response.status_code)
         self.assertEqual("Casey", state["rsvp_signups"][0]["name"])
         self.assertEqual("casey@example.com", state["rsvp_signups"][0]["contact"])
@@ -664,6 +679,26 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("You're on the RSVP list", confirmation_response.get_data(as_text=True))
         self.assertNotIn("Total guest", confirmation_response.get_data(as_text=True))
         self.assertNotIn("Karaoke song", confirmation_response.get_data(as_text=True))
+
+    def test_rsvp_unlock_is_per_browser_session(self):
+        self.save_current_state()
+
+        with main.app.test_client() as unlocked_client:
+            unlocked_client.post("/rsvp", data={"party_code": "invite-code"})
+            unlocked_response = unlocked_client.get("/rsvp")
+
+        with main.app.test_client() as locked_client:
+            locked_response = locked_client.get("/rsvp")
+
+        unlocked_body = unlocked_response.get_data(as_text=True)
+        locked_body = locked_response.get_data(as_text=True)
+        self.assertIn("Save your RSVP", unlocked_body)
+        self.assertIn("Date", unlocked_body)
+        self.assertIn("Unlock RSVP", locked_body)
+        self.assertNotIn("Date", locked_body)
+        self.assertNotIn("Latest Updates", locked_body)
+        self.assertNotIn("Costume", locked_body)
+        self.assertNotIn("Karaoke", locked_body)
 
     def test_admin_can_update_party_details_on_rsvp_page(self):
         self.save_current_state()

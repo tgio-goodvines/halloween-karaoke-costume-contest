@@ -1637,6 +1637,7 @@ def rsvp():
             maps_urls=google_maps_urls(party_details.get("map_address", "")),
             rsvp_updates=sorted_rsvp_updates(),
             show_admin_link=False,
+            hide_party_nav=True,
         )
 
     if request.method == "POST" and request.form.get("action") == "submit_rsvp":

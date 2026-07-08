@@ -19,12 +19,14 @@
               {% elif admin_authenticated %}
                 <span class="site-nav__user">Signed in as Admin</span>
               {% endif %}
-              <a href="{{ url_for('party_dashboard') }}">Overview</a>
-              <a href="{{ url_for('party_costumes') }}">Costume</a>
-              {% if costume_contest_state.voting_open %}
-                <a href="{{ url_for('party_costume_voting') }}">Voting</a>
+              {% if not hide_party_nav %}
+                <a href="{{ url_for('party_dashboard') }}">Overview</a>
+                <a href="{{ url_for('party_costumes') }}">Costume</a>
+                {% if costume_contest_state.voting_open %}
+                  <a href="{{ url_for('party_costume_voting') }}">Voting</a>
+                {% endif %}
+                <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
               {% endif %}
-              <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
               {% if show_admin_link is not defined or show_admin_link %}
                 <a href="{{ url_for('admin_portal') }}">Admin</a>
               {% endif %}

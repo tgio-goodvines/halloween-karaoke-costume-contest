@@ -22,11 +22,30 @@ vault_field() {
   VAULT_ADDR="${VAULT_ADDR}" VAULT_TOKEN="${vault_token}" vault kv get -field="${field}" "${path}"
 }
 
+vault_optional_field() {
+  local path="$1"
+  local field="$2"
+  local fallback="$3"
+  VAULT_ADDR="${VAULT_ADDR}" VAULT_TOKEN="${vault_token}" vault kv get -field="${field}" "${path}" 2>/dev/null || printf '%s' "${fallback}"
+}
+
 export HALLOWEEN_APP_SECRET
 HALLOWEEN_APP_SECRET="$(vault_field "${HALLOWEEN_APP_SECRET_PATH}" secret_key)"
 
 export HALLOWEEN_ADMIN_PASSWORD
 HALLOWEEN_ADMIN_PASSWORD="$(vault_field "${HALLOWEEN_APP_SECRET_PATH}" admin_password)"
+
+export HALLOWEEN_EMAIL_UPDATES_ENABLED
+HALLOWEEN_EMAIL_UPDATES_ENABLED="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" email_updates_enabled "false")"
+
+export HALLOWEEN_SES_REGION
+HALLOWEEN_SES_REGION="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" ses_region "us-east-1")"
+
+export HALLOWEEN_EMAIL_FROM
+HALLOWEEN_EMAIL_FROM="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" email_from "Qiana and Tony's Halloween Party <no-reply@tnq-halloween.com>")"
+
+export HALLOWEEN_PUBLIC_BASE_URL
+HALLOWEEN_PUBLIC_BASE_URL="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" public_base_url "https://tnq-halloween.com")"
 
 export HALLOWEEN_REDIS_HOST
 HALLOWEEN_REDIS_HOST="$(vault_field "${HALLOWEEN_REDIS_SECRET_PATH}" host)"

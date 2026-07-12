@@ -71,9 +71,24 @@ and SSM.
   - `appsecrets/halloween_app`
   - `appsecrets/halloween_redis`
 - `appsecrets/halloween_app` must include `secret_key` and `admin_password`;
-  attendee account passwords are stored as hashes in Redis app state.
+  attendee account passwords are stored as hashes in Redis app state. Optional
+  Halloween email fields read from the same path are `email_updates_enabled`,
+  `ses_region`, `email_from`, and `public_base_url`.
 - Verified the API EC2 can read required fields from both Halloween runtime
   secret paths through Vault AWS IAM auth.
+- Created a separate Amazon SES domain identity for `tnq-halloween.com` in
+  `us-east-1` and added only its DKIM CNAME records to the
+  `tnq-halloween.com` Route 53 hosted zone. Existing SES identities for
+  `appg-v.com`, `goodvines.app`, and GoodVines sender emails were not modified.
+- SES verification for `tnq-halloween.com` reached `SUCCESS`.
+- Attached inline IAM policy `HalloweenSesNoReplySendPolicy` to
+  `GoodVinesEC2SSMRole`; it allows only `ses:SendEmail` against
+  `arn:aws:ses:us-east-1:152923357640:identity/tnq-halloween.com` with
+  `ses:FromAddress` equal to `no-reply@tnq-halloween.com`.
+- Updated `appsecrets/halloween_app` through the documented services-EC2 Vault
+  operator path to set `email_updates_enabled=true`, `ses_region=us-east-1`,
+  `email_from=Qiana and Tony's Halloween Party <no-reply@tnq-halloween.com>`,
+  and `public_base_url=https://tnq-halloween.com`.
 
 ## External Setup Required
 
@@ -185,6 +200,12 @@ Current deployed app behavior:
   admin session.
 - Header logout is a single `/logout` action inside the disclosure menu and
   clears the current browser session regardless of role.
+- RSVP and party registration collect required email addresses and
+  acknowledgment that RSVP-page host updates are emailed. When
+  `HALLOWEEN_EMAIL_UPDATES_ENABLED=true`, admin RSVP update posts send email
+  through SES from `no-reply@tnq-halloween.com` to deduplicated RSVP and
+  registered-user recipients; failures are reported to admin without blocking
+  the update.
 
 ## Vault Admin Password Rotation
 

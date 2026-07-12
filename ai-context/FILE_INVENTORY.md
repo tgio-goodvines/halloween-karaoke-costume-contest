@@ -4,15 +4,15 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP updates, editable party details/map address, role-based session auth, party-code gate, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
-| `requirements.txt` | Python dependency declaration; includes Flask 3.x and redis-py for the Redis migration. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP updates, RSVP/registered-user email recipient collection, SES email sending, editable party details/map address, role-based session auth, party-code gate, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
+| `requirements.txt` | Python dependency declaration; includes Flask 3.x, redis-py for Redis state, boto3 for SES email, and gunicorn for production. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
-| `deploy/start_halloween.sh` | systemd start wrapper that authenticates to Vault using AWS IAM auth, exports Halloween app/Redis secrets, and execs gunicorn. |
+| `deploy/start_halloween.sh` | systemd start wrapper that authenticates to Vault using AWS IAM auth, exports Halloween app/Redis/email secrets, and execs gunicorn. |
 | `deploy/halloween-party.service` | systemd unit for running the Halloween Flask app through gunicorn on `127.0.0.1:8081`. |
 | `deploy/nginx-halloween.conf` | nginx host-routing config for `tnq-halloween.com` and `www.tnq-halloween.com`, including SSE-friendly proxy settings. |
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
-| `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, and the `halloween` prefix. |
+| `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, and Halloween email update settings. |
 | `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, display update publishing, and JSON exports using an in-memory Redis fake. |
 | `static/styles.css` | Shared Halloween-themed styles for attendee/admin pages, including the header menu and single logout action. |
 | `static/display.css` | Dedicated large-format live-display styles, override cards, CTA layout, scoreboard layout, and karaoke display panels. |
@@ -24,6 +24,7 @@
 | `templates/party_code_gate.html` | Party-code gate displayed before direct attendee login/register forms. |
 | `templates/halloween_login.html` | Attendee account sign-in form shown after party-code verification. |
 | `templates/halloween_register.html` | Attendee account registration form shown after party-code verification. |
+| `templates/email/rsvp_update.html` | HTML email body for admin-posted RSVP update notifications. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
 | `templates/karaoke_signup.html` | Karaoke signup form and submitted karaoke lineup. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |

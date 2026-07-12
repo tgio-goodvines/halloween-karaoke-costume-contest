@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from email.utils import parseaddr
 from typing import List, Tuple
 from threading import Condition, Thread
 from urllib.parse import quote_plus, unquote, urlparse
@@ -10,6 +11,7 @@ import copy
 import io
 import json
 import os
+import re
 import time
 
 import redis
@@ -43,6 +45,18 @@ app.config["PARTY_OVERVIEW"] = os.environ.get(
     "HALLOWEEN_PARTY_OVERVIEW",
     "Costumes encouraged, karaoke expected, dramatic entrances welcomed.",
 )
+app.config["EMAIL_UPDATES_ENABLED"] = os.environ.get("HALLOWEEN_EMAIL_UPDATES_ENABLED", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+app.config["SES_REGION"] = os.environ.get("HALLOWEEN_SES_REGION", os.environ.get("AWS_REGION", "us-east-1"))
+app.config["EMAIL_FROM"] = os.environ.get(
+    "HALLOWEEN_EMAIL_FROM",
+    "Qiana and Tony's Halloween Party <no-reply@tnq-halloween.com>",
+)
+app.config["PUBLIC_BASE_URL"] = os.environ.get("HALLOWEEN_PUBLIC_BASE_URL", "https://tnq-halloween.com")
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -215,6 +229,7 @@ class RSVPSignup:
     note: str = ""
     created_at: str = ""
     id: str = ""
+    email_updates_acknowledged: bool = False
 
 
 @dataclass
@@ -285,7 +300,7 @@ karaoke_signups: List[KaraokeSignup] = []
 costume_votes: List[List[int]] = []
 costume_ballots: dict[str, dict[str, int]] = {}
 registered_users: dict[str, str] = {}
-user_accounts: dict[str, dict[str, str]] = {}
+user_accounts: dict[str, dict[str, object]] = {}
 rsvp_signups: List[RSVPSignup] = []
 rsvp_updates: List[RSVPUpdate] = []
 submitted_costume_votes: set[str] = set()
@@ -435,10 +450,20 @@ def normalize_username(username: str) -> str:
     return " ".join(username.strip().lower().split())
 
 
-def create_user_account(username: str, password: str) -> dict[str, str]:
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def normalize_email(raw_email: str) -> str:
+    parsed_email = parseaddr(raw_email.strip())[1].strip().lower()
+    return parsed_email if EMAIL_PATTERN.match(parsed_email) else ""
+
+
+def create_user_account(username: str, password: str, email: str = "") -> dict[str, object]:
     return {
         "id": uuid4().hex,
         "username": username.strip(),
+        "email": normalize_email(email),
+        "email_updates_acknowledged": True,
         "password_hash": generate_password_hash(password),
         "created_at": _utc_now_iso(),
     }
@@ -493,6 +518,7 @@ def rsvp_signup_to_dict(signup: RSVPSignup) -> dict[str, object]:
         "guest_count": signup.guest_count,
         "note": signup.note,
         "created_at": signup.created_at,
+        "email_updates_acknowledged": signup.email_updates_acknowledged,
     }
 
 
@@ -509,6 +535,7 @@ def rsvp_signup_from_dict(data: dict[str, object]) -> RSVPSignup:
         guest_count=max(1, min(12, guest_count)),
         note=str(data.get("note", "") or ""),
         created_at=str(data.get("created_at", "") or ""),
+        email_updates_acknowledged=bool(data.get("email_updates_acknowledged", False)),
     )
 
 
@@ -536,6 +563,87 @@ def sorted_rsvp_updates() -> list[RSVPUpdate]:
         key=lambda update: update.created_at or "",
         reverse=True,
     )
+
+
+def collect_update_email_recipients() -> list[str]:
+    recipients: list[str] = []
+    seen: set[str] = set()
+
+    def add_recipient(raw_email: object) -> None:
+        email = normalize_email(str(raw_email or ""))
+        if email and email not in seen:
+            recipients.append(email)
+            seen.add(email)
+
+    for signup in rsvp_signups:
+        if signup.email_updates_acknowledged:
+            add_recipient(signup.contact)
+
+    for account in user_accounts.values():
+        if bool(account.get("email_updates_acknowledged", False)):
+            add_recipient(account.get("email", ""))
+
+    return recipients
+
+
+def create_ses_client():
+    import boto3
+
+    return boto3.client("sesv2", region_name=app.config["SES_REGION"])
+
+
+def send_rsvp_update_emails(update: RSVPUpdate) -> tuple[int, int]:
+    recipients = collect_update_email_recipients()
+    if not recipients:
+        return 0, 0
+
+    if not app.config["EMAIL_UPDATES_ENABLED"]:
+        return 0, len(recipients)
+
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        app.logger.warning("Email updates are enabled, but boto3 is not installed.")
+        return 0, len(recipients)
+
+    rsvp_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("rsvp")
+    subject = f"Halloween Party Update: {update.title}"
+    text_body = (
+        f"{update.title}\n\n"
+        f"{update.message}\n\n"
+        f"Read the latest party details: {rsvp_url}\n\n"
+        "You are receiving this because you RSVP'd or created a party account for "
+        "Qiana and Tony's Halloween Party."
+    )
+    html_body = render_template(
+        "email/rsvp_update.html",
+        update=update,
+        rsvp_url=rsvp_url,
+    )
+
+    sent_count = 0
+    failed_count = 0
+    for recipient in recipients:
+        try:
+            ses_client.send_email(
+                FromEmailAddress=app.config["EMAIL_FROM"],
+                Destination={"ToAddresses": [recipient]},
+                Content={
+                    "Simple": {
+                        "Subject": {"Data": subject, "Charset": "UTF-8"},
+                        "Body": {
+                            "Text": {"Data": text_body, "Charset": "UTF-8"},
+                            "Html": {"Data": html_body, "Charset": "UTF-8"},
+                        },
+                    }
+                },
+            )
+            sent_count += 1
+        except Exception as exc:
+            failed_count += 1
+            app.logger.warning("Unable to send RSVP update email to %s: %s", recipient, exc)
+
+    return sent_count, failed_count
 
 
 def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
@@ -763,6 +871,8 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                 user_accounts[normalized_username] = {
                     "id": account_id,
                     "username": username,
+                    "email": normalize_email(str(raw_account.get("email", "") or "")),
+                    "email_updates_acknowledged": bool(raw_account.get("email_updates_acknowledged", False)),
                     "password_hash": password_hash,
                     "created_at": str(raw_account.get("created_at", "") or ""),
                 }
@@ -1643,6 +1753,7 @@ def rsvp():
     if request.method == "POST" and request.form.get("action") == "submit_rsvp":
         username = request.form.get("username", "").strip()
         contact = request.form.get("contact", "").strip()
+        acknowledged_email_updates = request.form.get("email_updates_acknowledged") == "yes"
         note = request.form.get("note", "").strip()
         try:
             guest_count = int(request.form.get("guest_count", "1") or 1)
@@ -1653,8 +1764,14 @@ def rsvp():
             errors.append("Name is required.")
         elif len(username) > 80:
             errors.append("Name must be 80 characters or fewer.")
-        if len(contact) > 120:
-            errors.append("Contact must be 120 characters or fewer.")
+        if not contact:
+            errors.append("Email is required so the hosts can send party updates.")
+        elif len(contact) > 120:
+            errors.append("Email must be 120 characters or fewer.")
+        elif not normalize_email(contact):
+            errors.append("Enter a valid email address for party updates.")
+        if not acknowledged_email_updates:
+            errors.append("Please acknowledge that RSVP guests receive party update emails.")
         if not 1 <= guest_count <= 12:
             errors.append("Guest count must be between 1 and 12.")
         if len(note) > 240:
@@ -1664,10 +1781,11 @@ def rsvp():
             submitted_rsvp = RSVPSignup(
                 id=uuid4().hex,
                 name=username,
-                contact=contact,
+                contact=normalize_email(contact),
                 guest_count=guest_count,
                 note=note,
                 created_at=_utc_now_iso(),
+                email_updates_acknowledged=True,
             )
             rsvp_signups.append(submitted_rsvp)
             session["rsvp_id"] = submitted_rsvp.id
@@ -1844,6 +1962,8 @@ def party_register():
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip()
+        acknowledged_email_updates = request.form.get("email_updates_acknowledged") == "yes"
         provided_password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
         normalized_username = normalize_username(username)
@@ -1855,13 +1975,22 @@ def party_register():
         elif normalized_username in user_accounts:
             errors.append("That username is already registered.")
 
+        if not email:
+            errors.append("Email is required so the hosts can send party updates.")
+        elif len(email) > 120:
+            errors.append("Email must be 120 characters or fewer.")
+        elif not normalize_email(email):
+            errors.append("Enter a valid email address for party updates.")
+        if not acknowledged_email_updates:
+            errors.append("Please acknowledge that registered users receive party update emails.")
+
         if len(provided_password) < 8:
             errors.append("Password must be at least 8 characters.")
         elif provided_password != confirm_password:
             errors.append("Passwords do not match.")
 
         if not errors:
-            account = create_user_account(username, provided_password)
+            account = create_user_account(username, provided_password, email)
             user_accounts[normalized_username] = account
             session["user_id"] = account["id"]
             session["username"] = account["username"]
@@ -2058,15 +2187,27 @@ def admin_portal():
             elif len(message) > 2000:
                 errors.append("RSVP update message must be 2000 characters or fewer.")
             if not errors:
-                rsvp_updates.append(
-                    RSVPUpdate(
-                        id=uuid4().hex,
-                        title=title,
-                        message=message,
-                        created_at=_utc_now_iso(),
-                    )
+                posted_update = RSVPUpdate(
+                    id=uuid4().hex,
+                    title=title,
+                    message=message,
+                    created_at=_utc_now_iso(),
                 )
-                messages.append("RSVP update posted.")
+                rsvp_updates.append(posted_update)
+                if app.config["EMAIL_UPDATES_ENABLED"]:
+                    sent_count, failed_count = send_rsvp_update_emails(posted_update)
+                    if failed_count:
+                        messages.append(
+                            f"RSVP update posted. Email sent to {sent_count} guest"
+                            f"{'s' if sent_count != 1 else ''}; {failed_count} failed."
+                        )
+                    else:
+                        messages.append(
+                            f"RSVP update posted. Email sent to {sent_count} guest"
+                            f"{'s' if sent_count != 1 else ''}."
+                        )
+                else:
+                    messages.append("RSVP update posted. Email notifications are disabled.")
                 should_broadcast = True
 
         elif action == "delete_rsvp_update":

@@ -13,10 +13,12 @@
   and party navigation stay hidden until the current browser session enters the
   correct code.
 - Successful RSVP adds an independent host-visible RSVP entry with name,
-  optional contact, guest count, and note; it does not create an attendee
-  account.
+  required email contact, required email-update acknowledgment, guest count, and
+  note; it does not create an attendee account.
 - Party dashboard at `/party`.
-- Redis-backed attendee account registration at `/party/register`.
+- Redis-backed attendee account registration at `/party/register` requires an
+  email address and acknowledgment that registered users receive RSVP-page host
+  update emails.
 - Password-backed attendee account sign-in at `/party/login`.
 - A single logout action inside the shared header menu clears the current
   browser session regardless of role.
@@ -76,7 +78,9 @@
 - Admin can edit the static party detail cards and map address shown on the RSVP
   page.
 - Admin can post and remove RSVP updates. Updates appear on `/rsvp` newest first
-  after the static party detail cards.
+  after the static party detail cards. When Halloween email updates are enabled,
+  posted RSVP updates are emailed through SES to deduplicated RSVP and
+  registered-user email recipients.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.

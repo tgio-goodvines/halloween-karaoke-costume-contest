@@ -11,8 +11,9 @@ remaining as a process-local cache in `main.py`.
 ## Runtime
 
 - Python version: `.python-version` pins `3.11.9`.
-- Dependencies: `requirements.txt` requires `flask>=3.0,<4.0` and
-  `redis>=5.0,<6.0`; production also uses `gunicorn`.
+- Dependencies: `requirements.txt` requires `flask>=3.0,<4.0`,
+  `redis>=5.0,<6.0`, and `boto3>=1.34,<2.0`; production also uses
+  `gunicorn`.
 - Entrypoint: `main.py`.
 - Local run behavior: `python main.py` starts Flask debug mode on `0.0.0.0:80`.
 - Secret key: `HALLOWEEN_APP_SECRET`, falling back to `dev-secret-key`.
@@ -72,10 +73,12 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 2. `/rsvp`, `/party/login`, and `/party/register` require the party code before
    guests can see RSVP, sign-in, or account creation forms.
 3. `/rsvp` asks guests to RSVP, offers account creation/login as optional next
-   steps, shows static party detail cards, renders a Google Maps embed and
-   directions button when a map address is configured, then shows host update
-   cards from newest to oldest. RSVP submissions save independent entries for
-   the admin RSVP list and do not create attendee portal accounts.
+  steps, shows static party detail cards, renders a Google Maps embed and
+  directions button when a map address is configured, then shows host update
+  cards from newest to oldest. RSVP submissions require an email address and
+  required acknowledgment that host RSVP-page updates are sent by email; they
+  save independent entries for the admin RSVP list and do not create attendee
+  portal accounts.
 4. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
@@ -104,8 +107,9 @@ the process-local cache:
 - `user_accounts`: maps normalized usernames to Redis-backed attendee account
   records with stable IDs and password hashes.
 - `registered_users`: maps session `user_id` to display name.
-- `rsvp_signups`: independent host RSVP list entries with name, optional
-  contact, guest count, note, created timestamp, and stable ID.
+- `rsvp_signups`: independent host RSVP list entries with name, required email
+  contact, guest count, note, created timestamp, stable ID, and required email
+  update acknowledgment.
 - `rsvp_updates`: admin-posted update cards with title, message, timestamp, and
   stable ID, displayed newest-to-oldest on `/rsvp` and in pre-party display
   rotation.
@@ -126,6 +130,20 @@ the process-local cache:
 RSVP/update rotation to the full party-night costume/karaoke/event rotation.
 Before that timestamp, the display does not show costume or karaoke signup
 entries.
+
+## RSVP Update Email
+
+Admin-posted RSVP updates can send outbound email through Amazon SES when
+`HALLOWEEN_EMAIL_UPDATES_ENABLED=true`. The intended sender is
+`Qiana and Tony's Halloween Party <no-reply@tnq-halloween.com>`, configured via
+`HALLOWEEN_EMAIL_FROM`, with `HALLOWEEN_PUBLIC_BASE_URL=https://tnq-halloween.com`.
+
+The SES identity for `tnq-halloween.com` is separate from the existing
+GoodVines SES identities. Do not modify `appg-v.com`, `goodvines.app`, or
+GoodVines sender-address SES identities while working on Halloween email.
+Recipients are deduplicated across RSVP entries and Redis-backed party account
+emails, and delivery failures are logged/reported to admin without blocking the
+RSVP update from being posted.
 
 Schema version 1 Redis state with index-aligned `costume_votes` is upgraded on
 load into ID-keyed `costume_ballots`.

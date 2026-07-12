@@ -387,6 +387,21 @@ main.container {
   font-weight: 600;
 }
 
+.form-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  line-height: 1.45;
+}
+
+.form-check input[type="checkbox"] {
+  width: 1.15rem;
+  min-height: 1.15rem;
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+}
+
 .signup-form input,
 .login-form input,
 .admin-entry__fields input,
@@ -1128,6 +1143,11 @@ main.container {
   border: 1px solid rgba(255, 59, 59, 0.35);
   background: #111;
   color: var(--text);
+}
+
+.rsvp-card .form-check input[type="checkbox"] {
+  width: 1.15rem;
+  padding: 0;
 }
 
 .rsvp-card textarea {

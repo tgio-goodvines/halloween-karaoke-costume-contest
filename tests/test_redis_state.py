@@ -83,6 +83,19 @@ class FailingRedis(FakeRedis):
         raise redis.RedisError("redis unavailable")
 
 
+class FakeSESClient:
+    def __init__(self, failing_recipients=None):
+        self.failing_recipients = set(failing_recipients or [])
+        self.sent_messages = []
+
+    def send_email(self, **kwargs):
+        recipient = kwargs["Destination"]["ToAddresses"][0]
+        if recipient in self.failing_recipients:
+            raise RuntimeError("SES send failed")
+        self.sent_messages.append(kwargs)
+        return {"MessageId": f"message-{len(self.sent_messages)}"}
+
+
 class RedisStateTests(unittest.TestCase):
     def setUp(self):
         self.fake_redis = FakeRedis()
@@ -92,6 +105,10 @@ class RedisStateTests(unittest.TestCase):
         self.original_testing = main.app.config["TESTING"]
         self.original_admin_password = main.app.config["ADMIN_PASSWORD"]
         self.original_party_start = main.app.config["PARTY_START"]
+        self.original_email_updates_enabled = main.app.config["EMAIL_UPDATES_ENABLED"]
+        self.original_email_from = main.app.config["EMAIL_FROM"]
+        self.original_public_base_url = main.app.config["PUBLIC_BASE_URL"]
+        self.original_create_ses_client = main.create_ses_client
         self.original_app_env = os.environ.get("APP_ENV")
 
         main.redis_client = self.fake_redis
@@ -106,6 +123,9 @@ class RedisStateTests(unittest.TestCase):
         )
         main.app.config["TESTING"] = True
         main.app.config["ADMIN_PASSWORD"] = "admin-secret"
+        main.app.config["EMAIL_UPDATES_ENABLED"] = False
+        main.app.config["EMAIL_FROM"] = "Halloween Party <no-reply@tnq-halloween.com>"
+        main.app.config["PUBLIC_BASE_URL"] = "https://tnq-halloween.com"
         self.reset_state()
 
     def tearDown(self):
@@ -115,6 +135,10 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["TESTING"] = self.original_testing
         main.app.config["ADMIN_PASSWORD"] = self.original_admin_password
         main.app.config["PARTY_START"] = self.original_party_start
+        main.app.config["EMAIL_UPDATES_ENABLED"] = self.original_email_updates_enabled
+        main.app.config["EMAIL_FROM"] = self.original_email_from
+        main.app.config["PUBLIC_BASE_URL"] = self.original_public_base_url
+        main.create_ses_client = self.original_create_ses_client
         if self.original_app_env is None:
             os.environ.pop("APP_ENV", None)
         else:
@@ -160,8 +184,8 @@ class RedisStateTests(unittest.TestCase):
         with client.session_transaction() as session:
             session["party_code_verified"] = True
 
-    def add_user_account(self, username="Jamie", password="party-password", user_id="user-1"):
-        account = main.create_user_account(username, password)
+    def add_user_account(self, username="Jamie", password="party-password", user_id="user-1", email="jamie@example.com"):
+        account = main.create_user_account(username, password, email)
         account["id"] = user_id
         main.user_accounts[main.normalize_username(username)] = account
         return account
@@ -640,6 +664,7 @@ class RedisStateTests(unittest.TestCase):
                     "action": "submit_rsvp",
                     "username": "Casey",
                     "contact": "casey@example.com",
+                    "email_updates_acknowledged": "yes",
                     "guest_count": "3",
                     "note": "Arriving after 8",
                 },
@@ -671,6 +696,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(302, signup_response.status_code)
         self.assertEqual("Casey", state["rsvp_signups"][0]["name"])
         self.assertEqual("casey@example.com", state["rsvp_signups"][0]["contact"])
+        self.assertTrue(state["rsvp_signups"][0]["email_updates_acknowledged"])
         self.assertEqual(3, state["rsvp_signups"][0]["guest_count"])
         self.assertEqual("Arriving after 8", state["rsvp_signups"][0]["note"])
         self.assertEqual(state["rsvp_signups"][0]["id"], rsvp_id)
@@ -811,6 +837,79 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual(long_message.strip(), state["rsvp_updates"][0]["message"])
 
+    def test_update_email_recipients_include_rsvps_and_registered_users_once(self):
+        main.rsvp_signups = [
+            main.RSVPSignup(
+                name="Casey",
+                contact="casey@example.com",
+                email_updates_acknowledged=True,
+            ),
+            main.RSVPSignup(
+                name="Duplicate Casey",
+                contact="CASEY@example.com",
+                email_updates_acknowledged=True,
+            ),
+            main.RSVPSignup(
+                name="Phone Only",
+                contact="303-555-0100",
+                email_updates_acknowledged=True,
+            ),
+            main.RSVPSignup(
+                name="No Ack",
+                contact="noack@example.com",
+                email_updates_acknowledged=False,
+            ),
+        ]
+        main.user_accounts = {
+            "morgan": main.create_user_account("Morgan", "party-password", "morgan@example.com"),
+            "casey": main.create_user_account("Casey", "party-password", "casey@example.com"),
+            "old-account": {
+                "id": "user-old",
+                "username": "Old Account",
+                "password_hash": main.generate_password_hash("party-password"),
+                "created_at": "2026-07-06T00:00:00Z",
+            },
+        }
+
+        recipients = main.collect_update_email_recipients()
+
+        self.assertEqual(["casey@example.com", "morgan@example.com"], recipients)
+
+    def test_admin_rsvp_update_sends_email_without_blocking_on_partial_failure(self):
+        main.rsvp_signups = [
+            main.RSVPSignup(
+                name="Casey",
+                contact="casey@example.com",
+                email_updates_acknowledged=True,
+            )
+        ]
+        main.user_accounts = {
+            "morgan": main.create_user_account("Morgan", "party-password", "morgan@example.com"),
+        }
+        self.save_current_state()
+        fake_ses = FakeSESClient(failing_recipients={"morgan@example.com"})
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "add_rsvp_update",
+                    "title": "Parking",
+                    "message": "Use the west side of the street.",
+                },
+            )
+
+        state = self.redis_state()
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("Parking", state["rsvp_updates"][0]["title"])
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(["casey@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
+        self.assertIn("Email sent to 1 guest; 1 failed.", body)
+
     def test_pre_party_display_rotates_only_rsvp_cards_and_updates(self):
         main.costume_signups = [
             main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
@@ -907,6 +1006,8 @@ class RedisStateTests(unittest.TestCase):
                 "/party/register",
                 data={
                     "username": "Morgan",
+                    "email": "morgan@example.com",
+                    "email_updates_acknowledged": "yes",
                     "password": "party-password",
                     "confirm_password": "party-password",
                     "next": "/party",
@@ -923,6 +1024,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(302, register_response.status_code)
         self.assertEqual(200, halloween_response.status_code)
         self.assertEqual("Morgan", account["username"])
+        self.assertEqual("morgan@example.com", account["email"])
+        self.assertTrue(account["email_updates_acknowledged"])
         self.assertNotEqual("party-password", account["password_hash"])
         self.assertEqual("Morgan", state["registered_users"][user_id])
         self.assertIn("regular", roles)

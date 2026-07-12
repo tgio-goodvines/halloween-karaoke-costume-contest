@@ -4,7 +4,7 @@
 {% block content %}
 <section class="form-section">
   <h2>Create Your Halloween Account</h2>
-  <p>Register once on this device, then use the same account for signups and costume voting.</p>
+  <p>Register once on this device, then use the same account for signups and costume voting. RSVP guests and registered users receive host update emails.</p>
 
   {% if errors %}
     <div class="errors">
@@ -23,11 +23,19 @@
     <label for="username">Name</label>
     <input type="text" id="username" name="username" autocomplete="username" required value="{{ request.form.username }}">
 
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" autocomplete="email" maxlength="120" required value="{{ request.form.email }}">
+
     <label for="password">Password</label>
     <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
 
     <label for="confirm_password">Confirm Password</label>
     <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required minlength="8">
+
+    <label class="form-check" for="email_updates_acknowledged">
+      <input type="checkbox" id="email_updates_acknowledged" name="email_updates_acknowledged" value="yes" required {% if request.form.email_updates_acknowledged == 'yes' %}checked{% endif %}>
+      <span>I understand the hosts will email this address when RSVP page updates are posted.</span>
+    </label>
 
     <button type="submit" class="button button--primary">Create Account</button>
   </form>

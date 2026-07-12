@@ -21,6 +21,8 @@ Important working notes:
 - `/rsvp`, `/party/register`, and `/party/login` require the admin-configured party code before showing RSVP, account creation, or sign-in forms.
 - The locked `/rsvp` page must not show party detail/map/update cards or party navigation; party-code unlock is per browser/session and must not unlock other browsers.
 - `/rsvp` is an independent host RSVP list, not account creation; attendee portal accounts are created/signed in through Redis-backed accounts at `/party/register` and `/party/login`.
+- RSVP and party account registration require an email address plus acknowledgment that RSVP-page host updates are sent by email; admin-posted RSVP updates can email deduplicated RSVP and registered-user recipients through SES when enabled.
+- Halloween outbound email uses the separate `tnq-halloween.com` SES identity and sender `no-reply@tnq-halloween.com`; do not change existing GoodVines SES identities or sender addresses for `appg-v.com` or `goodvines.app`.
 - Admin controls can set the root landing target, replace the party code, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
 - Before `HALLOWEEN_PARTY_START`, live-display rotation is limited to RSVP/static party info/update cards and should not show costume or karaoke signup entries.
 - Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`.

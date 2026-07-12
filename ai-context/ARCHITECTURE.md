@@ -13,7 +13,8 @@
   showing party details and an independent RSVP form; successful RSVPs are saved
   to the host-visible RSVP list and do not create attendee accounts. Admin-editable
   party info cards and a Google Maps location embed are shown first, then RSVP
-  updates are shown newest-to-oldest.
+  updates are shown newest-to-oldest. RSVP submissions require an email contact
+  and required acknowledgment that host updates are sent by email.
   Locked RSVP sessions show only the code prompt; party details, map, updates,
   and party navigation stay hidden until that browser session enters the correct
   code.
@@ -48,6 +49,7 @@
 - Flask app setup and route definitions.
 - Dataclasses: `CostumeSignup`, `KaraokeSignup`.
 - Redis-backed state serialization/hydration, with process-local global caches.
+- RSVP update recipient collection and Amazon SES email sending when enabled.
 - Display update broadcasting via `threading.Condition`.
 - Scoreboard construction, ranking, and winner card creation.
 - Rotation-entry construction for the live display.
@@ -178,6 +180,9 @@ karaoke signup/event cards are withheld until the configured party start time.
 - Production deploys are GitHub Actions -> AWS SSM -> EC2 and must preserve the
   GoodVines service. Do not use S3, ECS, ECR, CodeDeploy, or new hosting
   infrastructure for the current deployment path.
+- Halloween outbound email uses the separate SES domain identity
+  `tnq-halloween.com` and must not change existing GoodVines SES identities
+  such as `appg-v.com` or `goodvines.app`.
 
 ## Extension Guidance
 

@@ -2,7 +2,7 @@
 
 :root {
   color-scheme: dark;
-  --primary: #e11d48;
+  --primary: #ff3131;
   --primary-dark: #9b1235;
   --primary-light: #ff2d55;
   --bg: #161516;
@@ -13,10 +13,12 @@
   --dusty-rose: #ebaeb6;
   --text: #f6edf0;
   --muted: #b9a8b0;
-  --card-border: rgba(225, 29, 72, 0.42);
-  --card-glow: inset 0 0 24px rgba(225, 29, 72, 0.045), 0 0 18px rgba(225, 29, 72, 0.16);
+  --card-border: rgba(255, 49, 49, 0.42);
+  --card-glow: inset 0 0 24px rgba(255, 49, 49, 0.045), 0 0 18px rgba(255, 49, 49, 0.16);
   --steel-border: rgba(61, 63, 67, 0.85);
-  --scanline: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(225, 29, 72, 0.018) 3px, rgba(225, 29, 72, 0.018) 4px);
+  --scanline: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.018) 3px, rgba(255, 49, 49, 0.018) 4px);
+  --lab-panel-bg: var(--scanline), linear-gradient(180deg, rgba(26, 24, 26, 0.98), rgba(16, 15, 16, 0.98));
+  --lab-red-rgb: 255, 49, 49;
 }
 
 * {
@@ -27,7 +29,7 @@ body {
   margin: 0;
   font-family: "IBM Plex Mono", "Courier New", monospace;
   background:
-    radial-gradient(circle at 50% -12rem, rgba(225, 29, 72, 0.12), transparent 28rem),
+    radial-gradient(circle at 50% -12rem, rgba(255, 49, 49, 0.12), transparent 28rem),
     linear-gradient(180deg, #161516 0%, #100f10 100%);
   color: var(--text);
   min-height: 100vh;
@@ -53,8 +55,8 @@ body::after {
   z-index: 9998;
   height: 180px;
   bottom: auto;
-  background: linear-gradient(transparent, rgba(225, 29, 72, 0.035), transparent);
-  animation: lab-scan 8s linear infinite;
+  background: linear-gradient(transparent, rgba(255, 49, 49, 0.018), transparent);
+  animation: lab-scan 12s linear infinite;
 }
 
 @keyframes lab-scan {
@@ -84,7 +86,7 @@ a:focus {
 
 .site-header {
   background: rgba(0, 0, 0, 0.92);
-  border-bottom: 1px solid rgba(255, 59, 59, 0.35);
+  border-bottom: 1px solid rgba(255, 49, 49, 0.35);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -132,11 +134,11 @@ a:focus {
   justify-content: center;
   min-height: 44px;
   padding: 0.65rem 0.9rem;
-  border: 1px solid rgba(255, 59, 59, 0.55);
+  border: 1px solid rgba(255, 49, 49, 0.55);
   border-radius: 0.7rem;
   color: var(--text);
   background: rgba(0, 0, 0, 0.72);
-  box-shadow: 0 0 18px rgba(255, 59, 59, 0.28);
+  box-shadow: 0 0 18px rgba(255, 49, 49, 0.28);
   cursor: pointer;
 }
 
@@ -150,10 +152,10 @@ a:focus {
   display: grid;
   gap: 0.5rem;
   margin: 0;
-  border: 1px solid rgba(255, 59, 59, 0.55);
+  border: 1px solid rgba(255, 49, 49, 0.55);
   border-radius: 0.85rem;
   background: rgba(5, 5, 5, 0.98);
-  box-shadow: 0 0 28px rgba(255, 59, 59, 0.38);
+  box-shadow: 0 0 28px rgba(255, 49, 49, 0.38);
 }
 
 .site-nav:not([open]) nav {
@@ -177,8 +179,8 @@ a:focus {
 .site-nav nav a:focus,
 .site-nav__logout button:hover,
 .site-nav__logout button:focus {
-  border-color: rgba(255, 59, 59, 0.6);
-  background-color: rgba(255, 59, 59, 0.18);
+  border-color: rgba(255, 49, 49, 0.6);
+  background-color: rgba(255, 49, 49, 0.18);
   transform: translateY(-1px);
 }
 
@@ -191,7 +193,7 @@ a:focus {
   width: 100%;
   min-height: 44px;
   text-align: center;
-  border-color: rgba(255, 59, 59, 0.22);
+  border-color: rgba(255, 49, 49, 0.22);
 }
 
 :is(
@@ -311,8 +313,8 @@ main.container {
 
 .contest-banner--voting,
 .contest-banner--winner {
-  border-color: rgba(255, 59, 59, 0.85);
-  box-shadow: 0 0 32px rgba(255, 59, 59, 0.55);
+  border-color: rgba(255, 49, 49, 0.85);
+  box-shadow: 0 0 32px rgba(255, 49, 49, 0.55);
 }
 
 .contest-banner__body {
@@ -348,16 +350,16 @@ main.container {
   color: #fff;
   font-weight: 600;
   text-decoration: none;
-  border: 1px solid rgba(255, 59, 59, 0.6);
+  border: 1px solid rgba(255, 49, 49, 0.6);
   transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s;
-  box-shadow: 0 0 18px rgba(255, 59, 59, 0.4);
+  box-shadow: 0 0 18px rgba(255, 49, 49, 0.4);
 }
 
 .contest-banner__button:hover,
 .contest-banner__button:focus {
   transform: translateY(-2px);
-  background-color: rgba(255, 59, 59, 0.15);
-  box-shadow: 0 0 26px rgba(255, 59, 59, 0.55);
+  background-color: rgba(255, 49, 49, 0.15);
+  box-shadow: 0 0 26px rgba(255, 49, 49, 0.55);
 }
 
 .signup-callout__intro {
@@ -458,7 +460,7 @@ main.container {
   min-height: 44px;
   padding: 0.75rem;
   border-radius: 0.6rem;
-  border: 1px solid rgba(255, 59, 59, 0.35);
+  border: 1px solid rgba(255, 49, 49, 0.35);
   background: #111;
   color: var(--text);
   font-size: 1rem;
@@ -480,12 +482,12 @@ main.container {
   padding: 0.9rem 1.2rem;
   border: none;
   border-radius: 0.85rem;
-  background: linear-gradient(135deg, rgba(255, 59, 59, 0.9), rgba(197, 0, 0, 0.85));
+  background: linear-gradient(135deg, rgba(255, 49, 49, 0.9), rgba(197, 0, 0, 0.85));
   color: white;
   font-size: 1rem;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 0 24px rgba(255, 59, 59, 0.45);
+  box-shadow: 0 0 24px rgba(255, 49, 49, 0.45);
 }
 
 .signup-form button:hover,
@@ -493,7 +495,7 @@ main.container {
 .login-form button:hover,
 .login-form button:focus {
   transform: translateY(-2px);
-  box-shadow: 0 0 30px rgba(255, 59, 59, 0.6);
+  box-shadow: 0 0 30px rgba(255, 49, 49, 0.6);
 }
 
 .success,
@@ -504,13 +506,13 @@ main.container {
 }
 
 .success {
-  border-color: rgba(255, 59, 59, 0.6);
-  box-shadow: 0 0 20px rgba(255, 59, 59, 0.45);
+  border-color: rgba(255, 49, 49, 0.6);
+  box-shadow: 0 0 20px rgba(255, 49, 49, 0.45);
 }
 
 .errors {
-  border-color: rgba(255, 59, 59, 0.9);
-  box-shadow: 0 0 24px rgba(255, 59, 59, 0.55);
+  border-color: rgba(255, 49, 49, 0.9);
+  box-shadow: 0 0 24px rgba(255, 49, 49, 0.55);
   color: #ffdede;
 }
 
@@ -547,11 +549,11 @@ main.container {
 }
 
 .flash--error {
-  border-color: rgba(255, 59, 59, 0.85);
+  border-color: rgba(255, 49, 49, 0.85);
 }
 
 .flash--success {
-  border-color: rgba(255, 59, 59, 0.65);
+  border-color: rgba(255, 49, 49, 0.65);
 }
 
 .flash ul {
@@ -611,9 +613,9 @@ main.container {
   min-width: 2.4rem;
   min-height: 2.4rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 59, 59, 0.45);
+  border: 1px solid rgba(255, 49, 49, 0.45);
   color: #fff;
-  background: rgba(255, 59, 59, 0.12);
+  background: rgba(255, 49, 49, 0.12);
   font-weight: 700;
 }
 
@@ -661,7 +663,7 @@ main.container {
 .admin-entry__fields input {
   padding: 0.75rem;
   border-radius: 0.6rem;
-  border: 1px solid rgba(255, 59, 59, 0.35);
+  border: 1px solid rgba(255, 49, 49, 0.35);
   background: #111;
   color: var(--text);
 }
@@ -680,35 +682,35 @@ main.container {
   padding: 0.75rem 1.2rem;
   min-height: 44px;
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 59, 59, 0.6);
+  border: 1px solid rgba(255, 49, 49, 0.6);
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, background-color 0.2s;
   text-decoration: none;
   color: var(--text);
   background: rgba(0, 0, 0, 0.7);
-  box-shadow: 0 0 18px rgba(255, 59, 59, 0.35);
+  box-shadow: 0 0 18px rgba(255, 49, 49, 0.35);
 }
 
 .button--primary {
-  background: linear-gradient(135deg, rgba(255, 59, 59, 0.95), rgba(197, 0, 0, 0.9));
+  background: linear-gradient(135deg, rgba(255, 49, 49, 0.95), rgba(197, 0, 0, 0.9));
   color: white;
-  box-shadow: 0 0 24px rgba(255, 59, 59, 0.5);
+  box-shadow: 0 0 24px rgba(255, 49, 49, 0.5);
 }
 
 .button--accent {
-  background: linear-gradient(135deg, rgba(255, 59, 59, 0.85), rgba(122, 0, 0, 0.85));
+  background: linear-gradient(135deg, rgba(255, 49, 49, 0.85), rgba(122, 0, 0, 0.85));
   color: white;
 }
 
 .button--danger {
-  background: linear-gradient(135deg, rgba(255, 59, 59, 1), rgba(140, 0, 0, 0.95));
+  background: linear-gradient(135deg, rgba(255, 49, 49, 1), rgba(140, 0, 0, 0.95));
   color: white;
 }
 
 .button--outline {
   background: transparent;
-  border: 1px solid rgba(255, 59, 59, 0.6);
+  border: 1px solid rgba(255, 49, 49, 0.6);
   color: var(--text);
   box-shadow: none;
 }
@@ -717,7 +719,7 @@ main.container {
 .button:focus {
   transform: translateY(-2px);
   filter: brightness(1.05);
-  box-shadow: 0 0 26px rgba(255, 59, 59, 0.55);
+  box-shadow: 0 0 26px rgba(255, 49, 49, 0.55);
 }
 
 .button:disabled {
@@ -745,7 +747,7 @@ main.container {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
-  border: 1px solid rgba(255, 59, 59, 0.25);
+  border: 1px solid rgba(255, 49, 49, 0.25);
   border-radius: 0.85rem;
   background: rgba(0, 0, 0, 0.2);
 }
@@ -762,7 +764,7 @@ main.container {
   display: grid;
   gap: 0.45rem;
   padding: 0.85rem;
-  border: 1px solid rgba(225, 29, 72, 0.28);
+  border: 1px solid rgba(255, 49, 49, 0.28);
   background: rgba(13, 12, 13, 0.48);
 }
 
@@ -776,7 +778,7 @@ main.container {
   width: 100%;
   padding: 0.75rem;
   border-radius: 0.6rem;
-  border: 1px solid rgba(255, 59, 59, 0.35);
+  border: 1px solid rgba(255, 49, 49, 0.35);
   background: #111;
   color: var(--text);
 }
@@ -815,7 +817,7 @@ main.container {
 .bartender-card__media {
   aspect-ratio: 4 / 3;
   background: #111;
-  border-bottom: 1px solid rgba(255, 59, 59, 0.35);
+  border-bottom: 1px solid rgba(255, 49, 49, 0.35);
 }
 
 .menu-card__image,
@@ -835,7 +837,7 @@ main.container {
   color: rgba(244, 244, 248, 0.72);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  background: linear-gradient(135deg, rgba(255, 59, 59, 0.16), rgba(0, 0, 0, 0.4));
+  background: linear-gradient(135deg, rgba(255, 49, 49, 0.16), rgba(0, 0, 0, 0.4));
 }
 
 .menu-card__body {
@@ -885,7 +887,7 @@ main.container {
 
 .order-card--complete {
   border-color: rgba(255, 134, 134, 0.9);
-  box-shadow: 0 0 28px rgba(255, 59, 59, 0.58);
+  box-shadow: 0 0 28px rgba(255, 49, 49, 0.58);
 }
 
 .bartender-grid {
@@ -901,11 +903,11 @@ main.container {
 
 .bartender-card--in_progress {
   border-color: rgba(255, 134, 134, 0.95);
-  box-shadow: 0 0 32px rgba(255, 59, 59, 0.62);
+  box-shadow: 0 0 32px rgba(255, 49, 49, 0.62);
 }
 
 .bartender-card__media {
-  border-right: 1px solid rgba(255, 59, 59, 0.35);
+  border-right: 1px solid rgba(255, 49, 49, 0.35);
   border-bottom: none;
   min-height: 100%;
 }
@@ -918,7 +920,7 @@ main.container {
 
 .bartender-card__recipe {
   padding: 0.85rem;
-  border: 1px solid rgba(255, 59, 59, 0.28);
+  border: 1px solid rgba(255, 49, 49, 0.28);
   border-radius: 0.75rem;
   background: rgba(0, 0, 0, 0.24);
 }
@@ -931,7 +933,7 @@ main.container {
 .menu-admin-entry__image {
   max-height: 220px;
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 59, 59, 0.35);
+  border: 1px solid rgba(255, 49, 49, 0.35);
 }
 
 .access-settings__form textarea {
@@ -948,7 +950,7 @@ main.container {
   display: grid;
   gap: 0.45rem;
   padding: 1rem;
-  border: 1px solid rgba(255, 59, 59, 0.25);
+  border: 1px solid rgba(255, 49, 49, 0.25);
   border-radius: 0.85rem;
   background: rgba(0, 0, 0, 0.24);
 }
@@ -1078,7 +1080,7 @@ main.container {
   padding: 0.65rem 0.75rem;
   border-radius: 0.75rem;
   background: #0d0d0d;
-  border: 1px solid rgba(255, 59, 59, 0.25);
+  border: 1px solid rgba(255, 49, 49, 0.25);
 }
 
 .contest-top-card__rank {
@@ -1158,8 +1160,8 @@ main.container {
 }
 
 .contest-chart__item.is-leader {
-  border-color: rgba(255, 59, 59, 0.85);
-  box-shadow: 0 0 26px rgba(255, 59, 59, 0.55);
+  border-color: rgba(255, 49, 49, 0.85);
+  box-shadow: 0 0 26px rgba(255, 49, 49, 0.55);
 }
 
 .contest-chart__heading {
@@ -1184,14 +1186,14 @@ main.container {
   border-radius: 999px;
   overflow: hidden;
   height: 12px;
-  border: 1px solid rgba(255, 59, 59, 0.35);
+  border: 1px solid rgba(255, 49, 49, 0.35);
 }
 
 .contest-chart__bar-fill {
   position: absolute;
   inset: 0;
   width: min(var(--score-width, 0%), 100%);
-  background: linear-gradient(135deg, rgba(255, 59, 59, 0.95), rgba(197, 0, 0, 0.85));
+  background: linear-gradient(135deg, rgba(255, 49, 49, 0.95), rgba(197, 0, 0, 0.85));
   border-radius: inherit;
   transition: width 0.4s ease;
 }
@@ -1265,7 +1267,7 @@ main.container {
 .voting-card__label input {
   padding: 0.75rem;
   border-radius: 0.6rem;
-  border: 1px solid rgba(255, 59, 59, 0.35);
+  border: 1px solid rgba(255, 49, 49, 0.35);
   background: #111;
   color: var(--text);
   font-size: 1.05rem;
@@ -1341,7 +1343,7 @@ main.container {
 
 .rsvp-details article {
   padding: 1rem;
-  border: 1px solid rgba(255, 59, 59, 0.25);
+  border: 1px solid rgba(255, 49, 49, 0.25);
   border-radius: 0.85rem;
   background: rgba(0, 0, 0, 0.28);
 }
@@ -1375,7 +1377,7 @@ main.container {
   width: 100%;
   padding: 0.8rem;
   border-radius: 0.6rem;
-  border: 1px solid rgba(255, 59, 59, 0.35);
+  border: 1px solid rgba(255, 49, 49, 0.35);
   background: #111;
   color: var(--text);
 }
@@ -1415,7 +1417,7 @@ main.container {
 .rsvp-map iframe {
   width: 100%;
   min-height: 320px;
-  border: 1px solid rgba(255, 59, 59, 0.25);
+  border: 1px solid rgba(255, 49, 49, 0.25);
   border-radius: 0.85rem;
   background: #111;
 }
@@ -1438,14 +1440,14 @@ main.container {
   display: grid;
   gap: 0.55rem;
   padding: 1rem;
-  border: 1px solid rgba(255, 59, 59, 0.25);
+  border: 1px solid rgba(255, 49, 49, 0.25);
   border-radius: 0.85rem;
   background: rgba(0, 0, 0, 0.28);
 }
 
 .rsvp-update-card--latest {
-  border-color: rgba(255, 59, 59, 0.6);
-  box-shadow: 0 0 20px rgba(255, 59, 59, 0.3);
+  border-color: rgba(255, 49, 49, 0.6);
+  box-shadow: 0 0 20px rgba(255, 49, 49, 0.3);
 }
 
 .rsvp-update-card h4,
@@ -1474,20 +1476,20 @@ main.container {
 
 a {
   color: var(--dusty-rose);
-  text-decoration-color: rgba(225, 29, 72, 0.55);
+  text-decoration-color: rgba(255, 49, 49, 0.55);
   text-underline-offset: 0.18em;
 }
 
 a:hover,
 a:focus {
   color: #fff;
-  text-shadow: 0 0 8px rgba(225, 29, 72, 0.62);
+  text-shadow: 0 0 8px rgba(255, 49, 49, 0.62);
 }
 
 .site-header {
   background: rgba(22, 21, 22, 0.96);
-  border-bottom: 2px solid rgba(225, 29, 72, 0.32);
-  box-shadow: 0 2px 20px rgba(225, 29, 72, 0.12), inset 0 -1px 0 rgba(225, 29, 72, 0.2);
+  border-bottom: 2px solid rgba(255, 49, 49, 0.32);
+  box-shadow: 0 2px 20px rgba(255, 49, 49, 0.12), inset 0 -1px 0 rgba(255, 49, 49, 0.2);
 }
 
 .site-header h1 {
@@ -1495,7 +1497,7 @@ a:focus {
   color: var(--primary);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  text-shadow: 0 0 15px rgba(225, 29, 72, 0.85), 0 0 44px rgba(225, 29, 72, 0.36);
+  text-shadow: 0 0 15px rgba(255, 49, 49, 0.85), 0 0 44px rgba(255, 49, 49, 0.36);
 }
 
 .site-header__inner::after {
@@ -1514,7 +1516,7 @@ a:focus {
   width: 0.55rem;
   height: 0.55rem;
   background: var(--primary);
-  box-shadow: 0 0 5px var(--primary), 0 0 16px rgba(225, 29, 72, 0.75);
+  box-shadow: 0 0 5px var(--primary), 0 0 16px rgba(255, 49, 49, 0.75);
   order: 3;
 }
 
@@ -1537,16 +1539,16 @@ a:focus {
 }
 
 .site-nav__toggle {
-  border: 2px solid rgba(225, 29, 72, 0.52);
+  border: 2px solid rgba(255, 49, 49, 0.52);
   background: #0d0c0d;
   color: var(--dusty-rose);
-  box-shadow: inset 0 0 12px rgba(225, 29, 72, 0.06), 0 0 12px rgba(225, 29, 72, 0.18);
+  box-shadow: inset 0 0 12px rgba(255, 49, 49, 0.06), 0 0 12px rgba(255, 49, 49, 0.18);
 }
 
 .site-nav nav {
-  border: 2px solid rgba(225, 29, 72, 0.48);
+  border: 2px solid rgba(255, 49, 49, 0.48);
   background: rgba(13, 12, 13, 0.98);
-  box-shadow: inset 0 0 20px rgba(225, 29, 72, 0.05), 0 0 24px rgba(225, 29, 72, 0.22);
+  box-shadow: inset 0 0 20px rgba(255, 49, 49, 0.05), 0 0 24px rgba(255, 49, 49, 0.22);
 }
 
 .site-nav__user {
@@ -1596,8 +1598,8 @@ a:focus {
 }
 
 :is(.menu-card, .order-card, .bartender-card, .admin-entry, .rsvp-update-card, .voting-card):hover {
-  border-color: rgba(225, 29, 72, 0.72);
-  box-shadow: inset 0 0 30px rgba(225, 29, 72, 0.055), 0 0 26px rgba(225, 29, 72, 0.22);
+  border-color: rgba(255, 49, 49, 0.72);
+  box-shadow: inset 0 0 30px rgba(255, 49, 49, 0.055), 0 0 26px rgba(255, 49, 49, 0.22);
 }
 
 h2,
@@ -1617,7 +1619,7 @@ legend,
 .signup-callout h2,
 .admin-panel__header h2 {
   color: var(--primary);
-  text-shadow: 0 0 10px rgba(225, 29, 72, 0.72), 0 0 34px rgba(225, 29, 72, 0.34);
+  text-shadow: 0 0 10px rgba(255, 49, 49, 0.72), 0 0 34px rgba(255, 49, 49, 0.34);
 }
 
 .rsvp-landing__eyebrow,
@@ -1628,8 +1630,8 @@ legend,
   display: inline-flex;
   width: fit-content;
   padding: 0.16rem 0.55rem;
-  border: 1px solid rgba(225, 29, 72, 0.5);
-  background: rgba(225, 29, 72, 0.12);
+  border: 1px solid rgba(255, 49, 49, 0.5);
+  background: rgba(255, 49, 49, 0.12);
   color: var(--primary);
   font-size: 0.68rem;
   line-height: 1.25;
@@ -1652,7 +1654,7 @@ textarea,
 .rsvp-card input,
 .rsvp-card textarea {
   border-radius: 0;
-  border: 1px solid rgba(225, 29, 72, 0.4);
+  border: 1px solid rgba(255, 49, 49, 0.4);
   background:
     var(--scanline),
     rgba(13, 12, 13, 0.92);
@@ -1676,7 +1678,7 @@ textarea:focus,
 .rsvp-card textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary), 0 0 14px rgba(225, 29, 72, 0.38), inset 0 0 10px rgba(225, 29, 72, 0.06);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 14px rgba(255, 49, 49, 0.38), inset 0 0 10px rgba(255, 49, 49, 0.06);
 }
 
 ::placeholder {
@@ -1687,10 +1689,10 @@ textarea:focus,
 .contest-banner__button,
 .signup-form button,
 .login-form button {
-  border: 2px solid rgba(225, 29, 72, 0.55);
+  border: 2px solid rgba(255, 49, 49, 0.55);
   background: #0d0c0d;
   color: var(--dusty-rose);
-  box-shadow: 0 0 12px rgba(225, 29, 72, 0.18);
+  box-shadow: 0 0 12px rgba(255, 49, 49, 0.18);
 }
 
 .button--primary,
@@ -1699,7 +1701,7 @@ textarea:focus,
   border-color: var(--primary);
   background: var(--primary);
   color: #fff;
-  box-shadow: 0 0 8px rgba(225, 29, 72, 0.6), 0 0 24px rgba(225, 29, 72, 0.3);
+  box-shadow: 0 0 8px rgba(255, 49, 49, 0.6), 0 0 24px rgba(255, 49, 49, 0.3);
 }
 
 .button--accent {
@@ -1729,14 +1731,14 @@ textarea:focus,
   border-color: var(--primary-light);
   background-color: var(--primary-light);
   color: #fff;
-  box-shadow: 0 0 10px var(--primary), 0 0 26px rgba(225, 29, 72, 0.54), 0 0 48px rgba(225, 29, 72, 0.22);
+  box-shadow: 0 0 10px var(--primary), 0 0 26px rgba(255, 49, 49, 0.54), 0 0 48px rgba(255, 49, 49, 0.22);
 }
 
 .button--outline:hover,
 .button--outline:focus,
 .contest-banner__button:hover,
 .contest-banner__button:focus {
-  background-color: rgba(225, 29, 72, 0.16);
+  background-color: rgba(255, 49, 49, 0.16);
 }
 
 .success,
@@ -1747,17 +1749,17 @@ textarea:focus,
 
 .errors,
 .flash--error {
-  border-color: rgba(225, 29, 72, 0.9);
+  border-color: rgba(255, 49, 49, 0.9);
   color: #ffe5ea;
 }
 
 .admin-entry__rank,
 .instruction-card__badge {
   border-radius: 0;
-  border-color: rgba(225, 29, 72, 0.55);
+  border-color: rgba(255, 49, 49, 0.55);
   background: #0d0c0d;
   color: var(--primary);
-  box-shadow: 0 0 12px rgba(225, 29, 72, 0.24);
+  box-shadow: 0 0 12px rgba(255, 49, 49, 0.24);
 }
 
 .contest-chart__bar {
@@ -1768,7 +1770,7 @@ textarea:focus,
 .contest-chart__bar-fill {
   border-radius: 0;
   background: linear-gradient(90deg, var(--primary-dark), var(--primary), var(--primary-light));
-  box-shadow: 0 0 10px rgba(225, 29, 72, 0.65);
+  box-shadow: 0 0 10px rgba(255, 49, 49, 0.65);
 }
 
 .menu-card__image-wrap,
@@ -1777,19 +1779,19 @@ textarea:focus,
 .menu-admin-entry__image,
 .order-card__image {
   border-radius: 0;
-  border-color: rgba(225, 29, 72, 0.35);
+  border-color: rgba(255, 49, 49, 0.35);
 }
 
 .menu-card__placeholder {
   background:
     var(--scanline),
-    linear-gradient(135deg, rgba(225, 29, 72, 0.14), rgba(13, 12, 13, 0.78));
+    linear-gradient(135deg, rgba(255, 49, 49, 0.14), rgba(13, 12, 13, 0.78));
   color: rgba(235, 174, 182, 0.72);
 }
 
 .site-footer {
   background: rgba(13, 12, 13, 0.92);
-  border-top: 1px solid rgba(225, 29, 72, 0.24);
+  border-top: 1px solid rgba(255, 49, 49, 0.24);
   color: rgba(235, 174, 182, 0.62);
   font-size: 0.78rem;
   letter-spacing: 0.08em;
@@ -1926,7 +1928,7 @@ textarea:focus,
 
   .bartender-card__media {
     border-right: none;
-    border-bottom: 1px solid rgba(225, 29, 72, 0.35);
+    border-bottom: 1px solid rgba(255, 49, 49, 0.35);
   }
 
   .contest-chart__meta,
@@ -1947,5 +1949,432 @@ textarea:focus,
 
   .slides-wrapper {
     min-height: 180px;
+  }
+}
+
+/*
+  UI kit refinement pass.
+  This final layer translates the attached mobile lab-terminal kit into the
+  existing Flask templates without adding Tailwind, icon fonts, or new runtime
+  dependencies.
+*/
+
+.lab-led {
+  width: 0.58rem;
+  height: 0.58rem;
+  flex: 0 0 auto;
+  display: inline-block;
+  background: var(--primary);
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--primary), 0 0 8px var(--primary);
+  animation: lab-led-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes lab-led-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 4px var(--primary), 0 0 8px var(--primary);
+  }
+
+  50% {
+    opacity: 0.82;
+    box-shadow: 0 0 8px var(--primary), 0 0 20px var(--primary), 0 0 35px rgba(var(--lab-red-rgb), 0.5);
+  }
+}
+
+@keyframes lab-flicker {
+  0%,
+  95%,
+  100% {
+    opacity: 1;
+  }
+
+  96% {
+    opacity: 0.72;
+  }
+
+  97% {
+    opacity: 1;
+  }
+
+  98.5% {
+    opacity: 0.86;
+  }
+}
+
+.site-header {
+  background: rgba(13, 12, 13, 0.98);
+  border-bottom: 1px solid rgba(var(--lab-red-rgb), 0.3);
+  box-shadow: 0 2px 20px rgba(var(--lab-red-rgb), 0.1), inset 0 -1px 0 rgba(var(--lab-red-rgb), 0.22);
+}
+
+.site-header::after {
+  content: "";
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(var(--lab-red-rgb), 0.62), transparent);
+}
+
+.site-header__inner {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(0, auto) minmax(7rem, 1fr) auto;
+  gap: 0.85rem;
+  min-height: 3.65rem;
+}
+
+.site-header__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 49, 49, 0.78);
+  font-size: 0.58rem;
+  line-height: 1.2;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.site-header__status--live {
+  justify-self: end;
+  color: rgba(255, 49, 49, 0.6);
+}
+
+.site-header h1 {
+  justify-self: center;
+  max-width: min(56vw, 38rem);
+  color: var(--primary);
+  font-size: clamp(1rem, 2.15vw, 1.65rem);
+  letter-spacing: 0.15em;
+  text-align: center;
+  text-shadow: 0 0 10px rgba(var(--lab-red-rgb), 0.8), 0 0 30px rgba(var(--lab-red-rgb), 0.5), 0 0 60px rgba(var(--lab-red-rgb), 0.3);
+  animation: lab-flicker 4s infinite;
+}
+
+.site-header__inner::before,
+.site-header__inner::after {
+  content: none;
+}
+
+.site-header__meta {
+  justify-self: end;
+}
+
+.site-nav__toggle,
+.site-nav nav a,
+.site-nav__logout button,
+.button,
+.contest-banner__button,
+.signup-form button,
+.login-form button {
+  min-height: 48px;
+  padding: 0.78rem 1rem;
+  border-radius: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.site-nav__toggle,
+.button,
+.contest-banner__button,
+.signup-form button,
+.login-form button {
+  border: 2px solid rgba(var(--lab-red-rgb), 0.5);
+  background: transparent;
+  color: var(--dusty-rose);
+  box-shadow: none;
+}
+
+.button--primary,
+.signup-form button,
+.login-form button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 12px var(--primary), 0 0 30px rgba(var(--lab-red-rgb), 0.34);
+}
+
+.button--accent {
+  border-color: rgba(177, 109, 150, 0.7);
+  background: rgba(177, 109, 150, 0.14);
+  color: var(--dusty-rose);
+}
+
+.button--danger {
+  border-color: var(--primary-light);
+  background: var(--primary-dark);
+  color: #fff;
+}
+
+.button--outline,
+.contest-banner__button {
+  background: transparent;
+  color: var(--dusty-rose);
+}
+
+.site-nav__toggle:hover,
+.site-nav__toggle:focus,
+.site-nav nav a:hover,
+.site-nav nav a:focus,
+.site-nav__logout button:hover,
+.site-nav__logout button:focus,
+.button:hover,
+.button:focus,
+.contest-banner__button:hover,
+.contest-banner__button:focus,
+.signup-form button:hover,
+.signup-form button:focus,
+.login-form button:hover,
+.login-form button:focus {
+  transform: translateY(-1px);
+  border-color: var(--primary);
+  background: rgba(var(--lab-red-rgb), 0.14);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(var(--lab-red-rgb), 0.5), 0 0 20px rgba(var(--lab-red-rgb), 0.3);
+}
+
+.button--primary:hover,
+.button--primary:focus,
+.signup-form button:hover,
+.signup-form button:focus,
+.login-form button:hover,
+.login-form button:focus {
+  background: var(--primary-light);
+}
+
+.button:focus-visible,
+.contest-banner__button:focus-visible,
+.site-nav__toggle:focus-visible,
+.site-nav nav a:focus-visible,
+.site-nav__logout button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+:is(
+    .signup-callout,
+    .contest-banner,
+    .slides,
+    .signup-summary > div,
+    .form-section,
+    .rsvp-landing,
+    .rsvp-card,
+    .submitted-list,
+    .voting-reminder,
+    .voting-card,
+    .success,
+    .success-message,
+    .errors,
+    .admin-panel,
+    .admin-section,
+    .admin-entry,
+    .menu-section,
+    .menu-card,
+    .order-card,
+    .bartender-card,
+    .karaoke-lineup,
+    .contest-chart,
+    .contest-chart__item,
+    .contest-winner-card,
+    .contest-top-card,
+    .flash,
+    .rsvp-details article,
+    .rsvp-update-card,
+    .rsvp-admin-item,
+    .access-settings__form,
+    .party-code-status,
+    .bartender-card__recipe
+  ) {
+  border-radius: 0;
+  border: 1px solid var(--card-border);
+  background: var(--lab-panel-bg);
+  box-shadow: var(--card-glow);
+}
+
+.admin-entry--new {
+  border-style: dashed;
+}
+
+.contest-banner--voting,
+.contest-banner--winner,
+.order-card--complete,
+.bartender-card--in_progress,
+.rsvp-update-card--latest,
+.contest-chart__item.is-leader {
+  border-color: rgba(var(--lab-red-rgb), 0.76);
+  box-shadow: inset 0 0 30px rgba(var(--lab-red-rgb), 0.06), 0 0 28px rgba(var(--lab-red-rgb), 0.28);
+}
+
+h2,
+h3,
+h4,
+legend,
+.contest-banner__body h2,
+.signup-callout h2,
+.rsvp-landing__intro h2 {
+  color: var(--dusty-rose);
+  letter-spacing: 0.04em;
+}
+
+.rsvp-landing__intro h2,
+.signup-callout h2,
+.admin-panel__header h2 {
+  color: var(--dusty-rose);
+  text-shadow: 0 0 10px rgba(var(--lab-red-rgb), 0.72), 0 0 30px rgba(var(--lab-red-rgb), 0.38), 0 0 60px rgba(var(--lab-red-rgb), 0.2);
+}
+
+.rsvp-landing__eyebrow,
+.menu-card__eyebrow,
+.order-card__status,
+.rsvp-update-card__eyebrow,
+.contest-status--active,
+.contest-status--inactive,
+.rsvp-admin-item__meta,
+.form-helper {
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+}
+
+.rsvp-landing__eyebrow,
+.menu-card__eyebrow,
+.order-card__status,
+.rsvp-update-card__eyebrow {
+  padding: 0.18rem 0.55rem;
+  border: 1px solid rgba(var(--lab-red-rgb), 0.5);
+  background: rgba(var(--lab-red-rgb), 0.15);
+  color: var(--primary);
+  font-size: 0.62rem;
+  line-height: 1.3;
+  letter-spacing: 0.15em;
+}
+
+input,
+select,
+textarea,
+.signup-form input,
+.login-form input,
+.admin-entry__fields input,
+.admin-entry__fields select,
+.admin-entry__fields textarea,
+.access-settings__form input,
+.access-settings__form select,
+.access-settings__form textarea,
+.voting-card__label input,
+.rsvp-card input,
+.rsvp-card textarea {
+  min-height: 48px;
+  border-radius: 0;
+  border: 1px solid rgba(var(--lab-red-rgb), 0.4);
+  background: var(--scanline), rgba(22, 21, 22, 0.9);
+  color: var(--dusty-rose);
+  font-size: 0.95rem;
+}
+
+textarea,
+.admin-entry__fields textarea,
+.access-settings__form textarea,
+.rsvp-card textarea {
+  min-height: 6.25rem;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 12px rgba(var(--lab-red-rgb), 0.4), inset 0 0 10px rgba(var(--lab-red-rgb), 0.05);
+}
+
+.admin-entry__rank,
+.instruction-card__badge {
+  border-radius: 0;
+}
+
+.contest-chart__bar,
+.progress-track {
+  height: 0.45rem;
+  border-radius: 0;
+  background: rgba(61, 63, 67, 0.42);
+  border: 1px solid rgba(61, 63, 67, 0.65);
+}
+
+.contest-chart__bar-fill,
+.progress-fill {
+  border-radius: 0;
+  background: linear-gradient(90deg, var(--primary-dark), var(--primary), var(--primary-light));
+  box-shadow: 0 0 8px rgba(var(--lab-red-rgb), 0.6);
+}
+
+.menu-card__image-wrap,
+.bartender-card__media,
+.rsvp-map iframe,
+.menu-admin-entry__image,
+.order-card__image {
+  background: #0d0c0d;
+  border-radius: 0;
+}
+
+.menu-card__placeholder {
+  background: var(--scanline), linear-gradient(135deg, rgba(var(--lab-red-rgb), 0.15), rgba(0, 0, 0, 0.45));
+}
+
+.success,
+.success-message,
+.flash--success {
+  border-color: rgba(34, 197, 94, 0.46);
+}
+
+.errors,
+.flash--error {
+  border-color: rgba(var(--lab-red-rgb), 0.9);
+}
+
+.site-footer {
+  background: rgba(13, 12, 13, 0.96);
+  border-top: 1px solid rgba(var(--lab-red-rgb), 0.24);
+}
+
+@media (max-width: 840px) {
+  .site-header__inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .site-header h1 {
+    justify-self: start;
+    max-width: min(100%, 42rem);
+    text-align: left;
+  }
+
+  .site-header__status {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .site-nav__toggle,
+  .site-nav nav a,
+  .site-nav__logout button,
+  .button,
+  .contest-banner__button,
+  .signup-form button,
+  .login-form button {
+    width: 100%;
+  }
+
+  .site-header h1 {
+    font-size: 0.92rem;
+    letter-spacing: 0.08em;
+  }
+
+  .rsvp-landing,
+  .signup-callout,
+  .admin-panel,
+  .admin-section,
+  .menu-section,
+  .submitted-list,
+  .form-section {
+    gap: 1rem;
   }
 }

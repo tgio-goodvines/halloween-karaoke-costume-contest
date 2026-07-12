@@ -9,7 +9,15 @@
   <body>
     <header class="site-header">
       <div class="container site-header__inner">
+        <span class="site-header__status site-header__status--clearance" aria-hidden="true">
+          <span class="lab-led"></span>
+          Clearance: LV IV
+        </span>
         <h1>{{ party_title }}</h1>
+        <span class="site-header__status site-header__status--live" aria-hidden="true">
+          Live
+          <span class="lab-led"></span>
+        </span>
         {% set show_admin_nav_link = show_admin_link is not defined or show_admin_link %}
         {% if not hide_site_nav and (regular_authenticated or bartender_authenticated or admin_authenticated or show_admin_nav_link) %}
           <div class="site-header__meta">

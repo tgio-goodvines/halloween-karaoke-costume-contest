@@ -1,15 +1,15 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap");
 
 body.display-mode {
-  --primary: #e11d48;
+  --primary: #ff3131;
   --primary-dark: #9b1235;
   --primary-light: #ff2d55;
   --dusty-rose: #ebaeb6;
   --magenta: #b16d96;
   --steel: #3d3f43;
   --display-surface: #161516;
-  --display-card-border: rgba(225, 29, 72, 0.48);
-  --display-card-glow: inset 0 0 28px rgba(225, 29, 72, 0.055), 0 0 28px rgba(225, 29, 72, 0.2);
+  --display-card-border: rgba(255, 49, 49, 0.48);
+  --display-card-glow: inset 0 0 28px rgba(255, 49, 49, 0.055), 0 0 28px rgba(255, 49, 49, 0.2);
   --display-page-padding: clamp(1.25rem, 3vh, 2.5rem);
   --display-gap: 2.5rem;
   --display-card-padding: 2.25rem;
@@ -24,7 +24,7 @@ body.display-mode {
   text-align: center;
   font-family: "IBM Plex Mono", "Courier New", monospace;
   background:
-    radial-gradient(circle at 50% -10rem, rgba(225, 29, 72, 0.18), transparent 30rem),
+    radial-gradient(circle at 50% -10rem, rgba(255, 49, 49, 0.18), transparent 30rem),
     #161516;
   color: var(--text, #f6edf0);
   overflow-x: hidden;
@@ -47,8 +47,8 @@ body.display-mode::after {
   z-index: 9998;
   height: 220px;
   bottom: auto;
-  background: linear-gradient(transparent, rgba(225, 29, 72, 0.035), transparent);
-  animation: display-scan 8s linear infinite;
+  background: linear-gradient(transparent, rgba(255, 49, 49, 0.018), transparent);
+  animation: display-scan 12s linear infinite;
 }
 
 @keyframes display-scan {
@@ -87,7 +87,7 @@ body.display-mode::after {
   text-transform: uppercase;
   overflow-wrap: anywhere;
   color: var(--primary);
-  text-shadow: 0 0 12px rgba(225, 29, 72, 0.84), 0 0 42px rgba(225, 29, 72, 0.4);
+  text-shadow: 0 0 12px rgba(255, 49, 49, 0.84), 0 0 42px rgba(255, 49, 49, 0.4);
 }
 
 .display-metrics {
@@ -107,7 +107,7 @@ body.display-mode::after {
   min-width: clamp(150px, 26vw, 210px);
   border-radius: 0;
   background:
-    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(225, 29, 72, 0.018) 3px, rgba(225, 29, 72, 0.018) 4px),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.018) 3px, rgba(255, 49, 49, 0.018) 4px),
     #161516;
   border: 2px solid var(--display-card-border);
   box-shadow: var(--display-card-glow);
@@ -148,7 +148,7 @@ body.display-mode::after {
   padding: var(--display-card-padding);
   border-radius: 0;
   background:
-    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(225, 29, 72, 0.018) 3px, rgba(225, 29, 72, 0.018) 4px),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.018) 3px, rgba(255, 49, 49, 0.018) 4px),
     linear-gradient(180deg, rgba(26, 24, 26, 0.98), rgba(16, 15, 16, 0.98));
   border: 2px solid var(--display-card-border);
   box-shadow: var(--display-card-glow);
@@ -168,14 +168,14 @@ body.display-mode::after {
 .display-card--costume,
 .display-card--winner,
 .display-card--inferno {
-  border-color: rgba(225, 29, 72, 0.86);
-  box-shadow: inset 0 0 36px rgba(225, 29, 72, 0.075), 0 0 42px rgba(225, 29, 72, 0.36);
+  border-color: rgba(255, 49, 49, 0.86);
+  box-shadow: inset 0 0 36px rgba(255, 49, 49, 0.075), 0 0 42px rgba(255, 49, 49, 0.36);
 }
 
 .display-card--inferno {
   background:
     repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.035) 3px, rgba(255, 255, 255, 0.035) 4px),
-    radial-gradient(circle at 18% 20%, rgba(255, 45, 85, 0.92) 0%, rgba(225, 29, 72, 0.88) 38%, rgba(82, 8, 28, 0.96) 100%),
+    radial-gradient(circle at 18% 20%, rgba(255, 45, 85, 0.92) 0%, rgba(255, 49, 49, 0.88) 38%, rgba(82, 8, 28, 0.96) 100%),
     #700000;
   color: #fff;
   --text: #ffffff;
@@ -210,8 +210,8 @@ body.display-mode::after {
   width: fit-content;
   justify-self: center;
   padding: 0.18rem 0.7rem;
-  border: 1px solid rgba(225, 29, 72, 0.55);
-  background: rgba(225, 29, 72, 0.12);
+  border: 1px solid rgba(255, 49, 49, 0.55);
+  background: rgba(255, 49, 49, 0.12);
   color: var(--primary);
 }
 
@@ -222,7 +222,7 @@ body.display-mode::after {
   overflow-wrap: anywhere;
   font-family: "Libre Baskerville", Georgia, serif;
   color: #fff;
-  text-shadow: 0 0 12px rgba(225, 29, 72, 0.5);
+  text-shadow: 0 0 12px rgba(255, 49, 49, 0.5);
 }
 
 .display-secondary {
@@ -279,7 +279,7 @@ body.display-mode::after {
 
 .display-cta-list__item {
   background: #0d0c0d;
-  border: 1px solid rgba(225, 29, 72, 0.45);
+  border: 1px solid rgba(255, 49, 49, 0.45);
   border-radius: 0;
   padding: 0.75rem 0.85rem;
   display: grid;
@@ -311,20 +311,20 @@ body.display-mode::after {
   justify-content: center;
   padding: clamp(0.85rem, 2.2vw, 1.2rem) clamp(1.2rem, 3vw, 1.6rem);
   border-radius: 0;
-  border: 2px solid rgba(225, 29, 72, 0.65);
+  border: 2px solid rgba(255, 49, 49, 0.65);
   color: inherit;
   text-decoration: none;
   font-weight: 700;
   font-size: clamp(1.2rem, 3.2vw, 1.55rem);
   word-break: break-word;
-  box-shadow: 0 0 24px rgba(225, 29, 72, 0.28);
+  box-shadow: 0 0 24px rgba(255, 49, 49, 0.28);
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .display-cta-url:hover,
 .display-cta-url:focus {
-  background-color: rgba(225, 29, 72, 0.16);
-  box-shadow: 0 0 30px rgba(225, 29, 72, 0.46);
+  background-color: rgba(255, 49, 49, 0.16);
+  box-shadow: 0 0 30px rgba(255, 49, 49, 0.46);
 }
 
 .display-cta-reminder {
@@ -338,7 +338,7 @@ body.display-mode::after {
   padding: clamp(1.4rem, 3vw, 2.1rem);
   border-radius: 0;
   background:
-    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(225, 29, 72, 0.018) 3px, rgba(225, 29, 72, 0.018) 4px),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.018) 3px, rgba(255, 49, 49, 0.018) 4px),
     #161516;
   border: 2px solid var(--display-card-border);
   box-shadow: var(--display-card-glow);
@@ -385,7 +385,7 @@ body.display-mode::after {
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   background: #0d0c0d;
-  border: 1px solid rgba(225, 29, 72, 0.4);
+  border: 1px solid rgba(255, 49, 49, 0.4);
   border-radius: 0;
   font-size: clamp(1rem, 2.4vw, 1.25rem);
 }
@@ -420,7 +420,7 @@ body.display-mode::after {
   gap: clamp(0.9rem, 2.4vw, 1.4rem);
   text-align: left;
   background:
-    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(225, 29, 72, 0.018) 3px, rgba(225, 29, 72, 0.018) 4px),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.018) 3px, rgba(255, 49, 49, 0.018) 4px),
     #161516;
   border: 2px solid var(--display-card-border);
   box-shadow: var(--display-card-glow);
@@ -435,8 +435,8 @@ body.display-mode::after {
   place-items: center;
   font-size: clamp(1.8rem, 4.4vw, 2.6rem);
   background: #1b0000;
-  border: 2px solid rgba(255, 59, 59, 0.7);
-  box-shadow: 0 0 24px rgba(255, 59, 59, 0.5);
+  border: 2px solid rgba(255, 49, 49, 0.7);
+  box-shadow: 0 0 24px rgba(255, 49, 49, 0.5);
   margin: 0 auto;
 }
 
@@ -485,7 +485,7 @@ body.display-mode::after {
   padding: 0.75rem;
   background: #0d0c0d;
   border-radius: 0;
-  border: 1px solid rgba(225, 29, 72, 0.4);
+  border: 1px solid rgba(255, 49, 49, 0.4);
 }
 
 .instruction-callout__item {
@@ -533,9 +533,9 @@ body.display-mode::after {
   border-radius: 0;
   background:
     repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.035) 3px, rgba(255, 255, 255, 0.035) 4px),
-    radial-gradient(circle at 16% 18%, rgba(255, 45, 85, 0.94) 0%, rgba(225, 29, 72, 0.9) 38%, rgba(82, 8, 28, 0.96) 100%);
+    radial-gradient(circle at 16% 18%, rgba(255, 45, 85, 0.94) 0%, rgba(255, 49, 49, 0.9) 38%, rgba(82, 8, 28, 0.96) 100%);
   border: 3px solid rgba(255, 185, 198, 0.95);
-  box-shadow: 0 0 48px rgba(225, 29, 72, 0.76), 0 0 90px rgba(225, 29, 72, 0.42);
+  box-shadow: 0 0 48px rgba(255, 49, 49, 0.76), 0 0 90px rgba(255, 49, 49, 0.42);
   display: grid;
   gap: clamp(0.85rem, 2.1vw, 1.35rem);
   text-align: center;
@@ -718,7 +718,7 @@ body.display-mode::after {
   border-radius: 0;
   background:
     repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.035) 3px, rgba(255, 255, 255, 0.035) 4px),
-    radial-gradient(circle at 30% 20%, #ff2d55 0%, #e11d48 45%, #5a001c 100%);
+    radial-gradient(circle at 30% 20%, #ff2d55 0%, #ff3131 45%, #5a001c 100%);
   border: 3px solid rgba(255, 180, 180, 0.95);
   box-shadow: 0 0 40px rgba(255, 90, 90, 0.85), 0 0 90px rgba(255, 40, 40, 0.5);
   display: grid;
@@ -843,18 +843,18 @@ body.display-mode::after {
   justify-content: center;
   padding: 0.75rem 1.1rem;
   border-radius: 0;
-  border: 1px solid rgba(225, 29, 72, 0.6);
+  border: 1px solid rgba(255, 49, 49, 0.6);
   text-decoration: none;
   color: inherit;
   font-weight: 600;
-  box-shadow: 0 0 24px rgba(225, 29, 72, 0.32);
+  box-shadow: 0 0 24px rgba(255, 49, 49, 0.32);
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .display-cta-link:hover,
 .display-cta-link:focus {
-  background-color: rgba(225, 29, 72, 0.15);
-  box-shadow: 0 0 30px rgba(225, 29, 72, 0.44);
+  background-color: rgba(255, 49, 49, 0.15);
+  box-shadow: 0 0 30px rgba(255, 49, 49, 0.44);
 }
 
 .display-card--long {
@@ -1059,4 +1059,129 @@ body.display-mode :is(
     .display-cta-link
   ) {
   border-radius: 0;
+}
+
+/*
+  Live display UI kit refinement.
+  Mirrors the attendee/admin lab-terminal system at presentation scale.
+*/
+
+@keyframes display-led-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 5px var(--primary), 0 0 12px var(--primary);
+  }
+
+  50% {
+    opacity: 0.82;
+    box-shadow: 0 0 10px var(--primary), 0 0 24px var(--primary), 0 0 44px rgba(255, 49, 49, 0.48);
+  }
+}
+
+body.display-mode {
+  --display-card-border: rgba(255, 49, 49, 0.48);
+  --display-card-glow: inset 0 0 28px rgba(255, 49, 49, 0.055), 0 0 28px rgba(255, 49, 49, 0.2);
+  background:
+    radial-gradient(circle at 50% -10rem, rgba(255, 49, 49, 0.18), transparent 30rem),
+    linear-gradient(180deg, #161516 0%, #100f10 100%);
+}
+
+.display-header::before {
+  content: "";
+  width: 0.72rem;
+  height: 0.72rem;
+  background: var(--primary);
+  border-radius: 50%;
+  box-shadow: 0 0 5px var(--primary), 0 0 12px var(--primary);
+  animation: display-led-pulse 2.5s ease-in-out infinite;
+}
+
+.display-header h1 {
+  color: var(--primary);
+  text-shadow: 0 0 10px rgba(255, 49, 49, 0.82), 0 0 34px rgba(255, 49, 49, 0.48), 0 0 68px rgba(255, 49, 49, 0.24);
+}
+
+.display-count,
+.display-card,
+.display-scoreboard,
+.instruction-card {
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.018) 3px, rgba(255, 49, 49, 0.018) 4px),
+    linear-gradient(180deg, rgba(26, 24, 26, 0.98), rgba(16, 15, 16, 0.98));
+}
+
+.display-count {
+  position: relative;
+  border-width: 1px;
+}
+
+.display-count::before {
+  content: "";
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  background: var(--primary);
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--primary), 0 0 10px rgba(255, 49, 49, 0.7);
+}
+
+.display-count__label,
+.display-category,
+.karaoke-card__label,
+.instruction-callout__label {
+  letter-spacing: 0.16em;
+}
+
+.display-category {
+  border-color: rgba(255, 49, 49, 0.55);
+  background: rgba(255, 49, 49, 0.15);
+  color: var(--primary);
+}
+
+.display-primary {
+  color: #fff;
+  text-shadow: 0 0 12px rgba(255, 49, 49, 0.52);
+}
+
+.display-card.cta,
+.display-card--costume,
+.display-card--winner,
+.display-card--inferno {
+  border-color: rgba(255, 49, 49, 0.86);
+  box-shadow: inset 0 0 36px rgba(255, 49, 49, 0.075), 0 0 42px rgba(255, 49, 49, 0.36);
+}
+
+.display-cta-url,
+.display-cta-link,
+.display-cta-list__item,
+.display-scoreboard__list li,
+.instruction-callout,
+.display-override__details li,
+.karaoke-card__list-item {
+  background: rgba(13, 12, 13, 0.72);
+  border-color: rgba(255, 49, 49, 0.45);
+}
+
+.display-override .display-override__card,
+.karaoke-card__panel {
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.035) 3px, rgba(255, 255, 255, 0.035) 4px),
+    radial-gradient(circle at 18% 20%, rgba(255, 45, 85, 0.92) 0%, rgba(255, 49, 49, 0.88) 38%, rgba(82, 8, 28, 0.96) 100%),
+    #700000;
+  border-color: rgba(255, 200, 200, 0.95);
+  box-shadow: 0 0 58px rgba(255, 49, 49, 0.76), 0 0 104px rgba(255, 49, 49, 0.42);
+}
+
+.display-override__image {
+  border-color: rgba(255, 230, 230, 0.86);
+}
+
+@media (max-width: 640px) {
+  .display-header::before,
+  .display-count::before {
+    display: none;
+  }
 }

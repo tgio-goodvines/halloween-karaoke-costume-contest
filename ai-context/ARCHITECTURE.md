@@ -16,15 +16,21 @@
   submissions require the admin-configured party code as a form field plus an
   email contact, and do not show a guest opt-in checkbox for update emails.
   Successful RSVPs send a confirmation email with RSVP details and calendar
-  links when email is enabled. The RSVP page is intentionally standalone and
-  hides the shared header menu/site navigation even when a signed-in party user
-  visits it directly.
+  links when email is enabled, and also send a host notification email to the
+  admin-configurable RSVP notification recipient when configured. The RSVP page
+  is intentionally standalone and hides the shared header menu/site navigation
+  even when a signed-in party user visits it directly.
 - `GET /rsvp/calendar/<rsvp_id>` -> returns a downloadable `.ics` calendar
   invite for a saved RSVP using the random RSVP ID.
-- `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
+- `GET /party` -> attendee dashboard; requires a `regular` role session plus
+  `session.user_id` and `session.username`. Before the calendar date of
+  `HALLOWEEN_PARTY_START`, Event Highlights shows RSVP detail cards and
+  RSVP updates while event-night signup/menu/drink/voting summaries are hidden.
+  On the party date, it shows the normal event-night dashboard.
 - `GET|POST /party/menu` -> signed-in attendee menu page with food/drink image
   cards. Available drinks can be ordered and create Redis-backed drink orders
-  with estimated ready times.
+  with estimated ready times. Attendee access is redirected back to `/party`
+  until the party date.
 - `GET|POST /bartender` -> bartender/admin drink order queue with image and
   recipe reference; transitions orders to `in_progress` or `complete`.
 - `GET|POST /party/login` -> public attendee account sign-in form; validates a
@@ -46,9 +52,13 @@
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
-- `GET|POST /party/costumes` -> attendee costume signup form.
-- `GET|POST /party/karaoke` -> attendee karaoke signup form.
-- `GET|POST /party/costumes/vote` -> logged-in one-ballot-per-session voting while the costume contest is started, voting is open, and no winner is locked.
+- `GET|POST /party/costumes` -> attendee costume signup form, available on
+  the party date and redirected to `/party` before then.
+- `GET|POST /party/karaoke` -> attendee karaoke signup form, available on the
+  party date and redirected to `/party` before then.
+- `GET|POST /party/costumes/vote` -> logged-in one-ballot-per-session voting
+  on the party date while the costume contest is started, voting is open, and
+  no winner is locked.
 - Legacy attendee paths redirect to the canonical `/party` paths:
   `/halloween`, `/halloween/login`, `/halloween/register`,
   `/costume-signup`, `/karaoke-signup`, and `/costume-voting`.
@@ -131,6 +141,14 @@ Before `HALLOWEEN_PARTY_START`, `build_rotation_entries()` returns only RSVP
 prompt, static party detail cards, and admin-posted RSVP updates. Costume and
 karaoke signup/event cards are withheld until the configured party start time.
 
+The attendee portal has a related but separate date gate: `party_day_has_arrived()`
+compares the local date of `HALLOWEEN_PARTY_START` to the current date. Before
+that date, `/party/menu`, `/party/costumes`, and `/party/karaoke` redirect to
+`/party`, and `base.html` hides the Menu, Costume, Karaoke, and Voting links.
+On the party date, those links/routes become available. Voting still depends
+on `costume_voting_is_visible()`, which also requires the admin contest state
+to have started/open voting with no locked winner.
+
 ## Frontend Responsibilities
 
 `templates/display.html` renders initial display state and embeds JSON in:
@@ -153,13 +171,17 @@ karaoke signup/event cards are withheld until the configured party start time.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.
 
-`static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds.
+`static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds. The server chooses the slide set: pre-party RSVP details/updates before the party date, and event-night slides on the party date.
 
 ## Template Responsibilities
 
 - `base.html`: shared shell, title, CSS include, header menu with signed-in
-  identity and single logout action, footer, and script block.
-- `index.html`: attendee dashboard, contest status banners, event highlights, drink order status cards, and signup summaries.
+  identity and single logout action, footer, and script block. Regular attendee
+  Menu/Costume/Karaoke/Voting links are hidden until the party date.
+- `index.html`: attendee dashboard, contest status banners, event highlights,
+  drink order status cards, and signup summaries. It renders pre-party RSVP
+  details/updates before the party date and event-night sections on the party
+  date.
 - `menu.html`: attendee food/drink menu with images, drink ordering, and recent order status cards.
 - `bartender.html`: bartender/admin drink order queue with image and recipe reference.
 - `halloween_login.html`: attendee account sign-in form.
@@ -172,7 +194,8 @@ karaoke signup/event cards are withheld until the configured party start time.
   party-code field, party details, Google Maps directions/embed,
   newest-to-oldest update cards, and optional portal account links.
 - `admin.html`: all admin actions, public landing settings, explicit party-code
-  management with active/not-set status and hint editing, RSVP list CRUD, party detail/map address editing, selective RSVP update
+  management with active/not-set status and hint editing, host RSVP
+  notification email configuration, RSVP list CRUD, party detail/map address editing, selective RSVP update
   posting/resending/removal, and live
   contest/karaoke state, menu management, user account CRUD/password reset/bartender role assignment, and bar
   operations summary; add/edit entry forms are disclosure rows to keep mobile
@@ -181,8 +204,9 @@ karaoke signup/event cards are withheld until the configured party start time.
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
   panel markup.
 - `email/*.html`: generated HTML email bodies for RSVP confirmation/update,
-  account welcome, password reset, and drink order notifications. These use
-  email-client-safe inline CSS aligned with the dark lab-terminal visual system.
+  host RSVP notification, account welcome, password reset, and drink order
+  notifications. These use email-client-safe inline CSS aligned with the dark
+  lab-terminal visual system.
 
 ## Known Constraints And Risks
 

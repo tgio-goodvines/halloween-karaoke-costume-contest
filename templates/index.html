@@ -2,7 +2,7 @@
 {% set title = "Party Dashboard" %}
 
 {% block content %}
-{% if costume_contest_state.voting_visible %}
+{% if party_day_has_arrived and costume_contest_state.voting_visible %}
   <section class="contest-banner contest-banner--voting">
     <div class="contest-banner__body">
       <h2>Cast Your Costume Contest Votes</h2>
@@ -10,7 +10,7 @@
     </div>
     <a class="contest-banner__button" href="{{ url_for('party_costume_voting') }}">Start Voting</a>
   </section>
-{% elif costume_contest_state.winner_locked and costume_contest_state.winner %}
+{% elif party_day_has_arrived and costume_contest_state.winner_locked and costume_contest_state.winner %}
   <section class="contest-banner contest-banner--winner">
     <div class="contest-banner__body">
       <h2>Costume Contest Champion</h2>
@@ -26,7 +26,7 @@
   </section>
 {% endif %}
 
-{% if ready_drink_orders %}
+{% if party_day_has_arrived and ready_drink_orders %}
   <section class="contest-banner contest-banner--winner">
     <div class="contest-banner__body">
       <h2>Your Drink Is Ready</h2>
@@ -40,15 +40,22 @@
 
 <section class="signup-callout">
   <div class="signup-callout__intro">
-    <h2>Welcome to the Party Portal</h2>
-    <p>
-      You're already connected—now use this hub to order drinks, join the costume contest, reserve a karaoke song, and
-      keep up with the latest signups.
-    </p>
+    {% if party_day_has_arrived %}
+      <h2>Welcome to the Party Portal</h2>
+      <p>
+        You're already connected—now use this hub to order drinks, join the costume contest, reserve a karaoke song, and
+        keep up with the latest signups.
+      </p>
+    {% else %}
+      <h2>Pre-Party Portal</h2>
+      <p>
+        You're already connected. Check the RSVP details and latest host updates here before party day.
+      </p>
+    {% endif %}
   </div>
 </section>
 
-{% if drink_orders %}
+{% if party_day_has_arrived and drink_orders %}
   <section class="submitted-list">
     <h3>Your Recent Drink Orders</h3>
     <div class="order-list">
@@ -84,36 +91,38 @@
   </div>
 </section>
 
-<section class="signup-summary">
-  <div>
-    <h2>Costume Contest Signups</h2>
-    {% if costume_signups %}
-      <ul>
-        {% for signup in costume_signups %}
-          <li>
-            <strong>{{ signup.name }}</strong> as {{ signup.costume }}{% if signup.contact %} &mdash; {{ signup.contact }}{% endif %}
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p>No costume signups yet. <a href="{{ url_for('party_costumes') }}">Be the first!</a></p>
-    {% endif %}
-  </div>
-  <div>
-    <h2>Karaoke Signups</h2>
-    {% if karaoke_signups %}
-      <ul>
-        {% for signup in karaoke_signups %}
-          <li>
-            <strong>{{ signup.name }}</strong> &mdash; "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p>No karaoke signups yet. <a href="{{ url_for('party_karaoke') }}">Choose a song!</a></p>
-    {% endif %}
-  </div>
-</section>
+{% if party_day_has_arrived %}
+  <section class="signup-summary">
+    <div>
+      <h2>Costume Contest Signups</h2>
+      {% if costume_signups %}
+        <ul>
+          {% for signup in costume_signups %}
+            <li>
+              <strong>{{ signup.name }}</strong> as {{ signup.costume }}{% if signup.contact %} &mdash; {{ signup.contact }}{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>No costume signups yet. <a href="{{ url_for('party_costumes') }}">Be the first!</a></p>
+      {% endif %}
+    </div>
+    <div>
+      <h2>Karaoke Signups</h2>
+      {% if karaoke_signups %}
+        <ul>
+          {% for signup in karaoke_signups %}
+            <li>
+              <strong>{{ signup.name }}</strong> &mdash; "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>No karaoke signups yet. <a href="{{ url_for('party_karaoke') }}">Choose a song!</a></p>
+      {% endif %}
+    </div>
+  </section>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

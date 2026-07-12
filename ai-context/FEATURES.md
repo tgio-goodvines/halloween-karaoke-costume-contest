@@ -19,7 +19,11 @@
 - Successful RSVP sends a confirmation email through SES when email is enabled;
   the email includes RSVP details, a Google Calendar link, and an `.ics`
   calendar download link.
-- Party dashboard at `/party`.
+- Successful public RSVP sends a host notification email through SES when email
+  is enabled. The host recipient is configurable in admin, defaults to
+  `tgio1129@gmail.com`, and can be left blank to disable host notifications.
+- Party dashboard at `/party`. Before the party date, Event Highlights shows
+  RSVP details and host updates instead of event-night prompts.
 - Redis-backed attendee account registration at `/party/register` requires an
   email address so registered users can receive RSVP-page host update emails.
 - Successful party account creation sends a welcome email through SES when
@@ -28,24 +32,28 @@
 - Email-based password reset at `/party/password-reset` sends a one-time
   45-minute reset link without revealing whether the submitted email is
   registered.
-- Food and drink menu at `/party/menu` shows admin-managed cards with images,
-  descriptions, and availability.
-- Signed-in attendees can order available drinks from `/party/menu`; food items
-  are currently view-only.
-- Attendees can see recent drink order statuses and dashboard ready-drink cards.
+- On the party date, food and drink menu at `/party/menu` shows admin-managed
+  cards with images, descriptions, and availability.
+- On the party date, signed-in attendees can order available drinks from
+  `/party/menu`; food items are currently view-only.
+- On the party date, attendees can see recent drink order statuses and
+  dashboard ready-drink cards.
 - A single logout action inside the shared header menu clears the current
   browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
 - Logged-in user name is shown in the shared header menu.
-- Costume contest signup at `/party/costumes`.
+- Costume contest signup at `/party/costumes` is attendee-accessible on the
+  party date.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.
-- Karaoke signup at `/party/karaoke`.
+- Karaoke signup at `/party/karaoke` is attendee-accessible on the party date.
 - Karaoke signup validation for required name, song title, and artist.
 - Optional YouTube link field for karaoke entries.
 - Karaoke signup success redirect and lineup display.
-- Event highlight slide rotation on the party dashboard.
+- Event highlight slide rotation on the party dashboard. Pre-party slides use
+  RSVP detail cards and host updates; party-day slides use the event-night
+  lineup/menu/costume/karaoke prompts.
 - Contest status banners on attendee pages when costume voting is visible or the winner is locked.
 
 ## Costume Contest Features
@@ -54,7 +62,8 @@
 - Starting the contest opens voting, clears previous submitted-voter tracking, clears winner/scoreboard state, and pushes a live-display contest-start override.
 - Stopping the contest closes and hides attendee voting without deleting entries or existing results.
 - Resetting the contest clears votes, submitted-voter tracking, winner/scoreboard state, and live-display override without deleting costume entries.
-- Voting page and voting navigation are only visible while the costume contest is started, voting is open, and no winner is locked.
+- Voting page and voting navigation are only visible on the party date while
+  the costume contest is started, voting is open, and no winner is locked.
 - Voting page requires a checked-in session.
 - Each guest/session can vote once.
 - Voting requires a score for every costume entry.
@@ -91,6 +100,9 @@
 - Admin can manage the RSVP submission party code from the Public Access panel:
   view active/not-set status, replace the code, and update the optional
   guest-facing hint. The party code is stored as a hash, not plaintext.
+- Admin can manage the host RSVP notification email from the Public Access
+  panel; it defaults to `tgio1129@gmail.com`, and a blank value disables host
+  RSVP notifications.
 - Admin can add, edit, and delete RSVP entries, and see the total guest count.
 - Admin can edit the static party detail cards and map address shown on the RSVP
   page.

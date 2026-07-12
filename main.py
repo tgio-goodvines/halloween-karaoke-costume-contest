@@ -64,6 +64,10 @@ app.config["EMAIL_FROM"] = os.environ.get(
     "Qiana and Tony's Halloween Party <no-reply@tnq-halloween.com>",
 )
 app.config["PUBLIC_BASE_URL"] = os.environ.get("HALLOWEEN_PUBLIC_BASE_URL", "https://tnq-halloween.com")
+app.config["RSVP_NOTIFICATION_EMAIL"] = os.environ.get(
+    "HALLOWEEN_RSVP_NOTIFICATION_EMAIL",
+    "tgio1129@gmail.com",
+)
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -275,6 +279,7 @@ DEFAULT_PARTY_DETAILS: dict[str, str] = {
     "map_address": app.config["PARTY_LOCATION_LABEL"],
     "overview": app.config["PARTY_OVERVIEW"],
 }
+DEFAULT_RSVP_NOTIFICATION_EMAIL = app.config["RSVP_NOTIFICATION_EMAIL"]
 
 DEFAULT_LANDING_PAGE_TARGET = "rsvp"
 LANDING_PAGE_TARGETS: dict[str, dict[str, str]] = {
@@ -324,6 +329,7 @@ live_display_override: dict[str, object] | None = None
 landing_page_target = DEFAULT_LANDING_PAGE_TARGET
 party_code_hash = generate_password_hash(app.config["PARTY_CODE"]) if app.config["PARTY_CODE"] else ""
 party_code_hint = ""
+rsvp_notification_email = DEFAULT_RSVP_NOTIFICATION_EMAIL.strip()
 
 display_update_condition = Condition()
 display_update_version = 0
@@ -448,6 +454,15 @@ def party_has_started() -> bool:
     return datetime.now(timezone.utc) >= parse_party_start().astimezone(timezone.utc)
 
 
+def party_day_has_arrived(now: datetime | None = None) -> bool:
+    party_start = parse_party_start()
+    party_tz = party_start.tzinfo or timezone(timedelta(hours=-6))
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=party_tz)
+    return current_time.astimezone(party_tz).date() >= party_start.astimezone(party_tz).date()
+
+
 def party_info_cards() -> list[dict[str, str]]:
     return [
         {
@@ -556,6 +571,10 @@ EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 def normalize_email(raw_email: str) -> str:
     parsed_email = parseaddr(raw_email.strip())[1].strip().lower()
     return parsed_email if EMAIL_PATTERN.match(parsed_email) else ""
+
+
+def normalize_rsvp_notification_email(raw_email: object) -> str:
+    return normalize_email(str(raw_email or ""))
 
 
 def create_user_account(username: str, password: str, email: str = "") -> dict[str, object]:
@@ -1029,6 +1048,58 @@ def send_rsvp_confirmation_email(signup: RSVPSignup) -> bool:
         return False
 
 
+def send_rsvp_admin_notification_email(signup: RSVPSignup) -> bool:
+    recipient = normalize_rsvp_notification_email(rsvp_notification_email)
+    if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
+        return False
+
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        app.logger.warning("RSVP admin notification requested, but boto3 is not installed.")
+        return False
+
+    admin_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("admin_portal")
+    subject = f"New RSVP: {signup.name}"
+    text_body = (
+        f"New RSVP for {app.config['PARTY_TITLE']}\n\n"
+        f"Name: {signup.name}\n"
+        f"Email: {signup.contact}\n"
+        f"Guests: {signup.guest_count}\n"
+        f"Note: {signup.note or 'None'}\n"
+        f"Submitted: {signup.created_at or 'Unknown'}\n\n"
+        f"Date: {party_details.get('date', DEFAULT_PARTY_DETAILS['date'])}\n"
+        f"Time: {party_details.get('time', DEFAULT_PARTY_DETAILS['time'])}\n"
+        f"Location: {party_details.get('location', DEFAULT_PARTY_DETAILS['location'])}\n\n"
+        f"Admin dashboard: {admin_url}"
+    )
+    html_body = render_template(
+        "email/rsvp_admin_notification.html",
+        signup=signup,
+        party_details=party_details,
+        admin_url=admin_url,
+    )
+
+    try:
+        ses_client.send_email(
+            FromEmailAddress=app.config["EMAIL_FROM"],
+            Destination={"ToAddresses": [recipient]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {
+                        "Text": {"Data": text_body, "Charset": "UTF-8"},
+                        "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    },
+                }
+            },
+        )
+        return True
+    except Exception as exc:
+        app.logger.warning("Unable to send RSVP admin notification email to %s: %s", recipient, exc)
+        return False
+
+
 def send_drink_order_placed_email(order: dict[str, object]) -> bool:
     recipient = normalize_email(str(order.get("email", "") or ""))
     if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
@@ -1444,6 +1515,7 @@ def snapshot_state() -> dict[str, object]:
         "landing_page_target": normalize_landing_page_target(landing_page_target),
         "party_code_hash": party_code_hash,
         "party_code_hint": party_code_hint,
+        "rsvp_notification_email": normalize_rsvp_notification_email(rsvp_notification_email),
         "display_update_version": display_update_version,
         "updated_at": _utc_now_iso(),
     }
@@ -1453,7 +1525,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
     global landing_page_target, party_code_hash, party_code_hint, party_details, display_update_version
-    global password_reset_tokens, menu_items, drink_orders
+    global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -1612,6 +1684,10 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     landing_page_target = normalize_landing_page_target(data.get("landing_page_target"))
     party_code_hash = str(data.get("party_code_hash", party_code_hash) or "")
     party_code_hint = str(data.get("party_code_hint", party_code_hint) or "").strip()
+    if "rsvp_notification_email" in data:
+        rsvp_notification_email = normalize_rsvp_notification_email(data.get("rsvp_notification_email"))
+    else:
+        rsvp_notification_email = normalize_rsvp_notification_email(DEFAULT_RSVP_NOTIFICATION_EMAIL)
 
     try:
         display_update_version = int(data.get("display_update_version", 0) or 0)
@@ -2171,7 +2247,8 @@ def is_costume_lineup_locked_for_voting() -> bool:
 
 def costume_voting_is_visible() -> bool:
     return (
-        bool(contest_state.get("contest_started"))
+        party_day_has_arrived()
+        and bool(contest_state.get("contest_started"))
         and bool(contest_state.get("voting_open"))
         and not bool(contest_state.get("winner_locked"))
     )
@@ -2196,6 +2273,30 @@ SLIDES = [
         "content": "Pick your favorite song and take center stage on karaoke night.",
     },
 ]
+
+
+def build_pre_party_dashboard_slides() -> list[dict[str, str]]:
+    slides = [
+        {
+            "title": "RSVP Details",
+            "content": "You're signed in for the party portal. Keep an eye here for the latest RSVP details and host updates.",
+        }
+    ]
+    slides.extend(
+        {
+            "title": card["title"],
+            "content": card["message"],
+        }
+        for card in party_info_cards()
+    )
+    slides.extend(
+        {
+            "title": update.title,
+            "content": update.message,
+        }
+        for update in sorted_rsvp_updates()
+    )
+    return slides
 
 
 def build_rotation_entries() -> List[dict[str, object]]:
@@ -2408,6 +2509,7 @@ def inject_contest_state():
         "bartender_authenticated": session_has_role("bartender"),
         "format_time_label": format_time_label,
         "drink_order_status_label": drink_order_status_label,
+        "party_day_has_arrived": party_day_has_arrived(),
         "party_title": app.config["PARTY_TITLE"],
         "party_year": app.config["PARTY_YEAR"],
     }
@@ -2482,6 +2584,7 @@ def rsvp():
             rsvp_signups.append(submitted_rsvp)
             session["rsvp_id"] = submitted_rsvp.id
             send_rsvp_confirmation_email(submitted_rsvp)
+            send_rsvp_admin_notification_email(submitted_rsvp)
             persist_state_if_available()
             return redirect(url_for("rsvp", success="1"))
 
@@ -2551,25 +2654,30 @@ def party_dashboard():
     if "user_id" not in session or "username" not in session:
         return redirect(url_for("party_login", next=url_for("party_dashboard")))
 
+    party_day = party_day_has_arrived()
     user_orders = user_drink_orders(str(session.get("user_id", "")))
-    ready_orders = [order for order in user_orders if order.get("status") == "complete"][:3]
-    slides = list(SLIDES)
-    winner = contest_state.get("winner")
-    if winner:
-        slides.append(
-            {
-                "title": "Costume Contest Champion",
-                "content": f"Congratulations to {winner['name']} for {winner['costume']}! Average score: {winner['average']:.2f}.",
-            }
-        )
+    ready_orders = [order for order in user_orders if order.get("status") == "complete"][:3] if party_day else []
+    if party_day:
+        slides = list(SLIDES)
+        winner = contest_state.get("winner")
+        if winner:
+            slides.append(
+                {
+                    "title": "Costume Contest Champion",
+                    "content": f"Congratulations to {winner['name']} for {winner['costume']}! Average score: {winner['average']:.2f}.",
+                }
+            )
+    else:
+        slides = build_pre_party_dashboard_slides()
 
     return render_template(
         "index.html",
         slides=slides,
         costume_signups=costume_signups,
         karaoke_signups=karaoke_signups,
-        drink_orders=user_orders[:5],
+        drink_orders=user_orders[:5] if party_day else [],
         ready_drink_orders=ready_orders,
+        party_day_has_arrived=party_day,
         show_admin_link=False,
     )
 
@@ -2781,6 +2889,8 @@ def party_menu():
 
     if not user_id or not account:
         return redirect(url_for("party_login", next=url_for("party_menu")))
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
 
     if request.method == "POST":
         item_id = request.form.get("menu_item_id", "").strip()
@@ -2943,7 +3053,7 @@ def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
     global live_display_override, submitted_costume_votes, costume_ballots, karaoke_state
-    global landing_page_target, party_code_hash, party_code_hint, party_details
+    global landing_page_target, party_code_hash, party_code_hint, party_details, rsvp_notification_email
 
     ensure_costume_votes_alignment()
 
@@ -3174,6 +3284,18 @@ def admin_portal():
                     party_code_hash = generate_password_hash(new_party_code)
                 party_code_hint = new_party_code_hint
                 messages.append("Party code settings updated.")
+
+        elif action == "update_rsvp_notification_email":
+            raw_email = request.form.get("rsvp_notification_email", "").strip()
+            normalized_email = normalize_rsvp_notification_email(raw_email)
+            if raw_email and not normalized_email:
+                errors.append("Enter a valid RSVP notification email address, or leave it blank to disable host notifications.")
+            if not errors:
+                rsvp_notification_email = normalized_email
+                if rsvp_notification_email:
+                    messages.append(f"RSVP notifications will be sent to {rsvp_notification_email}.")
+                else:
+                    messages.append("RSVP host email notifications disabled.")
 
         elif action == "update_party_details":
             updated_details = {
@@ -3799,6 +3921,7 @@ def admin_portal():
         landing_page_targets=LANDING_PAGE_TARGETS,
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
+        rsvp_notification_email=rsvp_notification_email,
         party_details=party_details,
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
@@ -3848,6 +3971,8 @@ def export_karaoke_lineup():
 def party_costumes():
     errors: List[str] = []
     submitted = False
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
 
     ensure_costume_votes_alignment()
 
@@ -3890,6 +4015,8 @@ def party_costumes():
 def party_karaoke():
     errors: List[str] = []
     submitted = False
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()

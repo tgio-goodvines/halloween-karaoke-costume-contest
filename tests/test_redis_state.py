@@ -108,6 +108,7 @@ class RedisStateTests(unittest.TestCase):
         self.original_email_updates_enabled = main.app.config["EMAIL_UPDATES_ENABLED"]
         self.original_email_from = main.app.config["EMAIL_FROM"]
         self.original_public_base_url = main.app.config["PUBLIC_BASE_URL"]
+        self.original_rsvp_notification_email = main.rsvp_notification_email
         self.original_create_ses_client = main.create_ses_client
         self.original_app_env = os.environ.get("APP_ENV")
 
@@ -123,6 +124,7 @@ class RedisStateTests(unittest.TestCase):
         )
         main.app.config["TESTING"] = True
         main.app.config["ADMIN_PASSWORD"] = "admin-secret"
+        main.app.config["PARTY_START"] = "2026-01-01T00:00:00-06:00"
         main.app.config["EMAIL_UPDATES_ENABLED"] = False
         main.app.config["EMAIL_FROM"] = "Halloween Party <no-reply@tnq-halloween.com>"
         main.app.config["PUBLIC_BASE_URL"] = "https://tnq-halloween.com"
@@ -138,6 +140,7 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["EMAIL_UPDATES_ENABLED"] = self.original_email_updates_enabled
         main.app.config["EMAIL_FROM"] = self.original_email_from
         main.app.config["PUBLIC_BASE_URL"] = self.original_public_base_url
+        main.rsvp_notification_email = self.original_rsvp_notification_email
         main.create_ses_client = self.original_create_ses_client
         if self.original_app_env is None:
             os.environ.pop("APP_ENV", None)
@@ -162,6 +165,7 @@ class RedisStateTests(unittest.TestCase):
         main.landing_page_target = main.DEFAULT_LANDING_PAGE_TARGET
         main.party_code_hash = main.generate_password_hash("invite-code")
         main.party_code_hint = ""
+        main.rsvp_notification_email = main.DEFAULT_RSVP_NOTIFICATION_EMAIL
         main.display_update_version = 0
         main.contest_state.clear()
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
@@ -289,6 +293,7 @@ class RedisStateTests(unittest.TestCase):
         main.landing_page_target = "party_login"
         main.party_code_hash = main.generate_password_hash("secret-code")
         main.party_code_hint = "On your invite"
+        main.rsvp_notification_email = "host@example.com"
         main.party_details = {
             "date": "Saturday, October 31",
             "time": "8:00 PM",
@@ -334,6 +339,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("party_login", main.landing_page_target)
         self.assertTrue(main.check_password_hash(main.party_code_hash, "secret-code"))
         self.assertEqual("On your invite", main.party_code_hint)
+        self.assertEqual("host@example.com", main.rsvp_notification_email)
         self.assertEqual("Saturday, October 31", main.party_details["date"])
         self.assertEqual("8:00 PM", main.party_details["time"])
         self.assertEqual("The haunted house", main.party_details["location"])
@@ -469,6 +475,76 @@ class RedisStateTests(unittest.TestCase):
 
         dashboard_body = dashboard_response.get_data(as_text=True)
         self.assertEqual(200, dashboard_response.status_code)
+        self.assertNotIn("Start Voting", dashboard_body)
+        self.assertEqual(302, voting_response.status_code)
+        self.assertEqual("/party", voting_response.headers["Location"])
+
+    def test_pre_party_dashboard_shows_rsvp_details_and_blocks_event_routes(self):
+        main.app.config["PARTY_START"] = "2026-10-31T19:00:00-06:00"
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        main.party_details = {
+            "date": "Saturday, October 31",
+            "time": "7:00 PM until late",
+            "location": "The haunted house",
+            "map_address": "123 Pumpkin Lane, Denver, CO",
+            "overview": "RSVP before party night.",
+        }
+        main.rsvp_updates = [
+            main.RSVPUpdate("Parking", "Use the west side of the street.", "2026-07-07T00:00:00Z", "update-1")
+        ]
+        main.costume_signups = [
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+        ]
+        main.karaoke_signups = [
+            main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "", "karaoke-1"),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            dashboard_response = client.get("/party")
+            menu_response = client.get("/party/menu")
+            costume_response = client.get("/party/costumes")
+            karaoke_response = client.get("/party/karaoke")
+
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, dashboard_response.status_code)
+        self.assertIn("Pre-Party Portal", dashboard_body)
+        self.assertIn("Saturday, October 31", dashboard_body)
+        self.assertIn("Parking", dashboard_body)
+        self.assertNotIn("Tonight's Lineup", dashboard_body)
+        self.assertNotIn("Costume Contest Signups", dashboard_body)
+        self.assertNotIn("Karaoke Signups", dashboard_body)
+        self.assertNotIn('href="/party/menu"', dashboard_body)
+        self.assertNotIn('href="/party/costumes"', dashboard_body)
+        self.assertNotIn('href="/party/karaoke"', dashboard_body)
+        self.assertEqual("/party", menu_response.headers["Location"])
+        self.assertEqual("/party", costume_response.headers["Location"])
+        self.assertEqual("/party", karaoke_response.headers["Location"])
+
+    def test_party_day_dashboard_enables_event_routes_but_voting_stays_admin_gated(self):
+        main.app.config["PARTY_START"] = "2026-01-01T19:00:00-06:00"
+        main.costume_signups = [
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+        ]
+        main.karaoke_signups = [
+            main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "", "karaoke-1"),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            dashboard_response = client.get("/party")
+            voting_response = client.get("/party/costumes/vote")
+
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, dashboard_response.status_code)
+        self.assertIn("Welcome to the Party Portal", dashboard_body)
+        self.assertIn("Costume Contest Signups", dashboard_body)
+        self.assertIn("Karaoke Signups", dashboard_body)
+        self.assertIn('href="/party/menu"', dashboard_body)
+        self.assertIn('href="/party/costumes"', dashboard_body)
+        self.assertIn('href="/party/karaoke"', dashboard_body)
         self.assertNotIn("Start Voting", dashboard_body)
         self.assertEqual(302, voting_response.status_code)
         self.assertEqual("/party", voting_response.headers["Location"])
@@ -877,6 +953,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("Log Out", body)
 
     def test_rsvp_sends_confirmation_email_with_calendar_links(self):
+        main.app.config["PARTY_START"] = "2026-10-31T19:00:00-06:00"
         main.party_details = {
             "date": "Saturday, October 31",
             "time": "7:00 PM until late",
@@ -905,12 +982,15 @@ class RedisStateTests(unittest.TestCase):
             calendar_response = client.get(f"/rsvp/calendar/{rsvp_id}")
 
         self.assertEqual(302, response.status_code)
-        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(2, len(fake_ses.sent_messages))
         sent_email = fake_ses.sent_messages[0]
+        notification_email = fake_ses.sent_messages[1]
         text_body = sent_email["Content"]["Simple"]["Body"]["Text"]["Data"]
         html_body = sent_email["Content"]["Simple"]["Body"]["Html"]["Data"]
         self.assertEqual(["casey@example.com"], sent_email["Destination"]["ToAddresses"])
+        self.assertEqual(["tgio1129@gmail.com"], notification_email["Destination"]["ToAddresses"])
         self.assertIn("RSVP confirmed", sent_email["Content"]["Simple"]["Subject"]["Data"])
+        self.assertIn("New RSVP", notification_email["Content"]["Simple"]["Subject"]["Data"])
         self.assertIn("Guests: 3", text_body)
         self.assertIn("Note: Arriving after 8", text_body)
         self.assertIn(f"/rsvp/calendar/{rsvp_id}", text_body)
@@ -946,7 +1026,8 @@ class RedisStateTests(unittest.TestCase):
         state = self.redis_state()
         self.assertEqual(302, response.status_code)
         self.assertEqual("Casey", state["rsvp_signups"][0]["name"])
-        self.assertEqual(0, len(fake_ses.sent_messages))
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(["tgio1129@gmail.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
 
     def test_unknown_rsvp_calendar_returns_404(self):
         self.save_current_state()
@@ -1009,6 +1090,42 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Get Directions", body)
         self.assertIn("https://www.google.com/maps/dir/?api=1&amp;destination=123+Pumpkin+Lane%2C+Denver%2C+CO", body)
         self.assertIn("https://www.google.com/maps?q=123+Pumpkin+Lane%2C+Denver%2C+CO&amp;output=embed", body)
+
+    def test_admin_can_update_rsvp_notification_email(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_rsvp_notification_email",
+                    "rsvp_notification_email": "Host@Example.COM",
+                },
+            )
+            invalid_response = client.post(
+                "/admin",
+                data={
+                    "action": "update_rsvp_notification_email",
+                    "rsvp_notification_email": "not-an-email",
+                },
+            )
+            disabled_response = client.post(
+                "/admin",
+                data={
+                    "action": "update_rsvp_notification_email",
+                    "rsvp_notification_email": "",
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIn("RSVP notifications will be sent to host@example.com", response.get_data(as_text=True))
+        self.assertIn("Enter a valid RSVP notification email", invalid_response.get_data(as_text=True))
+        self.assertEqual(200, disabled_response.status_code)
+        self.assertEqual("", state["rsvp_notification_email"])
+        main.load_state_from_redis()
+        self.assertEqual("", main.rsvp_notification_email)
 
     def test_admin_page_shows_rsvp_list(self):
         main.rsvp_signups = [
@@ -1252,6 +1369,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Resent RSVP update: Parking. Email sent to 1 selected recipient.", body)
 
     def test_pre_party_display_rotates_only_rsvp_cards_and_updates(self):
+        main.app.config["PARTY_START"] = "2026-10-31T19:00:00-06:00"
         main.costume_signups = [
             main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
         ]

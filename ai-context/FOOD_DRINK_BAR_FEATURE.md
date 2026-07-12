@@ -2,7 +2,9 @@
 
 ## Routes
 
-- `GET|POST /party/menu`: regular attendee menu page. Guests can view food and drink cards with images. Available drinks can be ordered; food is view-only.
+- `GET|POST /party/menu`: regular attendee menu page, available on the party
+  date and redirected to `/party` before then. Guests can view food and drink
+  cards with images. Available drinks can be ordered; food is view-only.
 - `GET|POST /bartender`: bartender queue. Requires a `bartender` session role or an admin session. Admins can use the same view.
 - `/admin`: includes menu management, bar operations summary, bartender-view link, and user role assignment.
 
@@ -45,4 +47,7 @@ Completing a drink creates `live_display_override` with `type="drink_ready"`, at
 
 ## Tests
 
-`tests/test_redis_state.py` covers state round-trip, menu image persistence, attendee drink ordering, food-order rejection, bartender authorization, bartender status transitions, ready email sending, and live-display drink-ready override payloads.
+`tests/test_redis_state.py` covers state round-trip, party-date gating for the
+attendee menu, menu image persistence, attendee drink ordering,
+food-order rejection, bartender authorization, bartender status transitions,
+ready email sending, and live-display drink-ready override payloads.

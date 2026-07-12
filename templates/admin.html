@@ -77,6 +77,23 @@
           Update Party Code
         </button>
       </form>
+
+      <form method="post" class="access-settings__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h4>RSVP Notifications</h4>
+        <label for="rsvp_notification_email">Host notification email</label>
+        <input
+          type="email"
+          id="rsvp_notification_email"
+          name="rsvp_notification_email"
+          maxlength="120"
+          value="{{ rsvp_notification_email }}"
+          placeholder="host@example.com">
+        <p class="form-helper">New public RSVPs send a host notification here when email is enabled. Leave blank to disable host notifications.</p>
+        <button type="submit" name="action" value="update_rsvp_notification_email" class="button button--primary">
+          Save Notification Email
+        </button>
+      </form>
     </div>
   </section>
 

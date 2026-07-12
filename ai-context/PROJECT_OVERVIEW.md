@@ -80,18 +80,25 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
   for the admin RSVP list, and do not create attendee portal accounts. There is
   no guest opt-in checkbox for update emails.
   Successful RSVPs send a confirmation email with RSVP details plus Google
-  Calendar and `.ics` calendar links when email is enabled.
+  Calendar and `.ics` calendar links when email is enabled. Successful public
+  RSVPs also send a host notification email to the admin-configurable RSVP
+  notification recipient, defaulting to `tgio1129@gmail.com`, when email is
+  enabled.
 4. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
    signed in, can create an account at `/party/register`, or recover a
    forgotten account password through `/party/password-reset`, then see the
-   party dashboard. Account creation sends a SES welcome email when email is
-   enabled.
-6. Attendees can submit costume entries at `/party/costumes`.
-7. Attendees can submit karaoke songs at `/party/karaoke`.
-8. Attendees can view food and drink menu cards with images at `/party/menu`
-   and order available drinks from the bar.
+   party dashboard. Before the party date, `/party` shows pre-party RSVP
+   details and host updates in Event Highlights and hides event-night menu,
+   costume, karaoke, drink-order, and voting navigation. On the party date,
+   `/party` switches to the event-night dashboard. Account creation sends a SES
+   welcome email when email is enabled.
+6. On the party date, attendees can submit costume entries at
+   `/party/costumes`.
+7. On the party date, attendees can submit karaoke songs at `/party/karaoke`.
+8. On the party date, attendees can view food and drink menu cards with images
+   at `/party/menu` and order available drinks from the bar.
 9. Bartenders assigned from existing user accounts can manage drink orders at
    `/bartender`; admins can access the same view.
 10. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
@@ -138,6 +145,9 @@ the process-local cache:
   `/rsvp`.
 - `party_code_hash` and `party_code_hint`: RSVP submission code settings. The
   code itself is not stored in plaintext.
+- `rsvp_notification_email`: admin-configurable host notification recipient
+  for new public RSVPs, defaulting to `tgio1129@gmail.com`; blank disables host
+  RSVP notifications.
 - `contest_state`: contest started/stopped, voting open/closed, winner lock, scoreboard card visibility.
 - `karaoke_state`: whether karaoke has been started/stopped/reset and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.
@@ -150,6 +160,13 @@ events create a temporary live-display override with the drink image.
 RSVP/update rotation to the full party-night costume/karaoke/event rotation.
 Before that timestamp, the display does not show costume or karaoke signup
 entries.
+
+The attendee dashboard uses the calendar date from `HALLOWEEN_PARTY_START`.
+Before that date, `/party` shows pre-party RSVP details and host updates in the
+Event Highlights carousel and blocks attendee access to `/party/menu`,
+`/party/costumes`, and `/party/karaoke`. On the party date, those attendee
+routes and navigation links become available. Costume voting remains separately
+admin-gated and only appears when the admin starts/opens voting.
 
 ## RSVP Update Email
 
@@ -170,6 +187,12 @@ party date/time/location, an RSVP page link, a Google Calendar link, and a
 download link to `/rsvp/calendar/<rsvp_id>`. That endpoint serves an `.ics`
 calendar invite generated from `HALLOWEEN_PARTY_START` and the current
 admin-editable party details; the random RSVP ID acts as the access token.
+
+New public RSVPs also send a host notification email when email is enabled.
+The recipient is managed from the admin Public Access panel, defaults to
+`tgio1129@gmail.com`, is stored in Redis state as `rsvp_notification_email`,
+and can be left blank to disable host notifications. Notification delivery
+failures are logged and never block RSVP creation.
 
 The same SES sender is used for account welcome emails and party account
 password reset emails. Reset links are generated from random one-time tokens,

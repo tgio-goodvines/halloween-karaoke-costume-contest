@@ -23,12 +23,14 @@
                 {% endif %}
                 {% if not hide_party_nav and regular_authenticated %}
                   <a href="{{ url_for('party_dashboard') }}">Overview</a>
-                  <a href="{{ url_for('party_menu') }}">Menu</a>
-                  <a href="{{ url_for('party_costumes') }}">Costume</a>
-                  {% if costume_contest_state.voting_visible %}
-                    <a href="{{ url_for('party_costume_voting') }}">Voting</a>
+                  {% if party_day_has_arrived %}
+                    <a href="{{ url_for('party_menu') }}">Menu</a>
+                    <a href="{{ url_for('party_costumes') }}">Costume</a>
+                    {% if costume_contest_state.voting_visible %}
+                      <a href="{{ url_for('party_costume_voting') }}">Voting</a>
+                    {% endif %}
+                    <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
                   {% endif %}
-                  <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
                 {% endif %}
                 {% if bartender_authenticated or admin_authenticated %}
                   <a href="{{ url_for('bartender_portal') }}">Bartender</a>

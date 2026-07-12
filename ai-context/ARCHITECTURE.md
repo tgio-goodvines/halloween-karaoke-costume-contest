@@ -14,7 +14,7 @@
   to the host-visible RSVP list and do not create attendee accounts. Admin-editable
   party info cards and a Google Maps location embed are shown first, then RSVP
   updates are shown newest-to-oldest. RSVP submissions require an email contact
-  and required acknowledgment that host updates are sent by email.
+  and do not show a guest opt-in checkbox for update emails.
   Locked RSVP sessions show only the code prompt; party details, map, updates,
   and party navigation stay hidden until that browser session enters the correct
   code.

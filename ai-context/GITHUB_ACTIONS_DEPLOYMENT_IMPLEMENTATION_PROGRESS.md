@@ -200,8 +200,8 @@ Current deployed app behavior:
   admin session.
 - Header logout is a single `/logout` action inside the disclosure menu and
   clears the current browser session regardless of role.
-- RSVP and party registration collect required email addresses and
-  acknowledgment that RSVP-page host updates are emailed. When
+- RSVP and party registration collect required email addresses without a guest
+  opt-in checkbox. When
   `HALLOWEEN_EMAIL_UPDATES_ENABLED=true`, admin RSVP update posts send email
   through SES from `no-reply@tnq-halloween.com` to deduplicated RSVP and
   registered-user recipients; failures are reported to admin without blocking

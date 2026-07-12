@@ -735,17 +735,15 @@ def available_update_email_recipients() -> list[dict[str, str]]:
             seen.add(email)
 
     for signup in rsvp_signups:
-        if signup.email_updates_acknowledged:
-            add_recipient(f"rsvp:{signup.id}", "RSVP", signup.name, signup.contact)
+        add_recipient(f"rsvp:{signup.id}", "RSVP", signup.name, signup.contact)
 
     for account in user_accounts.values():
-        if bool(account.get("email_updates_acknowledged", False)):
-            add_recipient(
-                f"account:{account.get('id', '')}",
-                "Account",
-                account.get("username", ""),
-                account.get("email", ""),
-            )
+        add_recipient(
+            f"account:{account.get('id', '')}",
+            "Account",
+            account.get("username", ""),
+            account.get("email", ""),
+        )
 
     return recipients
 
@@ -2300,7 +2298,6 @@ def rsvp():
     if request.method == "POST" and request.form.get("action") == "submit_rsvp":
         username = request.form.get("username", "").strip()
         contact = request.form.get("contact", "").strip()
-        acknowledged_email_updates = request.form.get("email_updates_acknowledged") == "yes"
         note = request.form.get("note", "").strip()
         try:
             guest_count = int(request.form.get("guest_count", "1") or 1)
@@ -2317,8 +2314,6 @@ def rsvp():
             errors.append("Email must be 120 characters or fewer.")
         elif not normalize_email(contact):
             errors.append("Enter a valid email address for party updates.")
-        if not acknowledged_email_updates:
-            errors.append("Please acknowledge that RSVP guests receive party update emails.")
         if not 1 <= guest_count <= 12:
             errors.append("Guest count must be between 1 and 12.")
         if len(note) > 240:
@@ -2617,7 +2612,6 @@ def party_register():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         email = request.form.get("email", "").strip()
-        acknowledged_email_updates = request.form.get("email_updates_acknowledged") == "yes"
         provided_password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
         normalized_username = normalize_username(username)
@@ -2635,9 +2629,6 @@ def party_register():
             errors.append("Email must be 120 characters or fewer.")
         elif not normalize_email(email):
             errors.append("Enter a valid email address for party updates.")
-        if not acknowledged_email_updates:
-            errors.append("Please acknowledge that registered users receive party update emails.")
-
         if len(provided_password) < 8:
             errors.append("Password must be at least 8 characters.")
         elif provided_password != confirm_password:
@@ -2944,7 +2935,7 @@ def admin_portal():
             "username": username,
             "normalized_username": normalized_username,
             "email": normalized_email,
-            "email_updates_acknowledged": request.form.get("email_updates_acknowledged") == "yes",
+            "email_updates_acknowledged": True,
             "roles": roles_from_account_form(),
         }
 
@@ -2983,7 +2974,7 @@ def admin_portal():
             guest_count=guest_count,
             note=note,
             created_at=existing_created_at or _utc_now_iso(),
-            email_updates_acknowledged=request.form.get("email_updates_acknowledged") == "yes",
+            email_updates_acknowledged=True,
         )
 
     def selected_update_recipient_ids() -> set[str]:

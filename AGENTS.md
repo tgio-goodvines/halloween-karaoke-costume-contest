@@ -22,7 +22,7 @@ Important working notes:
 - `/rsvp`, `/party/register`, and `/party/login` require the admin-configured party code before showing RSVP, account creation, or sign-in forms.
 - The locked `/rsvp` page must not show party detail/map/update cards or party navigation; party-code unlock is per browser/session and must not unlock other browsers.
 - `/rsvp` is an independent host RSVP list, not account creation; attendee portal accounts are created/signed in through Redis-backed accounts at `/party/register` and `/party/login`.
-- RSVP and party account registration require an email address plus acknowledgment that RSVP-page host updates are sent by email; admin-posted RSVP updates can email deduplicated RSVP and registered-user recipients through SES when enabled.
+- RSVP and party account registration require an email address; there is no guest opt-in checkbox. Admin-posted RSVP updates can email deduplicated RSVP and registered-user recipients through SES when enabled.
 - Party account users can reset forgotten passwords through `/party/password-reset`; reset emails use SES, reset tokens are hashed before storage, expire after 45 minutes, and are single-use.
 - `/party/menu` lets signed-in attendees view food/drink menu cards with images and order available drinks; food is currently view-only.
 - Admin can manage food/drink menu items, image URLs, availability, and drink recipes from `/admin`; bartender access is assigned to existing party accounts through account roles.

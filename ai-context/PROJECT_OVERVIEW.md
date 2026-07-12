@@ -75,10 +75,9 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 3. `/rsvp` asks guests to RSVP, offers account creation/login as optional next
   steps, shows static party detail cards, renders a Google Maps embed and
   directions button when a map address is configured, then shows host update
-  cards from newest to oldest. RSVP submissions require an email address and
-  required acknowledgment that host RSVP-page updates are sent by email; they
-  save independent entries for the admin RSVP list and do not create attendee
-  portal accounts.
+  cards from newest to oldest. RSVP submissions require an email address, save
+  independent entries for the admin RSVP list, and do not create attendee
+  portal accounts. There is no guest opt-in checkbox for update emails.
 4. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
@@ -123,8 +122,7 @@ the process-local cache:
   duration.
 - `registered_users`: maps session `user_id` to display name.
 - `rsvp_signups`: independent host RSVP list entries with name, required email
-  contact, guest count, note, created timestamp, stable ID, and required email
-  update acknowledgment.
+  contact, guest count, note, created timestamp, and stable ID.
 - `rsvp_updates`: admin-posted update cards with title, message, timestamp, and
   stable ID, displayed newest-to-oldest on `/rsvp` and in pre-party display
   rotation.

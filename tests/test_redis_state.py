@@ -818,7 +818,6 @@ class RedisStateTests(unittest.TestCase):
                     "action": "submit_rsvp",
                     "username": "Casey",
                     "contact": "casey@example.com",
-                    "email_updates_acknowledged": "yes",
                     "guest_count": "3",
                     "note": "Arriving after 8",
                 },
@@ -951,7 +950,6 @@ class RedisStateTests(unittest.TestCase):
                     "contact": "Morgan@Example.COM",
                     "guest_count": "2",
                     "note": "Needs parking",
-                    "email_updates_acknowledged": "yes",
                 },
             )
             state_after_add = self.redis_state()
@@ -965,7 +963,6 @@ class RedisStateTests(unittest.TestCase):
                     "contact": "morgan.lee@example.com",
                     "guest_count": "3",
                     "note": "Arriving at 8",
-                    "email_updates_acknowledged": "yes",
                 },
             )
             state_after_update = self.redis_state()
@@ -1077,7 +1074,7 @@ class RedisStateTests(unittest.TestCase):
 
         recipients = main.collect_update_email_recipients()
 
-        self.assertEqual(["casey@example.com", "morgan@example.com"], recipients)
+        self.assertEqual(["casey@example.com", "noack@example.com", "morgan@example.com"], recipients)
 
     def test_admin_rsvp_update_sends_email_without_blocking_on_partial_failure(self):
         main.rsvp_signups = [
@@ -1267,7 +1264,6 @@ class RedisStateTests(unittest.TestCase):
                     "email": "Morgan@Example.COM",
                     "password": "party-password",
                     "confirm_password": "party-password",
-                    "email_updates_acknowledged": "yes",
                     "bartender": "yes",
                 },
             )
@@ -1280,7 +1276,6 @@ class RedisStateTests(unittest.TestCase):
                     "account_id": account_id,
                     "username": "Morgan Lee",
                     "email": "morgan.lee@example.com",
-                    "email_updates_acknowledged": "yes",
                 },
             )
             reset_response = client.post(
@@ -1516,7 +1511,6 @@ class RedisStateTests(unittest.TestCase):
                 data={
                     "username": "Morgan",
                     "email": "morgan@example.com",
-                    "email_updates_acknowledged": "yes",
                     "password": "party-password",
                     "confirm_password": "party-password",
                     "next": "/party",

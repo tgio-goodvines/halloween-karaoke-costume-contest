@@ -56,7 +56,7 @@
       <h3>Save your RSVP</h3>
       <p class="form-helper">
         Already RSVP'd? <a href="{{ url_for('party_register') }}">Create a party account</a> to get a head start, or
-        <a href="{{ url_for('party_login') }}">sign in</a> if you already have one. RSVP guests and registered users receive host update emails.
+        <a href="{{ url_for('party_login') }}">sign in</a> if you already have one. The hosts may email party updates to RSVP guests and registered users.
       </p>
 
       <label for="username">Your Name</label>
@@ -64,11 +64,6 @@
 
       <label for="contact">Email</label>
       <input type="email" id="contact" name="contact" autocomplete="email" maxlength="120" placeholder="you@example.com" required value="{{ request.form.contact }}">
-
-      <label class="form-check" for="email_updates_acknowledged">
-        <input type="checkbox" id="email_updates_acknowledged" name="email_updates_acknowledged" value="yes" required {% if request.form.email_updates_acknowledged == 'yes' %}checked{% endif %}>
-        <span>I understand the hosts will email this address when RSVP page updates are posted.</span>
-      </label>
 
       <label for="guest_count">Number of Guests</label>
       <input type="number" id="guest_count" name="guest_count" min="1" max="12" required value="{{ request.form.guest_count or 1 }}">

@@ -13,12 +13,11 @@
   and party navigation stay hidden until the current browser session enters the
   correct code.
 - Successful RSVP adds an independent host-visible RSVP entry with name,
-  required email contact, required email-update acknowledgment, guest count, and
-  note; it does not create an attendee account.
+  required email contact, guest count, and note; it does not create an attendee
+  account. There is no guest opt-in checkbox for update emails.
 - Party dashboard at `/party`.
 - Redis-backed attendee account registration at `/party/register` requires an
-  email address and acknowledgment that registered users receive RSVP-page host
-  update emails.
+  email address so registered users can receive RSVP-page host update emails.
 - Password-backed attendee account sign-in at `/party/login`.
 - Email-based password reset at `/party/password-reset` sends a one-time
   45-minute reset link without revealing whether the submitted email is

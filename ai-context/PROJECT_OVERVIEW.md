@@ -78,6 +78,8 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
   cards from newest to oldest. RSVP submissions require an email address, save
   independent entries for the admin RSVP list, and do not create attendee
   portal accounts. There is no guest opt-in checkbox for update emails.
+  Successful RSVPs send a confirmation email with RSVP details plus Google
+  Calendar and `.ics` calendar links when email is enabled.
 4. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
@@ -151,8 +153,8 @@ entries.
 
 ## RSVP Update Email
 
-Admin-posted RSVP updates can send outbound email through Amazon SES when
-`HALLOWEEN_EMAIL_UPDATES_ENABLED=true`. The intended sender is
+RSVP confirmations and admin-posted RSVP updates can send outbound email through
+Amazon SES when `HALLOWEEN_EMAIL_UPDATES_ENABLED=true`. The intended sender is
 `Qiana and Tony's Halloween Party <no-reply@tnq-halloween.com>`, configured via
 `HALLOWEEN_EMAIL_FROM`, with `HALLOWEEN_PUBLIC_BASE_URL=https://tnq-halloween.com`.
 
@@ -162,6 +164,12 @@ GoodVines sender-address SES identities while working on Halloween email.
 Recipients are deduplicated across RSVP entries and Redis-backed party account
 emails, and delivery failures are logged/reported to admin without blocking the
 RSVP update from being posted.
+
+RSVP confirmation emails include the submitted name, guest count, email, note,
+party date/time/location, an RSVP page link, a Google Calendar link, and a
+download link to `/rsvp/calendar/<rsvp_id>`. That endpoint serves an `.ics`
+calendar invite generated from `HALLOWEEN_PARTY_START` and the current
+admin-editable party details; the random RSVP ID acts as the access token.
 
 The same SES sender is used for account welcome emails and party account
 password reset emails. Reset links are generated from random one-time tokens,

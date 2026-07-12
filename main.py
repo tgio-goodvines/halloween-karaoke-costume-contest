@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
 from typing import List, Tuple
 from threading import Condition, Thread
-from urllib.parse import quote_plus, unquote, urlparse
+from urllib.parse import quote, quote_plus, unquote, urlparse
 from uuid import uuid4
 import copy
 import hashlib
@@ -349,6 +349,7 @@ STATE_MUTATION_ENDPOINTS = {
 }
 STATE_REFRESH_ENDPOINTS = {
     "rsvp",
+    "rsvp_calendar",
     "admin_portal",
     "party_dashboard",
     "party_menu",
@@ -478,6 +479,71 @@ def google_maps_urls(address: str) -> dict[str, str]:
         "directions": f"https://www.google.com/maps/dir/?api=1&destination={encoded_address}",
         "embed": f"https://www.google.com/maps?q={encoded_address}&output=embed",
     }
+
+
+def party_calendar_times() -> tuple[datetime, datetime]:
+    start = parse_party_start().astimezone(timezone.utc)
+    return start, start + timedelta(hours=5)
+
+
+def calendar_timestamp(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def ics_escape(value: object) -> str:
+    return (
+        str(value or "")
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
+def party_calendar_description() -> str:
+    details = party_details.get("overview", DEFAULT_PARTY_DETAILS["overview"])
+    rsvp_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("rsvp")
+    return f"{details}\n\nRSVP details: {rsvp_url}"
+
+
+def google_calendar_url() -> str:
+    start, end = party_calendar_times()
+    location = party_details.get("map_address") or party_details.get("location", "")
+    params = {
+        "action": "TEMPLATE",
+        "text": app.config["PARTY_TITLE"],
+        "dates": f"{calendar_timestamp(start)}/{calendar_timestamp(end)}",
+        "details": party_calendar_description(),
+        "location": location,
+    }
+    return "https://calendar.google.com/calendar/render?" + "&".join(
+        f"{key}={quote(str(value), safe='')}" for key, value in params.items()
+    )
+
+
+def build_party_ics(rsvp_id: str | None = None) -> str:
+    start, end = party_calendar_times()
+    location = party_details.get("map_address") or party_details.get("location", "")
+    uid = f"{rsvp_id or 'party'}@tnq-halloween.com"
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//TNQ Halloween//Party RSVP//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:{ics_escape(uid)}",
+        f"DTSTAMP:{calendar_timestamp(datetime.now(timezone.utc))}",
+        f"DTSTART:{calendar_timestamp(start)}",
+        f"DTEND:{calendar_timestamp(end)}",
+        f"SUMMARY:{ics_escape(app.config['PARTY_TITLE'])}",
+        f"DESCRIPTION:{ics_escape(party_calendar_description())}",
+        f"LOCATION:{ics_escape(location)}",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    return "\r\n".join(lines) + "\r\n"
 
 
 def normalize_username(username: str) -> str:
@@ -922,6 +988,65 @@ def send_account_welcome_email(account: dict[str, object]) -> bool:
         return True
     except Exception as exc:
         app.logger.warning("Unable to send account welcome email to %s: %s", recipient, exc)
+        return False
+
+
+def send_rsvp_confirmation_email(signup: RSVPSignup) -> bool:
+    recipient = normalize_email(signup.contact)
+    if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
+        return False
+
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        app.logger.warning("RSVP confirmation email requested, but boto3 is not installed.")
+        return False
+
+    base_url = app.config["PUBLIC_BASE_URL"].rstrip("/")
+    rsvp_url = base_url + url_for("rsvp")
+    calendar_url = base_url + url_for("rsvp_calendar", rsvp_id=signup.id)
+    maps_urls = google_maps_urls(party_details.get("map_address", ""))
+    subject = f"RSVP confirmed: {app.config['PARTY_TITLE']}"
+    text_body = (
+        f"Hi {signup.name},\n\n"
+        f"Your RSVP for {app.config['PARTY_TITLE']} is confirmed.\n\n"
+        f"Guests: {signup.guest_count}\n"
+        f"Email: {signup.contact}\n"
+        f"Note: {signup.note or 'None'}\n\n"
+        f"Date: {party_details.get('date', DEFAULT_PARTY_DETAILS['date'])}\n"
+        f"Time: {party_details.get('time', DEFAULT_PARTY_DETAILS['time'])}\n"
+        f"Location: {party_details.get('location', DEFAULT_PARTY_DETAILS['location'])}\n\n"
+        f"RSVP details: {rsvp_url}\n"
+        f"Add to calendar: {calendar_url}\n"
+        f"Google Calendar: {google_calendar_url()}\n"
+    )
+    html_body = render_template(
+        "email/rsvp_confirmation.html",
+        signup=signup,
+        party_details=party_details,
+        rsvp_url=rsvp_url,
+        calendar_url=calendar_url,
+        google_calendar_url=google_calendar_url(),
+        maps_urls=maps_urls,
+    )
+
+    try:
+        ses_client.send_email(
+            FromEmailAddress=app.config["EMAIL_FROM"],
+            Destination={"ToAddresses": [recipient]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {
+                        "Text": {"Data": text_body, "Charset": "UTF-8"},
+                        "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    },
+                }
+            },
+        )
+        return True
+    except Exception as exc:
+        app.logger.warning("Unable to send RSVP confirmation email to %s: %s", recipient, exc)
         return False
 
 
@@ -2314,6 +2439,17 @@ def legacy_halloween_overview():
     return redirect(url_for("party_dashboard"), code=301)
 
 
+@app.route("/rsvp/calendar/<rsvp_id>")
+def rsvp_calendar(rsvp_id: str):
+    signup = next((entry for entry in rsvp_signups if entry.id == rsvp_id), None)
+    if signup is None:
+        return Response("Calendar invite not found.", status=404)
+
+    response = Response(build_party_ics(rsvp_id), mimetype="text/calendar; charset=utf-8")
+    response.headers["Content-Disposition"] = "attachment; filename=tnq-halloween-party.ics"
+    return response
+
+
 @app.route("/rsvp", methods=["GET", "POST"])
 def rsvp():
     errors: List[str] = []
@@ -2386,6 +2522,7 @@ def rsvp():
             )
             rsvp_signups.append(submitted_rsvp)
             session["rsvp_id"] = submitted_rsvp.id
+            send_rsvp_confirmation_email(submitted_rsvp)
             persist_state_if_available()
             return redirect(url_for("rsvp", success="1"))
 

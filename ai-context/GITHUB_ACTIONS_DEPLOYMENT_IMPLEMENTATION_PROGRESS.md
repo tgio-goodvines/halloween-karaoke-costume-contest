@@ -206,6 +206,10 @@ Current deployed app behavior:
   through SES from `no-reply@tnq-halloween.com` to deduplicated RSVP and
   registered-user recipients; failures are reported to admin without blocking
   the update.
+- Public RSVP submissions send a confirmation email through the same SES sender
+  when email is enabled. Confirmation emails include submitted RSVP details plus
+  Google Calendar and `/rsvp/calendar/<rsvp_id>` `.ics` links; send failures are
+  logged and do not block RSVP creation.
 - Party account creation sends a welcome email through the same SES sender when
   email is enabled; send failures are logged and do not block account creation.
 - Party account password recovery is available at `/party/password-reset`.

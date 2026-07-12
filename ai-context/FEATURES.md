@@ -15,6 +15,9 @@
 - Successful RSVP adds an independent host-visible RSVP entry with name,
   required email contact, guest count, and note; it does not create an attendee
   account. There is no guest opt-in checkbox for update emails.
+- Successful RSVP sends a confirmation email through SES when email is enabled;
+  the email includes RSVP details, a Google Calendar link, and an `.ics`
+  calendar download link.
 - Party dashboard at `/party`.
 - Redis-backed attendee account registration at `/party/register` requires an
   email address so registered users can receive RSVP-page host update emails.

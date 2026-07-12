@@ -14,7 +14,11 @@
   to the host-visible RSVP list and do not create attendee accounts. Admin-editable
   party info cards and a Google Maps location embed are shown first, then RSVP
   updates are shown newest-to-oldest. RSVP submissions require an email contact
-  and do not show a guest opt-in checkbox for update emails.
+  and do not show a guest opt-in checkbox for update emails. Successful RSVPs
+  send a confirmation email with RSVP details and calendar links when email is
+  enabled.
+- `GET /rsvp/calendar/<rsvp_id>` -> returns a downloadable `.ics` calendar
+  invite for a saved RSVP using the random RSVP ID.
   Locked RSVP sessions show only the code prompt; party details, map, updates,
   and party navigation stay hidden until that browser session enters the correct
   code.
@@ -63,8 +67,8 @@
 - Redis-backed state serialization/hydration, with process-local global caches.
 - Food/drink menu management, drink order lifecycle, bartender role checks,
   prep-time estimates, and drink notification emails.
-- RSVP update recipient collection, account welcome email, password reset email,
-  and Amazon SES email sending when enabled.
+- RSVP confirmation/update recipient collection, account welcome email,
+  password reset email, and Amazon SES email sending when enabled.
 - Display update broadcasting via `threading.Condition`.
 - Scoreboard construction, ranking, and winner card creation.
 - Rotation-entry construction for the live display.

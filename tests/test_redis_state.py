@@ -859,6 +859,86 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("Total guest", confirmation_response.get_data(as_text=True))
         self.assertNotIn("Karaoke song", confirmation_response.get_data(as_text=True))
 
+    def test_rsvp_sends_confirmation_email_with_calendar_links(self):
+        main.party_details = {
+            "date": "Saturday, October 31",
+            "time": "7:00 PM until late",
+            "location": "The haunted house",
+            "map_address": "123 Pumpkin Lane, Denver, CO",
+            "overview": "Costumes encouraged.",
+        }
+        self.save_current_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            self.verify_party_code(client)
+            response = client.post(
+                "/rsvp",
+                data={
+                    "action": "submit_rsvp",
+                    "username": "Casey",
+                    "contact": "casey@example.com",
+                    "guest_count": "3",
+                    "note": "Arriving after 8",
+                },
+            )
+            rsvp_id = self.redis_state()["rsvp_signups"][0]["id"]
+            calendar_response = client.get(f"/rsvp/calendar/{rsvp_id}")
+
+        self.assertEqual(302, response.status_code)
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        sent_email = fake_ses.sent_messages[0]
+        text_body = sent_email["Content"]["Simple"]["Body"]["Text"]["Data"]
+        html_body = sent_email["Content"]["Simple"]["Body"]["Html"]["Data"]
+        self.assertEqual(["casey@example.com"], sent_email["Destination"]["ToAddresses"])
+        self.assertIn("RSVP confirmed", sent_email["Content"]["Simple"]["Subject"]["Data"])
+        self.assertIn("Guests: 3", text_body)
+        self.assertIn("Note: Arriving after 8", text_body)
+        self.assertIn(f"/rsvp/calendar/{rsvp_id}", text_body)
+        self.assertIn("calendar.google.com", text_body)
+        self.assertIn("Download calendar file", html_body)
+        self.assertEqual(200, calendar_response.status_code)
+        self.assertIn("text/calendar", calendar_response.content_type)
+        calendar_body = calendar_response.get_data(as_text=True)
+        self.assertIn("BEGIN:VCALENDAR", calendar_body)
+        self.assertIn("SUMMARY:Qiana and Tony's 3rd Annual Halloween Party", calendar_body)
+        self.assertIn("DTSTART:20261101T010000Z", calendar_body)
+        self.assertIn("LOCATION:123 Pumpkin Lane\\, Denver\\, CO", calendar_body)
+
+    def test_rsvp_confirmation_email_failure_does_not_block_rsvp(self):
+        self.save_current_state()
+        fake_ses = FakeSESClient(failing_recipients={"casey@example.com"})
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            self.verify_party_code(client)
+            response = client.post(
+                "/rsvp",
+                data={
+                    "action": "submit_rsvp",
+                    "username": "Casey",
+                    "contact": "casey@example.com",
+                    "guest_count": "2",
+                    "note": "",
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(302, response.status_code)
+        self.assertEqual("Casey", state["rsvp_signups"][0]["name"])
+        self.assertEqual(0, len(fake_ses.sent_messages))
+
+    def test_unknown_rsvp_calendar_returns_404(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            response = client.get("/rsvp/calendar/not-found")
+
+        self.assertEqual(404, response.status_code)
+
     def test_rsvp_unlock_is_per_browser_session(self):
         self.save_current_state()
 

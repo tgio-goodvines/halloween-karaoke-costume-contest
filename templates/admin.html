@@ -31,11 +31,12 @@
 
   <section class="admin-section admin-section--access">
     <h3>Public Access</h3>
-    <p>Control what guests see at tnq-halloween.com and set the party code guests enter when they submit an RSVP.</p>
+    <p>Control what guests see at tnq-halloween.com and manage the party code guests enter when they submit an RSVP.</p>
 
     <div class="access-settings">
       <form method="post" class="access-settings__form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h4>Landing Page</h4>
         <label for="landing_page_target">Landing page</label>
         <select id="landing_page_target" name="landing_page_target">
           {% for key, option in landing_page_targets.items() %}
@@ -52,17 +53,28 @@
         </button>
       </form>
 
-      <form method="post" class="access-settings__form">
+      <form method="post" class="access-settings__form access-settings__form--party-code">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <p class="contest-status {% if party_code_configured %}contest-status--active{% else %}contest-status--inactive{% endif %}">
-          Party code is {% if party_code_configured %}set{% else %}not set{% endif %}.
-        </p>
-        <label for="party_code">New party code</label>
-        <input type="password" id="party_code" name="party_code" autocomplete="new-password" minlength="4" placeholder="Leave blank to keep current code">
+        <h4>Party Code</h4>
+        <div class="party-code-status">
+          <p class="contest-status {% if party_code_configured %}contest-status--active{% else %}contest-status--inactive{% endif %}">
+            RSVP party code is {% if party_code_configured %}active{% else %}not set{% endif %}.
+          </p>
+          <p class="contest-status">
+            {% if party_code_hint %}
+              Current hint: {{ party_code_hint }}
+            {% else %}
+              No guest-facing hint is set.
+            {% endif %}
+          </p>
+        </div>
+        <label for="party_code">Replace party code</label>
+        <input type="password" id="party_code" name="party_code" autocomplete="new-password" minlength="4" placeholder="Enter a new code, or leave blank to keep current code">
         <label for="party_code_hint">Code hint</label>
         <input type="text" id="party_code_hint" name="party_code_hint" maxlength="120" value="{{ party_code_hint }}" placeholder="Optional hint for invited guests">
-        <button type="submit" name="action" value="update_party_code" class="button">
-          Save Party Code
+        <p class="form-helper">The code itself is never shown or stored in plaintext. Saving a blank replacement keeps the current code and only updates the hint.</p>
+        <button type="submit" name="action" value="update_party_code" class="button button--primary">
+          Update Party Code
         </button>
       </form>
     </div>

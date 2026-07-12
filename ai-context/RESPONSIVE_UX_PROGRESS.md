@@ -57,3 +57,20 @@ in normal browser windows and on mobile phone browsers.
   quickly.
 - If future work adds more admin controls, prefer extending the disclosure
   pattern rather than adding more always-open form panels.
+
+## 2026 Lab-Terminal Redesign Verification
+
+- Rechecked the redesigned UI at a 390x844 mobile viewport after the
+  lab-terminal styling pass.
+- Verified no horizontal overflow on public pages: `/rsvp`, `/party/login`,
+  `/party/register`, `/party/password-reset`, and `/admin/login`.
+- Verified no horizontal overflow on logged-in attendee pages: `/party`,
+  `/party/menu`, `/party/costumes`, and `/party/karaoke`.
+- Verified no horizontal overflow on admin/bartender/display pages: `/admin`,
+  `/bartender`, and `/live-display`.
+- Verified `/rsvp` remains standalone without the header menu.
+- Verified non-RSVP mobile pages retain the compact `Menu` disclosure and that
+  opening the menu does not create horizontal overflow.
+- Verified admin add/edit disclosure rows remain collapsed by default on mobile.
+- Corrected the redesigned mobile card group so phone-width panels retain the
+  square lab-panel shape instead of reverting to rounded cards.

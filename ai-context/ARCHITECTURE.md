@@ -171,8 +171,8 @@ karaoke signup/event cards are withheld until the configured party start time.
 - `rsvp.html`: standalone guest RSVP landing page with RSVP prompt, RSVP form
   party-code field, party details, Google Maps directions/embed,
   newest-to-oldest update cards, and optional portal account links.
-- `admin.html`: all admin actions, public landing/party-code settings, RSVP
-  list CRUD, party detail/map address editing, selective RSVP update
+- `admin.html`: all admin actions, public landing settings, explicit party-code
+  management with active/not-set status and hint editing, RSVP list CRUD, party detail/map address editing, selective RSVP update
   posting/resending/removal, and live
   contest/karaoke state, menu management, user account CRUD/password reset/bartender role assignment, and bar
   operations summary; add/edit entry forms are disclosure rows to keep mobile
@@ -180,6 +180,9 @@ karaoke signup/event cards are withheld until the configured party start time.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
   panel markup.
+- `email/*.html`: generated HTML email bodies for RSVP confirmation/update,
+  account welcome, password reset, and drink order notifications. These use
+  email-client-safe inline CSS aligned with the dark lab-terminal visual system.
 
 ## Known Constraints And Risks
 

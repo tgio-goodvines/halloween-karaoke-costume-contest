@@ -95,12 +95,12 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 9. Bartenders assigned from existing user accounts can manage drink orders at
    `/bartender`; admins can access the same view.
 10. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
-   party code settings, and event state at
-   `/admin`.
-9. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
-10. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
-11. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
-12. Regular and admin sessions use one logout action in the header menu; it
+    explicit party-code replacement/status/hint controls, and event state at
+    `/admin`.
+11. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
+12. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
+13. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
+14. Regular and admin sessions use one logout action in the header menu; it
     clears the current browser session regardless of role.
 
 ## State Model
@@ -179,7 +179,8 @@ responses are intentionally generic so the UI does not reveal whether an email
 address is registered.
 
 The same SES sender is used for drink order confirmation emails and drink-ready
-emails when Halloween email sending is enabled.
+emails when Halloween email sending is enabled. Generated HTML email templates
+use email-safe inline styling aligned with the dark lab-terminal UI system.
 
 Schema version 1 Redis state with index-aligned `costume_votes` is upgraded on
 load into ID-keyed `costume_ballots`.
@@ -189,13 +190,17 @@ load into ID-keyed `costume_ballots`.
 This is intentionally a simple Flask/Jinja app:
 
 - `main.py` defines routes, in-memory state, scoring helpers, and live-display API payloads.
-- `templates/` contains Jinja templates for attendee, admin, voting, and display pages.
+- `templates/` contains Jinja templates for attendee, admin, voting, display pages,
+  and generated HTML email bodies.
 - `static/styles.css` styles normal attendee/admin pages.
 - `static/display.css` styles the TV/live-display experience.
 - `static/display.js` drives live-display rotation, override rendering, SSE updates, and polling.
 - `static/slides.js` rotates dashboard highlight slides.
 
-The visual style is dark Halloween-themed: black backgrounds, red accents, glowing borders, and large display typography.
+The visual style is the dark lab-terminal Halloween system documented in
+`ai-context/UI_UX_DESIGN_SYSTEM.md`: near-black backgrounds, red/magenta/steel
+accents, CRT scanline texture, square glowing lab panels, mono controls, and
+serif display headings.
 The responsive UX pass is complete: live-display cards scale for normal browser
 windows, attendee pages use a compact menu nav with a single logout action,
 touch-safe forms, and admin add/edit forms collapse into disclosure rows by

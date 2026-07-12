@@ -1,13 +1,22 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap");
+
 :root {
   color-scheme: dark;
-  --primary: #ff3b3b;
-  --primary-dark: #c50000;
-  --bg: #050505;
-  --surface: #0b0b0b;
-  --text: #f8f8f8;
-  --muted: #b3b3b3;
-  --card-border: rgba(255, 59, 59, 0.7);
-  --card-glow: 0 0 24px rgba(255, 59, 59, 0.5);
+  --primary: #e11d48;
+  --primary-dark: #9b1235;
+  --primary-light: #ff2d55;
+  --bg: #161516;
+  --surface: #1a181a;
+  --surface-raised: #211f22;
+  --steel: #3d3f43;
+  --magenta: #b16d96;
+  --dusty-rose: #ebaeb6;
+  --text: #f6edf0;
+  --muted: #b9a8b0;
+  --card-border: rgba(225, 29, 72, 0.42);
+  --card-glow: inset 0 0 24px rgba(225, 29, 72, 0.045), 0 0 18px rgba(225, 29, 72, 0.16);
+  --steel-border: rgba(61, 63, 67, 0.85);
+  --scanline: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(225, 29, 72, 0.018) 3px, rgba(225, 29, 72, 0.018) 4px);
 }
 
 * {
@@ -16,13 +25,46 @@
 
 body {
   margin: 0;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: var(--bg);
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  background:
+    radial-gradient(circle at 50% -12rem, rgba(225, 29, 72, 0.12), transparent 28rem),
+    linear-gradient(180deg, #161516 0%, #100f10 100%);
   color: var(--text);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+body::before {
+  z-index: 9999;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.1) 2px, rgba(0, 0, 0, 0.1) 4px);
+}
+
+body::after {
+  z-index: 9998;
+  height: 180px;
+  bottom: auto;
+  background: linear-gradient(transparent, rgba(225, 29, 72, 0.035), transparent);
+  animation: lab-scan 8s linear infinite;
+}
+
+@keyframes lab-scan {
+  from {
+    transform: translateY(-100%);
+  }
+
+  to {
+    transform: translateY(100vh);
+  }
 }
 
 .container {
@@ -710,6 +752,22 @@ main.container {
 
 .access-settings__form label {
   font-weight: 700;
+}
+
+.access-settings__form h4 {
+  margin: 0;
+}
+
+.party-code-status {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(225, 29, 72, 0.28);
+  background: rgba(13, 12, 13, 0.48);
+}
+
+.party-code-status .contest-status {
+  margin: 0;
 }
 
 .access-settings__form input,
@@ -1408,6 +1466,343 @@ main.container {
   text-transform: uppercase;
 }
 
+/*
+  Stranger-lab visual system.
+  These overrides intentionally sit at the end so existing Flask/Jinja structure
+  keeps working while every page shares the new UI kit language.
+*/
+
+a {
+  color: var(--dusty-rose);
+  text-decoration-color: rgba(225, 29, 72, 0.55);
+  text-underline-offset: 0.18em;
+}
+
+a:hover,
+a:focus {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(225, 29, 72, 0.62);
+}
+
+.site-header {
+  background: rgba(22, 21, 22, 0.96);
+  border-bottom: 2px solid rgba(225, 29, 72, 0.32);
+  box-shadow: 0 2px 20px rgba(225, 29, 72, 0.12), inset 0 -1px 0 rgba(225, 29, 72, 0.2);
+}
+
+.site-header h1 {
+  font-family: "Libre Baskerville", Georgia, serif;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 15px rgba(225, 29, 72, 0.85), 0 0 44px rgba(225, 29, 72, 0.36);
+}
+
+.site-header__inner::after {
+  content: "Signal: Live";
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: rgba(235, 174, 182, 0.78);
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.site-header__inner::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  background: var(--primary);
+  box-shadow: 0 0 5px var(--primary), 0 0 16px rgba(225, 29, 72, 0.75);
+  order: 3;
+}
+
+.site-header__meta {
+  order: 4;
+}
+
+.site-nav__toggle,
+.site-nav nav,
+.site-nav nav a,
+.site-nav__logout button,
+.button,
+.contest-banner__button,
+.signup-form button,
+.login-form button {
+  border-radius: 0;
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.site-nav__toggle {
+  border: 2px solid rgba(225, 29, 72, 0.52);
+  background: #0d0c0d;
+  color: var(--dusty-rose);
+  box-shadow: inset 0 0 12px rgba(225, 29, 72, 0.06), 0 0 12px rgba(225, 29, 72, 0.18);
+}
+
+.site-nav nav {
+  border: 2px solid rgba(225, 29, 72, 0.48);
+  background: rgba(13, 12, 13, 0.98);
+  box-shadow: inset 0 0 20px rgba(225, 29, 72, 0.05), 0 0 24px rgba(225, 29, 72, 0.22);
+}
+
+.site-nav__user {
+  color: rgba(235, 174, 182, 0.76);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+:is(
+    .signup-callout,
+    .contest-banner,
+    .slides,
+    .signup-summary > div,
+    .form-section,
+    .rsvp-landing,
+    .rsvp-card,
+    .submitted-list,
+    .voting-reminder,
+    .voting-card,
+    .success,
+    .success-message,
+    .errors,
+    .admin-panel,
+    .admin-section,
+    .admin-entry,
+    .menu-section,
+    .menu-card,
+    .order-card,
+    .bartender-card,
+    .karaoke-lineup,
+    .contest-chart,
+    .contest-chart__item,
+    .contest-winner-card,
+    .contest-top-card,
+    .flash,
+    .rsvp-details article,
+    .rsvp-update-card,
+    .rsvp-admin-item,
+    .access-settings__form
+  ) {
+  border-radius: 0;
+  border: 2px solid var(--card-border);
+  background:
+    var(--scanline),
+    linear-gradient(180deg, rgba(26, 24, 26, 0.98), rgba(16, 15, 16, 0.98));
+  box-shadow: var(--card-glow);
+}
+
+:is(.menu-card, .order-card, .bartender-card, .admin-entry, .rsvp-update-card, .voting-card):hover {
+  border-color: rgba(225, 29, 72, 0.72);
+  box-shadow: inset 0 0 30px rgba(225, 29, 72, 0.055), 0 0 26px rgba(225, 29, 72, 0.22);
+}
+
+h2,
+h3,
+h4,
+legend,
+.contest-banner__body h2,
+.signup-callout h2,
+.rsvp-landing__intro h2,
+.display-header h1 {
+  font-family: "Libre Baskerville", Georgia, serif;
+  color: #fff;
+  letter-spacing: 0.06em;
+}
+
+.rsvp-landing__intro h2,
+.signup-callout h2,
+.admin-panel__header h2 {
+  color: var(--primary);
+  text-shadow: 0 0 10px rgba(225, 29, 72, 0.72), 0 0 34px rgba(225, 29, 72, 0.34);
+}
+
+.rsvp-landing__eyebrow,
+.menu-card__eyebrow,
+.order-card__status,
+.rsvp-update-card__eyebrow,
+.display-category {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.16rem 0.55rem;
+  border: 1px solid rgba(225, 29, 72, 0.5);
+  background: rgba(225, 29, 72, 0.12);
+  color: var(--primary);
+  font-size: 0.68rem;
+  line-height: 1.25;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+input,
+select,
+textarea,
+.signup-form input,
+.login-form input,
+.admin-entry__fields input,
+.admin-entry__fields select,
+.admin-entry__fields textarea,
+.access-settings__form input,
+.access-settings__form select,
+.access-settings__form textarea,
+.voting-card__label input,
+.rsvp-card input,
+.rsvp-card textarea {
+  border-radius: 0;
+  border: 1px solid rgba(225, 29, 72, 0.4);
+  background:
+    var(--scanline),
+    rgba(13, 12, 13, 0.92);
+  color: var(--dusty-rose);
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.signup-form input:focus,
+.login-form input:focus,
+.admin-entry__fields input:focus,
+.admin-entry__fields select:focus,
+.admin-entry__fields textarea:focus,
+.access-settings__form input:focus,
+.access-settings__form select:focus,
+.access-settings__form textarea:focus,
+.voting-card__label input:focus,
+.rsvp-card input:focus,
+.rsvp-card textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 14px rgba(225, 29, 72, 0.38), inset 0 0 10px rgba(225, 29, 72, 0.06);
+}
+
+::placeholder {
+  color: rgba(177, 109, 150, 0.52);
+}
+
+.button,
+.contest-banner__button,
+.signup-form button,
+.login-form button {
+  border: 2px solid rgba(225, 29, 72, 0.55);
+  background: #0d0c0d;
+  color: var(--dusty-rose);
+  box-shadow: 0 0 12px rgba(225, 29, 72, 0.18);
+}
+
+.button--primary,
+.signup-form button,
+.login-form button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(225, 29, 72, 0.6), 0 0 24px rgba(225, 29, 72, 0.3);
+}
+
+.button--accent {
+  border-color: rgba(177, 109, 150, 0.74);
+  background: rgba(177, 109, 150, 0.18);
+  color: var(--dusty-rose);
+}
+
+.button--danger {
+  border-color: #ff2d55;
+  background: #9b1235;
+}
+
+.button--outline {
+  background: transparent;
+}
+
+.button:hover,
+.button:focus,
+.contest-banner__button:hover,
+.contest-banner__button:focus,
+.signup-form button:hover,
+.signup-form button:focus,
+.login-form button:hover,
+.login-form button:focus {
+  transform: translateY(-1px);
+  border-color: var(--primary-light);
+  background-color: var(--primary-light);
+  color: #fff;
+  box-shadow: 0 0 10px var(--primary), 0 0 26px rgba(225, 29, 72, 0.54), 0 0 48px rgba(225, 29, 72, 0.22);
+}
+
+.button--outline:hover,
+.button--outline:focus,
+.contest-banner__button:hover,
+.contest-banner__button:focus {
+  background-color: rgba(225, 29, 72, 0.16);
+}
+
+.success,
+.success-message,
+.flash--success {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.errors,
+.flash--error {
+  border-color: rgba(225, 29, 72, 0.9);
+  color: #ffe5ea;
+}
+
+.admin-entry__rank,
+.instruction-card__badge {
+  border-radius: 0;
+  border-color: rgba(225, 29, 72, 0.55);
+  background: #0d0c0d;
+  color: var(--primary);
+  box-shadow: 0 0 12px rgba(225, 29, 72, 0.24);
+}
+
+.contest-chart__bar {
+  border-radius: 0;
+  background: #0d0c0d;
+}
+
+.contest-chart__bar-fill {
+  border-radius: 0;
+  background: linear-gradient(90deg, var(--primary-dark), var(--primary), var(--primary-light));
+  box-shadow: 0 0 10px rgba(225, 29, 72, 0.65);
+}
+
+.menu-card__image-wrap,
+.bartender-card__media,
+.rsvp-map iframe,
+.menu-admin-entry__image,
+.order-card__image {
+  border-radius: 0;
+  border-color: rgba(225, 29, 72, 0.35);
+}
+
+.menu-card__placeholder {
+  background:
+    var(--scanline),
+    linear-gradient(135deg, rgba(225, 29, 72, 0.14), rgba(13, 12, 13, 0.78));
+  color: rgba(235, 174, 182, 0.72);
+}
+
+.site-footer {
+  background: rgba(13, 12, 13, 0.92);
+  border-top: 1px solid rgba(225, 29, 72, 0.24);
+  color: rgba(235, 174, 182, 0.62);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 720px) {
+  .site-header__inner::after,
+  .site-header__inner::before {
+    display: none;
+  }
+}
+
 @media (max-width: 600px) {
   main.container {
     gap: 1rem;
@@ -1430,7 +1825,7 @@ main.container {
   .admin-section,
   .admin-entry,
   .voting-card {
-    border-radius: 0.85rem;
+    border-radius: 0;
     padding: 1rem;
   }
 
@@ -1531,7 +1926,7 @@ main.container {
 
   .bartender-card__media {
     border-right: none;
-    border-bottom: 1px solid rgba(255, 59, 59, 0.35);
+    border-bottom: 1px solid rgba(225, 29, 72, 0.35);
   }
 
   .contest-chart__meta,

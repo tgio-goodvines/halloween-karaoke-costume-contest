@@ -8,6 +8,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/FEATURES.md` - all supported user/admin/live-display features.
 - `ai-context/FILE_INVENTORY.md` - file-by-file purpose and ownership map.
 - `ai-context/ARCHITECTURE.md` - route map, data structures, frontend behavior, and extension guidance.
+- `ai-context/UI_UX_DESIGN_SYSTEM.md` - current lab-terminal visual design system, palette, typography, surfaces, and implementation notes.
 - `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
@@ -36,6 +37,7 @@ Important working notes:
 - Header logout is a single button tucked inside the `Menu` disclosure; do not add separate regular/admin logout controls.
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.
 - Responsive UX updates are complete: live-display cards scale for normal browser windows, attendee/admin pages are mobile-oriented, and admin add/edit forms are collapsed disclosure rows by default.
+- The active UI direction is the dark lab-terminal Halloween system documented in `ai-context/UI_UX_DESIGN_SYSTEM.md`; keep future page styling aligned with its square panels, mono controls, serif glowing headings, red/magenta/steel palette, and scanline texture.
 - GitHub Actions deployment to EC2 has succeeded, and future API ASG replacement instances should bootstrap Halloween automatically from launch template version `2`.
 - Do not disrupt GoodVines when working on deployment: do not restart GoodVines services, edit GoodVines source directories, or change GoodVines nginx server blocks.
 - Keep changes compact and consistent with the existing Flask/Jinja/static-file structure unless a larger refactor is explicitly requested.

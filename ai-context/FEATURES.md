@@ -88,8 +88,9 @@
   routes; they do not implicitly receive regular guest access.
 - Admin can choose which page `/` redirects to: RSVP landing, party login,
   party account signup, party portal, or live display.
-- Admin can set or replace the RSVP submission party code and optional code
-  hint. The party code is stored as a hash, not plaintext.
+- Admin can manage the RSVP submission party code from the Public Access panel:
+  view active/not-set status, replace the code, and update the optional
+  guest-facing hint. The party code is stored as a hash, not plaintext.
 - Admin can add, edit, and delete RSVP entries, and see the total guest count.
 - Admin can edit the static party detail cards and map address shown on the RSVP
   page.
@@ -164,12 +165,16 @@ app state.
 
 ## Styling And UX Features
 
-- Shared dark Halloween visual system in `static/styles.css`.
-- Dedicated TV/projector display styling in `static/display.css`.
+- Shared dark lab-terminal Halloween visual system in `static/styles.css`.
+- Dedicated TV/projector display styling in `static/display.css`, visually
+  aligned with the lab-terminal system.
+- Generated HTML emails in `templates/email/*.html` use matching email-safe
+  inline lab-terminal styling.
 - Responsive layouts for mobile, normal browser windows, and large display
   screens.
 - Sticky site header for attendee/admin pages.
 - Attendee/admin mobile header uses compact disclosure navigation with shorter
   labels and touch-friendly controls.
 - The single logout control is tucked into the disclosure navigation menu.
-- Red glowing cards, buttons, banners, score bars, and display panels.
+- Square glowing lab panels, red/magenta/steel palette, mono controls, serif
+  display headings, scanline texture, and matching generated HTML emails.

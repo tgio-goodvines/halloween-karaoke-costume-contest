@@ -14,8 +14,8 @@
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
 | `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, and Halloween email update settings. |
 | `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, food/drink ordering, bartender roles/order status transitions, display update publishing, and JSON exports using an in-memory Redis fake. |
-| `static/styles.css` | Shared Halloween-themed styles for attendee/admin pages, including the header menu, single logout action, menu cards, order cards, and bartender queue. |
-| `static/display.css` | Dedicated large-format live-display styles, override cards, drink-ready images, CTA layout, scoreboard layout, and karaoke display panels. |
+| `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, header menu, single logout action, menu cards, order cards, and bartender queue. |
+| `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, override cards, drink-ready images, CTA layout, scoreboard layout, and karaoke display panels. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, override rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
@@ -25,14 +25,14 @@
 | `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
 | `templates/halloween_login.html` | Public attendee account sign-in form. |
 | `templates/halloween_register.html` | Public attendee account registration form. |
-| `templates/email/rsvp_update.html` | HTML email body for admin-posted RSVP update notifications. |
-| `templates/email/rsvp_confirmation.html` | HTML email body for RSVP confirmation messages with party details and calendar links. |
-| `templates/email/account_welcome.html` | HTML email body for party account creation welcome messages. |
-| `templates/email/drink_order_placed.html` | HTML email body for drink order confirmations with estimated ready time. |
-| `templates/email/drink_order_ready.html` | HTML email body for notifying attendees their drink is ready. |
+| `templates/email/rsvp_update.html` | Dark lab-terminal styled HTML email body for admin-posted RSVP update notifications. |
+| `templates/email/rsvp_confirmation.html` | Dark lab-terminal styled HTML email body for RSVP confirmation messages with party details and calendar links. |
+| `templates/email/account_welcome.html` | Dark lab-terminal styled HTML email body for party account creation welcome messages. |
+| `templates/email/drink_order_placed.html` | Dark lab-terminal styled HTML email body for drink order confirmations with estimated ready time. |
+| `templates/email/drink_order_ready.html` | Dark lab-terminal styled HTML email body for notifying attendees their drink is ready. |
 | `templates/password_reset_request.html` | Email entry form for requesting a party account password reset link. |
 | `templates/password_reset_form.html` | New-password form for valid password reset links and invalid/expired link feedback. |
-| `templates/email/password_reset.html` | HTML email body for one-time password reset links. |
+| `templates/email/password_reset.html` | Dark lab-terminal styled HTML email body for one-time password reset links. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
 | `templates/karaoke_signup.html` | Karaoke signup form and submitted karaoke lineup. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
@@ -63,6 +63,7 @@ These files are present locally but not tracked by Git at the time this context 
 | --- | --- |
 | `AGENTS.md` | Future-agent entry point with high-signal repo notes. |
 | `ai-context/PROJECT_OVERVIEW.md` | Durable summary of app purpose, runtime, flows, state model, and design. |
+| `ai-context/UI_UX_DESIGN_SYSTEM.md` | Durable current UI/UX visual design system notes for the lab-terminal Halloween style, palette, typography, surfaces, controls, and live-display alignment. |
 | `ai-context/FEATURES.md` | Durable catalog of supported attendee, admin, contest, karaoke, display, and styling features. |
 | `ai-context/ARCHITECTURE.md` | Durable route map, data flow, frontend behavior, constraints, and extension guidance. |
 | `ai-context/FILE_INVENTORY.md` | Durable file-by-file inventory. |
@@ -105,6 +106,7 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── GITLAB_AWS_DEPLOYMENT_DESIGN.md
 │   ├── NO_SQL_DATA_POLICY.md
 │   ├── PROJECT_OVERVIEW.md
+│   ├── UI_UX_DESIGN_SYSTEM.md
 │   ├── REDIS_ENHANCEMENT_IMPLEMENTATION_PLAN.md
 │   ├── REDIS_CONNECTION_REQUIREMENTS.md
 │   ├── REDIS_MIGRATION_PLAN.md

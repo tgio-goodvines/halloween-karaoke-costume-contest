@@ -165,12 +165,15 @@ returns party-night cards even before `HALLOWEEN_PARTY_START` so hosts can
 stage and test the live display ahead of the event.
 
 The attendee portal has a related but separate date gate: `party_day_has_arrived()`
-compares the local date of `HALLOWEEN_PARTY_START` to the current date. Before
-that date, `/party/menu`, `/party/costumes`, and `/party/karaoke` redirect to
-`/party`, and `base.html` hides the Menu, Costume, Karaoke, and Voting links.
-On the party date, those links/routes become available. Voting still depends
-on `costume_voting_is_visible()`, which also requires the admin contest state
-to have started/open voting with no locked winner.
+uses the persisted `event_experience_mode` first, then compares the local date
+of `HALLOWEEN_PARTY_START` to the current date when the mode is `auto`. Admins
+can force `pre_party` or `party_day` from `/admin` to test attendee UX states.
+Before the effective party date, `/party/menu`, `/party/costumes`, and
+`/party/karaoke` redirect to `/party`, and `base.html` hides the Menu, Costume,
+Karaoke, and Voting links. On the effective party date, those links/routes
+become available. Voting still depends on `costume_voting_is_visible()`, which
+also requires the admin contest state to have started/open voting with no
+locked winner.
 
 ## Frontend Responsibilities
 
@@ -225,10 +228,10 @@ to have started/open voting with no locked winner.
 - `rsvp.html`: standalone guest RSVP landing page with RSVP prompt, RSVP form
   party-code field, party details, Google Maps directions/embed,
   newest-to-oldest update cards, and optional portal account links.
-- `admin.html`: all admin actions, public landing settings, explicit party-code
-  management with active/not-set status and hint editing, host RSVP
-  notification email configuration, live-display WiFi settings, RSVP list CRUD,
-  party detail/map address editing, selective RSVP update
+- `admin.html`: all admin actions, public landing settings, attendee experience
+  mode override, explicit party-code management with active/not-set status and
+  hint editing, host RSVP notification email configuration, live-display WiFi
+  settings, RSVP list CRUD, party detail/map address editing, selective RSVP update
   posting/resending/removal, and live
   contest/karaoke state, menu management with specialty/orderable drink
   controls, bartender tip settings, user account CRUD/password reset/bartender

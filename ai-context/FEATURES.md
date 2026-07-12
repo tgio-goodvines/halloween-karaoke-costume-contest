@@ -112,6 +112,9 @@
   routes; they do not implicitly receive regular guest access.
 - Admin can choose which page `/` redirects to: RSVP landing, party login,
   party account signup, party portal, or live display.
+- Admin can force the attendee portal experience to Automatic, Pre-party, or
+  Party day mode from the Public Access panel so hosts can test both guest UX
+  states without changing `HALLOWEEN_PARTY_START`.
 - Admin can manage the RSVP submission party code from the Public Access panel:
   view active/not-set status, replace the code, and update the optional
   guest-facing hint. The party code is stored as a hash, not plaintext.

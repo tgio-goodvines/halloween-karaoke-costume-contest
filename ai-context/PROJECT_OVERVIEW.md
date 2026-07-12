@@ -101,7 +101,9 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    promote party-night app actions before those routes are available. On the
    party date, `/party` switches to the event-night dashboard and may promote
    app usage, costume signup, karaoke signup, drink ordering, and live party
-   updates. Account creation sends a SES welcome email when email is enabled.
+   updates. Admins can override this attendee experience gate from `/admin` for
+   testing with Automatic, Pre-party, or Party day modes. Account creation sends
+   a SES welcome email when email is enabled.
 6. On the party date, attendees can submit costume entries at
    `/party/costumes`.
 7. On the party date, attendees can submit karaoke songs at `/party/karaoke`.
@@ -168,6 +170,9 @@ the process-local cache:
   remains as the effective override for compatibility.
 - `landing_page_target`: admin-selected root redirect target, defaulting to
   `/rsvp`.
+- `event_experience_mode`: admin-selected attendee experience override,
+  defaulting to `auto`; `pre_party` forces planning-mode portal/routes and
+  `party_day` forces event-night portal/routes for testing.
 - `party_code_hash` and `party_code_hint`: RSVP submission code settings. The
   code itself is not stored in plaintext.
 - `rsvp_notification_email`: admin-configurable host notification recipient

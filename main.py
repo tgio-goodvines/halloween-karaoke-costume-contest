@@ -302,6 +302,22 @@ DEFAULT_BARTENDER_TIP_SETTINGS: dict[str, object] = {
 }
 DEFAULT_RSVP_NOTIFICATION_EMAIL = app.config["RSVP_NOTIFICATION_EMAIL"]
 
+DEFAULT_EVENT_EXPERIENCE_MODE = "auto"
+EVENT_EXPERIENCE_MODES: dict[str, dict[str, str]] = {
+    "auto": {
+        "label": "Automatic",
+        "description": "Use the configured party date to decide which guest portal experience appears.",
+    },
+    "pre_party": {
+        "label": "Pre-party",
+        "description": "Force the planning view and hide party-day menu, costume, karaoke, drink, and voting actions.",
+    },
+    "party_day": {
+        "label": "Party day",
+        "description": "Force the event-night portal so hosts can test guest menu, drink, costume, karaoke, and voting flows.",
+    },
+}
+
 DEFAULT_LANDING_PAGE_TARGET = "rsvp"
 LANDING_PAGE_TARGETS: dict[str, dict[str, str]] = {
     "rsvp": {
@@ -349,6 +365,7 @@ submitted_costume_votes: set[str] = set()
 live_display_event_override: dict[str, object] | None = None
 live_display_notice_override: dict[str, object] | None = None
 landing_page_target = DEFAULT_LANDING_PAGE_TARGET
+event_experience_mode = DEFAULT_EVENT_EXPERIENCE_MODE
 party_code_hash = generate_password_hash(app.config["PARTY_CODE"]) if app.config["PARTY_CODE"] else ""
 party_code_hint = ""
 rsvp_notification_email = DEFAULT_RSVP_NOTIFICATION_EMAIL.strip()
@@ -481,6 +498,11 @@ def party_has_started() -> bool:
 
 
 def party_day_has_arrived(now: datetime | None = None) -> bool:
+    if event_experience_mode == "pre_party":
+        return False
+    if event_experience_mode == "party_day":
+        return True
+
     party_start = parse_party_start()
     party_tz = party_start.tzinfo or timezone(timedelta(hours=-6))
     current_time = now or datetime.now(timezone.utc)
@@ -749,6 +771,13 @@ def normalize_landing_page_target(raw_target: object) -> str:
     if target in LANDING_PAGE_TARGETS:
         return target
     return DEFAULT_LANDING_PAGE_TARGET
+
+
+def normalize_event_experience_mode(raw_mode: object) -> str:
+    mode = str(raw_mode or "").strip()
+    if mode in EVENT_EXPERIENCE_MODES:
+        return mode
+    return DEFAULT_EVENT_EXPERIENCE_MODE
 
 
 def landing_page_endpoint() -> str:
@@ -1707,6 +1736,7 @@ def snapshot_state() -> dict[str, object]:
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
         "live_display_override": copy.deepcopy(current_display_override()),
         "landing_page_target": normalize_landing_page_target(landing_page_target),
+        "event_experience_mode": normalize_event_experience_mode(event_experience_mode),
         "party_code_hash": party_code_hash,
         "party_code_hint": party_code_hint,
         "rsvp_notification_email": normalize_rsvp_notification_email(rsvp_notification_email),
@@ -1719,7 +1749,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes
     global live_display_event_override, live_display_notice_override
-    global landing_page_target, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
+    global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
     global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email, bartender_tip_settings
 
     raw_costume_signups = data.get("costume_signups", [])
@@ -1897,6 +1927,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         )
     cleanup_expired_display_notices()
     landing_page_target = normalize_landing_page_target(data.get("landing_page_target"))
+    event_experience_mode = normalize_event_experience_mode(data.get("event_experience_mode"))
     party_code_hash = str(data.get("party_code_hash", party_code_hash) or "")
     party_code_hint = str(data.get("party_code_hint", party_code_hint) or "").strip()
     if "rsvp_notification_email" in data:
@@ -3316,7 +3347,7 @@ def admin_portal():
     messages: List[str] = []
     global live_display_event_override, live_display_notice_override
     global submitted_costume_votes, costume_ballots, karaoke_state
-    global landing_page_target, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
+    global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
     global bartender_tip_settings
 
     ensure_costume_votes_alignment()
@@ -3565,6 +3596,17 @@ def admin_portal():
                 landing_page_target = normalized_target
                 messages.append(
                     f"Public landing page set to {LANDING_PAGE_TARGETS[landing_page_target]['label']}."
+                )
+
+        elif action == "update_event_experience_mode":
+            requested_mode = request.form.get("event_experience_mode", "").strip()
+            normalized_mode = normalize_event_experience_mode(requested_mode)
+            if requested_mode != normalized_mode:
+                errors.append("Choose a valid guest experience mode.")
+            else:
+                event_experience_mode = normalized_mode
+                messages.append(
+                    f"Guest experience mode set to {EVENT_EXPERIENCE_MODES[event_experience_mode]['label']}."
                 )
 
         elif action == "update_party_code":
@@ -4249,6 +4291,9 @@ def admin_portal():
         costume_lineup_locked=is_costume_lineup_locked_for_voting(),
         landing_page_target=normalize_landing_page_target(landing_page_target),
         landing_page_targets=LANDING_PAGE_TARGETS,
+        event_experience_mode=normalize_event_experience_mode(event_experience_mode),
+        event_experience_modes=EVENT_EXPERIENCE_MODES,
+        effective_party_day_has_arrived=party_day_has_arrived(),
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
         rsvp_notification_email=rsvp_notification_email,

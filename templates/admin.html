@@ -53,6 +53,30 @@
         </button>
       </form>
 
+      <form method="post" class="access-settings__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h4>Guest Experience Mode</h4>
+        <label for="event_experience_mode">Portal mode</label>
+        <select id="event_experience_mode" name="event_experience_mode">
+          {% for key, option in event_experience_modes.items() %}
+            <option value="{{ key }}" {% if key == event_experience_mode %}selected{% endif %}>
+              {{ option.label }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="party-code-status">
+          <p class="contest-status {% if effective_party_day_has_arrived %}contest-status--active{% else %}contest-status--inactive{% endif %}">
+            Guests currently see the {% if effective_party_day_has_arrived %}party-day{% else %}pre-party{% endif %} portal.
+          </p>
+          <p class="contest-status">
+            {{ event_experience_modes[event_experience_mode].description }}
+          </p>
+        </div>
+        <button type="submit" name="action" value="update_event_experience_mode" class="button button--primary">
+          Save Portal Mode
+        </button>
+      </form>
+
       <form method="post" class="access-settings__form access-settings__form--party-code">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h4>Party Code</h4>

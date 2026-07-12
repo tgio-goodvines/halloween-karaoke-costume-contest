@@ -166,6 +166,7 @@ class RedisStateTests(unittest.TestCase):
         main.live_display_event_override = None
         main.live_display_notice_override = None
         main.landing_page_target = main.DEFAULT_LANDING_PAGE_TARGET
+        main.event_experience_mode = main.DEFAULT_EVENT_EXPERIENCE_MODE
         main.party_code_hash = main.generate_password_hash("invite-code")
         main.party_code_hint = ""
         main.rsvp_notification_email = main.DEFAULT_RSVP_NOTIFICATION_EMAIL
@@ -303,6 +304,7 @@ class RedisStateTests(unittest.TestCase):
         main.karaoke_state["party_started"] = True
         main.live_display_notice_override = {"type": "drink_ready", "title": "Tonight"}
         main.landing_page_target = "party_login"
+        main.event_experience_mode = "party_day"
         main.party_code_hash = main.generate_password_hash("secret-code")
         main.party_code_hint = "On your invite"
         main.rsvp_notification_email = "host@example.com"
@@ -368,6 +370,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertIsNone(main.live_display_event_override)
         self.assertEqual({"type": "drink_ready", "title": "Tonight"}, main.live_display_notice_override)
         self.assertEqual("party_login", main.landing_page_target)
+        self.assertEqual("party_day", main.event_experience_mode)
         self.assertTrue(main.check_password_hash(main.party_code_hash, "secret-code"))
         self.assertEqual("On your invite", main.party_code_hint)
         self.assertEqual("host@example.com", main.rsvp_notification_email)
@@ -879,6 +882,50 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("party_login", state["landing_page_target"])
         self.assertEqual(302, root_response.status_code)
         self.assertEqual("/party/login", root_response.headers["Location"])
+
+    def test_admin_can_update_guest_experience_mode(self):
+        main.app.config["PARTY_START"] = "2026-10-31T19:00:00-06:00"
+        self.add_user_account()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_event_experience_mode",
+                    "event_experience_mode": "party_day",
+                },
+            )
+            self.login_regular(client)
+            dashboard_response = client.get("/party")
+            menu_response = client.get("/party/menu")
+
+        state = self.redis_state()
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Guest experience mode set to Party day.", response.get_data(as_text=True))
+        self.assertEqual("party_day", state["event_experience_mode"])
+        self.assertIn("Welcome to the Party Portal", dashboard_body)
+        self.assertEqual(200, menu_response.status_code)
+
+    def test_admin_can_force_pre_party_guest_experience(self):
+        main.app.config["PARTY_START"] = "2026-01-01T19:00:00-06:00"
+        main.event_experience_mode = "pre_party"
+        self.add_user_account()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            dashboard_response = client.get("/party")
+            menu_response = client.get("/party/menu")
+
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, dashboard_response.status_code)
+        self.assertIn("Party Details", dashboard_body)
+        self.assertNotIn("Welcome to the Party Portal", dashboard_body)
+        self.assertEqual(302, menu_response.status_code)
+        self.assertEqual("/party", menu_response.headers["Location"])
 
     def test_admin_can_set_party_code_without_exposing_plaintext(self):
         self.save_current_state()

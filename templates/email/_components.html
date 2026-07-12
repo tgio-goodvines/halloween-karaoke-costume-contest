@@ -37,7 +37,7 @@
 {%- endmacro %}
 
 {% macro button(url, label) -%}
-<a href="{{ url }}" style="display: inline-block; background: #ff3131; border: 2px solid #ff3131; color: #ffffff; padding: 13px 17px; border-radius: 0; font-weight: 700; letter-spacing: 0.08em; line-height: 1.2; text-decoration: none; text-transform: uppercase;">{{ label }}</a>
+<a href="{{ url }}" style="display: inline-block; background: #ff3131; border: 2px solid #ff3131; color: #ffffff !important; padding: 13px 17px; border-radius: 0; font-weight: 700; letter-spacing: 0.08em; line-height: 1.2; text-decoration: none; text-transform: uppercase;"><span style="color: #ffffff !important; text-decoration: none;">{{ label }}</span></a>
 {%- endmacro %}
 
 {% macro detail_table(rows) -%}

@@ -250,14 +250,9 @@ body.display-mode::after {
   display: none !important;
 }
 
-.display-cta-columns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: clamp(1rem, 2.5vw, 1.75rem);
-}
-
-.display-cta-column {
-  flex: 1 1 220px;
+.display-cta-wifi {
+  width: min(640px, 100%);
+  justify-self: center;
   display: grid;
   gap: 0.75rem;
 }
@@ -297,40 +292,6 @@ body.display-mode::after {
   margin: 0;
   font-size: clamp(1.2rem, 3.2vw, 1.6rem);
   font-weight: 600;
-}
-
-.display-cta-text {
-  margin: 0;
-  font-size: clamp(0.95rem, 2.2vw, 1.15rem);
-  color: var(--muted, #b3b3b3);
-}
-
-.display-cta-url {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(0.85rem, 2.2vw, 1.2rem) clamp(1.2rem, 3vw, 1.6rem);
-  border-radius: 0;
-  border: 2px solid rgba(255, 49, 49, 0.65);
-  color: inherit;
-  text-decoration: none;
-  font-weight: 700;
-  font-size: clamp(1.2rem, 3.2vw, 1.55rem);
-  word-break: break-word;
-  box-shadow: 0 0 24px rgba(255, 49, 49, 0.28);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.display-cta-url:hover,
-.display-cta-url:focus {
-  background-color: rgba(255, 49, 49, 0.16);
-  box-shadow: 0 0 30px rgba(255, 49, 49, 0.46);
-}
-
-.display-cta-reminder {
-  margin: 0;
-  font-size: clamp(0.95rem, 2.1vw, 1.2rem);
-  color: var(--muted, #b3b3b3);
 }
 
 .display-scoreboard {
@@ -837,26 +798,6 @@ body.display-mode::after {
   display: none !important;
 }
 
-.display-cta-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem 1.1rem;
-  border-radius: 0;
-  border: 1px solid rgba(255, 49, 49, 0.6);
-  text-decoration: none;
-  color: inherit;
-  font-weight: 600;
-  box-shadow: 0 0 24px rgba(255, 49, 49, 0.32);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.display-cta-link:hover,
-.display-cta-link:focus {
-  background-color: rgba(255, 49, 49, 0.15);
-  box-shadow: 0 0 30px rgba(255, 49, 49, 0.44);
-}
-
 .display-card--long {
   --display-primary-size: 2.75rem;
   --display-secondary-size: 1.55rem;
@@ -879,9 +820,6 @@ body.display-mode::after {
 }
 
 .display-cta-list__item dd,
-.display-cta-text,
-.display-cta-url,
-.display-cta-reminder,
 .display-scoreboard__subtitle,
 .display-scoreboard__name,
 .display-scoreboard__costume,
@@ -897,8 +835,7 @@ body.display-mode::after {
 .karaoke-card__list-name,
 .karaoke-card__list-song,
 .instruction-step__body,
-.instruction-callout__value,
-.instruction-url {
+.instruction-callout__value {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -967,10 +904,6 @@ body.display-mode::after {
 }
 
 @media (max-width: 900px) {
-  .display-cta-columns {
-    flex-direction: column;
-  }
-
   .display-scoreboard__list li {
     justify-content: flex-start;
   }
@@ -1054,9 +987,7 @@ body.display-mode :is(
     .instruction-card__badge,
     .instruction-callout,
     .karaoke-card__panel,
-    .karaoke-card__list-item,
-    .display-cta-url,
-    .display-cta-link
+    .karaoke-card__list-item
   ) {
   border-radius: 0;
 }
@@ -1132,8 +1063,6 @@ body.display-mode {
   box-shadow: inset 0 0 36px rgba(255, 49, 49, 0.075), 0 0 42px rgba(255, 49, 49, 0.36);
 }
 
-.display-cta-url,
-.display-cta-link,
 .display-cta-list__item,
 .display-scoreboard__list li,
 .instruction-callout,

@@ -93,9 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const ctaWifiNetworkItemElement = card.querySelector('[data-cta-wifi-network-item]');
   const ctaWifiPasswordElement = card.querySelector('[data-cta-wifi-password]');
   const ctaWifiPasswordItemElement = card.querySelector('[data-cta-wifi-password-item]');
-  const ctaPortalLinkElement = card.querySelector('[data-cta-portal-link]');
-  const ctaPortalNoteElement = card.querySelector('[data-cta-portal-note]');
-  const ctaReminderElement = card.querySelector('[data-cta-reminder]');
   const scoreboardLayout = card.querySelector('[data-scoreboard-layout]');
   const scoreboardTitleElement = scoreboardLayout
     ? scoreboardLayout.querySelector('[data-scoreboard-title]')
@@ -113,7 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const primaryElement = card.querySelector('[data-entry-primary]');
   const secondaryElement = card.querySelector('[data-entry-secondary]');
   const tertiaryElement = card.querySelector('[data-entry-tertiary]');
-  const linkElement = card.querySelector('[data-entry-link]');
 
   const formatAverageScore = (value) => {
     const numeric = Number(value);
@@ -128,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return 0;
     }
 
-    return ['category', 'primary', 'secondary', 'tertiary', 'link_label']
+    return ['category', 'primary', 'secondary', 'tertiary']
       .map((key) => (entry[key] ? String(entry[key]) : ''))
       .join(' ')
       .length;
@@ -814,27 +810,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      if (ctaPortalLinkElement) {
-        const portalUrl = ctaDetails.portal_url || entry.link || '';
-        const portalLabel = ctaDetails.portal_label || portalUrl;
-
-        if (portalUrl) {
-          ctaPortalLinkElement.textContent = portalLabel || portalUrl;
-          ctaPortalLinkElement.setAttribute('href', portalUrl);
-        } else {
-          ctaPortalLinkElement.textContent = '';
-          ctaPortalLinkElement.removeAttribute('href');
-        }
-      }
-
-      if (ctaPortalNoteElement) {
-        ctaPortalNoteElement.textContent = ctaDetails.portal_note || '';
-      }
-
-      if (ctaReminderElement) {
-        ctaReminderElement.textContent = ctaDetails.reminder || entry.tertiary || '';
-      }
-
       if (scoreboardLayout) {
         scoreboardLayout.setAttribute('hidden', '');
         if (scoreboardListElement) {
@@ -865,16 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ctaWifiPasswordItemElement) {
         ctaWifiPasswordItemElement.setAttribute('hidden', '');
       }
-      if (ctaPortalLinkElement) {
-        ctaPortalLinkElement.textContent = '';
-        ctaPortalLinkElement.removeAttribute('href');
-      }
-      if (ctaPortalNoteElement) {
-        ctaPortalNoteElement.textContent = '';
-      }
-      if (ctaReminderElement) {
-        ctaReminderElement.textContent = '';
-      }
       if (scoreboardLayout) {
         scoreboardLayout.setAttribute('hidden', '');
         if (scoreboardListElement) {
@@ -902,18 +867,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (isWinnerCard) {
         card.classList.add('display-card--winner');
-      }
-    }
-
-    if (linkElement) {
-      if (entry.link && !entry.cta && !hasScoreboard) {
-        linkElement.textContent = entry.link_label || entry.link;
-        linkElement.setAttribute('href', entry.link);
-        linkElement.removeAttribute('hidden');
-      } else {
-        linkElement.textContent = '';
-        linkElement.removeAttribute('href');
-        linkElement.setAttribute('hidden', '');
       }
     }
   };

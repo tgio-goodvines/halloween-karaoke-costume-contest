@@ -82,7 +82,8 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 4. `/live-display` redirects to `/admin/login` until the browser session has
    the `admin` role, then shows rotating event cards and current signup counts.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
-   signed in, can create an account at `/party/register`, then see the
+   signed in, can create an account at `/party/register`, or recover a
+   forgotten account password through `/party/password-reset`, then see the
    party dashboard.
 6. Attendees can submit costume entries at `/party/costumes`.
 7. Attendees can submit karaoke songs at `/party/karaoke`.
@@ -106,6 +107,9 @@ the process-local cache:
 - `costume_ballots`: maps `user_id` to `{costume_id: score}`.
 - `user_accounts`: maps normalized usernames to Redis-backed attendee account
   records with stable IDs and password hashes.
+- `password_reset_tokens`: maps SHA-256 reset-token hashes to account-bound
+  reset records with email, created/expiration timestamps, and used timestamp.
+  Plaintext reset tokens are only sent in the emailed link and are not stored.
 - `registered_users`: maps session `user_id` to display name.
 - `rsvp_signups`: independent host RSVP list entries with name, required email
   contact, guest count, note, created timestamp, stable ID, and required email
@@ -144,6 +148,12 @@ GoodVines sender-address SES identities while working on Halloween email.
 Recipients are deduplicated across RSVP entries and Redis-backed party account
 emails, and delivery failures are logged/reported to admin without blocking the
 RSVP update from being posted.
+
+The same SES sender is used for party account password reset emails. Reset links
+are generated from random one-time tokens, stored only as SHA-256 hashes in
+Redis-backed state, expire after 45 minutes, and are marked used after a
+successful password change. Password reset request responses are intentionally
+generic so the UI does not reveal whether an email address is registered.
 
 Schema version 1 Redis state with index-aligned `costume_votes` is upgraded on
 load into ID-keyed `costume_ballots`.

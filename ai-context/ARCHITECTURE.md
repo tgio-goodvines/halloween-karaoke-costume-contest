@@ -22,6 +22,12 @@
 - `GET|POST /party/login` -> attendee account sign-in; requires party-code
   verification before showing the login form, then validates a Redis-stored
   password hash and grants the `regular` role.
+- `GET|POST /party/password-reset` -> public account recovery request form;
+  accepts an email address, always returns a generic response, and sends a
+  one-time reset email when a matching account exists.
+- `GET|POST /party/password-reset/<token>` -> validates a reset token and lets
+  the user choose a new password; tokens are hashed in stored state, expire
+  after 45 minutes, and are marked used after a successful reset.
 - `GET|POST /party/register` -> attendee account creation; requires party-code
   verification before showing the registration form, then stores a password hash
   in Redis app state and grants the `regular` role.
@@ -49,7 +55,8 @@
 - Flask app setup and route definitions.
 - Dataclasses: `CostumeSignup`, `KaraokeSignup`.
 - Redis-backed state serialization/hydration, with process-local global caches.
-- RSVP update recipient collection and Amazon SES email sending when enabled.
+- RSVP update recipient collection, password reset email, and Amazon SES email
+  sending when enabled.
 - Display update broadcasting via `threading.Condition`.
 - Scoreboard construction, ranking, and winner card creation.
 - Rotation-entry construction for the live display.

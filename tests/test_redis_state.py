@@ -152,6 +152,7 @@ class RedisStateTests(unittest.TestCase):
         main.costume_ballots = {}
         main.registered_users = {}
         main.user_accounts = {}
+        main.password_reset_tokens = {}
         main.rsvp_signups = []
         main.rsvp_updates = []
         main.submitted_costume_votes = set()
@@ -192,6 +193,12 @@ class RedisStateTests(unittest.TestCase):
 
     def redis_state(self):
         return json.loads(self.fake_redis.store[main.redis_key("state")])
+
+    def password_reset_token_from_email(self, fake_ses):
+        text_body = fake_ses.sent_messages[-1]["Content"]["Simple"]["Body"]["Text"]["Data"]
+        marker = "/party/password-reset/"
+        reset_url = next(line.strip() for line in text_body.splitlines() if marker in line)
+        return reset_url.rsplit(marker, 1)[1].strip()
 
     def save_current_state(self):
         main.save_state_to_redis()
@@ -1029,6 +1036,133 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotEqual("party-password", account["password_hash"])
         self.assertEqual("Morgan", state["registered_users"][user_id])
         self.assertIn("regular", roles)
+
+    def test_password_reset_request_sends_generic_response_and_email_for_existing_account(self):
+        self.add_user_account("Morgan", "party-password", "user-1", "morgan@example.com")
+        self.save_current_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            response = client.post(
+                "/party/password-reset",
+                data={"email": "morgan@example.com"},
+            )
+
+        state = self.redis_state()
+        token_hashes = list(state["password_reset_tokens"].keys())
+        self.assertEqual(200, response.status_code)
+        self.assertIn("If that email is registered, we sent a password reset link.", response.get_data(as_text=True))
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(["morgan@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
+        self.assertEqual(1, len(token_hashes))
+        self.assertEqual(64, len(token_hashes[0]))
+        self.assertEqual("morgan", state["password_reset_tokens"][token_hashes[0]]["normalized_username"])
+
+    def test_password_reset_request_for_unknown_email_does_not_reveal_account_status(self):
+        self.add_user_account("Morgan", "party-password", "user-1", "morgan@example.com")
+        self.save_current_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            response = client.post(
+                "/party/password-reset",
+                data={"email": "unknown@example.com"},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIn("If that email is registered, we sent a password reset link.", response.get_data(as_text=True))
+        self.assertEqual(0, len(fake_ses.sent_messages))
+        self.assertEqual({}, state.get("password_reset_tokens", {}))
+
+    def test_password_reset_updates_password_and_prevents_token_reuse(self):
+        self.add_user_account("Morgan", "party-password", "user-1", "morgan@example.com")
+        self.save_current_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            request_response = client.post(
+                "/party/password-reset",
+                data={"email": "morgan@example.com"},
+            )
+            token = self.password_reset_token_from_email(fake_ses)
+            form_response = client.get(f"/party/password-reset/{token}")
+            reset_response = client.post(
+                f"/party/password-reset/{token}",
+                data={
+                    "password": "new-party-password",
+                    "confirm_password": "new-party-password",
+                },
+            )
+            reuse_response = client.get(f"/party/password-reset/{token}")
+            self.verify_party_code(client)
+            old_login = client.post(
+                "/party/login",
+                data={"username": "Morgan", "password": "party-password"},
+            )
+            new_login = client.post(
+                "/party/login",
+                data={"username": "Morgan", "password": "new-party-password"},
+            )
+
+        state = self.redis_state()
+        token_hash = main.hash_password_reset_token(token)
+        account = state["user_accounts"]["morgan"]
+        self.assertEqual(200, request_response.status_code)
+        self.assertEqual(200, form_response.status_code)
+        self.assertIn("Update Password", form_response.get_data(as_text=True))
+        self.assertEqual(200, reset_response.status_code)
+        self.assertIn("Password updated", reset_response.get_data(as_text=True))
+        self.assertIn("invalid or expired", reuse_response.get_data(as_text=True))
+        self.assertIn("Incorrect username or password.", old_login.get_data(as_text=True))
+        self.assertEqual(302, new_login.status_code)
+        self.assertTrue(main.check_password_hash(account["password_hash"], "new-party-password"))
+        self.assertTrue(state["password_reset_tokens"][token_hash]["used_at"])
+
+    def test_expired_password_reset_token_is_rejected(self):
+        account = self.add_user_account("Morgan", "party-password", "user-1", "morgan@example.com")
+        token = "expired-token"
+        token_hash = main.hash_password_reset_token(token)
+        main.password_reset_tokens[token_hash] = {
+            "normalized_username": "morgan",
+            "account_id": account["id"],
+            "email": account["email"],
+            "created_at": "2026-07-01T00:00:00Z",
+            "expires_at": "2026-07-01T00:45:00Z",
+            "used_at": "",
+        }
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            response = client.get(f"/party/password-reset/{token}")
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("invalid or expired", response.get_data(as_text=True))
+
+    def test_password_reset_email_failure_still_returns_generic_response(self):
+        self.add_user_account("Morgan", "party-password", "user-1", "morgan@example.com")
+        self.save_current_state()
+        fake_ses = FakeSESClient(failing_recipients={"morgan@example.com"})
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            response = client.post(
+                "/party/password-reset",
+                data={"email": "morgan@example.com"},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIn("If that email is registered, we sent a password reset link.", response.get_data(as_text=True))
+        self.assertEqual(0, len(fake_ses.sent_messages))
+        self.assertEqual(1, len(state["password_reset_tokens"]))
 
     def test_logout_clears_current_session(self):
         self.save_current_state()

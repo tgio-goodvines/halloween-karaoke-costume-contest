@@ -8,10 +8,12 @@ from threading import Condition, Thread
 from urllib.parse import quote_plus, unquote, urlparse
 from uuid import uuid4
 import copy
+import hashlib
 import io
 import json
 import os
 import re
+import secrets
 import time
 
 import redis
@@ -301,6 +303,7 @@ costume_votes: List[List[int]] = []
 costume_ballots: dict[str, dict[str, int]] = {}
 registered_users: dict[str, str] = {}
 user_accounts: dict[str, dict[str, object]] = {}
+password_reset_tokens: dict[str, dict[str, object]] = {}
 rsvp_signups: List[RSVPSignup] = []
 rsvp_updates: List[RSVPUpdate] = []
 submitted_costume_votes: set[str] = set()
@@ -321,6 +324,8 @@ display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
     "party_login",
     "party_register",
+    "password_reset_request",
+    "password_reset_confirm",
     "rsvp",
     "admin_portal",
     "party_costumes",
@@ -467,6 +472,86 @@ def create_user_account(username: str, password: str, email: str = "") -> dict[s
         "password_hash": generate_password_hash(password),
         "created_at": _utc_now_iso(),
     }
+
+
+def hash_password_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def parse_utc_iso(raw_value: object) -> datetime | None:
+    if not raw_value:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(str(raw_value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def find_user_account_by_email(email: str) -> tuple[str, dict[str, object]] | None:
+    normalized_email = normalize_email(email)
+    if not normalized_email:
+        return None
+
+    for normalized_username, account in user_accounts.items():
+        if normalize_email(str(account.get("email", "") or "")) == normalized_email:
+            return normalized_username, account
+
+    return None
+
+
+def cleanup_password_reset_tokens() -> None:
+    now = datetime.now(timezone.utc)
+    expired_hashes = [
+        token_hash
+        for token_hash, record in password_reset_tokens.items()
+        if parse_utc_iso(record.get("expires_at")) and parse_utc_iso(record.get("expires_at")) < now
+    ]
+    for token_hash in expired_hashes:
+        password_reset_tokens.pop(token_hash, None)
+
+
+def create_password_reset_token(normalized_username: str, account: dict[str, object]) -> str:
+    cleanup_password_reset_tokens()
+    token = secrets.token_urlsafe(32)
+    token_hash = hash_password_reset_token(token)
+    now = datetime.now(timezone.utc)
+    password_reset_tokens[token_hash] = {
+        "normalized_username": normalized_username,
+        "account_id": str(account.get("id", "")),
+        "email": normalize_email(str(account.get("email", "") or "")),
+        "created_at": now.isoformat().replace("+00:00", "Z"),
+        "expires_at": (now + timedelta(minutes=45)).isoformat().replace("+00:00", "Z"),
+        "used_at": "",
+    }
+    return token
+
+
+def valid_password_reset_record(token: str) -> tuple[str, dict[str, object]] | None:
+    token_hash = hash_password_reset_token(token)
+    record = password_reset_tokens.get(token_hash)
+    if not record or record.get("used_at"):
+        return None
+
+    expires_at = parse_utc_iso(record.get("expires_at"))
+    if not expires_at or expires_at < datetime.now(timezone.utc):
+        return None
+
+    normalized_username = normalize_username(str(record.get("normalized_username", "") or ""))
+    account = user_accounts.get(normalized_username)
+    if not account or str(account.get("id", "")) != str(record.get("account_id", "")):
+        return None
+
+    return token_hash, record
+
+
+def mark_password_reset_token_used(token_hash: str) -> None:
+    if token_hash in password_reset_tokens:
+        password_reset_tokens[token_hash]["used_at"] = _utc_now_iso()
 
 
 def normalize_landing_page_target(raw_target: object) -> str:
@@ -646,6 +731,51 @@ def send_rsvp_update_emails(update: RSVPUpdate) -> tuple[int, int]:
     return sent_count, failed_count
 
 
+def send_password_reset_email(account: dict[str, object], token: str) -> bool:
+    recipient = normalize_email(str(account.get("email", "") or ""))
+    if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
+        return False
+
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        app.logger.warning("Password reset email requested, but boto3 is not installed.")
+        return False
+
+    reset_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("password_reset_confirm", token=token)
+    subject = "Reset your Halloween Party password"
+    text_body = (
+        f"Hi {account.get('username', 'there')},\n\n"
+        "Use this link to reset your Halloween Party password. It expires in 45 minutes:\n\n"
+        f"{reset_url}\n\n"
+        "If you did not request this, you can ignore this email."
+    )
+    html_body = render_template(
+        "email/password_reset.html",
+        account=account,
+        reset_url=reset_url,
+    )
+
+    try:
+        ses_client.send_email(
+            FromEmailAddress=app.config["EMAIL_FROM"],
+            Destination={"ToAddresses": [recipient]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {
+                        "Text": {"Data": text_body, "Charset": "UTF-8"},
+                        "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    },
+                }
+            },
+        )
+        return True
+    except Exception as exc:
+        app.logger.warning("Unable to send password reset email to %s: %s", recipient, exc)
+        return False
+
+
 def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
     return {
         "id": signup.id,
@@ -781,6 +911,7 @@ def snapshot_state() -> dict[str, object]:
     ensure_signup_ids()
     ensure_submitted_vote_tracking()
     rebuild_legacy_vote_rows_from_ballots()
+    cleanup_password_reset_tokens()
 
     return {
         "schema_version": STATE_SCHEMA_VERSION,
@@ -792,6 +923,7 @@ def snapshot_state() -> dict[str, object]:
         ],
         "costume_ballots": copy.deepcopy(costume_ballots),
         "user_accounts": copy.deepcopy(user_accounts),
+        "password_reset_tokens": copy.deepcopy(password_reset_tokens),
         "registered_users": copy.deepcopy(registered_users),
         "rsvp_signups": [
             rsvp_signup_to_dict(signup) for signup in rsvp_signups
@@ -816,6 +948,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
     global landing_page_target, party_code_hash, party_code_hint, party_details, display_update_version
+    global password_reset_tokens
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -878,6 +1011,26 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                 }
     else:
         user_accounts = {}
+
+    raw_password_reset_tokens = data.get("password_reset_tokens", {})
+    password_reset_tokens = {}
+    if isinstance(raw_password_reset_tokens, dict):
+        for token_hash, raw_record in raw_password_reset_tokens.items():
+            if not isinstance(raw_record, dict):
+                continue
+            normalized_username = normalize_username(str(raw_record.get("normalized_username", "") or ""))
+            expires_at = str(raw_record.get("expires_at", "") or "")
+            if not re.fullmatch(r"[0-9a-f]{64}", str(token_hash)) or not normalized_username or not expires_at:
+                continue
+            password_reset_tokens[str(token_hash)] = {
+                "normalized_username": normalized_username,
+                "account_id": str(raw_record.get("account_id", "") or ""),
+                "email": normalize_email(str(raw_record.get("email", "") or "")),
+                "created_at": str(raw_record.get("created_at", "") or ""),
+                "expires_at": expires_at,
+                "used_at": str(raw_record.get("used_at", "") or ""),
+            }
+    cleanup_password_reset_tokens()
 
     raw_submitted_votes = data.get("submitted_costume_votes", [])
     if isinstance(raw_submitted_votes, list):
@@ -1931,6 +2084,107 @@ def party_login():
         "halloween_login.html",
         errors=errors,
         next_page=next_page,
+        show_admin_link=False,
+    )
+
+
+@app.route("/party/password-reset", methods=["GET", "POST"])
+def password_reset_request():
+    messages: List[str] = []
+    errors: List[str] = []
+    next_page = normalize_next_page(
+        request.args.get("next") or request.form.get("next"),
+        url_for("party_login"),
+    )
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        normalized_email = normalize_email(email)
+        if not email:
+            errors.append("Email is required.")
+        elif len(email) > 120 or not normalized_email:
+            errors.append("Enter a valid email address.")
+
+        if not errors:
+            account_match = find_user_account_by_email(normalized_email)
+            if account_match:
+                normalized_username, account = account_match
+                token = create_password_reset_token(normalized_username, account)
+                sent = send_password_reset_email(account, token)
+                if not sent:
+                    app.logger.warning("Password reset email was not sent for %s.", normalized_email)
+            messages.append("If that email is registered, we sent a password reset link.")
+            persist_state_if_available()
+
+    return render_template(
+        "password_reset_request.html",
+        errors=errors,
+        messages=messages,
+        next_page=next_page,
+        show_admin_link=False,
+    )
+
+
+@app.route("/party/password-reset/<token>", methods=["GET", "POST"])
+def password_reset_confirm(token: str):
+    errors: List[str] = []
+    messages: List[str] = []
+    token_record = valid_password_reset_record(token)
+
+    if token_record is None:
+        errors.append("That password reset link is invalid or expired.")
+        return render_template(
+            "password_reset_form.html",
+            errors=errors,
+            messages=messages,
+            token=token,
+            token_valid=False,
+            show_admin_link=False,
+        )
+
+    token_hash, record = token_record
+    account = user_accounts.get(str(record["normalized_username"]))
+    if account is None:
+        errors.append("That password reset link is invalid or expired.")
+        return render_template(
+            "password_reset_form.html",
+            errors=errors,
+            messages=messages,
+            token=token,
+            token_valid=False,
+            show_admin_link=False,
+        )
+
+    if request.method == "POST":
+        new_password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        if len(new_password) < 8:
+            errors.append("Password must be at least 8 characters.")
+        elif new_password != confirm_password:
+            errors.append("Passwords do not match.")
+
+        if not errors:
+            account["password_hash"] = generate_password_hash(new_password)
+            mark_password_reset_token_used(token_hash)
+            persist_state_if_available()
+            messages.append("Password updated. You can sign in with your new password.")
+            return render_template(
+                "password_reset_form.html",
+                errors=errors,
+                messages=messages,
+                token=token,
+                token_valid=False,
+                reset_complete=True,
+                show_admin_link=False,
+            )
+
+    return render_template(
+        "password_reset_form.html",
+        errors=errors,
+        messages=messages,
+        token=token,
+        token_valid=True,
+        reset_complete=False,
         show_admin_link=False,
     )
 

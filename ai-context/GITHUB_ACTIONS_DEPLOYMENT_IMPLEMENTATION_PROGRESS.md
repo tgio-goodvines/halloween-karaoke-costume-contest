@@ -206,6 +206,10 @@ Current deployed app behavior:
   through SES from `no-reply@tnq-halloween.com` to deduplicated RSVP and
   registered-user recipients; failures are reported to admin without blocking
   the update.
+- Party account password recovery is available at `/party/password-reset`.
+  Reset emails use the same Halloween SES sender, store only SHA-256 token
+  hashes in Redis-backed state, expire after 45 minutes, are single-use, and
+  return generic request messaging to avoid account enumeration.
 
 ## Vault Admin Password Rotation
 

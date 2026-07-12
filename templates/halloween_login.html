@@ -30,6 +30,7 @@
 
   <p class="form-helper">
     New here? <a href="{{ url_for('party_register', next=next_page) }}">Create an account</a>.
+    Forgot your password? <a href="{{ url_for('password_reset_request', next=next_page) }}">Reset it by email</a>.
   </p>
 </section>
 {% endblock %}

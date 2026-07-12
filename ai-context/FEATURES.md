@@ -20,6 +20,9 @@
   email address and acknowledgment that registered users receive RSVP-page host
   update emails.
 - Password-backed attendee account sign-in at `/party/login`.
+- Email-based password reset at `/party/password-reset` sends a one-time
+  45-minute reset link without revealing whether the submitted email is
+  registered.
 - A single logout action inside the shared header menu clears the current
   browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.

@@ -1363,10 +1363,11 @@ class RedisStateTests(unittest.TestCase):
 
     def test_rsvp_update_message_allows_longer_host_updates(self):
         self.save_current_state()
-        long_message = "Bring your costume. " * 40
+        long_message = "Bring your costume. " * 120
 
         with main.app.test_client() as client:
             self.login_admin(client)
+            form_response = client.get("/admin")
             response = client.post(
                 "/admin",
                 data={
@@ -1377,6 +1378,7 @@ class RedisStateTests(unittest.TestCase):
             )
 
         state = self.redis_state()
+        self.assertIn('id="rsvp_update_message" name="message" maxlength="5000"', form_response.get_data(as_text=True))
         self.assertEqual(200, response.status_code)
         self.assertEqual(long_message.strip(), state["rsvp_updates"][0]["message"])
 

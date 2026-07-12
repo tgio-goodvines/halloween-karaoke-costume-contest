@@ -310,6 +310,7 @@ DEFAULT_BARTENDER_TIP_SETTINGS: dict[str, object] = {
 }
 DEFAULT_RSVP_NOTIFICATION_EMAIL = app.config["RSVP_NOTIFICATION_EMAIL"]
 RSVP_NOTE_MAX_LENGTH = 5000
+RSVP_UPDATE_MESSAGE_MAX_LENGTH = 5000
 
 DEFAULT_EVENT_EXPERIENCE_MODE = "auto"
 EVENT_EXPERIENCE_MODES: dict[str, dict[str, str]] = {
@@ -3810,8 +3811,8 @@ def admin_portal():
                 errors.append("RSVP update title must be 100 characters or fewer.")
             if not message:
                 errors.append("RSVP update message is required.")
-            elif len(message) > 2000:
-                errors.append("RSVP update message must be 2000 characters or fewer.")
+            elif len(message) > RSVP_UPDATE_MESSAGE_MAX_LENGTH:
+                errors.append(f"RSVP update message must be {RSVP_UPDATE_MESSAGE_MAX_LENGTH} characters or fewer.")
             if not errors:
                 posted_update = RSVPUpdate(
                     id=uuid4().hex,
@@ -4422,6 +4423,7 @@ def admin_portal():
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
         rsvp_note_max_length=RSVP_NOTE_MAX_LENGTH,
+        rsvp_update_message_max_length=RSVP_UPDATE_MESSAGE_MAX_LENGTH,
         rsvp_updates=sorted_rsvp_updates(),
         update_email_recipients=available_update_email_recipients(),
         email_updates_enabled=app.config["EMAIL_UPDATES_ENABLED"],

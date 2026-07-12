@@ -264,7 +264,7 @@
       <label for="rsvp_update_title">Title</label>
       <input type="text" id="rsvp_update_title" name="title" maxlength="100" required>
       <label for="rsvp_update_message">Message</label>
-      <textarea id="rsvp_update_message" name="message" maxlength="2000" required></textarea>
+      <textarea id="rsvp_update_message" name="message" maxlength="{{ rsvp_update_message_max_length }}" required></textarea>
       <fieldset class="admin-entry__fields">
         <legend>Email recipients</legend>
         {% if email_updates_enabled and update_email_recipients %}

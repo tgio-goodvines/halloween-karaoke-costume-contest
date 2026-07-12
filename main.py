@@ -52,6 +52,8 @@ app.config["PARTY_OVERVIEW"] = os.environ.get(
     "HALLOWEEN_PARTY_OVERVIEW",
     "The third annual Halloween party: costumes encouraged, karaoke expected, dramatic entrances welcomed.",
 )
+app.config["DISPLAY_WIFI_NETWORK"] = os.environ.get("HALLOWEEN_DISPLAY_WIFI_NETWORK", "Halloween Party WiFi")
+app.config["DISPLAY_WIFI_PASSWORD"] = os.environ.get("HALLOWEEN_DISPLAY_WIFI_PASSWORD", "halloween")
 app.config["EMAIL_UPDATES_ENABLED"] = os.environ.get("HALLOWEEN_EMAIL_UPDATES_ENABLED", "").strip().lower() in {
     "1",
     "true",
@@ -279,6 +281,10 @@ DEFAULT_PARTY_DETAILS: dict[str, str] = {
     "map_address": app.config["PARTY_LOCATION_LABEL"],
     "overview": app.config["PARTY_OVERVIEW"],
 }
+DEFAULT_DISPLAY_SETTINGS: dict[str, str] = {
+    "wifi_network": app.config["DISPLAY_WIFI_NETWORK"],
+    "wifi_password": app.config["DISPLAY_WIFI_PASSWORD"],
+}
 DEFAULT_RSVP_NOTIFICATION_EMAIL = app.config["RSVP_NOTIFICATION_EMAIL"]
 
 DEFAULT_LANDING_PAGE_TARGET = "rsvp"
@@ -338,6 +344,7 @@ display_update_version = 0
 contest_state: dict[str, object] = copy.deepcopy(DEFAULT_CONTEST_STATE)
 karaoke_state: dict[str, object] = copy.deepcopy(DEFAULT_KARAOKE_STATE)
 party_details: dict[str, str] = copy.deepcopy(DEFAULT_PARTY_DETAILS)
+display_settings: dict[str, str] = copy.deepcopy(DEFAULT_DISPLAY_SETTINGS)
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -1511,6 +1518,7 @@ def snapshot_state() -> dict[str, object]:
         "contest_state": copy.deepcopy(contest_state),
         "karaoke_state": copy.deepcopy(karaoke_state),
         "party_details": copy.deepcopy(party_details),
+        "display_settings": copy.deepcopy(display_settings),
         "live_display_override": copy.deepcopy(live_display_override),
         "landing_page_target": normalize_landing_page_target(landing_page_target),
         "party_code_hash": party_code_hash,
@@ -1524,7 +1532,7 @@ def snapshot_state() -> dict[str, object]:
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
-    global landing_page_target, party_code_hash, party_code_hint, party_details, display_update_version
+    global landing_page_target, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
     global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email
 
     raw_costume_signups = data.get("costume_signups", [])
@@ -1677,6 +1685,12 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     if isinstance(raw_party_details, dict):
         for key in DEFAULT_PARTY_DETAILS:
             party_details[key] = str(raw_party_details.get(key, party_details[key]) or "").strip()
+
+    raw_display_settings = data.get("display_settings", {})
+    display_settings = copy.deepcopy(DEFAULT_DISPLAY_SETTINGS)
+    if isinstance(raw_display_settings, dict):
+        for key in DEFAULT_DISPLAY_SETTINGS:
+            display_settings[key] = str(raw_display_settings.get(key, display_settings[key]) or "").strip()
 
     raw_override = data.get("live_display_override")
     live_display_override = copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
@@ -2255,8 +2269,6 @@ def costume_voting_is_visible() -> bool:
 
 
 PARTY_PORTAL_URL = "https://tnq-halloween.com/party"
-WIFI_NETWORK_LABEL = "Halloween Party WiFi"
-WIFI_PASSWORD_LABEL = "halloween"
 
 
 PARTY_DAY_DASHBOARD_SLIDES = [
@@ -2278,7 +2290,7 @@ PARTY_DAY_DASHBOARD_SLIDES = [
     },
     {
         "title": "WiFi and Access",
-        "content": f"Connect to {WIFI_NETWORK_LABEL}, then open {PARTY_PORTAL_URL} to sign in or create your account.",
+        "content": f"Connect to the party WiFi, then open {PARTY_PORTAL_URL} to sign in or create your account.",
     },
 ]
 
@@ -2331,6 +2343,8 @@ def build_pre_party_dashboard_slides() -> list[dict[str, str]]:
 
 def build_rotation_entries() -> List[dict[str, object]]:
     ensure_costume_votes_alignment()
+    wifi_network = display_settings.get("wifi_network", DEFAULT_DISPLAY_SETTINGS["wifi_network"])
+    wifi_password = display_settings.get("wifi_password", DEFAULT_DISPLAY_SETTINGS["wifi_password"])
 
     rotation_entries: List[dict[str, object]] = [
         {
@@ -2342,8 +2356,8 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "link_label": "Open the signup portal",
             "cta_details": {
                 "lede": "Get your phone connected.",
-                "wifi_network": WIFI_NETWORK_LABEL,
-                "wifi_password": WIFI_PASSWORD_LABEL,
+                "wifi_network": wifi_network,
+                "wifi_password": wifi_password,
                 "portal_url": PARTY_PORTAL_URL,
                 "portal_label": PARTY_PORTAL_URL,
                 "portal_note": "Use your existing account or create one at the party.",
@@ -3053,7 +3067,7 @@ def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
     global live_display_override, submitted_costume_votes, costume_ballots, karaoke_state
-    global landing_page_target, party_code_hash, party_code_hint, party_details, rsvp_notification_email
+    global landing_page_target, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
 
     ensure_costume_votes_alignment()
 
@@ -3296,6 +3310,20 @@ def admin_portal():
                     messages.append(f"RSVP notifications will be sent to {rsvp_notification_email}.")
                 else:
                     messages.append("RSVP host email notifications disabled.")
+
+        elif action == "update_display_wifi":
+            updated_display_settings = {
+                "wifi_network": request.form.get("display_wifi_network", "").strip(),
+                "wifi_password": request.form.get("display_wifi_password", "").strip(),
+            }
+            if len(updated_display_settings["wifi_network"]) > 120:
+                errors.append("WiFi network name must be 120 characters or fewer.")
+            if len(updated_display_settings["wifi_password"]) > 120:
+                errors.append("WiFi password must be 120 characters or fewer.")
+            if not errors:
+                display_settings = updated_display_settings
+                messages.append("Live display WiFi settings updated.")
+                should_broadcast = True
 
         elif action == "update_party_details":
             updated_details = {
@@ -3922,6 +3950,7 @@ def admin_portal():
         party_code_configured=party_code_is_configured(),
         party_code_hint=party_code_hint,
         rsvp_notification_email=rsvp_notification_email,
+        display_settings=display_settings,
         party_details=party_details,
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),

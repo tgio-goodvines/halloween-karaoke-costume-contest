@@ -135,17 +135,20 @@ That function increments `display_update_version` and notifies `display_update_c
 - `tertiary`: optional footnote/detail text.
 - `cta`: boolean for signup-instruction layout.
 - `link` and `link_label`: optional external link.
-- `cta_details`: WiFi and signup portal details.
+- `cta_details`: admin-configurable WiFi and signup portal details.
 - `scoreboard`: structured top-score rows.
 
 The base rotation always starts with WiFi/app sign-in instructions, costume and
 karaoke signup prompts, drink-order promotion, and live-update explanation
-cards. Winner and scoreboard cards are appended when the relevant contest state
-is active. Costume and karaoke entries are then interleaved. Admin stop/reset
-actions clear matching live-display start overrides without deleting signup
-lineups. `build_rotation_entries()` intentionally returns party-night cards
-even before `HALLOWEEN_PARTY_START` so hosts can stage and test the live display
-ahead of the event.
+cards. The WiFi network/password values come from Redis-backed
+`display_settings`, defaulting to `HALLOWEEN_DISPLAY_WIFI_NETWORK` and
+`HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank values are allowed so the live display
+can omit either row. Winner and scoreboard cards are appended when the relevant
+contest state is active. Costume and karaoke entries are then interleaved. Admin
+stop/reset actions clear matching live-display start overrides without deleting
+signup lineups. `build_rotation_entries()` intentionally returns party-night
+cards even before `HALLOWEEN_PARTY_START` so hosts can stage and test the live
+display ahead of the event.
 
 The attendee portal has a related but separate date gate: `party_day_has_arrived()`
 compares the local date of `HALLOWEEN_PARTY_START` to the current date. Before
@@ -201,7 +204,8 @@ to have started/open voting with no locked winner.
   newest-to-oldest update cards, and optional portal account links.
 - `admin.html`: all admin actions, public landing settings, explicit party-code
   management with active/not-set status and hint editing, host RSVP
-  notification email configuration, RSVP list CRUD, party detail/map address editing, selective RSVP update
+  notification email configuration, live-display WiFi settings, RSVP list CRUD,
+  party detail/map address editing, selective RSVP update
   posting/resending/removal, and live
   contest/karaoke state, menu management, user account CRUD/password reset/bartender role assignment, and bar
   operations summary; add/edit entry forms are disclosure rows to keep mobile

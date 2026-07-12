@@ -166,6 +166,7 @@ class RedisStateTests(unittest.TestCase):
         main.party_code_hash = main.generate_password_hash("invite-code")
         main.party_code_hint = ""
         main.rsvp_notification_email = main.DEFAULT_RSVP_NOTIFICATION_EMAIL
+        main.display_settings = main.copy.deepcopy(main.DEFAULT_DISPLAY_SETTINGS)
         main.display_update_version = 0
         main.contest_state.clear()
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
@@ -301,6 +302,10 @@ class RedisStateTests(unittest.TestCase):
             "map_address": "123 Pumpkin Lane, Denver, CO",
             "overview": "Bring a costume.",
         }
+        main.display_settings = {
+            "wifi_network": "Upside Down LAN",
+            "wifi_password": "friends-dont-lie",
+        }
         main.display_update_version = 7
 
         snapshot = main.snapshot_state()
@@ -345,6 +350,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("The haunted house", main.party_details["location"])
         self.assertEqual("123 Pumpkin Lane, Denver, CO", main.party_details["map_address"])
         self.assertEqual("Bring a costume.", main.party_details["overview"])
+        self.assertEqual("Upside Down LAN", main.display_settings["wifi_network"])
+        self.assertEqual("friends-dont-lie", main.display_settings["wifi_password"])
         self.assertEqual(7, main.display_update_version)
 
     def test_load_state_from_redis_initializes_missing_state_and_hydrates_existing_state(self):
@@ -1131,6 +1138,31 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("", state["rsvp_notification_email"])
         main.load_state_from_redis()
         self.assertEqual("", main.rsvp_notification_email)
+
+    def test_admin_can_update_live_display_wifi_details(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_display_wifi",
+                    "display_wifi_network": "Upside Down LAN",
+                    "display_wifi_password": "friends-dont-lie",
+                },
+            )
+            display_response = client.get("/api/display-data")
+
+        state = self.redis_state()
+        display_payload = display_response.get_json()
+        first_entry = display_payload["entries"][0]
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Live display WiFi settings updated.", response.get_data(as_text=True))
+        self.assertEqual("Upside Down LAN", state["display_settings"]["wifi_network"])
+        self.assertEqual("friends-dont-lie", state["display_settings"]["wifi_password"])
+        self.assertEqual("Upside Down LAN", first_entry["cta_details"]["wifi_network"])
+        self.assertEqual("friends-dont-lie", first_entry["cta_details"]["wifi_password"])
 
     def test_admin_page_shows_rsvp_list(self):
         main.rsvp_signups = [

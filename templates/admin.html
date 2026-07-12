@@ -94,6 +94,31 @@
           Save Notification Email
         </button>
       </form>
+
+      <form method="post" class="access-settings__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h4>Live Display WiFi</h4>
+        <label for="display_wifi_network">WiFi network</label>
+        <input
+          type="text"
+          id="display_wifi_network"
+          name="display_wifi_network"
+          maxlength="120"
+          value="{{ display_settings.wifi_network }}"
+          placeholder="Network name">
+        <label for="display_wifi_password">WiFi password</label>
+        <input
+          type="text"
+          id="display_wifi_password"
+          name="display_wifi_password"
+          maxlength="120"
+          value="{{ display_settings.wifi_password }}"
+          placeholder="Password shown on the live display">
+        <p class="form-helper">These values appear on the live display signup portal card. Leave either field blank to hide that row.</p>
+        <button type="submit" name="action" value="update_display_wifi" class="button button--primary">
+          Save WiFi Details
+        </button>
+      </form>
     </div>
   </section>
 

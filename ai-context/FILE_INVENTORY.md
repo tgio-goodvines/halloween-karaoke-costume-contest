@@ -4,7 +4,7 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP party-code validation, RSVP confirmation/update emails, RSVP calendar `.ics` generation, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, bartender roles/order queue, editable party details/map address, role-based session auth, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP party-code validation, RSVP confirmation/update emails, RSVP calendar `.ics` generation, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, bartender roles/order queue, editable party details/map address, live-display WiFi settings, role-based session auth, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
 | `requirements.txt` | Python dependency declaration; includes Flask 3.x, redis-py for Redis state, boto3 for SES email, and gunicorn for production. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
@@ -12,7 +12,7 @@
 | `deploy/halloween-party.service` | systemd unit for running the Halloween Flask app through gunicorn on `127.0.0.1:8081`. |
 | `deploy/nginx-halloween.conf` | nginx host-routing config for `tnq-halloween.com` and `www.tnq-halloween.com`, including SSE-friendly proxy settings. |
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
-| `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, and Halloween email update settings. |
+| `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, live-display WiFi defaults, and Halloween email update settings. |
 | `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, food/drink ordering, bartender roles/order status transitions, display update publishing, and JSON exports using an in-memory Redis fake. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, header menu, single logout action, menu cards, order cards, and bartender queue. |
 | `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, override cards, drink-ready images, CTA layout, scoreboard layout, and karaoke display panels. |
@@ -37,7 +37,7 @@
 | `templates/karaoke_signup.html` | Karaoke signup form and submitted karaoke lineup. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
-| `templates/admin.html` | Admin dashboard for public landing and party-code controls, RSVP list, party detail/map address editing, RSVP update posting/removal, food/drink menu CRUD with images/recipes, bartender role assignment, entry CRUD/reordering, contest controls, vote tally, winner state, and karaoke launch. |
+| `templates/admin.html` | Admin dashboard for public landing, party-code controls, live-display WiFi settings, RSVP list, party detail/map address editing, RSVP update posting/removal, food/drink menu CRUD with images/recipes, bartender role assignment, entry CRUD/reordering, contest controls, vote tally, winner state, and karaoke launch. |
 | `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including override image markup for drink-ready cards. |
 
 ## Untracked Local Files Present During Review

@@ -110,8 +110,8 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 9. Bartenders assigned from existing user accounts can manage drink orders at
    `/bartender`; admins can access the same view.
 10. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
-    explicit party-code replacement/status/hint controls, and event state at
-    `/admin`.
+    explicit party-code replacement/status/hint controls, live-display WiFi
+    details, and event state at `/admin`.
 11. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
 12. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
 13. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
@@ -147,6 +147,10 @@ the process-local cache:
   Event Highlights.
 - `party_details`: admin-editable static RSVP cards for date, time, location,
   map address, and overview.
+- `display_settings`: admin-editable live-display settings, currently WiFi
+  network and password for the signup portal card. Defaults come from
+  `HALLOWEEN_DISPLAY_WIFI_NETWORK` and `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank
+  values are allowed so the display can hide either row.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
 - `live_display_override`: current full-screen override card, or `None`.
 - `landing_page_target`: admin-selected root redirect target, defaulting to
@@ -166,9 +170,9 @@ events create a temporary live-display override with the drink image.
 
 `HALLOWEEN_PARTY_START` controls attendee route availability and the dashboard
 mode, but not the live display rotation. The live display is intentionally
-party-night oriented before and during the event, rotating WiFi/app access,
-costume, karaoke, drink-order, and live signup/update cards so it can be tested
-and staged before guests arrive.
+party-night oriented before and during the event, rotating admin-configurable
+WiFi/app access, costume, karaoke, drink-order, and live signup/update cards so
+it can be tested and staged before guests arrive.
 
 The attendee dashboard uses the calendar date from `HALLOWEEN_PARTY_START`.
 Before that date, `/party` shows logistics-oriented Event Highlights and blocks

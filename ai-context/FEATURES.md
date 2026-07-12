@@ -106,6 +106,9 @@
 - Admin can manage the host RSVP notification email from the Public Access
   panel; it defaults to `tgio1129@gmail.com`, and a blank value disables host
   RSVP notifications.
+- Admin can manage the live-display WiFi network and password from the Public
+  Access panel. Blank values are allowed and are hidden from the signup portal
+  card.
 - Admin can add, edit, and delete RSVP entries, and see the total guest count.
 - Admin can edit the static party detail cards and map address shown on the RSVP
   page.
@@ -166,7 +169,8 @@ app state.
 - Rotates through WiFi/app sign-in instructions, costume signup prompts, karaoke
   signup prompts, drink-order promotion, live-update explanation cards,
   winner/scoreboard cards, costume entries, and karaoke entries.
-- Signup portal card includes WiFi network, WiFi password, and portal link.
+- Signup portal card includes admin-configurable WiFi network/password details
+  and the party portal link.
 - Display entries rotate every 8 seconds with fade/slide transitions.
 - Display data refreshes every 30 seconds via `/api/display-data`.
 - Display also updates immediately through server-sent events from `/api/display-updates`.

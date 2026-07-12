@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&family=Figtree:wght@300;400;500;600;700&display=swap");
 
 body.display-mode {
   --primary: #ff3131;
@@ -1178,4 +1178,349 @@ body.display-mode {
 
 .display-override__image {
   border-color: rgba(255, 230, 230, 0.86);
+}
+
+/*
+  Attached wireframe display refinement.
+  Keeps the TV-first scale while matching the refined app surfaces: backlit top
+  borders, deeper ambient glow, compact classification labels, and square panels.
+*/
+
+body.display-mode {
+  --display-panel-top: linear-gradient(180deg, rgba(255, 49, 49, 0.16), transparent 8rem);
+  --display-card-glow: inset 0 1px 0 rgba(255, 255, 255, 0.035), inset 0 0 34px rgba(255, 49, 49, 0.06), 0 12px 44px rgba(0, 0, 0, 0.38), 0 0 36px rgba(255, 49, 49, 0.18);
+  background:
+    radial-gradient(ellipse at 50% -8%, rgba(255, 49, 49, 0.2), rgba(255, 49, 49, 0.045) 38%, transparent 66%),
+    radial-gradient(ellipse at 82% 96%, rgba(177, 109, 150, 0.1), transparent 42%),
+    linear-gradient(180deg, #161516, #0d0d0d);
+}
+
+.display-header h1 {
+  color: #f4f4f5;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 12px rgba(255, 49, 49, 0.8), 0 0 34px rgba(255, 49, 49, 0.52), 0 0 70px rgba(255, 49, 49, 0.25);
+}
+
+.display-header h1::first-letter {
+  color: var(--primary);
+}
+
+.display-count,
+.display-card,
+.instruction-card,
+.karaoke-card__panel,
+.display-override__card,
+.display-notice__card {
+  border-radius: 0;
+  border-color: rgba(255, 49, 49, 0.42);
+  border-top-color: rgba(255, 49, 49, 0.72);
+  background:
+    var(--display-panel-top),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.02) 3px, rgba(255, 49, 49, 0.02) 4px),
+    linear-gradient(180deg, rgba(26, 24, 26, 0.94), rgba(13, 12, 13, 0.98));
+  box-shadow: var(--display-card-glow);
+}
+
+.display-card.active {
+  box-shadow: var(--display-card-glow), 0 -2px 32px rgba(255, 49, 49, 0.12);
+}
+
+.display-card.cta,
+.display-card--costume,
+.display-card--winner,
+.display-card--inferno,
+.display-override .display-override__card--inferno,
+.display-override .display-override__card--contest,
+.display-override .display-override__card--winner,
+.display-override .display-override__card--drink,
+.display-override .display-override__card--karaoke {
+  border-top-color: rgba(255, 49, 49, 0.95);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 42px rgba(255, 49, 49, 0.08), 0 0 48px rgba(255, 49, 49, 0.34);
+}
+
+.display-category,
+.instruction-card__badge,
+.karaoke-card__label {
+  min-height: 1.8rem;
+  align-items: center;
+  border-color: rgba(255, 49, 49, 0.58);
+  background: rgba(255, 49, 49, 0.14);
+  color: var(--primary);
+  text-shadow: 0 0 10px rgba(255, 49, 49, 0.45);
+}
+
+.display-primary,
+.display-override__title,
+.karaoke-card__title {
+  color: #f4f4f5;
+  text-shadow: 0 0 14px rgba(255, 49, 49, 0.58), 0 0 44px rgba(255, 49, 49, 0.22);
+}
+
+.display-secondary,
+.display-tertiary,
+.display-override__message,
+.display-override__details,
+.karaoke-card__subtitle,
+.karaoke-card__message,
+.karaoke-card__note {
+  color: rgba(246, 237, 240, 0.84);
+}
+
+.display-count__number {
+  color: #f4f4f5;
+  text-shadow: 0 0 16px rgba(255, 49, 49, 0.35);
+}
+
+.display-count__label {
+  color: rgba(235, 174, 182, 0.84);
+}
+
+.display-card--inferno,
+.display-override .display-override__card--inferno,
+.display-override .display-override__card--contest,
+.display-override .display-override__card--winner,
+.display-override .display-override__card--drink,
+.display-override .display-override__card--karaoke {
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.04) 3px, rgba(255, 255, 255, 0.04) 4px),
+    radial-gradient(circle at 18% 20%, rgba(255, 45, 85, 0.9), rgba(255, 49, 49, 0.82) 36%, rgba(82, 8, 28, 0.98) 100%);
+}
+
+.karaoke-card__panel {
+  background:
+    var(--display-panel-top),
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.02) 3px, rgba(255, 49, 49, 0.02) 4px),
+    linear-gradient(180deg, rgba(26, 24, 26, 0.94), rgba(13, 12, 13, 0.98));
+}
+
+.contest-top-card__item,
+.karaoke-card__list-item,
+.display-cta-list__item,
+.instruction-callout {
+  border-radius: 0;
+  border-color: rgba(255, 49, 49, 0.28);
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 49, 49, 0.018) 3px, rgba(255, 49, 49, 0.018) 4px),
+    rgba(13, 12, 13, 0.82);
+}
+
+@media (max-width: 720px), (max-height: 680px) {
+  .display-header h1 {
+    letter-spacing: 0.07em;
+  }
+
+  .display-count,
+  .display-card,
+  .instruction-card,
+  .display-override__card,
+  .display-notice__card {
+    box-shadow: inset 0 0 22px rgba(255, 49, 49, 0.055), 0 0 22px rgba(255, 49, 49, 0.16);
+  }
+}
+
+/*
+  Modern neon wireframe source-of-truth layer for the TV display.
+  Matches the attached rounded glass/backlit kit more closely than the earlier
+  square terminal treatment.
+*/
+
+body.display-mode {
+  --display-card-border: rgba(255, 255, 255, 0.075);
+  --display-card-glow: 0 -2px 30px rgba(255, 49, 49, 0.15), 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 49, 49, 0.08);
+  font-family: "Figtree", "IBM Plex Mono", system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(255, 49, 49, 0.13), rgba(255, 49, 49, 0.04) 40%, transparent 70%),
+    radial-gradient(ellipse at 30% 100%, rgba(255, 49, 49, 0.05), transparent 70%),
+    #0d0d0d;
+}
+
+body.display-mode::before {
+  opacity: 0.18;
+}
+
+body.display-mode::after {
+  display: none;
+}
+
+.display-header h1 {
+  font-family: "Outfit", "Figtree", system-ui, sans-serif;
+  color: #ff3131;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  text-shadow: 0 0 12px rgba(255, 49, 49, 0.72), 0 0 30px rgba(255, 49, 49, 0.4), 0 0 60px rgba(255, 49, 49, 0.18);
+}
+
+.display-header h1::first-letter {
+  color: inherit;
+}
+
+.display-count,
+.display-card,
+.instruction-card,
+.karaoke-card__panel,
+.display-override__card,
+.display-notice__card {
+  border-radius: 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-top-color: rgba(255, 49, 49, 0.35);
+  background:
+    linear-gradient(180deg, rgba(255, 49, 49, 0.1), transparent 120px),
+    rgba(26, 26, 26, 0.78);
+  box-shadow: 0 -2px 24px rgba(255, 49, 49, 0.1), 0 8px 40px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.display-card.active {
+  box-shadow: var(--display-card-glow);
+}
+
+.display-card.cta,
+.display-card--costume,
+.display-card--winner,
+.display-card--inferno,
+.display-override .display-override__card--inferno,
+.display-override .display-override__card--contest,
+.display-override .display-override__card--winner,
+.display-override .display-override__card--drink,
+.display-override .display-override__card--karaoke {
+  border-radius: 14px !important;
+  border-color: rgba(255, 49, 49, 0.22);
+  border-top-color: rgba(255, 49, 49, 0.55);
+  box-shadow: 0 -3px 35px rgba(255, 49, 49, 0.18), 0 12px 50px rgba(255, 49, 49, 0.06), 0 8px 40px rgba(0, 0, 0, 0.45);
+}
+
+.display-category,
+.instruction-card__badge,
+.karaoke-card__label {
+  min-height: 1.85rem;
+  border-radius: 999px;
+  border-color: rgba(255, 49, 49, 0.3);
+  background: rgba(255, 49, 49, 0.12);
+  color: #ff5555;
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-shadow: none;
+}
+
+.display-primary,
+.display-override__title,
+.karaoke-card__title {
+  font-family: "Outfit", "Figtree", system-ui, sans-serif;
+  color: #f4f4f5;
+  letter-spacing: 0;
+  text-shadow: 0 0 20px rgba(255, 49, 49, 0.24);
+}
+
+.display-secondary,
+.display-tertiary,
+.display-override__message,
+.display-override__details,
+.karaoke-card__subtitle,
+.karaoke-card__message,
+.karaoke-card__note {
+  color: #a1a1aa;
+}
+
+.display-count__number {
+  font-family: "Outfit", "Figtree", system-ui, sans-serif;
+  color: #f4f4f5;
+  letter-spacing: 0;
+  text-shadow: 0 0 20px rgba(255, 49, 49, 0.18);
+}
+
+.display-count__label {
+  color: #52525b;
+  font-family: "Outfit", "Figtree", sans-serif;
+  letter-spacing: 0.1em;
+}
+
+.display-card--inferno,
+.display-override .display-override__card--inferno,
+.display-override .display-override__card--contest,
+.display-override .display-override__card--winner,
+.display-override .display-override__card--drink,
+.display-override .display-override__card--karaoke {
+  background:
+    linear-gradient(180deg, rgba(255, 49, 49, 0.16), transparent 140px),
+    radial-gradient(circle at 18% 20%, rgba(255, 49, 49, 0.22), rgba(26, 26, 26, 0.88) 52%, rgba(13, 13, 13, 0.96) 100%);
+}
+
+.contest-top-card__item,
+.karaoke-card__list-item,
+.display-cta-list__item,
+.instruction-callout {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+@media (max-width: 720px), (max-height: 680px) {
+  .display-count,
+  .display-card,
+  .instruction-card,
+  .display-override__card,
+  .display-notice__card {
+    border-radius: 12px !important;
+  }
+}
+
+/*
+  Live display contrast correction for room readability.
+*/
+
+body.display-mode {
+  --display-card-border: rgba(255, 49, 49, 0.52);
+  --display-card-glow: 0 -3px 42px rgba(255, 49, 49, 0.28), 0 10px 50px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 49, 49, 0.16);
+}
+
+.display-count,
+.display-card,
+.instruction-card,
+.karaoke-card__panel,
+.display-override__card,
+.display-notice__card {
+  border-color: rgba(255, 49, 49, 0.52);
+  border-top-color: rgba(255, 49, 49, 0.88);
+  box-shadow: var(--display-card-glow);
+}
+
+.display-card.cta,
+.display-card--costume,
+.display-card--winner,
+.display-card--inferno,
+.display-override .display-override__card--inferno,
+.display-override .display-override__card--contest,
+.display-override .display-override__card--winner,
+.display-override .display-override__card--drink,
+.display-override .display-override__card--karaoke {
+  border-color: rgba(255, 49, 49, 0.7);
+  border-top-color: rgba(255, 49, 49, 1);
+  box-shadow: 0 -4px 52px rgba(255, 49, 49, 0.36), 0 12px 56px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 49, 49, 0.22);
+}
+
+.display-secondary,
+.display-tertiary,
+.display-override__message,
+.display-override__details,
+.karaoke-card__subtitle,
+.karaoke-card__message,
+.karaoke-card__note,
+.display-count__label,
+.display-cta-list__item,
+.instruction-callout,
+.karaoke-card__list-name,
+.karaoke-card__list-song {
+  color: #d4d4d8;
+}
+
+.display-category,
+.instruction-card__badge,
+.karaoke-card__label {
+  border-color: rgba(255, 49, 49, 0.66);
+  background: rgba(255, 49, 49, 0.18);
+  color: #ff8a8a;
+  box-shadow: 0 0 16px rgba(255, 49, 49, 0.2);
 }

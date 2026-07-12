@@ -9,6 +9,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/FILE_INVENTORY.md` - file-by-file purpose and ownership map.
 - `ai-context/ARCHITECTURE.md` - route map, data structures, frontend behavior, and extension guidance.
 - `ai-context/UI_UX_DESIGN_SYSTEM.md` - current lab-terminal visual design system, palette, typography, surfaces, and implementation notes.
+- `ai-context/STYLING_REFINEMENT_PROGRESS.md` - attached-wireframe refinement progress across pages, live display, and generated emails.
 - `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.

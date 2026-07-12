@@ -1,24 +1,5 @@
-<!doctype html>
-<html lang="en">
-  <body style="margin: 0; padding: 0; background: #161516; color: #f6edf0; font-family: 'Courier New', Courier, monospace;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: #161516; padding: 30px 12px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 620px; background: #1a181a; border: 1px solid #ff3131; border-radius: 0; box-shadow: 0 0 24px rgba(255,49,49,0.24);">
-            <tr>
-              <td style="padding: 28px; background-image: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255,49,49,0.035) 3px, rgba(255,49,49,0.035) 4px);">
-                <p style="display: inline-block; margin: 0 0 14px; padding: 4px 9px; border: 1px solid rgba(255,49,49,0.55); background: rgba(255,49,49,0.14); color: #ff3131; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;">{{ party_title }}</p>
-                <h1 style="margin: 0 0 18px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 29px; line-height: 1.2; letter-spacing: 0.04em; text-transform: uppercase; text-shadow: 0 0 14px rgba(255,49,49,0.55);">{{ update.title }}</h1>
-                <p style="margin: 0 0 24px; color: #f6edf0; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">{{ update.message }}</p>
-                <p style="margin: 0 0 24px;">
-                  <a href="{{ rsvp_url }}" style="display: inline-block; background: #ff3131; border: 2px solid #ff3131; color: #ffffff; padding: 13px 17px; border-radius: 0; font-weight: 700; letter-spacing: 0.08em; text-decoration: none; text-transform: uppercase;">View RSVP Details</a>
-                </p>
-                <p style="margin: 0; color: #b9a8b0; font-size: 13px; line-height: 1.5;">You are receiving this because you RSVP'd or created a party account for {{ party_title }}.</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
+{% from "email/_components.html" import shell, button %}
+{% call shell(party_title, update.title, "You are receiving this because you RSVP'd or created a party account for " ~ party_title ~ ".") %}
+  <p style="margin: 0 0 24px; color: #f6edf0; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">{{ update.message }}</p>
+  <p style="margin: 0;">{{ button(rsvp_url, "View RSVP Details") }}</p>
+{% endcall %}

@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&family=Figtree:wght@300;400;500;600;700&display=swap");
 
 :root {
   color-scheme: dark;
@@ -2521,4 +2521,958 @@ textarea:focus {
   .form-section {
     gap: 1rem;
   }
+}
+
+/*
+  Attached wireframe refinement.
+  This layer keeps the current square lab-terminal system, but borrows the
+  wireframe's clearer surface depth, backlit card tops, compact badges, and
+  denser mobile-safe operational UI.
+*/
+
+:root {
+  --void: #0d0d0d;
+  --surface-strong: #151315;
+  --surface-soft: #1f1d20;
+  --zinc-light: #f4f4f5;
+  --zinc-mid: #a1a1aa;
+  --zinc-dim: #52525b;
+  --panel-top-glow: linear-gradient(180deg, rgba(var(--lab-red-rgb), 0.16), transparent 7rem);
+  --halo-shadow: 0 0 12px rgba(var(--lab-red-rgb), 0.55), 0 0 34px rgba(var(--lab-red-rgb), 0.28), 0 0 70px rgba(var(--lab-red-rgb), 0.1);
+  --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 0 32px rgba(var(--lab-red-rgb), 0.055), 0 12px 40px rgba(0, 0, 0, 0.42), 0 0 28px rgba(var(--lab-red-rgb), 0.16);
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 50% -8%, rgba(var(--lab-red-rgb), 0.18), rgba(var(--lab-red-rgb), 0.045) 34%, transparent 64%),
+    radial-gradient(ellipse at 78% 100%, rgba(177, 109, 150, 0.1), transparent 40%),
+    linear-gradient(180deg, #161516 0%, #0d0d0d 100%);
+  color: var(--zinc-light);
+}
+
+body::before {
+  opacity: 0.82;
+}
+
+.container {
+  width: min(1160px, 92%);
+}
+
+main.container {
+  gap: clamp(1.15rem, 3vw, 2.35rem);
+}
+
+.site-header {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.site-header__inner {
+  min-height: 4rem;
+}
+
+.site-header__status {
+  padding: 0.28rem 0.5rem;
+  border: 1px solid rgba(var(--lab-red-rgb), 0.18);
+  background: rgba(var(--lab-red-rgb), 0.045);
+}
+
+.site-header h1 {
+  color: var(--primary);
+  text-shadow: 0 0 12px rgba(var(--lab-red-rgb), 0.82), 0 0 34px rgba(var(--lab-red-rgb), 0.52), 0 0 70px rgba(var(--lab-red-rgb), 0.25);
+}
+
+.site-nav nav {
+  padding: 0.55rem;
+  border-color: rgba(var(--lab-red-rgb), 0.34);
+  background:
+    var(--scanline),
+    linear-gradient(180deg, rgba(20, 18, 20, 0.98), rgba(9, 9, 9, 0.98));
+}
+
+.site-nav nav a,
+.site-nav__logout button {
+  color: var(--zinc-mid);
+  text-align: left;
+}
+
+.site-nav__user {
+  padding: 0.35rem 0.55rem 0.55rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+:is(
+    .signup-callout,
+    .contest-banner,
+    .slides,
+    .signup-summary > div,
+    .form-section,
+    .rsvp-landing,
+    .rsvp-card,
+    .submitted-list,
+    .voting-reminder,
+    .voting-card,
+    .success,
+    .success-message,
+    .errors,
+    .admin-panel,
+    .admin-section,
+    .admin-entry,
+    .menu-section,
+    .menu-card,
+    .order-card,
+    .bartender-card,
+    .karaoke-lineup,
+    .contest-chart,
+    .contest-chart__item,
+    .contest-winner-card,
+    .contest-top-card,
+    .flash,
+    .rsvp-details article,
+    .rsvp-update-card,
+    .rsvp-admin-item,
+    .access-settings__form,
+    .party-code-status,
+    .bartender-card__recipe
+  ) {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(var(--lab-red-rgb), 0.34);
+  border-top-color: rgba(var(--lab-red-rgb), 0.72);
+  background:
+    var(--panel-top-glow),
+    var(--scanline),
+    linear-gradient(180deg, rgba(26, 26, 26, 0.94), rgba(13, 13, 13, 0.98));
+  box-shadow: var(--panel-shadow);
+}
+
+:is(
+    .signup-callout,
+    .contest-banner,
+    .slides,
+    .signup-summary > div,
+    .form-section,
+    .rsvp-landing,
+    .rsvp-card,
+    .submitted-list,
+    .voting-card,
+    .admin-panel,
+    .admin-section,
+    .menu-section
+  ) {
+  padding: clamp(1.15rem, 3vw, 2rem);
+}
+
+:is(.menu-card, .order-card, .bartender-card, .admin-entry, .rsvp-update-card, .voting-card, .rsvp-details article):hover {
+  border-top-color: rgba(var(--lab-red-rgb), 0.86);
+  box-shadow: var(--panel-shadow), 0 -2px 24px rgba(var(--lab-red-rgb), 0.16);
+}
+
+h2,
+h3,
+h4,
+legend {
+  color: var(--zinc-light);
+}
+
+p,
+li,
+.contest-status,
+.form-helper,
+.rsvp-admin-item__meta,
+.rsvp-update-card__meta,
+.site-footer {
+  color: rgba(246, 237, 240, 0.8);
+}
+
+.form-helper,
+.contest-status,
+.rsvp-admin-item__meta,
+.rsvp-update-card__meta,
+.contest-banner__meta {
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.rsvp-landing {
+  gap: clamp(1rem, 2.8vw, 1.75rem);
+}
+
+.rsvp-landing__intro {
+  max-width: 54rem;
+}
+
+.rsvp-landing__intro h2 {
+  max-width: 11ch;
+  color: var(--primary);
+  font-size: clamp(2.25rem, 8vw, 5rem);
+  letter-spacing: 0;
+  line-height: 0.95;
+}
+
+.rsvp-details article,
+.rsvp-update-card {
+  padding: 1rem;
+  min-width: 0;
+}
+
+.rsvp-details h3 {
+  font-size: 1rem;
+}
+
+.rsvp-map iframe {
+  min-height: clamp(260px, 45vw, 420px);
+}
+
+.signup-callout {
+  text-align: left;
+}
+
+.signup-callout h2,
+.admin-panel__header h2 {
+  color: var(--primary);
+}
+
+.slides-wrapper {
+  min-height: clamp(210px, 26vw, 270px);
+}
+
+.slide h3 {
+  font-size: clamp(1.15rem, 2.5vw, 1.55rem);
+}
+
+.menu-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15.5rem), 1fr));
+}
+
+.menu-card__image-wrap {
+  position: relative;
+  border-bottom-color: rgba(var(--lab-red-rgb), 0.28);
+}
+
+.menu-card__image-wrap::after,
+.bartender-card__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(var(--lab-red-rgb), 0.07), transparent 45%, rgba(13, 13, 13, 0.22));
+}
+
+.menu-card__body,
+.order-card__body,
+.bartender-card__body {
+  min-width: 0;
+}
+
+.menu-card h4,
+.order-card h4,
+.bartender-card h4,
+.bartender-card h5 {
+  overflow-wrap: anywhere;
+}
+
+.menu-card__badges span,
+.rsvp-landing__eyebrow,
+.menu-card__eyebrow,
+.order-card__status,
+.rsvp-update-card__eyebrow {
+  min-height: 1.55rem;
+  align-items: center;
+  color: var(--primary);
+  text-shadow: 0 0 8px rgba(var(--lab-red-rgb), 0.42);
+}
+
+.order-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+}
+
+.order-card {
+  grid-template-columns: minmax(5.5rem, 7.5rem) minmax(0, 1fr);
+}
+
+.order-card:not(:has(.order-card__image)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bartender-card {
+  grid-template-columns: minmax(11rem, 17rem) minmax(0, 1fr);
+}
+
+.bartender-completed-card {
+  grid-template-columns: minmax(3.35rem, 4.35rem) minmax(0, 1fr);
+}
+
+.admin-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+
+.admin-section {
+  gap: 1.15rem;
+}
+
+.admin-entry__summary {
+  min-height: 3.25rem;
+}
+
+.admin-entry__rank {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  border-radius: 0;
+}
+
+.admin-entry__fields label,
+.signup-form label,
+.login-form label,
+.rsvp-card label,
+.access-settings__form label {
+  color: var(--zinc-mid);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+input,
+select,
+textarea,
+.signup-form input,
+.login-form input,
+.admin-entry__fields input,
+.admin-entry__fields select,
+.admin-entry__fields textarea,
+.access-settings__form input,
+.access-settings__form select,
+.access-settings__form textarea,
+.voting-card__label input,
+.rsvp-card input,
+.rsvp-card textarea {
+  border-color: rgba(var(--lab-red-rgb), 0.34);
+  background:
+    var(--scanline),
+    linear-gradient(180deg, rgba(12, 12, 12, 0.98), rgba(20, 18, 20, 0.96));
+}
+
+.form-check {
+  padding: 0.65rem;
+  border: 1px solid rgba(var(--lab-red-rgb), 0.22);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--primary);
+}
+
+.button,
+.contest-banner__button,
+.signup-form button,
+.login-form button {
+  position: relative;
+  overflow: hidden;
+}
+
+.button::before,
+.contest-banner__button::before,
+.signup-form button::before,
+.login-form button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 58%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.button:hover::before,
+.button:focus::before,
+.contest-banner__button:hover::before,
+.contest-banner__button:focus::before,
+.signup-form button:hover::before,
+.signup-form button:focus::before,
+.login-form button:hover::before,
+.login-form button:focus::before {
+  opacity: 1;
+}
+
+.button--primary,
+.signup-form button,
+.login-form button {
+  box-shadow: var(--halo-shadow);
+}
+
+.button:disabled,
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.success,
+.success-message,
+.flash--success {
+  border-color: rgba(34, 197, 94, 0.48);
+  background:
+    var(--scanline),
+    linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(13, 12, 13, 0.96));
+}
+
+.errors,
+.flash--error {
+  background:
+    var(--scanline),
+    linear-gradient(180deg, rgba(var(--lab-red-rgb), 0.13), rgba(13, 12, 13, 0.96));
+}
+
+.contest-banner--voting,
+.contest-banner--winner {
+  background:
+    radial-gradient(ellipse at 25% 0%, rgba(var(--lab-red-rgb), 0.24), transparent 54%),
+    var(--scanline),
+    linear-gradient(180deg, rgba(26, 24, 26, 0.96), rgba(13, 12, 13, 0.98));
+}
+
+.voting-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+.voting-card__label input {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--primary);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@supports not selector(:has(*)) {
+  .order-card {
+    grid-template-columns: minmax(5.5rem, 7.5rem) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 840px) {
+  .site-header__inner {
+    min-height: 3.5rem;
+  }
+
+  .site-nav nav {
+    right: 0;
+    width: min(86vw, 20rem);
+  }
+}
+
+@media (max-width: 600px) {
+  .container {
+    width: min(100% - 1rem, 1160px);
+  }
+
+  .site-header h1 {
+    max-width: calc(100vw - 7.75rem);
+  }
+
+  .site-nav__toggle,
+  .button,
+  .contest-banner__button,
+  .signup-form button,
+  .login-form button {
+    min-height: 46px;
+  }
+
+  .rsvp-landing__intro h2 {
+    max-width: 100%;
+    font-size: clamp(2rem, 13vw, 3.35rem);
+  }
+
+  .rsvp-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rsvp-card__actions,
+  .contest-actions,
+  .admin-entry__actions {
+    grid-template-columns: minmax(0, 1fr);
+    display: grid;
+  }
+
+  .order-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-card__image {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+  }
+
+  .bartender-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bartender-card__media {
+    min-height: 12rem;
+  }
+
+  th,
+  td {
+    padding: 0.55rem 0.35rem;
+    overflow-wrap: anywhere;
+  }
+}
+
+/*
+  Modern neon wireframe source-of-truth layer.
+  The latest reference uses a rounded, glassy dark product UI: Figtree body
+  text, Outfit display labels, soft white surfaces, neon-red halo actions, and
+  backlit card tops. These rules intentionally override the earlier square
+  terminal interpretation while keeping the existing Flask templates intact.
+*/
+
+:root {
+  --primary: #ff3131;
+  --primary-dark: #c42020;
+  --primary-light: #ff5555;
+  --bg: #0d0d0d;
+  --surface: rgba(26, 26, 26, 0.78);
+  --surface-raised: rgba(34, 34, 34, 0.88);
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --dusty-rose: #f4f4f5;
+  --card-border: rgba(255, 255, 255, 0.075);
+  --card-glow: 0 -2px 26px rgba(255, 49, 49, 0.12), 0 8px 40px rgba(0, 0, 0, 0.45);
+  --lab-panel-bg: linear-gradient(180deg, rgba(255, 49, 49, 0.075), transparent 90px), rgba(26, 26, 26, 0.78);
+}
+
+body {
+  font-family: "Figtree", "IBM Plex Mono", system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(255, 49, 49, 0.12), rgba(255, 49, 49, 0.035) 42%, transparent 70%),
+    radial-gradient(ellipse at 30% 100%, rgba(255, 49, 49, 0.045), transparent 68%),
+    #0d0d0d;
+  color: var(--text);
+}
+
+body::before {
+  opacity: 0.22;
+}
+
+body::after {
+  display: none;
+}
+
+.site-header {
+  background: rgba(10, 10, 10, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 0 rgba(255, 49, 49, 0.08), 0 4px 30px rgba(0, 0, 0, 0.5);
+}
+
+.site-header::after {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 49, 49, 0.5) 30%, rgba(255, 49, 49, 0.8) 50%, rgba(255, 49, 49, 0.5) 70%, transparent 100%);
+  box-shadow: 0 0 10px rgba(255, 49, 49, 0.4), 0 0 20px rgba(255, 49, 49, 0.15);
+}
+
+.site-header h1 {
+  font-family: "Outfit", "Figtree", system-ui, sans-serif;
+  color: #ff3131;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  text-shadow: 0 0 12px rgba(255, 49, 49, 0.72), 0 0 30px rgba(255, 49, 49, 0.4), 0 0 60px rgba(255, 49, 49, 0.18);
+  animation: none;
+}
+
+.site-header__status {
+  border-radius: 999px;
+  border-color: rgba(255, 49, 49, 0.22);
+  background: rgba(255, 49, 49, 0.08);
+  color: #ff5555;
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.site-nav__toggle,
+.site-nav nav,
+.site-nav nav a,
+.site-nav__logout button {
+  border-radius: 10px;
+  font-family: "Outfit", "Figtree", sans-serif;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.site-nav__toggle {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: #a1a1aa;
+}
+
+.site-nav nav {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(26, 26, 26, 0.96);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.48), 0 0 28px rgba(255, 49, 49, 0.12);
+}
+
+:is(
+    .signup-callout,
+    .contest-banner,
+    .slides,
+    .signup-summary > div,
+    .form-section,
+    .rsvp-landing,
+    .rsvp-card,
+    .submitted-list,
+    .voting-reminder,
+    .voting-card,
+    .success,
+    .success-message,
+    .errors,
+    .admin-panel,
+    .admin-section,
+    .admin-entry,
+    .menu-section,
+    .menu-card,
+    .order-card,
+    .bartender-card,
+    .karaoke-lineup,
+    .contest-chart,
+    .contest-chart__item,
+    .contest-winner-card,
+    .contest-top-card,
+    .flash,
+    .rsvp-details article,
+    .rsvp-update-card,
+    .rsvp-admin-item,
+    .access-settings__form,
+    .party-code-status,
+    .bartender-card__recipe
+  ) {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-top-color: rgba(255, 49, 49, 0.26);
+  background:
+    linear-gradient(180deg, rgba(255, 49, 49, 0.075), transparent 90px),
+    rgba(26, 26, 26, 0.78);
+  box-shadow: 0 -2px 24px rgba(255, 49, 49, 0.1), 0 8px 40px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+:is(.menu-card, .order-card, .bartender-card, .admin-entry, .rsvp-update-card, .voting-card, .rsvp-details article):hover {
+  border-top-color: rgba(255, 49, 49, 0.6);
+  box-shadow: 0 -2px 30px rgba(255, 49, 49, 0.15), 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 49, 49, 0.08);
+}
+
+h2,
+h3,
+h4,
+legend,
+.contest-banner__body h2,
+.signup-callout h2,
+.rsvp-landing__intro h2 {
+  font-family: "Outfit", "Figtree", system-ui, sans-serif;
+  color: #f4f4f5;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.rsvp-landing__intro h2,
+.signup-callout h2,
+.admin-panel__header h2 {
+  color: #f4f4f5;
+  text-shadow: 0 0 20px rgba(255, 49, 49, 0.22);
+}
+
+.rsvp-landing__eyebrow,
+.menu-card__eyebrow,
+.order-card__status,
+.rsvp-update-card__eyebrow,
+.menu-card__badges span {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 49, 49, 0.3);
+  background: rgba(255, 49, 49, 0.12);
+  color: #ff5555;
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-shadow: none;
+}
+
+input,
+select,
+textarea,
+.signup-form input,
+.login-form input,
+.admin-entry__fields input,
+.admin-entry__fields select,
+.admin-entry__fields textarea,
+.access-settings__form input,
+.access-settings__form select,
+.access-settings__form textarea,
+.voting-card__label input,
+.rsvp-card input,
+.rsvp-card textarea {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f4f5;
+  font-family: "Figtree", system-ui, sans-serif;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(255, 49, 49, 0.7);
+  box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.12), 0 0 15px rgba(255, 49, 49, 0.08);
+}
+
+.button,
+.contest-banner__button,
+.signup-form button,
+.login-form button {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 49, 49, 0.28);
+  background: rgba(255, 49, 49, 0.08);
+  color: #ff5555;
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  box-shadow: none;
+}
+
+.button--primary,
+.signup-form button,
+.login-form button {
+  border: none;
+  background: linear-gradient(135deg, #c42020 0%, #ff3131 60%, #ff5555 100%);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(255, 49, 49, 0.4), 0 0 20px rgba(255, 49, 49, 0.2), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.button--outline,
+.contest-banner__button {
+  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: #a1a1aa;
+}
+
+.button:hover,
+.button:focus,
+.contest-banner__button:hover,
+.contest-banner__button:focus,
+.signup-form button:hover,
+.signup-form button:focus,
+.login-form button:hover,
+.login-form button:focus {
+  background: rgba(255, 49, 49, 0.14);
+  border-color: rgba(255, 49, 49, 0.55);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(255, 49, 49, 0.45), 0 0 35px rgba(255, 49, 49, 0.18), 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.button--primary:hover,
+.button--primary:focus,
+.signup-form button:hover,
+.signup-form button:focus,
+.login-form button:hover,
+.login-form button:focus {
+  filter: brightness(1.08);
+  background: linear-gradient(135deg, #c42020 0%, #ff3131 50%, #ff5555 100%);
+}
+
+.admin-entry__rank,
+.instruction-card__badge {
+  border-radius: 10px;
+  background: rgba(255, 49, 49, 0.1);
+  border-color: rgba(255, 49, 49, 0.25);
+}
+
+.contest-chart__bar,
+.contest-chart__bar-fill,
+.progress-track,
+.progress-fill {
+  border-radius: 999px;
+}
+
+.site-footer {
+  background: rgba(13, 13, 13, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: #52525b;
+  font-family: "Outfit", "Figtree", sans-serif;
+  text-transform: none;
+}
+
+@media (max-width: 600px) {
+  :is(
+      .signup-callout,
+      .contest-banner,
+      .slides,
+      .signup-summary > div,
+      .form-section,
+      .menu-section,
+      .menu-card,
+      .order-card,
+      .bartender-card,
+      .rsvp-landing,
+      .rsvp-card,
+      .submitted-list,
+      .admin-panel,
+      .admin-section,
+      .admin-entry,
+      .voting-card
+    ) {
+    border-radius: 10px;
+  }
+
+  .site-header h1 {
+    letter-spacing: 0;
+  }
+}
+
+/*
+  Contrast correction for black-background readability.
+  Borders should read as neon red, and secondary text should never fall into
+  low-contrast dark grey.
+*/
+
+:root {
+  --muted: #d4d4d8;
+  --zinc-mid: #d4d4d8;
+  --zinc-dim: #a1a1aa;
+  --card-border: rgba(255, 49, 49, 0.42);
+}
+
+p,
+li,
+td,
+.contest-status,
+.form-helper,
+.rsvp-admin-item__meta,
+.rsvp-update-card__meta,
+.site-footer,
+.site-nav__user,
+.site-nav nav a,
+.site-nav__logout button {
+  color: #d4d4d8;
+}
+
+:is(
+    .signup-callout,
+    .contest-banner,
+    .slides,
+    .signup-summary > div,
+    .form-section,
+    .rsvp-landing,
+    .rsvp-card,
+    .submitted-list,
+    .voting-reminder,
+    .voting-card,
+    .success,
+    .success-message,
+    .errors,
+    .admin-panel,
+    .admin-section,
+    .admin-entry,
+    .menu-section,
+    .menu-card,
+    .order-card,
+    .bartender-card,
+    .karaoke-lineup,
+    .contest-chart,
+    .contest-chart__item,
+    .contest-winner-card,
+    .contest-top-card,
+    .flash,
+    .rsvp-details article,
+    .rsvp-update-card,
+    .rsvp-admin-item,
+    .access-settings__form,
+    .party-code-status,
+    .bartender-card__recipe
+  ) {
+  border-color: rgba(255, 49, 49, 0.42);
+  border-top-color: rgba(255, 49, 49, 0.72);
+  box-shadow: 0 -2px 32px rgba(255, 49, 49, 0.22), 0 8px 44px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 49, 49, 0.08);
+}
+
+:is(.menu-card, .order-card, .bartender-card, .admin-entry, .rsvp-update-card, .voting-card, .rsvp-details article):hover {
+  border-color: rgba(255, 49, 49, 0.66);
+  border-top-color: rgba(255, 49, 49, 0.95);
+  box-shadow: 0 -3px 38px rgba(255, 49, 49, 0.28), 0 10px 46px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 49, 49, 0.18);
+}
+
+.rsvp-landing__eyebrow,
+.menu-card__eyebrow,
+.order-card__status,
+.rsvp-update-card__eyebrow,
+.menu-card__badges span {
+  border-color: rgba(255, 49, 49, 0.58);
+  background: rgba(255, 49, 49, 0.16);
+  color: #ff8a8a;
+  box-shadow: 0 0 14px rgba(255, 49, 49, 0.16);
+}
+
+input,
+select,
+textarea,
+.signup-form input,
+.login-form input,
+.admin-entry__fields input,
+.admin-entry__fields select,
+.admin-entry__fields textarea,
+.access-settings__form input,
+.access-settings__form select,
+.access-settings__form textarea,
+.voting-card__label input,
+.rsvp-card input,
+.rsvp-card textarea {
+  color: #f4f4f5;
+  border-color: rgba(255, 49, 49, 0.36);
+}
+
+::placeholder {
+  color: #a1a1aa;
+}
+
+.button,
+.contest-banner__button,
+.signup-form button,
+.login-form button {
+  border-color: rgba(255, 49, 49, 0.52);
+  color: #ff8a8a;
+  box-shadow: 0 0 16px rgba(255, 49, 49, 0.14);
+}
+
+.site-footer {
+  color: #a1a1aa;
 }

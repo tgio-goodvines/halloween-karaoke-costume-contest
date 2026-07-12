@@ -403,6 +403,7 @@ STATE_REFRESH_ENDPOINTS = {
     "party_menu",
     "party_drink_history",
     "bartender_portal",
+    "bartender_queue_data",
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
@@ -417,6 +418,7 @@ ADMIN_ENDPOINTS = {
 }
 BAR_ENDPOINTS = {
     "bartender_portal",
+    "bartender_queue_data",
 }
 REGULAR_USER_ENDPOINTS = {
     "party_dashboard",
@@ -2500,7 +2502,8 @@ def costume_voting_is_visible() -> bool:
     )
 
 
-PARTY_PORTAL_URL = "https://tnq-halloween.com/party"
+PARTY_SITE_URL = "https://tnq-halloween.com"
+PARTY_PORTAL_URL = f"{PARTY_SITE_URL}/party"
 
 
 PARTY_DAY_DASHBOARD_SLIDES = [
@@ -2582,12 +2585,13 @@ def build_rotation_entries() -> List[dict[str, object]]:
         {
             "category": "Signup Portal",
             "primary": "Connect to the party WiFi.",
-            "secondary": "Use the network details here before joining the live event flow.",
+            "secondary": f"After you connect, browse to {PARTY_SITE_URL} to start the party experience.",
             "cta": True,
             "cta_details": {
-                "lede": "Get your phone connected.",
+                "lede": "Get your phone connected, then open the party site.",
                 "wifi_network": wifi_network,
                 "wifi_password": wifi_password,
+                "site_url": PARTY_SITE_URL,
             },
         },
         {
@@ -3234,6 +3238,43 @@ def party_drink_history():
     )
 
 
+def bartender_queue_context() -> dict[str, object]:
+    sorted_orders = sorted(
+        drink_orders,
+        key=lambda order: (
+            {"in_progress": 0, "received": 1, "complete": 3}.get(str(order.get("status")), 4),
+            drink_order_priority_bucket(order),
+            str(order.get("created_at", "")),
+        ),
+    )
+    recent_completed = [
+        order for order in sorted_orders if order.get("status") == "complete"
+    ][-12:]
+    active_orders = [order for order in sorted_orders if order.get("status") != "complete"]
+    version_source = [
+        {
+            "id": str(order.get("id", "")),
+            "status": str(order.get("status", "")),
+            "started_at": str(order.get("started_at", "")),
+            "completed_at": str(order.get("completed_at", "")),
+            "created_at": str(order.get("created_at", "")),
+            "item_name": str(order.get("item_name", "")),
+            "username": str(order.get("username", "")),
+        }
+        for order in sorted_orders
+    ]
+    queue_version = hashlib.sha256(
+        json.dumps(version_source, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+    return {
+        "active_orders": active_orders,
+        "completed_orders": list(reversed(recent_completed)),
+        "average_completion_seconds": average_drink_completion_seconds(),
+        "queue_version": queue_version,
+    }
+
+
 @app.route("/bartender", methods=["GET", "POST"])
 def bartender_portal():
     global live_display_notice_override
@@ -3278,27 +3319,28 @@ def bartender_portal():
                 broadcast_display_update()
             persist_state_if_available()
 
-    sorted_orders = sorted(
-        drink_orders,
-        key=lambda order: (
-            {"in_progress": 0, "received": 1, "complete": 3}.get(str(order.get("status")), 4),
-            drink_order_priority_bucket(order),
-            str(order.get("created_at", "")),
-        ),
-    )
-    recent_completed = [
-        order for order in sorted_orders if order.get("status") == "complete"
-    ][-12:]
-    active_orders = [order for order in sorted_orders if order.get("status") != "complete"]
+    queue_context = bartender_queue_context()
 
     return render_template(
         "bartender.html",
         errors=errors,
         messages=messages,
-        active_orders=active_orders,
-        completed_orders=list(reversed(recent_completed)),
-        average_completion_seconds=average_drink_completion_seconds(),
+        **queue_context,
         show_admin_link=session_has_role("admin"),
+    )
+
+
+@app.route("/api/bartender-queue")
+def bartender_queue_data():
+    queue_context = bartender_queue_context()
+    html = render_template("_bartender_queue.html", **queue_context)
+    return jsonify(
+        {
+            "html": html,
+            "queue_version": queue_context["queue_version"],
+            "active_count": len(queue_context["active_orders"]),
+            "completed_count": len(queue_context["completed_orders"]),
+        }
     )
 
 

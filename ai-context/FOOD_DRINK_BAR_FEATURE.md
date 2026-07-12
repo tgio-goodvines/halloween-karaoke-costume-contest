@@ -12,6 +12,9 @@
   drink orders tied to the signed-in account, including old completed orders,
   and supports reordering currently available/orderable drinks.
 - `GET|POST /bartender`: bartender queue. Requires a `bartender` session role or an admin session. Admins can use the same view.
+- `GET /api/bartender-queue`: authenticated bartender/admin JSON endpoint
+  returning the rendered queue fragment and a deterministic queue version for
+  real-time bartender page refreshes.
 - `/admin`: includes menu management, specialty/standard drink classification,
   bartender tip settings, bar operations summary, bartender-view link, and user
   role assignment.
@@ -49,6 +52,9 @@ The bartender queue labels specialty orders with their sequence number. 4th+
 specialty requests are marked as after-11 PM extra requests with an availability
 check note. Active bartender queue sorting keeps in-progress orders first, then
 normal/included orders, then first-come-first-served 4th+ specialty requests.
+The browser refreshes the queue fragment every few seconds through
+`/api/bartender-queue`, so newly placed attendee drink orders appear without a
+manual page reload.
 
 ## Order Lifecycle
 
@@ -78,11 +84,16 @@ Completing a drink creates `live_display_notice_override` with `type="drink_read
 - `templates/menu.html`: attendee menu and recent order cards.
 - `templates/drink_history.html`: full attendee order history, reorder buttons,
   and per-order bartender tip disclosure with the configured QR/payment image.
-- `templates/bartender.html`: active bartender queue, recipe reference, status forms, and recent completed orders.
+- `templates/bartender.html`: bartender page shell and live queue container.
+- `templates/_bartender_queue.html`: active bartender queue, recipe reference,
+  status forms, and recent completed orders, shared by the full page and queue
+  JSON endpoint.
 - `templates/admin.html`: menu CRUD with image URL preview, availability toggle,
   specialty/standard drink controls, orderable toggle, recipes, bartender tip
   settings, user bartender role assignment, and bar operations summary.
 - `static/styles.css`: menu cards, order cards, bartender cards, admin image previews, and responsive behavior.
+- `static/bartender.js`: authenticated polling refresh for the bartender queue
+  fragment.
 - `static/display.css`: drink-ready override image layout.
 
 ## Tests
@@ -91,5 +102,6 @@ Completing a drink creates `live_display_notice_override` with `type="drink_read
 attendee menu, menu image persistence, attendee drink ordering,
 food-order rejection, bartender authorization, bartender status transitions,
 specialty drink limit enforcement, order history/reorder behavior, bartender
-priority sorting for 4th+ specialty requests, tip QR rendering, ready-notice
-expiry, ready email sending, and live-display drink-ready override payloads.
+queue API refresh payloads, priority sorting for 4th+ specialty requests, tip
+QR rendering, ready-notice expiry, ready email sending, and live-display
+drink-ready override payloads.

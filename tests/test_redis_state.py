@@ -1248,6 +1248,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("friends-dont-lie", state["display_settings"]["wifi_password"])
         self.assertEqual("Upside Down LAN", first_entry["cta_details"]["wifi_network"])
         self.assertEqual("friends-dont-lie", first_entry["cta_details"]["wifi_password"])
+        self.assertEqual("https://tnq-halloween.com", first_entry["cta_details"]["site_url"])
+        self.assertIn("browse to https://tnq-halloween.com", first_entry["secondary"])
 
     def test_admin_page_shows_rsvp_list(self):
         main.rsvp_signups = [
@@ -2144,6 +2146,42 @@ class RedisStateTests(unittest.TestCase):
         self.assertLess(body.index("First Witch Margarita"), body.index("Fourth Witch Margarita"))
         self.assertIn("After-11 PM 4+ specialty request", body)
         self.assertIn("Included specialty order 1 of 3", body)
+
+    def test_bartender_queue_api_reflects_new_drink_orders(self):
+        main.menu_items = [
+            {
+                "id": "drink-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "Lime, smoke, and salt.",
+                "image_url": "",
+                "recipe": "Shake tequila, lime, and syrup with ice.",
+                "available": True,
+                "orderable": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            }
+        ]
+        account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        account["roles"] = ["regular", "bartender"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["regular", "bartender"]
+            empty_response = client.get("/api/bartender-queue")
+            order_response = client.post("/party/menu", data={"menu_item_id": "drink-1"})
+            queue_response = client.get("/api/bartender-queue")
+
+        empty_payload = empty_response.get_json()
+        queue_payload = queue_response.get_json()
+        self.assertEqual(200, empty_response.status_code)
+        self.assertEqual(302, order_response.status_code)
+        self.assertEqual(200, queue_response.status_code)
+        self.assertNotEqual(empty_payload["queue_version"], queue_payload["queue_version"])
+        self.assertEqual(1, queue_payload["active_count"])
+        self.assertIn("Witch Margarita", queue_payload["html"])
+        self.assertIn("For Jamie", queue_payload["html"])
 
     def test_bartender_can_complete_order_and_publish_ready_override(self):
         account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")

@@ -114,6 +114,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const ctaWifiNetworkItemElement = card.querySelector('[data-cta-wifi-network-item]');
   const ctaWifiPasswordElement = card.querySelector('[data-cta-wifi-password]');
   const ctaWifiPasswordItemElement = card.querySelector('[data-cta-wifi-password-item]');
+  const ctaSiteUrlElement = card.querySelector('[data-cta-site-url]');
+  const ctaSiteUrlItemElement = card.querySelector('[data-cta-site-url-item]');
   const scoreboardLayout = card.querySelector('[data-scoreboard-layout]');
   const scoreboardTitleElement = scoreboardLayout
     ? scoreboardLayout.querySelector('[data-scoreboard-title]')
@@ -904,6 +906,17 @@ document.addEventListener('DOMContentLoaded', () => {
           ctaWifiPasswordItemElement.removeAttribute('hidden');
         } else {
           ctaWifiPasswordItemElement.setAttribute('hidden', '');
+        }
+      }
+
+      if (ctaSiteUrlElement) {
+        ctaSiteUrlElement.textContent = ctaDetails.site_url || '';
+      }
+      if (ctaSiteUrlItemElement) {
+        if (ctaDetails.site_url) {
+          ctaSiteUrlItemElement.removeAttribute('hidden');
+        } else {
+          ctaSiteUrlItemElement.setAttribute('hidden', '');
         }
       }
 

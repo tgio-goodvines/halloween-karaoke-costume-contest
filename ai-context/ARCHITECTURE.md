@@ -45,6 +45,10 @@
   recipe reference; transitions orders to `in_progress` or `complete`. Active
   queue sorting keeps in-progress orders first, then normal/included orders,
   then first-come-first-served 4th+ specialty requests.
+- `GET /api/bartender-queue` -> bartender/admin JSON endpoint that returns the
+  rendered queue fragment plus a queue version. `static/bartender.js` polls it
+  every few seconds so new drink orders appear on `/bartender` without a full
+  page reload.
 - `GET|POST /party/login` -> public attendee account sign-in form; validates a
   Redis-stored password hash and grants the `regular` role.
 - `GET|POST /party/password-reset` -> public account recovery request form;
@@ -150,7 +154,9 @@ That function increments `display_update_version` and notifies `display_update_c
 
 The base rotation always starts with WiFi/app sign-in instructions, costume and
 karaoke signup prompts, drink-order promotion, and live-update explanation
-cards. The WiFi network/password values come from Redis-backed
+cards. The WiFi card tells guests to connect to the configured network and then
+browse to `tnq-halloween.com` to start the party experience. The WiFi
+network/password values come from Redis-backed
 `display_settings`, defaulting to `HALLOWEEN_DISPLAY_WIFI_NETWORK` and
 `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank values are allowed so the live display
 can omit either row. Winner and scoreboard cards are appended when the relevant
@@ -217,8 +223,11 @@ locked winner.
 - `drink_history.html`: attendee order history with all account-bound drink
   orders, status/timestamp metadata, reorder buttons, and per-order bartender
   tip disclosure when enabled.
-- `bartender.html`: bartender/admin drink order queue with image, specialty
-  sequence labels, extra specialty availability notes, and recipe reference.
+- `bartender.html`: bartender/admin drink order page shell with a live-refresh
+  queue container.
+- `_bartender_queue.html`: shared bartender queue fragment with image, specialty
+  sequence labels, extra specialty availability notes, recipe reference, and
+  completed order history.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.

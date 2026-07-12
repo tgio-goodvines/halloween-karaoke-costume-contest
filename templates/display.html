@@ -17,6 +17,7 @@
     {% set cta_lede = cta_details.get('lede', '') %}
     {% set cta_wifi_network = cta_details.get('wifi_network', '') %}
     {% set cta_wifi_password = cta_details.get('wifi_password', '') %}
+    {% set cta_site_url = cta_details.get('site_url', '') %}
     <div class="display-wrapper">
       <header class="display-header">
         <h1>{{ party_title }}</h1>
@@ -52,6 +53,10 @@
                 <div class="display-cta-list__item" data-cta-wifi-password-item{% if not cta_wifi_password %} hidden{% endif %}>
                   <dt>Password</dt>
                   <dd data-cta-wifi-password>{{ cta_wifi_password }}</dd>
+                </div>
+                <div class="display-cta-list__item" data-cta-site-url-item{% if not cta_site_url %} hidden{% endif %}>
+                  <dt>Then browse to</dt>
+                  <dd data-cta-site-url>{{ cta_site_url }}</dd>
                 </div>
               </dl>
             </section>

@@ -968,6 +968,7 @@ main.container {
   overflow: hidden;
   display: grid;
   grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+  align-items: stretch;
 }
 
 .bartender-card--in_progress {
@@ -976,9 +977,19 @@ main.container {
 }
 
 .bartender-card__media {
+  aspect-ratio: auto;
   border-right: 1px solid rgba(255, 49, 49, 0.35);
   border-bottom: none;
+  height: 100%;
   min-height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bartender-card__media .menu-card__placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .bartender-card__body {

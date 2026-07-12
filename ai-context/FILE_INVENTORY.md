@@ -15,6 +15,7 @@
 | `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, live-display WiFi defaults, and Halloween email update settings. |
 | `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, food/drink ordering, specialty drink limits, drink history/reorder, bartender tipping, bartender priority sorting, bartender roles/order status transitions, display update publishing, and JSON exports using an in-memory Redis fake. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, header menu, single logout action, menu cards, order cards, bartender tip disclosures, and bartender queue. |
+| `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, event override cards, top-layer drink-ready notices, CTA layout, scoreboard layout, and karaoke display panels. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
@@ -22,7 +23,8 @@
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
 | `templates/menu.html` | Attendee food/drink menu for `/party/menu`, including menu images, availability, specialty/standard badges, drink ordering, and recent order statuses. |
 | `templates/drink_history.html` | Attendee full drink order history for `/party/drink-history`, including account-scoped order records, reorder controls, and per-order bartender tip QR/payment disclosure. |
-| `templates/bartender.html` | Bartender/admin drink order queue for `/bartender`, with drink images, specialty sequence and extra-request notes, recipe reference, status transitions, and completed order history. |
+| `templates/bartender.html` | Bartender/admin page shell for `/bartender`, with messages and the live-refresh queue container. |
+| `templates/_bartender_queue.html` | Shared bartender queue fragment with drink images/placeholders, specialty sequence and extra-request notes, recipe reference, status transition forms, and completed order history. |
 | `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
 | `templates/halloween_login.html` | Public attendee account sign-in form. |
 | `templates/halloween_register.html` | Public attendee account registration form. |

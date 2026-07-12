@@ -178,7 +178,7 @@
           </label>
           <label>
             Note
-            <textarea name="note" maxlength="240"></textarea>
+            <textarea name="note" maxlength="{{ rsvp_note_max_length }}"></textarea>
           </label>
         </div>
         <button type="submit" name="action" value="add_rsvp" class="button button--primary">Add RSVP</button>
@@ -217,7 +217,7 @@
                 </label>
                 <label>
                   Note
-                  <textarea name="note" maxlength="240">{{ signup.note }}</textarea>
+                  <textarea name="note" maxlength="{{ rsvp_note_max_length }}">{{ signup.note }}</textarea>
                 </label>
               </div>
               <div class="admin-entry__actions">

@@ -63,7 +63,7 @@
       <input type="number" id="guest_count" name="guest_count" min="1" max="12" required value="{{ request.form.guest_count or 1 }}">
 
       <label for="note">Note</label>
-      <textarea id="note" name="note" maxlength="240" placeholder="Optional costume, food, or arrival note">{{ request.form.note }}</textarea>
+      <textarea id="note" name="note" maxlength="{{ rsvp_note_max_length }}" placeholder="Optional costume, food, or arrival note">{{ request.form.note }}</textarea>
 
       <button type="submit" class="button button--primary">Add Me to the RSVP List</button>
     </form>

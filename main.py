@@ -309,6 +309,7 @@ DEFAULT_BARTENDER_TIP_SETTINGS: dict[str, object] = {
     "cash_app": "",
 }
 DEFAULT_RSVP_NOTIFICATION_EMAIL = app.config["RSVP_NOTIFICATION_EMAIL"]
+RSVP_NOTE_MAX_LENGTH = 5000
 
 DEFAULT_EVENT_EXPERIENCE_MODE = "auto"
 EVENT_EXPERIENCE_MODES: dict[str, dict[str, str]] = {
@@ -2860,8 +2861,8 @@ def rsvp():
             errors.append("Enter a valid email address for party updates.")
         if not 1 <= guest_count <= 12:
             errors.append("Guest count must be between 1 and 12.")
-        if len(note) > 240:
-            errors.append("Note must be 240 characters or fewer.")
+        if len(note) > RSVP_NOTE_MAX_LENGTH:
+            errors.append(f"Note must be {RSVP_NOTE_MAX_LENGTH} characters or fewer.")
 
         if not errors:
             submitted_rsvp = RSVPSignup(
@@ -2890,6 +2891,7 @@ def rsvp():
         party_info_cards=party_info_cards(),
         maps_urls=google_maps_urls(party_details.get("map_address", "")),
         rsvp_updates=sorted_rsvp_updates(),
+        rsvp_note_max_length=RSVP_NOTE_MAX_LENGTH,
         show_admin_link=False,
         hide_site_nav=True,
         hide_party_nav=True,
@@ -3637,8 +3639,8 @@ def admin_portal():
             errors.append("Enter a valid RSVP email address.")
         if not 1 <= guest_count <= 12:
             errors.append("RSVP guest count must be between 1 and 12.")
-        if len(note) > 240:
-            errors.append("RSVP note must be 240 characters or fewer.")
+        if len(note) > RSVP_NOTE_MAX_LENGTH:
+            errors.append(f"RSVP note must be {RSVP_NOTE_MAX_LENGTH} characters or fewer.")
 
         if errors:
             return None
@@ -4419,6 +4421,7 @@ def admin_portal():
         party_details=party_details,
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
+        rsvp_note_max_length=RSVP_NOTE_MAX_LENGTH,
         rsvp_updates=sorted_rsvp_updates(),
         update_email_recipients=available_update_email_recipients(),
         email_updates_enabled=app.config["EMAIL_UPDATES_ENABLED"],

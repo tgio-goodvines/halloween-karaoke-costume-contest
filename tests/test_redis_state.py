@@ -973,6 +973,7 @@ class RedisStateTests(unittest.TestCase):
             main.RSVPUpdate("Parking", "Use the west side of the street.", "2026-07-07T00:00:00Z", "update-1")
         ]
         self.save_current_state()
+        long_note = "A" * 241
 
         with main.app.test_client() as client:
             rsvp_form = client.get("/rsvp")
@@ -984,7 +985,7 @@ class RedisStateTests(unittest.TestCase):
                     "username": "Casey",
                     "contact": "casey@example.com",
                     "guest_count": "3",
-                    "note": "Arriving after 8",
+                    "note": long_note,
                 },
             )
             state_after_bad_code = self.redis_state()
@@ -996,7 +997,7 @@ class RedisStateTests(unittest.TestCase):
                     "username": "Casey",
                     "contact": "casey@example.com",
                     "guest_count": "3",
-                    "note": "Arriving after 8",
+                    "note": long_note,
                 },
             )
             confirmation_response = client.get("/rsvp")
@@ -1008,6 +1009,7 @@ class RedisStateTests(unittest.TestCase):
         rsvp_form_body = rsvp_form.get_data(as_text=True)
         self.assertIn("Save your RSVP", rsvp_form_body)
         self.assertIn("Party Code", rsvp_form_body)
+        self.assertIn('maxlength="5000"', rsvp_form_body)
         self.assertNotIn("Password", rsvp_form_body)
         self.assertIn("Date", rsvp_form_body)
         self.assertIn("Time", rsvp_form_body)
@@ -1027,7 +1029,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("casey@example.com", state["rsvp_signups"][0]["contact"])
         self.assertTrue(state["rsvp_signups"][0]["email_updates_acknowledged"])
         self.assertEqual(3, state["rsvp_signups"][0]["guest_count"])
-        self.assertEqual("Arriving after 8", state["rsvp_signups"][0]["note"])
+        self.assertEqual(long_note, state["rsvp_signups"][0]["note"])
         self.assertEqual(state["rsvp_signups"][0]["id"], rsvp_id)
         self.assertNotIn("casey", state["user_accounts"])
         self.assertNotIn("regular", roles)

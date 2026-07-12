@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set title = "Tip Bartender" %}
+
+{% block content %}
+<section class="form-section tip-page">
+  <p class="order-card__status">Bar Thanks</p>
+  <h2>Tip {{ bartender_tip_settings.display_name or 'the Bartender' }}</h2>
+  <p>{{ bartender_tip_settings.note }}</p>
+
+  {% if bartender_tip_settings.image_url %}
+    <img src="{{ bartender_tip_settings.image_url }}" alt="Bartender payment QR code" class="tip-page__image">
+  {% else %}
+    <p class="admin-empty">No QR code image is configured yet.</p>
+  {% endif %}
+
+  {% if bartender_tip_methods %}
+    <div class="menu-card__badges tip-page__methods">
+      {% for method in bartender_tip_methods %}
+        <span>{{ method.label }}: {{ method.value }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="contest-actions">
+    <a href="{{ url_for('party_drink_history') }}" class="button">Back to Drink History</a>
+  </div>
+</section>
+{% endblock %}

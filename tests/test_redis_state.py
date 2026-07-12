@@ -1,5 +1,7 @@
+import io
 import json
 import os
+import tempfile
 import unittest
 
 import redis
@@ -2032,18 +2034,82 @@ class RedisStateTests(unittest.TestCase):
             self.login_regular(client)
             overview_response = client.get("/party")
             history_response = client.get("/party/drink-history")
+            tip_response = client.get("/party/bartender-tip")
 
         state = self.redis_state()
         overview_html = overview_response.get_data(as_text=True)
         history_html = history_response.get_data(as_text=True)
+        tip_html = tip_response.get_data(as_text=True)
         self.assertEqual(200, admin_response.status_code)
         self.assertTrue(state["bartender_tip_settings"]["enabled"])
         self.assertIn("Tip Casey", overview_html)
         self.assertIn("https://example.test/tip.png", overview_html)
         self.assertIn("@casey", overview_html)
         self.assertIn("Tip Bartender", history_html)
-        self.assertIn("Bartender payment QR code", history_html)
-        self.assertIn("@casey", history_html)
+        self.assertIn("/party/bartender-tip", history_html)
+        self.assertIn("Bartender payment QR code", tip_html)
+        self.assertIn("@casey", tip_html)
+
+    def test_admin_can_upload_bartender_tip_qr_image(self):
+        original_upload_dir = main.app.config["BARTENDER_TIP_UPLOAD_DIR"]
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"qr-code-bytes"
+
+        with tempfile.TemporaryDirectory() as upload_dir:
+            main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = upload_dir
+            try:
+                with main.app.test_client() as client:
+                    self.login_admin(client)
+                    response = client.post(
+                        "/admin",
+                        data={
+                            "action": "update_bartender_tip_settings",
+                            "tip_enabled": "yes",
+                            "tip_display_name": "Casey",
+                            "tip_note": "Thanks for keeping the bar moving.",
+                            "tip_image_url": "",
+                            "tip_image_upload": (io.BytesIO(png_bytes), "casey-qr.png"),
+                            "tip_venmo": "@casey",
+                        },
+                        content_type="multipart/form-data",
+                    )
+            finally:
+                main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = original_upload_dir
+
+            state = self.redis_state()
+            image_url = state["bartender_tip_settings"]["image_url"]
+            self.assertEqual(200, response.status_code)
+            self.assertTrue(state["bartender_tip_settings"]["enabled"])
+            self.assertTrue(image_url.startswith("/static/uploads/bartender-tips/bartender-tip-"))
+            self.assertTrue(image_url.endswith(".png"))
+            self.assertTrue(os.path.exists(os.path.join(upload_dir, os.path.basename(image_url))))
+
+    def test_admin_rejects_invalid_bartender_tip_qr_upload(self):
+        original_upload_dir = main.app.config["BARTENDER_TIP_UPLOAD_DIR"]
+
+        with tempfile.TemporaryDirectory() as upload_dir:
+            main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = upload_dir
+            try:
+                with main.app.test_client() as client:
+                    self.login_admin(client)
+                    response = client.post(
+                        "/admin",
+                        data={
+                            "action": "update_bartender_tip_settings",
+                            "tip_enabled": "yes",
+                            "tip_display_name": "Casey",
+                            "tip_note": "Thanks for keeping the bar moving.",
+                            "tip_image_url": "",
+                            "tip_image_upload": (io.BytesIO(b"not really an image"), "casey-qr.png"),
+                        },
+                        content_type="multipart/form-data",
+                    )
+            finally:
+                main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = original_upload_dir
+
+            html = response.get_data(as_text=True)
+            self.assertEqual(200, response.status_code)
+            self.assertIn("does not look like a valid image file", html)
+            self.assertEqual([], os.listdir(upload_dir))
 
     def test_dashboard_ready_drink_notifications_expire_but_history_retains_orders(self):
         self.add_user_account(username="Jamie", user_id="user-1")

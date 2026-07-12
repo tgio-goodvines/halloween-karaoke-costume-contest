@@ -17,6 +17,7 @@ import secrets
 import time
 
 import redis
+from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask import (
@@ -69,6 +70,10 @@ app.config["PUBLIC_BASE_URL"] = os.environ.get("HALLOWEEN_PUBLIC_BASE_URL", "htt
 app.config["RSVP_NOTIFICATION_EMAIL"] = os.environ.get(
     "HALLOWEEN_RSVP_NOTIFICATION_EMAIL",
     "tgio1129@gmail.com",
+)
+app.config["BARTENDER_TIP_UPLOAD_DIR"] = os.environ.get(
+    "HALLOWEEN_BARTENDER_TIP_UPLOAD_DIR",
+    os.path.join(app.static_folder or "static", "uploads", "bartender-tips"),
 )
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
@@ -278,6 +283,9 @@ DRINK_ORDER_STATUSES = ("received", "in_progress", "complete")
 MENU_ITEM_CATEGORIES = ("drink", "food")
 DRINK_TYPES = ("standard", "specialty")
 BEVERAGE_TYPES = ("alcoholic", "non_alcoholic")
+BARTENDER_TIP_UPLOAD_URL_PREFIX = "/static/uploads/bartender-tips"
+ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS = {".gif", ".jpg", ".jpeg", ".png", ".webp"}
+MAX_BARTENDER_TIP_IMAGE_BYTES = 5 * 1024 * 1024
 
 DEFAULT_PARTY_DETAILS: dict[str, str] = {
     "date": app.config["PARTY_DATE_LABEL"],
@@ -402,6 +410,7 @@ STATE_REFRESH_ENDPOINTS = {
     "party_dashboard",
     "party_menu",
     "party_drink_history",
+    "party_bartender_tip",
     "bartender_portal",
     "bartender_queue_data",
     "party_costumes",
@@ -423,6 +432,7 @@ BAR_ENDPOINTS = {
 REGULAR_USER_ENDPOINTS = {
     "party_dashboard",
     "party_menu",
+    "party_bartender_tip",
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
@@ -1259,6 +1269,46 @@ def safe_image_url(raw_url: str) -> str:
     if image_url.startswith("/static/"):
         return image_url
     return ""
+
+
+def image_bytes_match_extension(filename: str, image_bytes: bytes) -> bool:
+    extension = os.path.splitext(filename)[1].lower()
+    if extension in {".jpg", ".jpeg"}:
+        return image_bytes.startswith(b"\xff\xd8\xff")
+    if extension == ".png":
+        return image_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension == ".gif":
+        return image_bytes.startswith((b"GIF87a", b"GIF89a"))
+    if extension == ".webp":
+        return image_bytes.startswith(b"RIFF") and image_bytes[8:12] == b"WEBP"
+    return False
+
+
+def save_uploaded_bartender_tip_image(upload) -> tuple[str, str]:
+    if upload is None or not upload.filename:
+        return "", ""
+
+    safe_name = secure_filename(upload.filename)
+    extension = os.path.splitext(safe_name)[1].lower()
+    if extension not in ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS:
+        return "", "Bartender tip QR upload must be a PNG, JPG, GIF, or WebP image."
+
+    image_bytes = upload.stream.read(MAX_BARTENDER_TIP_IMAGE_BYTES + 1)
+    if not image_bytes:
+        return "", "Bartender tip QR upload was empty."
+    if len(image_bytes) > MAX_BARTENDER_TIP_IMAGE_BYTES:
+        return "", "Bartender tip QR upload must be 5 MB or smaller."
+    if not image_bytes_match_extension(safe_name, image_bytes):
+        return "", "Bartender tip QR upload does not look like a valid image file."
+
+    upload_dir = app.config["BARTENDER_TIP_UPLOAD_DIR"]
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"bartender-tip-{uuid4().hex}{extension}"
+    upload_path = os.path.join(upload_dir, filename)
+    with open(upload_path, "wb") as image_file:
+        image_file.write(image_bytes)
+
+    return f"{BARTENDER_TIP_UPLOAD_URL_PREFIX}/{filename}", ""
 
 
 def normalize_menu_category(raw_category: object) -> str:
@@ -3238,6 +3288,26 @@ def party_drink_history():
     )
 
 
+@app.route("/party/bartender-tip")
+def party_bartender_tip():
+    user_id = str(session.get("user_id", "") or "")
+    account = current_user_account()
+
+    if not user_id or not account:
+        return redirect(url_for("party_login", next=url_for("party_bartender_tip")))
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
+    if not bartender_tip_settings.get("enabled"):
+        return redirect(url_for("party_drink_history"))
+
+    return render_template(
+        "bartender_tip.html",
+        bartender_tip_settings=bartender_tip_settings,
+        bartender_tip_methods=bartender_tip_methods(),
+        show_admin_link=False,
+    )
+
+
 def bartender_queue_context() -> dict[str, object]:
     sorted_orders = sorted(
         drink_orders,
@@ -3478,6 +3548,12 @@ def admin_portal():
 
     def bartender_tip_settings_from_form() -> dict[str, object] | None:
         image_url = request.form.get("tip_image_url", "").strip()
+        uploaded_image_url, upload_error = save_uploaded_bartender_tip_image(request.files.get("tip_image_upload"))
+        if upload_error:
+            errors.append(upload_error)
+        if uploaded_image_url:
+            image_url = uploaded_image_url
+
         normalized_image_url = safe_image_url(image_url)
         if image_url and not normalized_image_url:
             errors.append("Bartender tip image URL must be http, https, or a /static/ path.")

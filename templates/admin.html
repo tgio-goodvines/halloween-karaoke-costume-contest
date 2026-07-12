@@ -530,7 +530,7 @@
       {% if bartender_tip_settings.image_url %}
         <img class="menu-admin-entry__image" src="{{ bartender_tip_settings.image_url }}" alt="Bartender tip QR code">
       {% endif %}
-      <form method="post" class="admin-entry__form">
+      <form method="post" class="admin-entry__form" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="admin-entry__fields">
           <label class="form-check">
@@ -548,6 +548,10 @@
           <label>
             QR / Payment Image URL
             <input type="text" name="tip_image_url" maxlength="500" value="{{ bartender_tip_settings.image_url }}" placeholder="https://... or /static/..." inputmode="url">
+          </label>
+          <label>
+            Upload QR / Payment Image
+            <input type="file" name="tip_image_upload" accept="image/png,image/jpeg,image/gif,image/webp">
           </label>
           <label>
             Zelle

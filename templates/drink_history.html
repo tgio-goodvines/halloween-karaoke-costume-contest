@@ -70,22 +70,7 @@
               </form>
             {% endif %}
             {% if bartender_tip_settings.enabled %}
-              <details class="tip-disclosure">
-                <summary class="button">Tip Bartender</summary>
-                <div class="tip-disclosure__body">
-                  {% if bartender_tip_settings.image_url %}
-                    <img src="{{ bartender_tip_settings.image_url }}" alt="Bartender payment QR code" class="tip-disclosure__image">
-                  {% endif %}
-                  <p>{{ bartender_tip_settings.note }}</p>
-                  {% if bartender_tip_methods %}
-                    <div class="menu-card__badges">
-                      {% for method in bartender_tip_methods %}
-                        <span>{{ method.label }}: {{ method.value }}</span>
-                      {% endfor %}
-                    </div>
-                  {% endif %}
-                </div>
-              </details>
+              <a href="{{ url_for('party_bartender_tip') }}" class="button">Tip Bartender</a>
             {% endif %}
           </div>
         </article>

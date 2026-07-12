@@ -1009,6 +1009,25 @@ main.container {
   background: rgba(0, 0, 0, 0.35);
 }
 
+.tip-page {
+  align-items: center;
+  text-align: center;
+}
+
+.tip-page__image {
+  width: min(100%, 22rem);
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 1px solid rgba(255, 49, 49, 0.45);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 28px rgba(255, 49, 49, 0.18);
+}
+
+.tip-page__methods {
+  justify-content: center;
+}
+
 .bartender-grid {
   display: grid;
   gap: 1rem;

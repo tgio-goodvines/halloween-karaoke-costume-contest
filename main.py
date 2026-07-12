@@ -870,6 +870,61 @@ def send_password_reset_email(account: dict[str, object], token: str) -> bool:
         return False
 
 
+def send_account_welcome_email(account: dict[str, object]) -> bool:
+    recipient = normalize_email(str(account.get("email", "") or ""))
+    if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
+        return False
+
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        app.logger.warning("Account welcome email requested, but boto3 is not installed.")
+        return False
+
+    base_url = app.config["PUBLIC_BASE_URL"].rstrip("/")
+    dashboard_url = base_url + url_for("party_dashboard")
+    menu_url = base_url + url_for("party_menu")
+    costume_url = base_url + url_for("party_costumes")
+    karaoke_url = base_url + url_for("party_karaoke")
+    subject = f"Welcome to {app.config['PARTY_TITLE']}"
+    text_body = (
+        f"Hi {account.get('username', 'there')},\n\n"
+        f"Your account for {app.config['PARTY_TITLE']} is ready.\n\n"
+        f"Party portal: {dashboard_url}\n"
+        f"Food and drinks: {menu_url}\n"
+        f"Costume signup: {costume_url}\n"
+        f"Karaoke signup: {karaoke_url}\n\n"
+        "See you at the party."
+    )
+    html_body = render_template(
+        "email/account_welcome.html",
+        account=account,
+        dashboard_url=dashboard_url,
+        menu_url=menu_url,
+        costume_url=costume_url,
+        karaoke_url=karaoke_url,
+    )
+
+    try:
+        ses_client.send_email(
+            FromEmailAddress=app.config["EMAIL_FROM"],
+            Destination={"ToAddresses": [recipient]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {
+                        "Text": {"Data": text_body, "Charset": "UTF-8"},
+                        "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    },
+                }
+            },
+        )
+        return True
+    except Exception as exc:
+        app.logger.warning("Unable to send account welcome email to %s: %s", recipient, exc)
+        return False
+
+
 def send_drink_order_placed_email(order: dict[str, object]) -> bool:
     recipient = normalize_email(str(order.get("email", "") or ""))
     if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
@@ -2641,6 +2696,7 @@ def party_register():
             session["username"] = account["username"]
             grant_session_role("regular")
             registered_users[account["id"]] = account["username"]
+            send_account_welcome_email(account)
             persist_state_if_available()
             return redirect(next_page)
 
@@ -3244,7 +3300,14 @@ def admin_portal():
                 account["roles"] = account_fields["roles"]
                 user_accounts[str(account_fields["normalized_username"])] = account
                 registered_users[str(account["id"])] = str(account["username"])
-                messages.append(f"Added account for {account['username']}.")
+                welcome_sent = send_account_welcome_email(account)
+                if app.config["EMAIL_UPDATES_ENABLED"]:
+                    if welcome_sent:
+                        messages.append(f"Added account for {account['username']} and sent a welcome email.")
+                    else:
+                        messages.append(f"Added account for {account['username']}; welcome email was not sent.")
+                else:
+                    messages.append(f"Added account for {account['username']}.")
 
         elif action == "update_user_account":
             account_id = request.form.get("account_id", "").strip()

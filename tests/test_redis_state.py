@@ -1253,6 +1253,9 @@ class RedisStateTests(unittest.TestCase):
 
     def test_admin_can_crud_user_accounts_and_reset_passwords(self):
         self.save_current_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
 
         with main.app.test_client() as client:
             self.login_admin(client)
@@ -1290,10 +1293,13 @@ class RedisStateTests(unittest.TestCase):
 
         state_after_reset = self.redis_state()
         self.assertEqual(200, add_response.status_code)
+        self.assertIn("sent a welcome email", add_response.get_data(as_text=True))
         self.assertEqual(200, update_response.status_code)
         self.assertEqual(200, reset_response.status_code)
         self.assertEqual("morgan@example.com", state_after_add["user_accounts"]["morgan"]["email"])
         self.assertIn("bartender", state_after_add["user_accounts"]["morgan"]["roles"])
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(["morgan@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
         self.assertNotIn("morgan", state_after_reset["user_accounts"])
         self.assertEqual("Morgan Lee", state_after_reset["user_accounts"]["morgan lee"]["username"])
         self.assertEqual(["regular"], state_after_reset["user_accounts"]["morgan lee"]["roles"])
@@ -1335,6 +1341,31 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn(account_id, state_after_delete["costume_ballots"])
         self.assertNotIn(account_id, state_after_delete["submitted_costume_votes"])
         self.assertEqual({}, state_after_delete["password_reset_tokens"])
+
+    def test_admin_account_creation_continues_when_welcome_email_fails(self):
+        self.save_current_state()
+        fake_ses = FakeSESClient(failing_recipients={"morgan@example.com"})
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "add_user_account",
+                    "username": "Morgan",
+                    "email": "morgan@example.com",
+                    "password": "party-password",
+                    "confirm_password": "party-password",
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIn("morgan", state["user_accounts"])
+        self.assertIn("welcome email was not sent", response.get_data(as_text=True))
+        self.assertEqual(0, len(fake_ses.sent_messages))
 
     def test_attendee_can_order_drink_and_menu_displays_images(self):
         main.menu_items = [
@@ -1503,6 +1534,9 @@ class RedisStateTests(unittest.TestCase):
 
     def test_regular_user_registration_creates_account_and_signs_in(self):
         self.save_current_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
 
         with main.app.test_client() as client:
             self.verify_party_code(client)
@@ -1532,6 +1566,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotEqual("party-password", account["password_hash"])
         self.assertEqual("Morgan", state["registered_users"][user_id])
         self.assertIn("regular", roles)
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(["morgan@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
+        self.assertIn("Welcome", fake_ses.sent_messages[0]["Content"]["Simple"]["Subject"]["Data"])
 
     def test_password_reset_request_sends_generic_response_and_email_for_existing_account(self):
         self.add_user_account("Morgan", "party-password", "user-1", "morgan@example.com")

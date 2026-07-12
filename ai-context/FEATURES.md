@@ -18,6 +18,8 @@
 - Party dashboard at `/party`.
 - Redis-backed attendee account registration at `/party/register` requires an
   email address so registered users can receive RSVP-page host update emails.
+- Successful party account creation sends a welcome email through SES when
+  email is enabled; delivery failure does not block account creation.
 - Password-backed attendee account sign-in at `/party/login`.
 - Email-based password reset at `/party/password-reset` sends a one-time
   45-minute reset link without revealing whether the submitted email is

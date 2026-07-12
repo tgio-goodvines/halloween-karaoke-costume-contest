@@ -83,7 +83,8 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 5. Attendees visit `/party`, are redirected to `/party/login` if not
    signed in, can create an account at `/party/register`, or recover a
    forgotten account password through `/party/password-reset`, then see the
-   party dashboard.
+   party dashboard. Account creation sends a SES welcome email when email is
+   enabled.
 6. Attendees can submit costume entries at `/party/costumes`.
 7. Attendees can submit karaoke songs at `/party/karaoke`.
 8. Attendees can view food and drink menu cards with images at `/party/menu`
@@ -162,11 +163,12 @@ Recipients are deduplicated across RSVP entries and Redis-backed party account
 emails, and delivery failures are logged/reported to admin without blocking the
 RSVP update from being posted.
 
-The same SES sender is used for party account password reset emails. Reset links
-are generated from random one-time tokens, stored only as SHA-256 hashes in
-Redis-backed state, expire after 45 minutes, and are marked used after a
-successful password change. Password reset request responses are intentionally
-generic so the UI does not reveal whether an email address is registered.
+The same SES sender is used for account welcome emails and party account
+password reset emails. Reset links are generated from random one-time tokens,
+stored only as SHA-256 hashes in Redis-backed state, expire after 45 minutes,
+and are marked used after a successful password change. Password reset request
+responses are intentionally generic so the UI does not reveal whether an email
+address is registered.
 
 The same SES sender is used for drink order confirmation emails and drink-ready
 emails when Halloween email sending is enabled.

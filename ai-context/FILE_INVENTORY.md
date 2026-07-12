@@ -4,7 +4,7 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP updates, RSVP/registered-user email recipient collection, SES email sending, password reset token lifecycle, food/drink menu and drink ordering, bartender roles/order queue, editable party details/map address, role-based session auth, party-code gate, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP updates, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, bartender roles/order queue, editable party details/map address, role-based session auth, party-code gate, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
 | `requirements.txt` | Python dependency declaration; includes Flask 3.x, redis-py for Redis state, boto3 for SES email, and gunicorn for production. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
@@ -27,6 +27,7 @@
 | `templates/halloween_login.html` | Attendee account sign-in form shown after party-code verification. |
 | `templates/halloween_register.html` | Attendee account registration form shown after party-code verification. |
 | `templates/email/rsvp_update.html` | HTML email body for admin-posted RSVP update notifications. |
+| `templates/email/account_welcome.html` | HTML email body for party account creation welcome messages. |
 | `templates/email/drink_order_placed.html` | HTML email body for drink order confirmations with estimated ready time. |
 | `templates/email/drink_order_ready.html` | HTML email body for notifying attendees their drink is ready. |
 | `templates/password_reset_request.html` | Email entry form for requesting a party account password reset link. |

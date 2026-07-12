@@ -35,7 +35,8 @@
   after 45 minutes, and are marked used after a successful reset.
 - `GET|POST /party/register` -> attendee account creation; requires party-code
   verification before showing the registration form, then stores a password hash
-  in Redis app state and grants the `regular` role.
+  in Redis app state, sends a welcome email when email is enabled, and grants
+  the `regular` role.
 - `POST /logout` -> clears the current browser session regardless of regular/admin role.
 - `POST /party/logout` and `POST /admin/logout` -> compatibility aliases for
   the single logout behavior.
@@ -62,8 +63,8 @@
 - Redis-backed state serialization/hydration, with process-local global caches.
 - Food/drink menu management, drink order lifecycle, bartender role checks,
   prep-time estimates, and drink notification emails.
-- RSVP update recipient collection, password reset email, and Amazon SES email
-  sending when enabled.
+- RSVP update recipient collection, account welcome email, password reset email,
+  and Amazon SES email sending when enabled.
 - Display update broadcasting via `threading.Condition`.
 - Scoreboard construction, ranking, and winner card creation.
 - Rotation-entry construction for the live display.

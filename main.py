@@ -2483,6 +2483,7 @@ def rsvp():
             maps_urls=google_maps_urls(party_details.get("map_address", "")),
             rsvp_updates=sorted_rsvp_updates(),
             show_admin_link=False,
+            hide_site_nav=True,
             hide_party_nav=True,
         )
 
@@ -2537,6 +2538,8 @@ def rsvp():
         maps_urls=google_maps_urls(party_details.get("map_address", "")),
         rsvp_updates=sorted_rsvp_updates(),
         show_admin_link=False,
+        hide_site_nav=True,
+        hide_party_nav=True,
     )
 
 

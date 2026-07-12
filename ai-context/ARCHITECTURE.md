@@ -16,12 +16,12 @@
   updates are shown newest-to-oldest. RSVP submissions require an email contact
   and do not show a guest opt-in checkbox for update emails. Successful RSVPs
   send a confirmation email with RSVP details and calendar links when email is
-  enabled.
+  enabled. The RSVP page is intentionally standalone and hides the shared header
+  menu/site navigation even when a signed-in party user visits it directly.
 - `GET /rsvp/calendar/<rsvp_id>` -> returns a downloadable `.ics` calendar
   invite for a saved RSVP using the random RSVP ID.
-  Locked RSVP sessions show only the code prompt; party details, map, updates,
-  and party navigation stay hidden until that browser session enters the correct
-  code.
+  Locked RSVP sessions show only the code prompt; party details, map, and updates
+  stay hidden until that browser session enters the correct code.
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
 - `GET|POST /party/menu` -> signed-in attendee menu page with food/drink image
   cards. Available drinks can be ordered and create Redis-backed drink orders

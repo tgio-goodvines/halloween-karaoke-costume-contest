@@ -7,11 +7,12 @@
 - RSVP landing page at `/rsvp` opens with an RSVP prompt, account creation/login
   alternatives, admin-editable static party detail cards, Google Maps location
   embed/directions button, and update cards.
+- `/rsvp` is standalone and hides the shared header menu/site navigation even
+  if a signed-in party user opens it directly.
 - `/rsvp`, `/party/login`, and `/party/register` require the party code before
   RSVP, sign-in, or account creation forms are visible.
-- Locked `/rsvp` sessions show only the code prompt; party details, map, updates,
-  and party navigation stay hidden until the current browser session enters the
-  correct code.
+- Locked `/rsvp` sessions show only the code prompt; party details, map, and
+  updates stay hidden until the current browser session enters the correct code.
 - Successful RSVP adds an independent host-visible RSVP entry with name,
   required email contact, guest count, and note; it does not create an attendee
   account. There is no guest opt-in checkbox for update emails.

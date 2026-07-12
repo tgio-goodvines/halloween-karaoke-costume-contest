@@ -10,39 +10,41 @@
     <header class="site-header">
       <div class="container site-header__inner">
         <h1>{{ party_title }}</h1>
-        <div class="site-header__meta">
-          <details class="site-nav">
-            <summary class="site-nav__toggle">Menu</summary>
-            <nav>
-              {% if session.username %}
-                <span class="site-nav__user">Signed in as {{ session.username }}</span>
-              {% elif admin_authenticated %}
-                <span class="site-nav__user">Signed in as Admin</span>
-              {% endif %}
-              {% if not hide_party_nav %}
-                <a href="{{ url_for('party_dashboard') }}">Overview</a>
-                <a href="{{ url_for('party_menu') }}">Menu</a>
-                <a href="{{ url_for('party_costumes') }}">Costume</a>
-                {% if costume_contest_state.voting_visible %}
-                  <a href="{{ url_for('party_costume_voting') }}">Voting</a>
+        {% if not hide_site_nav %}
+          <div class="site-header__meta">
+            <details class="site-nav">
+              <summary class="site-nav__toggle">Menu</summary>
+              <nav>
+                {% if session.username %}
+                  <span class="site-nav__user">Signed in as {{ session.username }}</span>
+                {% elif admin_authenticated %}
+                  <span class="site-nav__user">Signed in as Admin</span>
                 {% endif %}
-                <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
-              {% endif %}
-              {% if bartender_authenticated or admin_authenticated %}
-                <a href="{{ url_for('bartender_portal') }}">Bartender</a>
-              {% endif %}
-              {% if show_admin_link is not defined or show_admin_link %}
-                <a href="{{ url_for('admin_portal') }}">Admin</a>
-              {% endif %}
-              {% if session.username or regular_authenticated or admin_authenticated %}
-                <form method="post" action="{{ url_for('logout') }}" class="site-nav__logout">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit">Log Out</button>
-                </form>
-              {% endif %}
-            </nav>
-          </details>
-        </div>
+                {% if not hide_party_nav %}
+                  <a href="{{ url_for('party_dashboard') }}">Overview</a>
+                  <a href="{{ url_for('party_menu') }}">Menu</a>
+                  <a href="{{ url_for('party_costumes') }}">Costume</a>
+                  {% if costume_contest_state.voting_visible %}
+                    <a href="{{ url_for('party_costume_voting') }}">Voting</a>
+                  {% endif %}
+                  <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
+                {% endif %}
+                {% if bartender_authenticated or admin_authenticated %}
+                  <a href="{{ url_for('bartender_portal') }}">Bartender</a>
+                {% endif %}
+                {% if show_admin_link is not defined or show_admin_link %}
+                  <a href="{{ url_for('admin_portal') }}">Admin</a>
+                {% endif %}
+                {% if session.username or regular_authenticated or admin_authenticated %}
+                  <form method="post" action="{{ url_for('logout') }}" class="site-nav__logout">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit">Log Out</button>
+                  </form>
+                {% endif %}
+              </nav>
+            </details>
+          </div>
+        {% endif %}
       </div>
     </header>
 

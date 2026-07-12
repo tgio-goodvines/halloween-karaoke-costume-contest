@@ -20,7 +20,7 @@ Important working notes:
 - The app stores Halloween event data in Redis DB `1` using the `halloween:` key prefix, with process-local state as a runtime cache.
 - The root route redirects to the admin-selected public landing page and defaults to `/rsvp`; attendee-facing portal flow continues at `/party` after separate registration/login.
 - `/rsvp`, `/party/register`, and `/party/login` require the admin-configured party code before showing RSVP, account creation, or sign-in forms.
-- The locked `/rsvp` page must not show party detail/map/update cards or party navigation; party-code unlock is per browser/session and must not unlock other browsers.
+- The `/rsvp` page is a standalone public RSVP surface and must not show the header menu/site navigation; the locked state also must not show party detail/map/update cards. Party-code unlock is per browser/session and must not unlock other browsers.
 - `/rsvp` is an independent host RSVP list, not account creation; attendee portal accounts are created/signed in through Redis-backed accounts at `/party/register` and `/party/login`.
 - RSVP and party account registration require an email address; there is no guest opt-in checkbox. Successful RSVP sends a confirmation email with RSVP details plus Google Calendar and `.ics` calendar links when email is enabled. Admin-posted RSVP updates can email deduplicated RSVP and registered-user recipients through SES when enabled.
 - Creating a party account sends a SES welcome email when email is enabled; failures must not block account creation.

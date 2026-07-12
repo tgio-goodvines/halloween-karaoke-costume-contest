@@ -19,6 +19,11 @@
   and party navigation stay hidden until that browser session enters the correct
   code.
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
+- `GET|POST /party/menu` -> signed-in attendee menu page with food/drink image
+  cards. Available drinks can be ordered and create Redis-backed drink orders
+  with estimated ready times.
+- `GET|POST /bartender` -> bartender/admin drink order queue with image and
+  recipe reference; transitions orders to `in_progress` or `complete`.
 - `GET|POST /party/login` -> attendee account sign-in; requires party-code
   verification before showing the login form, then validates a Redis-stored
   password hash and grants the `regular` role.
@@ -55,6 +60,8 @@
 - Flask app setup and route definitions.
 - Dataclasses: `CostumeSignup`, `KaraokeSignup`.
 - Redis-backed state serialization/hydration, with process-local global caches.
+- Food/drink menu management, drink order lifecycle, bartender role checks,
+  prep-time estimates, and drink notification emails.
 - RSVP update recipient collection, password reset email, and Amazon SES email
   sending when enabled.
 - Display update broadcasting via `threading.Condition`.
@@ -139,6 +146,7 @@ karaoke signup/event cards are withheld until the configured party start time.
 - Fetching latest display data.
 - Connecting and reconnecting to SSE updates.
 - Rendering override content.
+- Rendering drink-ready override images.
 - Running karaoke countdown timers and karaoke panel rotation.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.
@@ -149,7 +157,9 @@ karaoke signup/event cards are withheld until the configured party start time.
 
 - `base.html`: shared shell, title, CSS include, header menu with signed-in
   identity and single logout action, footer, and script block.
-- `index.html`: attendee dashboard, contest status banners, event highlights, signup summaries.
+- `index.html`: attendee dashboard, contest status banners, event highlights, drink order status cards, and signup summaries.
+- `menu.html`: attendee food/drink menu with images, drink ordering, and recent order status cards.
+- `bartender.html`: bartender/admin drink order queue with image and recipe reference.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
@@ -163,7 +173,8 @@ karaoke signup/event cards are withheld until the configured party start time.
   pages reveal their forms.
 - `admin.html`: all admin actions, public landing/party-code settings, RSVP
   list, party detail/map address editing, RSVP update posting/removal, and live
-  contest/karaoke state; add/edit entry forms are disclosure rows to keep mobile
+  contest/karaoke state, menu management, bartender role assignment, and bar
+  operations summary; add/edit entry forms are disclosure rows to keep mobile
   admin scanning manageable.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
@@ -197,5 +208,8 @@ karaoke signup/event cards are withheld until the configured party start time.
 - If adding durable event data, introduce a clear persistence layer before expanding globals further.
 - If changing contest voting, protect vote/index alignment carefully.
 - If changing live-display payloads, update both `build_rotation_entries()`/override payloads and `static/display.js`.
+- Drink-ready live-display overrides are temporary and include `expires_at`; keep
+  server-side cleanup in `/live-display` and `/api/display-data` if adding more
+  temporary override types.
 - If adding admin actions, call `broadcast_display_update()` whenever display-relevant state changes.
 - If adding template pages, extend `base.html` unless the page is a full-screen display mode.

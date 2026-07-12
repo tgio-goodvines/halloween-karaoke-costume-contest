@@ -153,6 +153,8 @@ class RedisStateTests(unittest.TestCase):
         main.registered_users = {}
         main.user_accounts = {}
         main.password_reset_tokens = {}
+        main.menu_items = []
+        main.drink_orders = []
         main.rsvp_signups = []
         main.rsvp_updates = []
         main.submitted_costume_votes = set()
@@ -225,10 +227,42 @@ class RedisStateTests(unittest.TestCase):
             "ada": {
                 "id": "user-1",
                 "username": "Ada",
+                "email": "ada@example.com",
+                "roles": ["regular", "bartender"],
                 "password_hash": main.generate_password_hash("party-password"),
                 "created_at": "2026-07-06T00:00:00Z",
             }
         }
+        main.menu_items = [
+            {
+                "id": "drink-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "Lime and smoke.",
+                "image_url": "https://example.test/margarita.jpg",
+                "recipe": "Shake with ice.",
+                "available": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            }
+        ]
+        main.drink_orders = [
+            {
+                "id": "order-1",
+                "user_id": "user-1",
+                "username": "Ada",
+                "email": "ada@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "https://example.test/margarita.jpg",
+                "recipe": "Shake with ice.",
+                "status": "complete",
+                "estimated_ready_at": "2026-07-06T00:08:00Z",
+                "created_at": "2026-07-06T00:00:00Z",
+                "started_at": "2026-07-06T00:01:00Z",
+                "completed_at": "2026-07-06T00:06:00Z",
+                "completed_seconds": 360,
+            }
+        ]
         main.rsvp_signups = [
             main.RSVPSignup(
                 "Morgan",
@@ -280,7 +314,12 @@ class RedisStateTests(unittest.TestCase):
         )
         self.assertEqual({"user-1": "Ada"}, main.registered_users)
         self.assertEqual("Ada", main.user_accounts["ada"]["username"])
+        self.assertEqual(["bartender", "regular"], main.user_accounts["ada"]["roles"])
         self.assertTrue(main.check_password_hash(main.user_accounts["ada"]["password_hash"], "party-password"))
+        self.assertEqual("Witch Margarita", main.menu_items[0]["name"])
+        self.assertEqual("https://example.test/margarita.jpg", main.menu_items[0]["image_url"])
+        self.assertEqual("order-1", main.drink_orders[0]["id"])
+        self.assertEqual(360, main.drink_orders[0]["completed_seconds"])
         self.assertEqual("Morgan", main.rsvp_signups[0].name)
         self.assertEqual(2, main.rsvp_signups[0].guest_count)
         self.assertEqual("Bringing cider", main.rsvp_signups[0].note)
@@ -979,6 +1018,181 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("/admin/login", admin_response.headers["Location"])
         self.assertEqual(302, display_response.status_code)
         self.assertIn("/admin/login", display_response.headers["Location"])
+
+    def test_admin_can_manage_menu_images_and_assign_bartender_role(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            add_response = client.post(
+                "/admin",
+                data={
+                    "action": "add_menu_item",
+                    "name": "Witch Margarita",
+                    "category": "drink",
+                    "description": "Lime, smoke, and salt.",
+                    "image_url": "https://example.test/witch.jpg",
+                    "recipe": "Shake tequila, lime, and syrup with ice.",
+                    "available": "yes",
+                },
+            )
+            role_response = client.post(
+                "/admin",
+                data={
+                    "action": "set_user_roles",
+                    "account_id": account["id"],
+                    "bartender": "yes",
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, add_response.status_code)
+        self.assertEqual(200, role_response.status_code)
+        self.assertEqual("Witch Margarita", state["menu_items"][0]["name"])
+        self.assertEqual("https://example.test/witch.jpg", state["menu_items"][0]["image_url"])
+        self.assertIn("bartender", state["user_accounts"]["jamie"]["roles"])
+
+    def test_attendee_can_order_drink_and_menu_displays_images(self):
+        main.menu_items = [
+            {
+                "id": "drink-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "Lime, smoke, and salt.",
+                "image_url": "https://example.test/witch.jpg",
+                "recipe": "Shake tequila, lime, and syrup with ice.",
+                "available": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            },
+            {
+                "id": "food-1",
+                "name": "Pumpkin Bites",
+                "category": "food",
+                "description": "Small savory snacks.",
+                "image_url": "https://example.test/bites.jpg",
+                "recipe": "",
+                "available": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            },
+        ]
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        self.save_current_state()
+
+        fake_ses = FakeSESClient()
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+        main.create_ses_client = lambda: fake_ses
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            menu_response = client.get("/party/menu")
+            order_response = client.post("/party/menu", data={"menu_item_id": "drink-1"})
+
+        state = self.redis_state()
+        self.assertEqual(200, menu_response.status_code)
+        menu_html = menu_response.get_data(as_text=True)
+        self.assertIn("https://example.test/witch.jpg", menu_html)
+        self.assertIn("https://example.test/bites.jpg", menu_html)
+        self.assertEqual(302, order_response.status_code)
+        self.assertEqual(1, len(state["drink_orders"]))
+        self.assertEqual("received", state["drink_orders"][0]["status"])
+        self.assertEqual("https://example.test/witch.jpg", state["drink_orders"][0]["item_image_url"])
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertIn("Drink order received", fake_ses.sent_messages[0]["Content"]["Simple"]["Body"]["Html"]["Data"])
+
+    def test_food_items_cannot_be_ordered_as_drinks(self):
+        main.menu_items = [
+            {
+                "id": "food-1",
+                "name": "Pumpkin Bites",
+                "category": "food",
+                "description": "Small savory snacks.",
+                "image_url": "https://example.test/bites.jpg",
+                "recipe": "",
+                "available": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            }
+        ]
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.post("/party/menu", data={"menu_item_id": "food-1"})
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Only drinks can be ordered", response.get_data(as_text=True))
+        self.assertEqual([], state["drink_orders"])
+
+    def test_bartender_can_complete_order_and_publish_ready_override(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        account["roles"] = ["regular", "bartender"]
+        main.drink_orders = [
+            {
+                "id": "order-1",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "https://example.test/witch.jpg",
+                "recipe": "Shake tequila, lime, and syrup with ice.",
+                "status": "received",
+                "estimated_ready_at": "2026-07-06T00:08:00Z",
+                "created_at": main._utc_now_iso(),
+                "started_at": "",
+                "completed_at": "",
+                "completed_seconds": None,
+            }
+        ]
+        self.save_current_state()
+
+        fake_ses = FakeSESClient()
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+        main.create_ses_client = lambda: fake_ses
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["regular", "bartender"]
+            start_response = client.post(
+                "/bartender",
+                data={"order_id": "order-1", "status": "in_progress"},
+            )
+            complete_response = client.post(
+                "/bartender",
+                data={"order_id": "order-1", "status": "complete"},
+            )
+            self.login_admin(client)
+            display_response = client.get("/api/display-data")
+
+        state = self.redis_state()
+        self.assertEqual(200, start_response.status_code)
+        self.assertEqual(200, complete_response.status_code)
+        self.assertEqual("complete", state["drink_orders"][0]["status"])
+        self.assertGreater(state["drink_orders"][0]["completed_seconds"], 0)
+        self.assertEqual("drink_ready", state["live_display_override"]["type"])
+        self.assertEqual("https://example.test/witch.jpg", state["live_display_override"]["image_url"])
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(200, display_response.status_code)
+        self.assertEqual("drink_ready", display_response.get_json()["override"]["type"])
+
+    def test_bartender_view_requires_bartender_or_admin(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            regular_response = client.get("/bartender")
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            admin_response = client.get("/bartender")
+
+        self.assertEqual(302, regular_response.status_code)
+        self.assertIn("/party/login", regular_response.headers["Location"])
+        self.assertEqual(200, admin_response.status_code)
 
     def test_legacy_attendee_routes_redirect_to_party_paths(self):
         self.save_current_state()

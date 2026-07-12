@@ -168,6 +168,10 @@ a:focus {
     .admin-panel,
     .admin-section,
     .admin-entry,
+    .menu-section,
+    .menu-card,
+    .order-card,
+    .bartender-card,
     .karaoke-lineup,
     .contest-chart,
     .contest-chart__item,
@@ -405,6 +409,8 @@ main.container {
 .signup-form input,
 .login-form input,
 .admin-entry__fields input,
+.admin-entry__fields select,
+.admin-entry__fields textarea,
 .voting-card__label input {
   width: 100%;
   min-height: 44px;
@@ -414,6 +420,16 @@ main.container {
   background: #111;
   color: var(--text);
   font-size: 1rem;
+}
+
+.admin-entry__fields select,
+.admin-entry__fields textarea {
+  font: inherit;
+}
+
+.admin-entry__fields textarea {
+  min-height: 6rem;
+  resize: vertical;
 }
 
 .signup-form button,
@@ -592,6 +608,14 @@ main.container {
   font-weight: 600;
 }
 
+.admin-entry__fields label.form-check,
+.access-settings__form label.form-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  font-weight: 600;
+}
+
 .admin-entry__fields input {
   padding: 0.75rem;
   border-radius: 0.6rem;
@@ -697,6 +721,159 @@ main.container {
   border: 1px solid rgba(255, 59, 59, 0.35);
   background: #111;
   color: var(--text);
+}
+
+.menu-section {
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.menu-section h3,
+.menu-card h4,
+.order-card h4,
+.bartender-card h4,
+.bartender-card h5 {
+  margin: 0;
+}
+
+.menu-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.menu-card {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.menu-card--unavailable {
+  opacity: 0.68;
+}
+
+.menu-card__image-wrap,
+.bartender-card__media {
+  aspect-ratio: 4 / 3;
+  background: #111;
+  border-bottom: 1px solid rgba(255, 59, 59, 0.35);
+}
+
+.menu-card__image,
+.bartender-card__media img,
+.menu-admin-entry__image,
+.order-card__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.menu-card__placeholder {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  color: rgba(244, 244, 248, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  background: linear-gradient(135deg, rgba(255, 59, 59, 0.16), rgba(0, 0, 0, 0.4));
+}
+
+.menu-card__body {
+  padding: 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.menu-card__body p,
+.order-card__body p,
+.bartender-card__body p,
+.bartender-card__recipe p {
+  margin: 0;
+}
+
+.menu-card__eyebrow,
+.order-card__status {
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.order-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.order-card {
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(84px, 120px) minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.order-card__image {
+  min-height: 100%;
+  aspect-ratio: 1;
+}
+
+.order-card__body {
+  padding: 0.9rem 1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.order-card--complete {
+  border-color: rgba(255, 134, 134, 0.9);
+  box-shadow: 0 0 28px rgba(255, 59, 59, 0.58);
+}
+
+.bartender-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.bartender-card {
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+}
+
+.bartender-card--in_progress {
+  border-color: rgba(255, 134, 134, 0.95);
+  box-shadow: 0 0 32px rgba(255, 59, 59, 0.62);
+}
+
+.bartender-card__media {
+  border-right: 1px solid rgba(255, 59, 59, 0.35);
+  border-bottom: none;
+  min-height: 100%;
+}
+
+.bartender-card__body {
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bartender-card__recipe {
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 59, 59, 0.28);
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.bartender-card__recipe summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.menu-admin-entry__image {
+  max-height: 220px;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 59, 59, 0.35);
 }
 
 .access-settings__form textarea {
@@ -1242,6 +1419,10 @@ main.container {
   .slides,
   .signup-summary > div,
   .form-section,
+  .menu-section,
+  .menu-card,
+  .order-card,
+  .bartender-card,
   .rsvp-landing,
   .rsvp-card,
   .submitted-list,
@@ -1336,6 +1517,21 @@ main.container {
   .admin-entry__actions .button--primary,
   .admin-entry__actions .button--danger {
     grid-column: 1 / -1;
+  }
+
+  .order-card,
+  .bartender-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-card__image,
+  .bartender-card__media {
+    aspect-ratio: 16 / 9;
+  }
+
+  .bartender-card__media {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 59, 59, 0.35);
   }
 
   .contest-chart__meta,

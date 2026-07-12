@@ -87,7 +87,11 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    party dashboard.
 6. Attendees can submit costume entries at `/party/costumes`.
 7. Attendees can submit karaoke songs at `/party/karaoke`.
-8. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
+8. Attendees can view food and drink menu cards with images at `/party/menu`
+   and order available drinks from the bar.
+9. Bartenders assigned from existing user accounts can manage drink orders at
+   `/bartender`; admins can access the same view.
+10. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
    party code settings, and event state at
    `/admin`.
 9. When the admin starts the costume contest, `/party/costumes/vote` becomes available to logged-in guests.
@@ -106,10 +110,17 @@ the process-local cache:
 - `karaoke_signups`: list of `KaraokeSignup` dataclass instances with stable IDs.
 - `costume_ballots`: maps `user_id` to `{costume_id: score}`.
 - `user_accounts`: maps normalized usernames to Redis-backed attendee account
-  records with stable IDs and password hashes.
+  records with stable IDs, password hashes, and roles such as `regular` and
+  optional `bartender`.
 - `password_reset_tokens`: maps SHA-256 reset-token hashes to account-bound
   reset records with email, created/expiration timestamps, and used timestamp.
   Plaintext reset tokens are only sent in the emailed link and are not stored.
+- `menu_items`: admin-managed food/drink entries with stable IDs, category,
+  description, image URL, optional drink recipe, availability, and created
+  timestamp.
+- `drink_orders`: attendee drink orders with account/menu snapshots, status,
+  estimated ready time, created/started/completed timestamps, and completed prep
+  duration.
 - `registered_users`: maps session `user_id` to display name.
 - `rsvp_signups`: independent host RSVP list entries with name, required email
   contact, guest count, note, created timestamp, stable ID, and required email
@@ -129,6 +140,10 @@ the process-local cache:
 - `contest_state`: voting open/closed, winner lock, scoreboard card visibility.
 - `karaoke_state`: whether karaoke has been started and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.
+
+Drink orders move from `received` to `in_progress` to `complete`. Completed
+orders track prep duration from `started_at` when available, and drink-ready
+events create a temporary live-display override with the drink image.
 
 `HALLOWEEN_PARTY_START` controls when the live display switches from pre-party
 RSVP/update rotation to the full party-night costume/karaoke/event rotation.
@@ -154,6 +169,9 @@ are generated from random one-time tokens, stored only as SHA-256 hashes in
 Redis-backed state, expire after 45 minutes, and are marked used after a
 successful password change. Password reset request responses are intentionally
 generic so the UI does not reveal whether an email address is registered.
+
+The same SES sender is used for drink order confirmation emails and drink-ready
+emails when Halloween email sending is enabled.
 
 Schema version 1 Redis state with index-aligned `costume_votes` is upgraded on
 load into ID-keyed `costume_ballots`.

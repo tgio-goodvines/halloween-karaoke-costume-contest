@@ -23,6 +23,11 @@
 - Email-based password reset at `/party/password-reset` sends a one-time
   45-minute reset link without revealing whether the submitted email is
   registered.
+- Food and drink menu at `/party/menu` shows admin-managed cards with images,
+  descriptions, and availability.
+- Signed-in attendees can order available drinks from `/party/menu`; food items
+  are currently view-only.
+- Attendees can see recent drink order statuses and dashboard ready-drink cards.
 - A single logout action inside the shared header menu clears the current
   browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
@@ -84,6 +89,10 @@
   after the static party detail cards. When Halloween email updates are enabled,
   posted RSVP updates are emailed through SES to deduplicated RSVP and
   registered-user email recipients.
+- Admin can add, edit, remove, and disable food/drink menu items, including image
+  URLs, descriptions, and drink recipes for bartender reference.
+- Admin can assign or remove the `bartender` role for existing party accounts.
+- Admin can open the bartender view and see bar operations summary counts.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.
@@ -98,6 +107,20 @@
   and karaoke lineup at `/admin/export/state`,
   `/admin/export/costume-results`, and `/admin/export/karaoke-lineup`.
 - POST forms include CSRF tokens outside testing mode.
+
+## Bar And Drink Ordering Features
+
+- Bartender view at `/bartender` is available to assigned bartender accounts and
+  admins.
+- Drink orders progress from `received` to `in_progress` to `complete`.
+- Bartender view shows drink image and recipe reference; in-progress orders keep
+  the recipe visible.
+- Completed orders track prep duration and feed future estimated ready times.
+- Drink order confirmation emails include estimated ready time when Halloween
+  email sending is enabled.
+- Completing a drink sends a ready email, updates attendee dashboard/menu order
+  cards, and creates a temporary live-display drink-ready override with the
+  drink image.
 
 Important caveat: UI role passwords must be configured for normal use:
 `HALLOWEEN_ADMIN_PASSWORD` is the only UI password loaded from Vault. Regular
@@ -122,6 +145,7 @@ app state.
 - Display also updates immediately through server-sent events from `/api/display-updates`.
 - SSE endpoint sends keep-alive comments on idle intervals.
 - Display supports full-screen override cards for contest start, winner announcement, and karaoke start.
+- Display supports temporary drink-ready override cards with drink images.
 - Live-display cards use dynamic browser-size scaling, long/dense text classes,
   and overflow wrapping so normal desktop/laptop browser windows and narrow
   browsers do not clip cards.

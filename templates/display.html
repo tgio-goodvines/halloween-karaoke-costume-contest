@@ -145,6 +145,11 @@
             <div class="display-override__general" data-override-general>
               <h2 class="display-override__title" data-override-title>{{ override.title if override else '' }}</h2>
               <p class="display-override__highlight" data-override-highlight{% if not override or not override.get('highlight') %} hidden{% endif %}>{{ override.highlight if override and override.get('highlight') else '' }}</p>
+              <img
+                class="display-override__image"
+                data-override-image
+                {% if override and override.get('image_url') %}src="{{ override.image_url }}" alt="{{ override.highlight if override.get('highlight') else override.title }}"{% else %}hidden alt=""{% endif %}
+              >
               <p class="display-override__message" data-override-message>{{ override.message if override else '' }}</p>
               <ul class="display-override__details" data-override-details{% if not override or not override.get('details') %} hidden{% endif %}>
                 {% if override and override.get('details') %}

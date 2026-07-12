@@ -257,6 +257,11 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
     "current_singer_id": None,
 }
 
+DEFAULT_DRINK_ESTIMATE_SECONDS = 8 * 60
+DRINK_READY_OVERRIDE_SECONDS = 24
+DRINK_ORDER_STATUSES = ("received", "in_progress", "complete")
+MENU_ITEM_CATEGORIES = ("drink", "food")
+
 DEFAULT_PARTY_DETAILS: dict[str, str] = {
     "date": app.config["PARTY_DATE_LABEL"],
     "time": app.config["PARTY_TIME_LABEL"],
@@ -304,6 +309,8 @@ costume_ballots: dict[str, dict[str, int]] = {}
 registered_users: dict[str, str] = {}
 user_accounts: dict[str, dict[str, object]] = {}
 password_reset_tokens: dict[str, dict[str, object]] = {}
+menu_items: list[dict[str, object]] = []
+drink_orders: list[dict[str, object]] = []
 rsvp_signups: List[RSVPSignup] = []
 rsvp_updates: List[RSVPUpdate] = []
 submitted_costume_votes: set[str] = set()
@@ -328,6 +335,8 @@ STATE_MUTATION_ENDPOINTS = {
     "password_reset_confirm",
     "rsvp",
     "admin_portal",
+    "bartender_portal",
+    "party_menu",
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
@@ -336,6 +345,8 @@ STATE_REFRESH_ENDPOINTS = {
     "rsvp",
     "admin_portal",
     "party_dashboard",
+    "party_menu",
+    "bartender_portal",
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
@@ -348,8 +359,12 @@ ADMIN_ENDPOINTS = {
     "export_costume_results",
     "export_karaoke_lineup",
 }
+BAR_ENDPOINTS = {
+    "bartender_portal",
+}
 REGULAR_USER_ENDPOINTS = {
     "party_dashboard",
+    "party_menu",
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
@@ -361,6 +376,7 @@ DISPLAY_ENDPOINTS = {
 }
 ROLE_LOGIN_ENDPOINTS = {
     "regular": "party_login",
+    "bartender": "party_login",
     "admin": "admin_login",
 }
 STATE_LOCK_TIMEOUT_SECONDS = 10
@@ -400,6 +416,13 @@ def ensure_submitted_vote_tracking() -> None:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def format_time_label(raw_iso: object) -> str:
+    parsed = parse_utc_iso(raw_iso)
+    if not parsed:
+        return ""
+    return parsed.astimezone().strftime("%-I:%M %p")
 
 
 def parse_party_start() -> datetime:
@@ -469,9 +492,33 @@ def create_user_account(username: str, password: str, email: str = "") -> dict[s
         "username": username.strip(),
         "email": normalize_email(email),
         "email_updates_acknowledged": True,
+        "roles": ["regular"],
         "password_hash": generate_password_hash(password),
         "created_at": _utc_now_iso(),
     }
+
+
+def normalize_account_roles(raw_roles: object) -> list[str]:
+    roles = {"regular"}
+    if isinstance(raw_roles, list):
+        roles.update(str(role) for role in raw_roles if role in {"regular", "bartender"})
+    return sorted(roles)
+
+
+def account_has_role(account: dict[str, object] | None, role: str) -> bool:
+    if not account:
+        return False
+    return role in normalize_account_roles(account.get("roles", []))
+
+
+def current_user_account() -> dict[str, object] | None:
+    user_id = str(session.get("user_id", "") or "")
+    if not user_id:
+        return None
+    for account in user_accounts.values():
+        if str(account.get("id", "")) == user_id:
+            return account
+    return None
 
 
 def hash_password_reset_token(token: str) -> str:
@@ -776,6 +823,256 @@ def send_password_reset_email(account: dict[str, object], token: str) -> bool:
         return False
 
 
+def send_drink_order_placed_email(order: dict[str, object]) -> bool:
+    recipient = normalize_email(str(order.get("email", "") or ""))
+    if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
+        return False
+
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        app.logger.warning("Drink order email requested, but boto3 is not installed.")
+        return False
+
+    menu_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_menu")
+    ready_label = format_time_label(order.get("estimated_ready_at")) or "soon"
+    subject = f"Drink order received: {order.get('item_name', 'your drink')}"
+    text_body = (
+        f"Hi {order.get('username', 'there')},\n\n"
+        f"We received your order for {order.get('item_name', 'your drink')}.\n"
+        f"Estimated ready time: {ready_label}.\n\n"
+        f"You can check your order status here: {menu_url}"
+    )
+    html_body = render_template(
+        "email/drink_order_placed.html",
+        order=order,
+        ready_label=ready_label,
+        menu_url=menu_url,
+    )
+
+    try:
+        ses_client.send_email(
+            FromEmailAddress=app.config["EMAIL_FROM"],
+            Destination={"ToAddresses": [recipient]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {
+                        "Text": {"Data": text_body, "Charset": "UTF-8"},
+                        "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    },
+                }
+            },
+        )
+        return True
+    except Exception as exc:
+        app.logger.warning("Unable to send drink order email to %s: %s", recipient, exc)
+        return False
+
+
+def send_drink_ready_email(order: dict[str, object]) -> bool:
+    recipient = normalize_email(str(order.get("email", "") or ""))
+    if not recipient or not app.config["EMAIL_UPDATES_ENABLED"]:
+        return False
+
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        app.logger.warning("Drink ready email requested, but boto3 is not installed.")
+        return False
+
+    menu_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_menu")
+    subject = f"Drink ready: {order.get('item_name', 'your drink')}"
+    text_body = (
+        f"Hi {order.get('username', 'there')},\n\n"
+        f"Your {order.get('item_name', 'drink')} is ready. Pick it up at the bar.\n\n"
+        f"Order status: {menu_url}"
+    )
+    html_body = render_template("email/drink_order_ready.html", order=order, menu_url=menu_url)
+
+    try:
+        ses_client.send_email(
+            FromEmailAddress=app.config["EMAIL_FROM"],
+            Destination={"ToAddresses": [recipient]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {
+                        "Text": {"Data": text_body, "Charset": "UTF-8"},
+                        "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    },
+                }
+            },
+        )
+        return True
+    except Exception as exc:
+        app.logger.warning("Unable to send drink ready email to %s: %s", recipient, exc)
+        return False
+
+
+def safe_image_url(raw_url: str) -> str:
+    image_url = raw_url.strip()
+    if not image_url:
+        return ""
+    if len(image_url) > 500:
+        return ""
+    parsed = urlparse(image_url)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return image_url
+    if image_url.startswith("/static/"):
+        return image_url
+    return ""
+
+
+def normalize_menu_category(raw_category: object) -> str:
+    category = str(raw_category or "").strip().lower()
+    return category if category in MENU_ITEM_CATEGORIES else "drink"
+
+
+def menu_item_to_dict(item: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": str(item.get("id", "") or uuid4().hex),
+        "name": str(item.get("name", "") or "").strip(),
+        "category": normalize_menu_category(item.get("category")),
+        "description": str(item.get("description", "") or "").strip(),
+        "image_url": safe_image_url(str(item.get("image_url", "") or "")),
+        "recipe": str(item.get("recipe", "") or "").strip(),
+        "available": bool(item.get("available", True)),
+        "created_at": str(item.get("created_at", "") or _utc_now_iso()),
+    }
+
+
+def normalize_menu_item(data: dict[str, object]) -> dict[str, object] | None:
+    item = menu_item_to_dict(data)
+    if not item["name"]:
+        return None
+    return item
+
+
+def find_menu_item(item_id: str) -> dict[str, object] | None:
+    return next((item for item in menu_items if str(item.get("id", "")) == item_id), None)
+
+
+def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
+    order_id = str(data.get("id", "") or uuid4().hex)
+    menu_item_id = str(data.get("menu_item_id", "") or "")
+    item_name = str(data.get("item_name", "") or "").strip()
+    status = str(data.get("status", "received") or "received")
+    if status not in DRINK_ORDER_STATUSES:
+        status = "received"
+    if not order_id or not item_name:
+        return None
+
+    completed_seconds = None
+    try:
+        raw_seconds = data.get("completed_seconds")
+        completed_seconds = int(raw_seconds) if raw_seconds not in (None, "") else None
+    except (TypeError, ValueError):
+        completed_seconds = None
+
+    return {
+        "id": order_id,
+        "user_id": str(data.get("user_id", "") or ""),
+        "username": str(data.get("username", "") or "").strip(),
+        "email": normalize_email(str(data.get("email", "") or "")),
+        "menu_item_id": menu_item_id,
+        "item_name": item_name,
+        "item_image_url": safe_image_url(str(data.get("item_image_url", "") or "")),
+        "recipe": str(data.get("recipe", "") or "").strip(),
+        "status": status,
+        "estimated_ready_at": str(data.get("estimated_ready_at", "") or ""),
+        "created_at": str(data.get("created_at", "") or _utc_now_iso()),
+        "started_at": str(data.get("started_at", "") or ""),
+        "completed_at": str(data.get("completed_at", "") or ""),
+        "completed_seconds": completed_seconds,
+    }
+
+
+def active_drink_orders() -> list[dict[str, object]]:
+    return [order for order in drink_orders if order.get("status") in {"received", "in_progress"}]
+
+
+def user_drink_orders(user_id: str) -> list[dict[str, object]]:
+    return sorted(
+        [order for order in drink_orders if str(order.get("user_id", "")) == user_id],
+        key=lambda order: str(order.get("created_at", "")),
+        reverse=True,
+    )
+
+
+def completed_drink_order_durations() -> list[int]:
+    durations = [
+        int(order["completed_seconds"])
+        for order in drink_orders
+        if order.get("completed_seconds") and int(order.get("completed_seconds", 0) or 0) > 0
+    ]
+    return durations[-20:]
+
+
+def average_drink_completion_seconds() -> int:
+    durations = completed_drink_order_durations()
+    if not durations:
+        return DEFAULT_DRINK_ESTIMATE_SECONDS
+    return max(60, int(sum(durations) / len(durations)))
+
+
+def estimate_drink_ready_at() -> str:
+    active_count = len(active_drink_orders()) + 1
+    wait_seconds = average_drink_completion_seconds() * active_count
+    return (datetime.now(timezone.utc) + timedelta(seconds=wait_seconds)).isoformat().replace("+00:00", "Z")
+
+
+def drink_order_status_label(status: object) -> str:
+    labels = {
+        "received": "Order received",
+        "in_progress": "In progress",
+        "complete": "Complete",
+    }
+    return labels.get(str(status), "Order received")
+
+
+def find_drink_order(order_id: str) -> dict[str, object] | None:
+    return next((order for order in drink_orders if str(order.get("id", "")) == order_id), None)
+
+
+def build_drink_ready_override(order: dict[str, object]) -> dict[str, object]:
+    attendee_name = str(order.get("username", "") or "Guest")
+    item_name = str(order.get("item_name", "") or "your drink")
+    return {
+        "type": "drink_ready",
+        "title": "Drink Ready",
+        "highlight": attendee_name,
+        "message": f"Your {item_name} is ready at the bar.",
+        "image_url": str(order.get("item_image_url", "") or ""),
+        "details": [
+            item_name,
+            "Pick it up while the spirits are still lively.",
+        ],
+        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=DRINK_READY_OVERRIDE_SECONDS))
+        .isoformat()
+        .replace("+00:00", "Z"),
+    }
+
+
+def cleanup_expired_display_override() -> bool:
+    global live_display_override
+    if not live_display_override:
+        return False
+    expires_at = parse_utc_iso(live_display_override.get("expires_at"))
+    if expires_at and expires_at <= datetime.now(timezone.utc):
+        live_display_override = None
+        persist_state_if_available()
+        return True
+    return False
+
+
+def build_menu_sections() -> dict[str, list[dict[str, object]]]:
+    return {
+        "drinks": [item for item in menu_items if item.get("category") == "drink"],
+        "food": [item for item in menu_items if item.get("category") == "food"],
+    }
+
+
 def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
     return {
         "id": signup.id,
@@ -924,6 +1221,8 @@ def snapshot_state() -> dict[str, object]:
         "costume_ballots": copy.deepcopy(costume_ballots),
         "user_accounts": copy.deepcopy(user_accounts),
         "password_reset_tokens": copy.deepcopy(password_reset_tokens),
+        "menu_items": copy.deepcopy(menu_items),
+        "drink_orders": copy.deepcopy(drink_orders),
         "registered_users": copy.deepcopy(registered_users),
         "rsvp_signups": [
             rsvp_signup_to_dict(signup) for signup in rsvp_signups
@@ -948,7 +1247,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
     global landing_page_target, party_code_hash, party_code_hint, party_details, display_update_version
-    global password_reset_tokens
+    global password_reset_tokens, menu_items, drink_orders
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -1006,11 +1305,30 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                     "username": username,
                     "email": normalize_email(str(raw_account.get("email", "") or "")),
                     "email_updates_acknowledged": bool(raw_account.get("email_updates_acknowledged", False)),
+                    "roles": normalize_account_roles(raw_account.get("roles", [])),
                     "password_hash": password_hash,
                     "created_at": str(raw_account.get("created_at", "") or ""),
                 }
     else:
         user_accounts = {}
+
+    raw_menu_items = data.get("menu_items", [])
+    menu_items = []
+    if isinstance(raw_menu_items, list):
+        for raw_item in raw_menu_items:
+            if isinstance(raw_item, dict):
+                item = normalize_menu_item(raw_item)
+                if item:
+                    menu_items.append(item)
+
+    raw_drink_orders = data.get("drink_orders", [])
+    drink_orders = []
+    if isinstance(raw_drink_orders, list):
+        for raw_order in raw_drink_orders:
+            if isinstance(raw_order, dict):
+                order = normalize_drink_order(raw_order)
+                if order:
+                    drink_orders.append(order)
 
     raw_password_reset_tokens = data.get("password_reset_tokens", {})
     password_reset_tokens = {}
@@ -1080,6 +1398,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
 
     raw_override = data.get("live_display_override")
     live_display_override = copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
+    cleanup_expired_display_override()
     landing_page_target = normalize_landing_page_target(data.get("landing_page_target"))
     party_code_hash = str(data.get("party_code_hash", party_code_hash) or "")
     party_code_hint = str(data.get("party_code_hint", party_code_hint) or "").strip()
@@ -1393,6 +1712,8 @@ def required_role_for_endpoint(endpoint: str | None) -> str | None:
         return "admin"
     if endpoint in DISPLAY_ENDPOINTS:
         return "admin"
+    if endpoint in BAR_ENDPOINTS:
+        return "bartender"
     if endpoint in REGULAR_USER_ENDPOINTS:
         return "regular"
     return None
@@ -1405,6 +1726,9 @@ def protect_role_routes():
         return None
 
     if session_has_role(required_role):
+        return None
+
+    if required_role == "bartender" and session_has_role("admin"):
         return None
 
     login_endpoint = ROLE_LOGIN_ENDPOINTS[required_role]
@@ -1794,6 +2118,7 @@ def health():
 
 @app.route("/live-display")
 def live_display():
+    cleanup_expired_display_override()
     rotation_entries = build_rotation_entries()
 
     return render_template(
@@ -1835,6 +2160,7 @@ def display_updates():
 
 @app.route("/api/display-data")
 def display_data():
+    cleanup_expired_display_override()
     rotation_entries = build_rotation_entries()
 
     return jsonify(
@@ -1859,6 +2185,9 @@ def inject_contest_state():
         "csrf_token": get_csrf_token,
         "admin_authenticated": bool(session.get("admin_authenticated")),
         "regular_authenticated": session_has_role("regular"),
+        "bartender_authenticated": session_has_role("bartender"),
+        "format_time_label": format_time_label,
+        "drink_order_status_label": drink_order_status_label,
     }
 
 
@@ -2009,6 +2338,8 @@ def party_dashboard():
     if "user_id" not in session or "username" not in session:
         return redirect(url_for("party_login", next=url_for("party_dashboard")))
 
+    user_orders = user_drink_orders(str(session.get("user_id", "")))
+    ready_orders = [order for order in user_orders if order.get("status") == "complete"][:3]
     slides = list(SLIDES)
     winner = contest_state.get("winner")
     if winner:
@@ -2024,6 +2355,8 @@ def party_dashboard():
         slides=slides,
         costume_signups=costume_signups,
         karaoke_signups=karaoke_signups,
+        drink_orders=user_orders[:5],
+        ready_drink_orders=ready_orders,
         show_admin_link=False,
     )
 
@@ -2075,6 +2408,8 @@ def party_login():
             session["user_id"] = user_id
             session["username"] = display_name
             grant_session_role("regular")
+            if account_has_role(account, "bartender"):
+                grant_session_role("bartender")
             registered_users[user_id] = display_name
             persist_state_if_available()
 
@@ -2261,6 +2596,133 @@ def party_register():
     )
 
 
+@app.route("/party/menu", methods=["GET", "POST"])
+def party_menu():
+    errors: List[str] = []
+    messages: List[str] = []
+    user_id = str(session.get("user_id", "") or "")
+    account = current_user_account()
+
+    if not user_id or not account:
+        return redirect(url_for("party_login", next=url_for("party_menu")))
+
+    if request.method == "POST":
+        item_id = request.form.get("menu_item_id", "").strip()
+        item = find_menu_item(item_id)
+        if not item:
+            errors.append("That menu item could not be found.")
+        elif item.get("category") != "drink":
+            errors.append("Only drinks can be ordered from the portal right now.")
+        elif not bool(item.get("available", True)):
+            errors.append("That drink is not available right now.")
+
+        if not errors and item:
+            estimated_ready_at = estimate_drink_ready_at()
+            order = {
+                "id": uuid4().hex,
+                "user_id": user_id,
+                "username": str(account.get("username", session.get("username", "Guest"))),
+                "email": normalize_email(str(account.get("email", "") or "")),
+                "menu_item_id": str(item.get("id", "")),
+                "item_name": str(item.get("name", "")),
+                "item_image_url": str(item.get("image_url", "") or ""),
+                "recipe": str(item.get("recipe", "") or ""),
+                "status": "received",
+                "estimated_ready_at": estimated_ready_at,
+                "created_at": _utc_now_iso(),
+                "started_at": "",
+                "completed_at": "",
+                "completed_seconds": None,
+            }
+            drink_orders.append(order)
+            send_drink_order_placed_email(order)
+            messages.append(
+                f"Order received for {order['item_name']}. Estimated ready time: "
+                f"{format_time_label(estimated_ready_at) or 'soon'}."
+            )
+            persist_state_if_available()
+            return redirect(url_for("party_menu", ordered="1"))
+
+    if request.args.get("ordered") == "1":
+        messages.append("Your drink order was sent to the bar.")
+
+    return render_template(
+        "menu.html",
+        errors=errors,
+        messages=messages,
+        menu_sections=build_menu_sections(),
+        drink_orders=user_drink_orders(user_id),
+        show_admin_link=False,
+    )
+
+
+@app.route("/bartender", methods=["GET", "POST"])
+def bartender_portal():
+    global live_display_override
+    errors: List[str] = []
+    messages: List[str] = []
+
+    if request.method == "POST":
+        order_id = request.form.get("order_id", "").strip()
+        requested_status = request.form.get("status", "").strip()
+        order = find_drink_order(order_id)
+
+        if not order:
+            errors.append("That drink order could not be found.")
+        elif requested_status not in {"in_progress", "complete"}:
+            errors.append("Choose a valid order status.")
+        elif requested_status == "in_progress" and order.get("status") != "received":
+            errors.append("Only received orders can be started.")
+        elif requested_status == "complete" and order.get("status") not in {"received", "in_progress"}:
+            errors.append("Only active orders can be completed.")
+
+        if not errors and order:
+            now_iso = _utc_now_iso()
+            if requested_status == "in_progress":
+                order["status"] = "in_progress"
+                order["started_at"] = now_iso
+                messages.append(f"Started {order.get('item_name')} for {order.get('username')}.")
+            elif requested_status == "complete":
+                order["status"] = "complete"
+                order["completed_at"] = now_iso
+                started_or_created_at = (
+                    parse_utc_iso(order.get("started_at"))
+                    or parse_utc_iso(order.get("created_at"))
+                    or datetime.now(timezone.utc)
+                )
+                order["completed_seconds"] = max(
+                    1,
+                    int((datetime.now(timezone.utc) - started_or_created_at).total_seconds()),
+                )
+                send_drink_ready_email(order)
+                live_display_override = build_drink_ready_override(order)
+                messages.append(f"Marked {order.get('item_name')} ready for {order.get('username')}.")
+                broadcast_display_update()
+            persist_state_if_available()
+
+    sorted_orders = sorted(
+        drink_orders,
+        key=lambda order: (
+            {"in_progress": 0, "received": 1, "complete": 2}.get(str(order.get("status")), 3),
+            str(order.get("created_at", "")),
+        ),
+    )
+    recent_completed = [
+        order for order in sorted_orders if order.get("status") == "complete"
+    ][-12:]
+    active_orders = [order for order in sorted_orders if order.get("status") != "complete"]
+
+    return render_template(
+        "bartender.html",
+        errors=errors,
+        messages=messages,
+        active_orders=active_orders,
+        completed_orders=list(reversed(recent_completed)),
+        average_completion_seconds=average_drink_completion_seconds(),
+        show_admin_link=session_has_role("admin"),
+    )
+
+
 @app.route("/party/logout", methods=["POST"])
 @app.route("/admin/logout", methods=["POST"])
 @app.route("/logout", methods=["POST"])
@@ -2347,6 +2809,42 @@ def admin_portal():
             f"{action_label} is disabled while costume voting is open. Lock a winner or restart voting before changing the lineup."
         )
         return True
+
+    def menu_item_from_form(existing_id: str | None = None, existing_created_at: str | None = None) -> dict[str, object] | None:
+        image_url = request.form.get("image_url", "").strip()
+        normalized_image_url = safe_image_url(image_url)
+        if image_url and not normalized_image_url:
+            errors.append("Menu image URL must be http, https, or a /static/ path.")
+
+        category = normalize_menu_category(request.form.get("category", "drink"))
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        recipe = request.form.get("recipe", "").strip()
+
+        if not name:
+            errors.append("Menu item name is required.")
+        elif len(name) > 100:
+            errors.append("Menu item name must be 100 characters or fewer.")
+        if len(description) > 500:
+            errors.append("Menu item description must be 500 characters or fewer.")
+        if len(recipe) > 1200:
+            errors.append("Drink recipe must be 1200 characters or fewer.")
+        if category == "food" and recipe:
+            recipe = ""
+
+        if errors:
+            return None
+
+        return {
+            "id": existing_id or uuid4().hex,
+            "name": name,
+            "category": category,
+            "description": description,
+            "image_url": normalized_image_url,
+            "recipe": recipe,
+            "available": request.form.get("available") == "yes",
+            "created_at": existing_created_at or _utc_now_iso(),
+        }
 
     if request.method == "POST":
         action = request.form.get("action", "")
@@ -2476,6 +2974,59 @@ def admin_portal():
                 removed_update = rsvp_updates.pop(update_index)
                 messages.append(f"Removed RSVP update: {removed_update.title}.")
                 should_broadcast = True
+
+        elif action == "add_menu_item":
+            item = menu_item_from_form()
+            if item:
+                menu_items.append(item)
+                messages.append(f"Added {item['name']} to the menu.")
+
+        elif action == "update_menu_item":
+            item_id = request.form.get("item_id", "").strip()
+            item_index = next(
+                (index for index, item in enumerate(menu_items) if str(item.get("id", "")) == item_id),
+                None,
+            )
+            if item_index is None:
+                errors.append("Menu item could not be found.")
+            else:
+                existing_item = menu_items[item_index]
+                item = menu_item_from_form(
+                    existing_id=str(existing_item.get("id", "")),
+                    existing_created_at=str(existing_item.get("created_at", "")),
+                )
+                if item:
+                    menu_items[item_index] = item
+                    messages.append(f"Updated menu item {item['name']}.")
+
+        elif action == "delete_menu_item":
+            item_id = request.form.get("item_id", "").strip()
+            item_index = next(
+                (index for index, item in enumerate(menu_items) if str(item.get("id", "")) == item_id),
+                None,
+            )
+            if item_index is None:
+                errors.append("Menu item could not be found.")
+            elif any(order.get("menu_item_id") == item_id and order.get("status") != "complete" for order in drink_orders):
+                errors.append("Menu items with active drink orders cannot be removed. Mark it unavailable instead.")
+            else:
+                removed_item = menu_items.pop(item_index)
+                messages.append(f"Removed {removed_item.get('name')} from the menu.")
+
+        elif action == "set_user_roles":
+            account_id = request.form.get("account_id", "").strip()
+            account = next(
+                (candidate for candidate in user_accounts.values() if str(candidate.get("id", "")) == account_id),
+                None,
+            )
+            if not account:
+                errors.append("User account could not be found.")
+            else:
+                roles = {"regular"}
+                if request.form.get("bartender") == "yes":
+                    roles.add("bartender")
+                account["roles"] = sorted(roles)
+                messages.append(f"Updated roles for {account.get('username')}.")
 
         elif action == "delete_costume":
             index = parse_entry_index(
@@ -2812,6 +3363,12 @@ def admin_portal():
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
         rsvp_updates=sorted_rsvp_updates(),
+        menu_items=menu_items,
+        menu_sections=build_menu_sections(),
+        drink_orders=drink_orders,
+        active_drink_order_count=len(active_drink_orders()),
+        average_drink_completion_seconds=average_drink_completion_seconds(),
+        user_accounts=user_accounts,
     )
 
 

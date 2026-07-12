@@ -8,6 +8,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/FEATURES.md` - all supported user/admin/live-display features.
 - `ai-context/FILE_INVENTORY.md` - file-by-file purpose and ownership map.
 - `ai-context/ARCHITECTURE.md` - route map, data structures, frontend behavior, and extension guidance.
+- `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
@@ -23,6 +24,10 @@ Important working notes:
 - `/rsvp` is an independent host RSVP list, not account creation; attendee portal accounts are created/signed in through Redis-backed accounts at `/party/register` and `/party/login`.
 - RSVP and party account registration require an email address plus acknowledgment that RSVP-page host updates are sent by email; admin-posted RSVP updates can email deduplicated RSVP and registered-user recipients through SES when enabled.
 - Party account users can reset forgotten passwords through `/party/password-reset`; reset emails use SES, reset tokens are hashed before storage, expire after 45 minutes, and are single-use.
+- `/party/menu` lets signed-in attendees view food/drink menu cards with images and order available drinks; food is currently view-only.
+- Admin can manage food/drink menu items, image URLs, availability, and drink recipes from `/admin`; bartender access is assigned to existing party accounts through account roles.
+- `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.
+- Completing a drink order sends the ready email and creates a temporary live-display `drink_ready` override with the drink image; attendees also see ready drink cards on `/party`.
 - Halloween outbound email uses the separate `tnq-halloween.com` SES identity and sender `no-reply@tnq-halloween.com`; do not change existing GoodVines SES identities or sender addresses for `appg-v.com` or `goodvines.app`.
 - Admin controls can set the root landing target, replace the party code, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
 - Before `HALLOWEEN_PARTY_START`, live-display rotation is limited to RSVP/static party info/update cards and should not show costume or karaoke signup entries.

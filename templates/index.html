@@ -26,15 +26,51 @@
   </section>
 {% endif %}
 
+{% if ready_drink_orders %}
+  <section class="contest-banner contest-banner--winner">
+    <div class="contest-banner__body">
+      <h2>Your Drink Is Ready</h2>
+      <p>
+        {{ ready_drink_orders[0].item_name }} is ready for pickup at the bar.
+      </p>
+    </div>
+    <a class="contest-banner__button" href="{{ url_for('party_menu') }}">View Orders</a>
+  </section>
+{% endif %}
+
 <section class="signup-callout">
   <div class="signup-callout__intro">
     <h2>Welcome to the Party Portal</h2>
     <p>
-      You're already connected—now use this hub to join the costume contest, reserve a karaoke song, and keep up with
-      the latest signups.
+      You're already connected—now use this hub to order drinks, join the costume contest, reserve a karaoke song, and
+      keep up with the latest signups.
     </p>
   </div>
 </section>
+
+{% if drink_orders %}
+  <section class="submitted-list">
+    <h3>Your Recent Drink Orders</h3>
+    <div class="order-list">
+      {% for order in drink_orders %}
+        <article class="order-card order-card--{{ order.status }}">
+          {% if order.item_image_url %}
+            <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image">
+          {% endif %}
+          <div class="order-card__body">
+            <p class="order-card__status">{{ drink_order_status_label(order.status) }}</p>
+            <h4>{{ order.item_name }}</h4>
+            {% if order.status == 'complete' %}
+              <p>Ready for pickup at the bar.</p>
+            {% elif order.estimated_ready_at %}
+              <p>Estimated ready: {{ format_time_label(order.estimated_ready_at) }}</p>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
 
 <section class="slides">
   <h2>Event Highlights</h2>

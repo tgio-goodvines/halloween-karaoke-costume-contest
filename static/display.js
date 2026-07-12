@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const overrideHighlightElement = overrideContainer ? overrideContainer.querySelector('[data-override-highlight]') : null;
   const overrideMessageElement = overrideContainer ? overrideContainer.querySelector('[data-override-message]') : null;
   const overrideDetailsElement = overrideContainer ? overrideContainer.querySelector('[data-override-details]') : null;
+  const overrideImageElement = overrideContainer ? overrideContainer.querySelector('[data-override-image]') : null;
   const karaokeTitleElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-title]')
     : null;
@@ -465,7 +466,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'display-override__card--inferno',
         'display-override__card--karaoke',
         'display-override__card--contest',
-        'display-override__card--winner'
+        'display-override__card--winner',
+        'display-override__card--drink'
       );
     }
 
@@ -477,6 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isKaraokeOverride = Boolean(overrideType === 'karaoke_start' && karaokeOverrideElement);
     const isContestStartOverride = overrideType === 'contest_start';
     const isContestWinnerOverride = overrideType === 'winner';
+    const isDrinkReadyOverride = overrideType === 'drink_ready';
 
     if (overrideTitleElement) {
       overrideTitleElement.textContent = titleText;
@@ -507,6 +510,19 @@ document.addEventListener('DOMContentLoaded', () => {
         overrideDetailsElement.removeAttribute('hidden');
       } else {
         overrideDetailsElement.setAttribute('hidden', '');
+      }
+    }
+
+    if (overrideImageElement) {
+      const imageUrl = overrideState && overrideState.image_url ? String(overrideState.image_url) : '';
+      if (imageUrl) {
+        overrideImageElement.src = imageUrl;
+        overrideImageElement.alt = highlightText || titleText || 'Drink image';
+        overrideImageElement.removeAttribute('hidden');
+      } else {
+        overrideImageElement.removeAttribute('src');
+        overrideImageElement.alt = '';
+        overrideImageElement.setAttribute('hidden', '');
       }
     }
 
@@ -603,13 +619,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       updateKaraokeLineup([]);
 
-      if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride)) {
+      if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride || isDrinkReadyOverride)) {
         overrideCardElement.classList.add('display-override__card--inferno');
         if (isContestStartOverride) {
           overrideCardElement.classList.add('display-override__card--contest');
         }
         if (isContestWinnerOverride) {
           overrideCardElement.classList.add('display-override__card--winner');
+        }
+        if (isDrinkReadyOverride) {
+          overrideCardElement.classList.add('display-override__card--drink');
         }
       }
     }

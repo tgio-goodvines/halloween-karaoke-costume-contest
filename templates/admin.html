@@ -310,6 +310,152 @@
     {% endif %}
   </section>
 
+  <section class="admin-section admin-section--bar">
+    <h3>Bar Operations</h3>
+    <p>
+      {{ active_drink_order_count }} active drink order{{ 's' if active_drink_order_count != 1 else '' }}.
+      Current estimate basis: about {{ (average_drink_completion_seconds / 60)|round(0, 'ceil')|int }} minute{{ 's' if (average_drink_completion_seconds / 60)|round(0, 'ceil')|int != 1 else '' }} per drink.
+    </p>
+    <div class="contest-actions">
+      <a href="{{ url_for('bartender_portal') }}" class="button button--primary">Open Bartender View</a>
+    </div>
+  </section>
+
+  <section class="admin-section admin-section--menu">
+    <h3>Food and Drink Menu</h3>
+    <p>Add menu images, descriptions, and drink recipes for guests and bartenders.</p>
+
+    <details class="admin-entry admin-entry--new">
+      <summary class="admin-entry__summary">
+        <span class="admin-entry__rank">+</span>
+        <span class="admin-entry__summary-text">
+          <strong>Add a menu item</strong>
+          <span>Create food or drink options for the portal</span>
+        </span>
+      </summary>
+      <form method="post" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="admin-entry__fields">
+          <label>
+            Name
+            <input type="text" name="name" maxlength="100" required>
+          </label>
+          <label>
+            Category
+            <select name="category">
+              <option value="drink">Drink</option>
+              <option value="food">Food</option>
+            </select>
+          </label>
+          <label>
+            Image URL
+            <input type="text" name="image_url" maxlength="500" placeholder="https://... or /static/..." inputmode="url">
+          </label>
+          <label>
+            Description
+            <textarea name="description" maxlength="500"></textarea>
+          </label>
+          <label>
+            Drink Recipe
+            <textarea name="recipe" maxlength="1200" placeholder="Ingredients and prep notes for bartenders"></textarea>
+          </label>
+          <label class="form-check">
+            <input type="checkbox" name="available" value="yes" checked>
+            <span>Available tonight</span>
+          </label>
+        </div>
+        <button type="submit" name="action" value="add_menu_item" class="button button--primary">Add Menu Item</button>
+      </form>
+    </details>
+
+    {% if menu_items %}
+      <div class="admin-entry-list">
+        {% for item in menu_items %}
+          <details class="admin-entry admin-entry--editable menu-admin-entry">
+            <summary class="admin-entry__summary">
+              <span class="admin-entry__rank">{{ item.category|title }}</span>
+              <span class="admin-entry__summary-text">
+                <strong>{{ item.name }}</strong>
+                <span>{% if item.available %}Available{% else %}Unavailable{% endif %}</span>
+              </span>
+            </summary>
+            {% if item.image_url %}
+              <img class="menu-admin-entry__image" src="{{ item.image_url }}" alt="{{ item.name }}">
+            {% endif %}
+            <form method="post" class="admin-entry__form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="item_id" value="{{ item.id }}">
+              <div class="admin-entry__fields">
+                <label>
+                  Name
+                  <input type="text" name="name" maxlength="100" value="{{ item.name }}" required>
+                </label>
+                <label>
+                  Category
+                  <select name="category">
+                    <option value="drink" {% if item.category == 'drink' %}selected{% endif %}>Drink</option>
+                    <option value="food" {% if item.category == 'food' %}selected{% endif %}>Food</option>
+                  </select>
+                </label>
+                <label>
+                  Image URL
+                  <input type="text" name="image_url" maxlength="500" value="{{ item.image_url }}" placeholder="https://... or /static/..." inputmode="url">
+                </label>
+                <label>
+                  Description
+                  <textarea name="description" maxlength="500">{{ item.description }}</textarea>
+                </label>
+                <label>
+                  Drink Recipe
+                  <textarea name="recipe" maxlength="1200">{{ item.recipe }}</textarea>
+                </label>
+                <label class="form-check">
+                  <input type="checkbox" name="available" value="yes" {% if item.available %}checked{% endif %}>
+                  <span>Available tonight</span>
+                </label>
+              </div>
+              <div class="admin-entry__actions">
+                <button type="submit" name="action" value="update_menu_item" class="button button--primary">Save Menu Item</button>
+                <button type="submit" name="action" value="delete_menu_item" class="button button--danger">Remove</button>
+              </div>
+            </form>
+          </details>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="admin-empty">No food or drink menu items yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="admin-section admin-section--users">
+    <h3>Users and Roles</h3>
+    <p>Assign bartender access to existing party accounts.</p>
+
+    {% if user_accounts %}
+      <div class="admin-entry-list">
+        {% for normalized_username, account in user_accounts.items() %}
+          <article class="rsvp-admin-item">
+            <div>
+              <h4>{{ account.username }}</h4>
+              <p class="rsvp-admin-item__meta">{{ account.email }}</p>
+            </div>
+            <form method="post" class="access-settings__form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="account_id" value="{{ account.id }}">
+              <label class="form-check">
+                <input type="checkbox" name="bartender" value="yes" {% if 'bartender' in account.roles %}checked{% endif %}>
+                <span>Bartender</span>
+              </label>
+              <button type="submit" name="action" value="set_user_roles" class="button">Save Roles</button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="admin-empty">No registered party accounts yet.</p>
+    {% endif %}
+  </section>
+
   <div class="admin-grid">
     <section class="admin-section">
       <h3>Costume Contest Signups</h3>

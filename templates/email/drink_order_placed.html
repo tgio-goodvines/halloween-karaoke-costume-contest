@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <h1>Drink order received</h1>
+    <p>Hi {{ order.username }},</p>
+    <p>Your order for <strong>{{ order.item_name }}</strong> was sent to the bar.</p>
+    <p>Estimated ready time: <strong>{{ ready_label }}</strong>.</p>
+    <p><a href="{{ menu_url }}">Check your order status</a></p>
+  </body>
+</html>

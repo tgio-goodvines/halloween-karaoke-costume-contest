@@ -7,7 +7,7 @@
     <p class="rsvp-landing__eyebrow">{{ party_title }}</p>
     <h2>RSVP for the party</h2>
     <p>
-      Use the party code from your invite to unlock the details, RSVP, and read the latest host updates.
+      Review the details, read the latest host updates, and enter the party code from your invite when you RSVP.
     </p>
   </div>
 
@@ -21,22 +21,7 @@
     </div>
   {% endif %}
 
-  {% if not party_code_verified %}
-    <form method="post" class="rsvp-card">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <h3>Enter the party code</h3>
-      {% if party_code_hint %}
-        <p class="form-helper">Hint: {{ party_code_hint }}</p>
-      {% endif %}
-      {% if party_code_configured %}
-        <label for="party_code">Party Code</label>
-        <input type="password" id="party_code" name="party_code" autocomplete="one-time-code" required>
-        <button type="submit" class="button button--primary">Unlock RSVP</button>
-      {% else %}
-        <p class="form-helper">The hosts have not set the party code yet.</p>
-      {% endif %}
-    </form>
-  {% elif submitted_rsvp %}
+  {% if submitted_rsvp %}
     <div class="rsvp-card rsvp-card--confirmed">
       <h3>You're on the RSVP list</h3>
       <p>
@@ -59,6 +44,15 @@
         <a href="{{ url_for('party_login') }}">sign in</a> if you already have one. The hosts may email party updates to RSVP guests and registered users.
       </p>
 
+      <label for="party_code">Party Code</label>
+      <input type="password" id="party_code" name="party_code" autocomplete="one-time-code" required>
+      {% if party_code_hint %}
+        <p class="form-helper">Hint: {{ party_code_hint }}</p>
+      {% endif %}
+      {% if not party_code_configured %}
+        <p class="form-helper">The hosts have not set the party code yet.</p>
+      {% endif %}
+
       <label for="username">Your Name</label>
       <input type="text" id="username" name="username" autocomplete="username" required value="{{ request.form.username }}">
 
@@ -75,57 +69,55 @@
     </form>
   {% endif %}
 
-  {% if party_code_verified %}
-    <div class="rsvp-details" aria-label="Party details">
-      {% for card in party_info_cards %}
-        <article>
-          <h3>{{ card.title }}</h3>
-          <p>{{ card.message }}</p>
-        </article>
-      {% endfor %}
-    </div>
+  <div class="rsvp-details" aria-label="Party details">
+    {% for card in party_info_cards %}
+      <article>
+        <h3>{{ card.title }}</h3>
+        <p>{{ card.message }}</p>
+      </article>
+    {% endfor %}
+  </div>
 
-    {% if maps_urls %}
-      <section class="rsvp-map" aria-label="Party location map">
-        <div class="rsvp-map__heading">
-          <h3>Find the Party</h3>
-          <a class="button button--primary" href="{{ maps_urls.directions }}" target="_blank" rel="noopener noreferrer">
-            Get Directions
-          </a>
-        </div>
-        <iframe
-          title="Google map for the party location"
-          src="{{ maps_urls.embed }}"
-          loading="lazy"
-          referrerpolicy="no-referrer-when-downgrade"
-          allowfullscreen>
-        </iframe>
-      </section>
-    {% endif %}
-
-    <section class="rsvp-updates" aria-label="Host updates">
-      <h3>Latest Updates</h3>
-      {% if rsvp_updates %}
-        <div class="rsvp-update-list">
-          {% for update in rsvp_updates %}
-            <article class="rsvp-update-card{% if loop.first %} rsvp-update-card--latest{% endif %}">
-              <p class="rsvp-update-card__eyebrow">{{ 'Latest update' if loop.first else 'Update' }}</p>
-              <h4>{{ update.title }}</h4>
-              <p>{{ update.message }}</p>
-              {% if update.created_at %}
-                <p class="rsvp-update-card__meta">{{ update.created_at }}</p>
-              {% endif %}
-            </article>
-          {% endfor %}
-        </div>
-      {% else %}
-        <article class="rsvp-update-card rsvp-update-card--latest">
-          <p class="rsvp-update-card__eyebrow">Latest update</p>
-          <h4>RSVP is open</h4>
-          <p>Use this page to let the hosts know you are coming. More updates will appear here as party night gets closer.</p>
-        </article>
-      {% endif %}
+  {% if maps_urls %}
+    <section class="rsvp-map" aria-label="Party location map">
+      <div class="rsvp-map__heading">
+        <h3>Find the Party</h3>
+        <a class="button button--primary" href="{{ maps_urls.directions }}" target="_blank" rel="noopener noreferrer">
+          Get Directions
+        </a>
+      </div>
+      <iframe
+        title="Google map for the party location"
+        src="{{ maps_urls.embed }}"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen>
+      </iframe>
     </section>
   {% endif %}
+
+  <section class="rsvp-updates" aria-label="Host updates">
+    <h3>Latest Updates</h3>
+    {% if rsvp_updates %}
+      <div class="rsvp-update-list">
+        {% for update in rsvp_updates %}
+          <article class="rsvp-update-card{% if loop.first %} rsvp-update-card--latest{% endif %}">
+            <p class="rsvp-update-card__eyebrow">{{ 'Latest update' if loop.first else 'Update' }}</p>
+            <h4>{{ update.title }}</h4>
+            <p>{{ update.message }}</p>
+            {% if update.created_at %}
+              <p class="rsvp-update-card__meta">{{ update.created_at }}</p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <article class="rsvp-update-card rsvp-update-card--latest">
+        <p class="rsvp-update-card__eyebrow">Latest update</p>
+        <h4>RSVP is open</h4>
+        <p>Use this page to let the hosts know you are coming. More updates will appear here as party night gets closer.</p>
+      </article>
+    {% endif %}
+  </section>
 </section>
 {% endblock %}

@@ -9,38 +9,35 @@
 - `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, and override state; requires an `admin` role session.
 - `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`; requires an `admin` role session.
 - `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
-- `GET|POST /rsvp` -> public RSVP landing page; requires the party code before
-  showing party details and an independent RSVP form; successful RSVPs are saved
-  to the host-visible RSVP list and do not create attendee accounts. Admin-editable
-  party info cards and a Google Maps location embed are shown first, then RSVP
-  updates are shown newest-to-oldest. RSVP submissions require an email contact
-  and do not show a guest opt-in checkbox for update emails. Successful RSVPs
-  send a confirmation email with RSVP details and calendar links when email is
-  enabled. The RSVP page is intentionally standalone and hides the shared header
-  menu/site navigation even when a signed-in party user visits it directly.
+- `GET|POST /rsvp` -> public RSVP landing page; shows party details, an
+  independent RSVP form, admin-editable party info cards, Google Maps location
+  embed, and RSVP updates without a party-code gate. Successful RSVPs are saved
+  to the host-visible RSVP list and do not create attendee accounts. RSVP
+  submissions require the admin-configured party code as a form field plus an
+  email contact, and do not show a guest opt-in checkbox for update emails.
+  Successful RSVPs send a confirmation email with RSVP details and calendar
+  links when email is enabled. The RSVP page is intentionally standalone and
+  hides the shared header menu/site navigation even when a signed-in party user
+  visits it directly.
 - `GET /rsvp/calendar/<rsvp_id>` -> returns a downloadable `.ics` calendar
   invite for a saved RSVP using the random RSVP ID.
-  Locked RSVP sessions show only the code prompt; party details, map, and updates
-  stay hidden until that browser session enters the correct code.
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus `session.user_id` and `session.username`.
 - `GET|POST /party/menu` -> signed-in attendee menu page with food/drink image
   cards. Available drinks can be ordered and create Redis-backed drink orders
   with estimated ready times.
 - `GET|POST /bartender` -> bartender/admin drink order queue with image and
   recipe reference; transitions orders to `in_progress` or `complete`.
-- `GET|POST /party/login` -> attendee account sign-in; requires party-code
-  verification before showing the login form, then validates a Redis-stored
-  password hash and grants the `regular` role.
+- `GET|POST /party/login` -> public attendee account sign-in form; validates a
+  Redis-stored password hash and grants the `regular` role.
 - `GET|POST /party/password-reset` -> public account recovery request form;
   accepts an email address, always returns a generic response, and sends a
   one-time reset email when a matching account exists.
 - `GET|POST /party/password-reset/<token>` -> validates a reset token and lets
   the user choose a new password; tokens are hashed in stored state, expire
   after 45 minutes, and are marked used after a successful reset.
-- `GET|POST /party/register` -> attendee account creation; requires party-code
-  verification before showing the registration form, then stores a password hash
-  in Redis app state, sends a welcome email when email is enabled, and grants
-  the `regular` role.
+- `GET|POST /party/register` -> public attendee account creation form; stores a
+  password hash in Redis app state, sends a welcome email when email is enabled,
+  and grants the `regular` role.
 - `POST /logout` -> clears the current browser session regardless of regular/admin role.
 - `POST /party/logout` and `POST /admin/logout` -> compatibility aliases for
   the single logout behavior.
@@ -171,11 +168,9 @@ karaoke signup/event cards are withheld until the configured party start time.
 - `karaoke_signup.html`: karaoke entry form and submitted karaoke lineup.
 - `costume_voting.html`: complete ballot form and post-vote state.
 - `admin_login.html`: admin password form when production admin auth is configured.
-- `rsvp.html`: standalone guest RSVP landing page with party-code unlock,
-  RSVP prompt, party details, Google Maps directions/embed, newest-to-oldest update cards, RSVP
-  form, and optional portal account links.
-- `party_code_gate.html`: invite-code gate shown before direct login/register
-  pages reveal their forms.
+- `rsvp.html`: standalone guest RSVP landing page with RSVP prompt, RSVP form
+  party-code field, party details, Google Maps directions/embed,
+  newest-to-oldest update cards, and optional portal account links.
 - `admin.html`: all admin actions, public landing/party-code settings, RSVP
   list CRUD, party detail/map address editing, selective RSVP update
   posting/resending/removal, and live

@@ -70,14 +70,15 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 
 1. `/` redirects to the admin-configured public landing page, defaulting to
    `/rsvp`.
-2. `/rsvp`, `/party/login`, and `/party/register` require the party code before
-   guests can see RSVP, sign-in, or account creation forms.
+2. `/rsvp`, `/party/login`, and `/party/register` are public starting-flow pages
+   with no party-code gate before the page renders.
 3. `/rsvp` asks guests to RSVP, offers account creation/login as optional next
   steps, shows static party detail cards, renders a Google Maps embed and
   directions button when a map address is configured, then shows host update
-  cards from newest to oldest. RSVP submissions require an email address, save
-  independent entries for the admin RSVP list, and do not create attendee
-  portal accounts. There is no guest opt-in checkbox for update emails.
+  cards from newest to oldest. RSVP submissions require the admin-configured
+  party code as a form field plus an email address, save independent entries
+  for the admin RSVP list, and do not create attendee portal accounts. There is
+  no guest opt-in checkbox for update emails.
   Successful RSVPs send a confirmation email with RSVP details plus Google
   Calendar and `.ics` calendar links when email is enabled.
 4. `/live-display` redirects to `/admin/login` until the browser session has
@@ -135,9 +136,8 @@ the process-local cache:
 - `live_display_override`: current full-screen override card, or `None`.
 - `landing_page_target`: admin-selected root redirect target, defaulting to
   `/rsvp`.
-- `party_code_hash` and `party_code_hint`: invite-code gate settings for RSVP,
-  attendee login, and attendee account creation. The code itself is not stored
-  in plaintext.
+- `party_code_hash` and `party_code_hint`: RSVP submission code settings. The
+  code itself is not stored in plaintext.
 - `contest_state`: contest started/stopped, voting open/closed, winner lock, scoreboard card visibility.
 - `karaoke_state`: whether karaoke has been started/stopped/reset and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.

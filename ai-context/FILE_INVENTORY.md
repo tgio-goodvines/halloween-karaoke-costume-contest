@@ -4,7 +4,7 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP confirmation/update emails, RSVP calendar `.ics` generation, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, bartender roles/order queue, editable party details/map address, role-based session auth, party-code gate, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP party-code validation, RSVP confirmation/update emails, RSVP calendar `.ics` generation, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, bartender roles/order queue, editable party details/map address, role-based session auth, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
 | `requirements.txt` | Python dependency declaration; includes Flask 3.x, redis-py for Redis state, boto3 for SES email, and gunicorn for production. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
@@ -22,10 +22,9 @@
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
 | `templates/menu.html` | Attendee food/drink menu for `/party/menu`, including menu images, availability, drink ordering, and recent order statuses. |
 | `templates/bartender.html` | Bartender/admin drink order queue for `/bartender`, with drink images, recipe reference, status transitions, and completed order history. |
-| `templates/rsvp.html` | Public RSVP landing page with party-code unlock, RSVP prompt, party details, Google Maps embed/directions button, newest-to-oldest update cards, independent RSVP form, confirmation state, and optional portal account links. |
-| `templates/party_code_gate.html` | Party-code gate displayed before direct attendee login/register forms. |
-| `templates/halloween_login.html` | Attendee account sign-in form shown after party-code verification. |
-| `templates/halloween_register.html` | Attendee account registration form shown after party-code verification. |
+| `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
+| `templates/halloween_login.html` | Public attendee account sign-in form. |
+| `templates/halloween_register.html` | Public attendee account registration form. |
 | `templates/email/rsvp_update.html` | HTML email body for admin-posted RSVP update notifications. |
 | `templates/email/rsvp_confirmation.html` | HTML email body for RSVP confirmation messages with party details and calendar links. |
 | `templates/email/account_welcome.html` | HTML email body for party account creation welcome messages. |
@@ -145,6 +144,5 @@ These files are present locally but not tracked by Git at the time this context 
     ├── index.html
     ├── karaoke_signup.html
     ├── menu.html
-    ├── party_code_gate.html
     └── rsvp.html
 ```

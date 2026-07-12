@@ -19,8 +19,8 @@ Important working notes:
 
 - The app stores Halloween event data in Redis DB `1` using the `halloween:` key prefix, with process-local state as a runtime cache.
 - The root route redirects to the admin-selected public landing page and defaults to `/rsvp`; attendee-facing portal flow continues at `/party` after separate registration/login.
-- `/rsvp`, `/party/register`, and `/party/login` require the admin-configured party code before showing RSVP, account creation, or sign-in forms.
-- The `/rsvp` page is a standalone public RSVP surface and must not show the header menu/site navigation; the locked state also must not show party detail/map/update cards. Party-code unlock is per browser/session and must not unlock other browsers.
+- `/rsvp`, `/party/register`, and `/party/login` are public starting-flow pages and must not be hidden behind a party-code gate.
+- The `/rsvp` page is a standalone public RSVP surface and must not show the header menu/site navigation; party details, map, and host updates are public. RSVP submission requires the admin-configured party code as a field on the RSVP form.
 - `/rsvp` is an independent host RSVP list, not account creation; attendee portal accounts are created/signed in through Redis-backed accounts at `/party/register` and `/party/login`.
 - RSVP and party account registration require an email address; there is no guest opt-in checkbox. Successful RSVP sends a confirmation email with RSVP details plus Google Calendar and `.ics` calendar links when email is enabled. Admin-posted RSVP updates can email deduplicated RSVP and registered-user recipients through SES when enabled.
 - Creating a party account sends a SES welcome email when email is enabled; failures must not block account creation.
@@ -30,7 +30,7 @@ Important working notes:
 - `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.
 - Completing a drink order sends the ready email and creates a temporary live-display `drink_ready` override with the drink image; attendees also see ready drink cards on `/party`.
 - Halloween outbound email uses the separate `tnq-halloween.com` SES identity and sender `no-reply@tnq-halloween.com`; do not change existing GoodVines SES identities or sender addresses for `appg-v.com` or `goodvines.app`.
-- Admin controls can set the root landing target, replace the party code, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
+- Admin controls can set the root landing target, replace the RSVP submission party code, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
 - Before `HALLOWEEN_PARTY_START`, live-display rotation is limited to RSVP/static party info/update cards and should not show costume or karaoke signup entries.
 - Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`.
 - Header logout is a single button tucked inside the `Menu` disclosure; do not add separate regular/admin logout controls.

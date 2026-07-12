@@ -20,7 +20,7 @@
                 {% elif admin_authenticated %}
                   <span class="site-nav__user">Signed in as Admin</span>
                 {% endif %}
-                {% if not hide_party_nav %}
+                {% if not hide_party_nav and regular_authenticated %}
                   <a href="{{ url_for('party_dashboard') }}">Overview</a>
                   <a href="{{ url_for('party_menu') }}">Menu</a>
                   <a href="{{ url_for('party_costumes') }}">Costume</a>

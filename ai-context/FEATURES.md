@@ -9,10 +9,10 @@
   embed/directions button, and update cards.
 - `/rsvp` is standalone and hides the shared header menu/site navigation even
   if a signed-in party user opens it directly.
-- `/rsvp`, `/party/login`, and `/party/register` require the party code before
-  RSVP, sign-in, or account creation forms are visible.
-- Locked `/rsvp` sessions show only the code prompt; party details, map, and
-  updates stay hidden until the current browser session enters the correct code.
+- `/rsvp`, `/party/login`, and `/party/register` are public starting-flow pages
+  and are not hidden behind a party-code gate.
+- RSVP submission requires the admin-configured party code as a field on the
+  RSVP form; party details, map, and updates are visible before submitting.
 - Successful RSVP adds an independent host-visible RSVP entry with name,
   required email contact, guest count, and note; it does not create an attendee
   account. There is no guest opt-in checkbox for update emails.
@@ -88,8 +88,8 @@
   routes; they do not implicitly receive regular guest access.
 - Admin can choose which page `/` redirects to: RSVP landing, party login,
   party account signup, party portal, or live display.
-- Admin can set or replace the party code and optional code hint. The party code
-  is stored as a hash, not plaintext.
+- Admin can set or replace the RSVP submission party code and optional code
+  hint. The party code is stored as a hash, not plaintext.
 - Admin can add, edit, and delete RSVP entries, and see the total guest count.
 - Admin can edit the static party detail cards and map address shown on the RSVP
   page.

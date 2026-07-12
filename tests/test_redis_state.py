@@ -774,48 +774,50 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("new-invite-code", state["party_code_hash"])
         self.assertEqual("Ask Tony", state["party_code_hint"])
 
-    def test_party_code_required_before_login_form_is_visible(self):
+    def test_login_and_register_forms_are_public_without_party_code_gate(self):
         self.add_user_account()
         self.save_current_state()
 
         with main.app.test_client() as client:
-            login_gate = client.get("/party/login")
-            bad_code = client.post(
-                "/party/login",
-                data={"party_code": "wrong", "next": "/party"},
-            )
-            good_code = client.post(
-                "/party/login",
-                data={"party_code": "invite-code", "next": "/party"},
-            )
+            login_form = client.get("/party/login")
+            register_form = client.get("/party/register")
             login_form = client.get("/party/login?next=/party")
 
-        self.assertEqual(200, login_gate.status_code)
-        self.assertIn("Enter the Party Code", login_gate.get_data(as_text=True))
-        self.assertNotIn("Your Name", login_gate.get_data(as_text=True))
-        self.assertEqual(200, bad_code.status_code)
-        self.assertIn("did not match", bad_code.get_data(as_text=True))
-        self.assertEqual(302, good_code.status_code)
-        self.assertIn("/party/login", good_code.headers["Location"])
+        self.assertEqual(200, login_form.status_code)
+        self.assertEqual(200, register_form.status_code)
         self.assertIn("Welcome to the Halloween Hub", login_form.get_data(as_text=True))
+        self.assertIn("Your Name", login_form.get_data(as_text=True))
+        self.assertIn("Create Your Halloween Account", register_form.get_data(as_text=True))
+        self.assertNotIn("Enter the Party Code", login_form.get_data(as_text=True))
+        self.assertNotIn("Enter the Party Code", register_form.get_data(as_text=True))
+        self.assertNotIn("Overview", login_form.get_data(as_text=True))
+        self.assertNotIn("Overview", register_form.get_data(as_text=True))
 
-    def test_rsvp_requires_party_code_and_creates_independent_rsvp_after_unlock(self):
+    def test_rsvp_requires_party_code_on_form_and_creates_independent_rsvp(self):
         main.rsvp_updates = [
             main.RSVPUpdate("Parking", "Use the west side of the street.", "2026-07-07T00:00:00Z", "update-1")
         ]
         self.save_current_state()
 
         with main.app.test_client() as client:
-            locked_rsvp = client.get("/rsvp")
-            unlock_response = client.post(
-                "/rsvp",
-                data={"party_code": "invite-code"},
-            )
             rsvp_form = client.get("/rsvp")
+            bad_code_response = client.post(
+                "/rsvp",
+                data={
+                    "action": "submit_rsvp",
+                    "party_code": "wrong",
+                    "username": "Casey",
+                    "contact": "casey@example.com",
+                    "guest_count": "3",
+                    "note": "Arriving after 8",
+                },
+            )
+            state_after_bad_code = self.redis_state()
             signup_response = client.post(
                 "/rsvp",
                 data={
                     "action": "submit_rsvp",
+                    "party_code": "invite-code",
                     "username": "Casey",
                     "contact": "casey@example.com",
                     "guest_count": "3",
@@ -828,30 +830,24 @@ class RedisStateTests(unittest.TestCase):
                 roles = session.get("roles", [])
                 rsvp_id = session.get("rsvp_id")
 
-        state = self.redis_state()
-        self.assertEqual(200, locked_rsvp.status_code)
-        locked_body = locked_rsvp.get_data(as_text=True)
-        self.assertIn("Unlock RSVP", locked_body)
-        self.assertNotIn("Date", locked_body)
-        self.assertNotIn("Time", locked_body)
-        self.assertNotIn("Location", locked_body)
-        self.assertNotIn("Latest Updates", locked_body)
-        self.assertNotIn("Get Directions", locked_body)
-        self.assertNotIn("Costume Contest", locked_body)
-        self.assertNotIn("Karaoke", locked_body)
-        self.assertNotIn("site-nav", locked_body)
-        self.assertNotIn("site-nav__toggle", locked_body)
-        self.assertEqual(302, unlock_response.status_code)
         rsvp_form_body = rsvp_form.get_data(as_text=True)
         self.assertIn("Save your RSVP", rsvp_form_body)
+        self.assertIn("Party Code", rsvp_form_body)
         self.assertNotIn("Password", rsvp_form_body)
         self.assertIn("Date", rsvp_form_body)
+        self.assertIn("Time", rsvp_form_body)
+        self.assertIn("Location", rsvp_form_body)
+        self.assertIn("Get Directions", rsvp_form_body)
         self.assertIn("Latest Updates", rsvp_form_body)
         self.assertNotIn("<h3>Costume Contest</h3>", rsvp_form_body)
         self.assertNotIn("<h3>Karaoke</h3>", rsvp_form_body)
         self.assertNotIn("site-nav", rsvp_form_body)
         self.assertNotIn("site-nav__toggle", rsvp_form_body)
+        self.assertEqual(200, bad_code_response.status_code)
+        self.assertIn("That party code did not match", bad_code_response.get_data(as_text=True))
+        self.assertEqual([], state_after_bad_code["rsvp_signups"])
         self.assertEqual(302, signup_response.status_code)
+        state = self.redis_state()
         self.assertEqual("Casey", state["rsvp_signups"][0]["name"])
         self.assertEqual("casey@example.com", state["rsvp_signups"][0]["contact"])
         self.assertTrue(state["rsvp_signups"][0]["email_updates_acknowledged"])
@@ -894,11 +890,11 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["EMAIL_UPDATES_ENABLED"] = True
 
         with main.app.test_client() as client:
-            self.verify_party_code(client)
             response = client.post(
                 "/rsvp",
                 data={
                     "action": "submit_rsvp",
+                    "party_code": "invite-code",
                     "username": "Casey",
                     "contact": "casey@example.com",
                     "guest_count": "3",
@@ -935,11 +931,11 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["EMAIL_UPDATES_ENABLED"] = True
 
         with main.app.test_client() as client:
-            self.verify_party_code(client)
             response = client.post(
                 "/rsvp",
                 data={
                     "action": "submit_rsvp",
+                    "party_code": "invite-code",
                     "username": "Casey",
                     "contact": "casey@example.com",
                     "guest_count": "2",
@@ -960,25 +956,25 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(404, response.status_code)
 
-    def test_rsvp_unlock_is_per_browser_session(self):
+    def test_rsvp_details_are_public_across_browser_sessions(self):
         self.save_current_state()
 
-        with main.app.test_client() as unlocked_client:
-            unlocked_client.post("/rsvp", data={"party_code": "invite-code"})
-            unlocked_response = unlocked_client.get("/rsvp")
+        with main.app.test_client() as first_client:
+            first_response = first_client.get("/rsvp")
 
-        with main.app.test_client() as locked_client:
-            locked_response = locked_client.get("/rsvp")
+        with main.app.test_client() as second_client:
+            second_response = second_client.get("/rsvp")
 
-        unlocked_body = unlocked_response.get_data(as_text=True)
-        locked_body = locked_response.get_data(as_text=True)
-        self.assertIn("Save your RSVP", unlocked_body)
-        self.assertIn("Date", unlocked_body)
-        self.assertIn("Unlock RSVP", locked_body)
-        self.assertNotIn("Date", locked_body)
-        self.assertNotIn("Latest Updates", locked_body)
-        self.assertNotIn("Costume", locked_body)
-        self.assertNotIn("Karaoke", locked_body)
+        first_body = first_response.get_data(as_text=True)
+        second_body = second_response.get_data(as_text=True)
+        self.assertIn("Save your RSVP", first_body)
+        self.assertIn("Date", first_body)
+        self.assertIn("Latest Updates", first_body)
+        self.assertIn("Save your RSVP", second_body)
+        self.assertIn("Date", second_body)
+        self.assertIn("Latest Updates", second_body)
+        self.assertNotIn("Unlock RSVP", first_body)
+        self.assertNotIn("Unlock RSVP", second_body)
 
     def test_admin_can_update_party_details_on_rsvp_page(self):
         self.save_current_state()

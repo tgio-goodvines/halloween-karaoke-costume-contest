@@ -703,29 +703,8 @@ def party_code_is_configured() -> bool:
     return bool(party_code_hash)
 
 
-def party_code_is_verified() -> bool:
-    return session_has_role("regular") or bool(session.get("party_code_verified"))
-
-
 def verify_party_code(raw_code: str) -> bool:
     return bool(raw_code) and party_code_is_configured() and check_password_hash(party_code_hash, raw_code)
-
-
-def render_party_code_gate(
-    *,
-    errors: list[str] | None = None,
-    next_page: str | None = None,
-    destination: str = "party",
-) -> str:
-    return render_template(
-        "party_code_gate.html",
-        errors=errors or [],
-        next_page=next_page or url_for("party_dashboard"),
-        destination=destination,
-        party_code_configured=party_code_is_configured(),
-        party_code_hint=party_code_hint,
-        show_admin_link=False,
-    )
 
 
 def rsvp_signup_to_dict(signup: RSVPSignup) -> dict[str, object]:
@@ -2461,41 +2440,20 @@ def rsvp():
             None,
         )
 
-    if not party_code_is_verified():
-        if request.method == "POST":
-            provided_code = request.form.get("party_code", "").strip()
-            if verify_party_code(provided_code):
-                session["party_code_verified"] = True
-                return redirect(url_for("rsvp"))
-            if not party_code_is_configured():
-                errors.append("The party code is not configured yet. Please ask the hosts.")
-            else:
-                errors.append("That party code did not match. Please try again.")
-
-        return render_template(
-            "rsvp.html",
-            errors=errors,
-            party_code_verified=False,
-            party_code_configured=party_code_is_configured(),
-            party_code_hint=party_code_hint,
-            submitted_rsvp=submitted_rsvp,
-            party_info_cards=party_info_cards(),
-            maps_urls=google_maps_urls(party_details.get("map_address", "")),
-            rsvp_updates=sorted_rsvp_updates(),
-            show_admin_link=False,
-            hide_site_nav=True,
-            hide_party_nav=True,
-        )
-
     if request.method == "POST" and request.form.get("action") == "submit_rsvp":
         username = request.form.get("username", "").strip()
         contact = request.form.get("contact", "").strip()
         note = request.form.get("note", "").strip()
+        provided_code = request.form.get("party_code", "").strip()
         try:
             guest_count = int(request.form.get("guest_count", "1") or 1)
         except ValueError:
             guest_count = 1
 
+        if not party_code_is_configured():
+            errors.append("The party code is not configured yet. Please ask the hosts.")
+        elif not verify_party_code(provided_code):
+            errors.append("That party code did not match. Please try again.")
         if not username:
             errors.append("Name is required.")
         elif len(username) > 80:
@@ -2623,23 +2581,6 @@ def party_login():
         request.args.get("next") or request.form.get("next"),
         url_for("party_dashboard"),
     )
-
-    if not party_code_is_verified():
-        if request.method == "POST":
-            provided_code = request.form.get("party_code", "").strip()
-            if verify_party_code(provided_code):
-                session["party_code_verified"] = True
-                return redirect(url_for("party_login", next=next_page))
-            if not party_code_is_configured():
-                errors.append("The party code is not configured yet. Please ask the hosts.")
-            else:
-                errors.append("That party code did not match. Please try again.")
-
-        return render_party_code_gate(
-            errors=errors,
-            next_page=next_page,
-            destination="sign in",
-        )
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -2786,23 +2727,6 @@ def party_register():
         request.args.get("next") or request.form.get("next"),
         url_for("party_dashboard"),
     )
-
-    if not party_code_is_verified():
-        if request.method == "POST":
-            provided_code = request.form.get("party_code", "").strip()
-            if verify_party_code(provided_code):
-                session["party_code_verified"] = True
-                return redirect(url_for("party_register", next=next_page))
-            if not party_code_is_configured():
-                errors.append("The party code is not configured yet. Please ask the hosts.")
-            else:
-                errors.append("That party code did not match. Please try again.")
-
-        return render_party_code_gate(
-            errors=errors,
-            next_page=next_page,
-            destination="create an account",
-        )
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -3242,7 +3166,7 @@ def admin_portal():
             if len(new_party_code_hint) > 120:
                 errors.append("Party code hint must be 120 characters or fewer.")
             if not new_party_code and not party_code_hash:
-                errors.append("Enter a party code before opening guest RSVP or login.")
+                errors.append("Enter a party code before accepting guest RSVP submissions.")
             if new_party_code and len(new_party_code) < 4:
                 errors.append("Party code must be at least 4 characters.")
             if not errors:

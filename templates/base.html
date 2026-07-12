@@ -10,7 +10,8 @@
     <header class="site-header">
       <div class="container site-header__inner">
         <h1>{{ party_title }}</h1>
-        {% if not hide_site_nav %}
+        {% set show_admin_nav_link = show_admin_link is not defined or show_admin_link %}
+        {% if not hide_site_nav and (regular_authenticated or bartender_authenticated or admin_authenticated or show_admin_nav_link) %}
           <div class="site-header__meta">
             <details class="site-nav">
               <summary class="site-nav__toggle">Menu</summary>
@@ -32,7 +33,7 @@
                 {% if bartender_authenticated or admin_authenticated %}
                   <a href="{{ url_for('bartender_portal') }}">Bartender</a>
                 {% endif %}
-                {% if show_admin_link is not defined or show_admin_link %}
+                {% if show_admin_nav_link %}
                   <a href="{{ url_for('admin_portal') }}">Admin</a>
                 {% endif %}
                 {% if session.username or regular_authenticated or admin_authenticated %}

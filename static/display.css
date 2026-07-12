@@ -1087,16 +1087,6 @@ body.display-mode {
     linear-gradient(180deg, #161516 0%, #100f10 100%);
 }
 
-.display-header::before {
-  content: "";
-  width: 0.72rem;
-  height: 0.72rem;
-  background: var(--primary);
-  border-radius: 50%;
-  box-shadow: 0 0 5px var(--primary), 0 0 12px var(--primary);
-  animation: display-led-pulse 2.5s ease-in-out infinite;
-}
-
 .display-header h1 {
   color: var(--primary);
   text-shadow: 0 0 10px rgba(255, 49, 49, 0.82), 0 0 34px rgba(255, 49, 49, 0.48), 0 0 68px rgba(255, 49, 49, 0.24);
@@ -1114,18 +1104,6 @@ body.display-mode {
 .display-count {
   position: relative;
   border-width: 1px;
-}
-
-.display-count::before {
-  content: "";
-  position: absolute;
-  top: 0.7rem;
-  left: 0.7rem;
-  width: 0.42rem;
-  height: 0.42rem;
-  background: var(--primary);
-  border-radius: 50%;
-  box-shadow: 0 0 4px var(--primary), 0 0 10px rgba(255, 49, 49, 0.7);
 }
 
 .display-count__label,
@@ -1177,11 +1155,4 @@ body.display-mode {
 
 .display-override__image {
   border-color: rgba(255, 230, 230, 0.86);
-}
-
-@media (max-width: 640px) {
-  .display-header::before,
-  .display-count::before {
-    display: none;
-  }
 }

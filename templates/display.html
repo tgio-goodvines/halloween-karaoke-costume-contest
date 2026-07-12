@@ -53,11 +53,11 @@
               <section class="display-cta-column">
                 <h3 class="display-cta-heading">WiFi access</h3>
                 <dl class="display-cta-list">
-                  <div class="display-cta-list__item">
+                  <div class="display-cta-list__item" data-cta-wifi-network-item{% if not cta_wifi_network %} hidden{% endif %}>
                     <dt>Network</dt>
                     <dd data-cta-wifi-network>{{ cta_wifi_network }}</dd>
                   </div>
-                  <div class="display-cta-list__item">
+                  <div class="display-cta-list__item" data-cta-wifi-password-item{% if not cta_wifi_password %} hidden{% endif %}>
                     <dt>Password</dt>
                     <dd data-cta-wifi-password>{{ cta_wifi_password }}</dd>
                   </div>

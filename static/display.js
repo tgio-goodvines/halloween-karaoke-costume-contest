@@ -90,7 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const ctaLayout = card.querySelector('[data-cta-layout]');
   const ctaLedeElement = card.querySelector('[data-cta-lede]');
   const ctaWifiNetworkElement = card.querySelector('[data-cta-wifi-network]');
+  const ctaWifiNetworkItemElement = card.querySelector('[data-cta-wifi-network-item]');
   const ctaWifiPasswordElement = card.querySelector('[data-cta-wifi-password]');
+  const ctaWifiPasswordItemElement = card.querySelector('[data-cta-wifi-password-item]');
   const ctaPortalLinkElement = card.querySelector('[data-cta-portal-link]');
   const ctaPortalNoteElement = card.querySelector('[data-cta-portal-note]');
   const ctaReminderElement = card.querySelector('[data-cta-reminder]');
@@ -793,9 +795,23 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ctaWifiNetworkElement) {
         ctaWifiNetworkElement.textContent = ctaDetails.wifi_network || '';
       }
+      if (ctaWifiNetworkItemElement) {
+        if (ctaDetails.wifi_network) {
+          ctaWifiNetworkItemElement.removeAttribute('hidden');
+        } else {
+          ctaWifiNetworkItemElement.setAttribute('hidden', '');
+        }
+      }
 
       if (ctaWifiPasswordElement) {
         ctaWifiPasswordElement.textContent = ctaDetails.wifi_password || '';
+      }
+      if (ctaWifiPasswordItemElement) {
+        if (ctaDetails.wifi_password) {
+          ctaWifiPasswordItemElement.removeAttribute('hidden');
+        } else {
+          ctaWifiPasswordItemElement.setAttribute('hidden', '');
+        }
       }
 
       if (ctaPortalLinkElement) {
@@ -840,8 +856,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ctaWifiNetworkElement) {
         ctaWifiNetworkElement.textContent = '';
       }
+      if (ctaWifiNetworkItemElement) {
+        ctaWifiNetworkItemElement.setAttribute('hidden', '');
+      }
       if (ctaWifiPasswordElement) {
         ctaWifiPasswordElement.textContent = '';
+      }
+      if (ctaWifiPasswordItemElement) {
+        ctaWifiPasswordItemElement.setAttribute('hidden', '');
       }
       if (ctaPortalLinkElement) {
         ctaPortalLinkElement.textContent = '';

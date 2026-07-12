@@ -13,6 +13,7 @@ Core traits:
 - Controls: square mono uppercase buttons, red primary actions, transparent/outlined secondary actions, visible focus glow, and touch-safe sizing.
 - Inputs: dark scanline fields with red borders, dusty-rose text, and red focus rings.
 - Status language: small uppercase badge treatments for RSVP/update/menu/order/status labels, plus small red LED pips for decorative system/live states.
+- Header status: avoid standalone/orphaned LED dots. Decorative LED pips should sit beside meaningful text or be removed.
 - Motion: CRT scanline overlays remain subtle; the vertical scan bar should stay slow enough to feel atmospheric instead of distracting.
 - Live display: same lab-system language at larger scale, with serif glowing headings, square display cards, scoreboard panels, LED-style metric accents, and high-contrast override cards.
 - HTML email: same palette and square lab-panel language, implemented with email-safe inline CSS, table wrappers, dark backgrounds, red borders, dusty-rose links, uppercase mono-style buttons, and Georgia/Courier fallbacks rather than relying on external web fonts. Email templates should use `#ff3131` for primary borders/buttons/badges.

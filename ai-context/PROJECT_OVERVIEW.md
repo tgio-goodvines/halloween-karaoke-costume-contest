@@ -85,15 +85,23 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
   notification recipient, defaulting to `tgio1129@gmail.com`, when email is
   enabled.
 4. `/live-display` redirects to `/admin/login` until the browser session has
-   the `admin` role, then shows rotating event cards and current signup counts.
+   the `admin` role, then shows rotating party-night cards and current signup
+   counts. The live display always rotates app usage, WiFi/sign-in, costume,
+   karaoke, drink-order, and signup/live-update prompts regardless of whether
+   `HALLOWEEN_PARTY_START` has passed, so hosts can stage and test the TV
+   experience ahead of the party.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
    signed in, can create an account at `/party/register`, or recover a
    forgotten account password through `/party/password-reset`, then see the
-   party dashboard. Before the party date, `/party` shows pre-party RSVP
-   details and host updates in Event Highlights and hides event-night menu,
-   costume, karaoke, drink-order, and voting navigation. On the party date,
-   `/party` switches to the event-night dashboard. Account creation sends a SES
-   welcome email when email is enabled.
+   party dashboard. Before the party date, `/party` keeps Event Highlights
+   logistics-focused: party date/time, directions/map address, rideshare
+   suggestions, potluck/overview details, and a light preview that costume
+   contest, games, and karaoke happen later in the night. It hides event-night
+   menu, costume, karaoke, drink-order, and voting navigation and should not
+   promote party-night app actions before those routes are available. On the
+   party date, `/party` switches to the event-night dashboard and may promote
+   app usage, costume signup, karaoke signup, drink ordering, and live party
+   updates. Account creation sends a SES welcome email when email is enabled.
 6. On the party date, attendees can submit costume entries at
    `/party/costumes`.
 7. On the party date, attendees can submit karaoke songs at `/party/karaoke`.
@@ -135,8 +143,8 @@ the process-local cache:
 - `rsvp_signups`: independent host RSVP list entries with name, required email
   contact, guest count, note, created timestamp, and stable ID.
 - `rsvp_updates`: admin-posted update cards with title, message, timestamp, and
-  stable ID, displayed newest-to-oldest on `/rsvp` and in pre-party display
-  rotation.
+  stable ID, displayed newest-to-oldest on `/rsvp` and in pre-party dashboard
+  Event Highlights.
 - `party_details`: admin-editable static RSVP cards for date, time, location,
   map address, and overview.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
@@ -156,17 +164,18 @@ Drink orders move from `received` to `in_progress` to `complete`. Completed
 orders track prep duration from `started_at` when available, and drink-ready
 events create a temporary live-display override with the drink image.
 
-`HALLOWEEN_PARTY_START` controls when the live display switches from pre-party
-RSVP/update rotation to the full party-night costume/karaoke/event rotation.
-Before that timestamp, the display does not show costume or karaoke signup
-entries.
+`HALLOWEEN_PARTY_START` controls attendee route availability and the dashboard
+mode, but not the live display rotation. The live display is intentionally
+party-night oriented before and during the event, rotating WiFi/app access,
+costume, karaoke, drink-order, and live signup/update cards so it can be tested
+and staged before guests arrive.
 
 The attendee dashboard uses the calendar date from `HALLOWEEN_PARTY_START`.
-Before that date, `/party` shows pre-party RSVP details and host updates in the
-Event Highlights carousel and blocks attendee access to `/party/menu`,
-`/party/costumes`, and `/party/karaoke`. On the party date, those attendee
-routes and navigation links become available. Costume voting remains separately
-admin-gated and only appears when the admin starts/opens voting.
+Before that date, `/party` shows logistics-oriented Event Highlights and blocks
+attendee access to `/party/menu`, `/party/costumes`, and `/party/karaoke`. On
+the party date, those attendee routes and navigation links become available.
+Costume voting remains separately admin-gated and only appears when the admin
+starts/opens voting.
 
 ## RSVP Update Email
 

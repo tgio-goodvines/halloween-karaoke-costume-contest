@@ -2254,41 +2254,71 @@ def costume_voting_is_visible() -> bool:
     )
 
 
-# Demo slides to rotate on the home page
-SLIDES = [
+PARTY_PORTAL_URL = "https://tnq-halloween.com/party"
+WIFI_NETWORK_LABEL = "Halloween Party WiFi"
+WIFI_PASSWORD_LABEL = "halloween"
+
+
+PARTY_DAY_DASHBOARD_SLIDES = [
     {
-        "title": "Tonight's Lineup",
-        "content": "Costume contest judging kicks off at 9:30 PM followed by karaoke at 10:15 PM. Make sure you're signed up!",
+        "title": "Join the Live Party Hub",
+        "content": "Sign in or create an account to order drinks, enter the costume contest, and add a karaoke song.",
     },
     {
-        "title": "Welcome to the Halloween Bash!",
-        "content": "Check out the event schedule and make sure to submit your signups.",
+        "title": "Costume Contest",
+        "content": "Add your costume before judging starts so your entry appears on the live display.",
     },
     {
-        "title": "Costume Contest Highlights",
-        "content": "Show off your creativity! Sign up to compete for spooky bragging rights.",
+        "title": "Karaoke Queue",
+        "content": "Pick a song and reserve your spot. New karaoke signups appear in the live rotation.",
     },
     {
-        "title": "Karaoke Night",
-        "content": "Pick your favorite song and take center stage on karaoke night.",
+        "title": "Event Drinks",
+        "content": "Browse the menu, order available drinks from your phone, and watch for the ready notification.",
+    },
+    {
+        "title": "WiFi and Access",
+        "content": f"Connect to {WIFI_NETWORK_LABEL}, then open {PARTY_PORTAL_URL} to sign in or create your account.",
     },
 ]
 
 
 def build_pre_party_dashboard_slides() -> list[dict[str, str]]:
+    details = copy.deepcopy(DEFAULT_PARTY_DETAILS)
+    details.update({key: value for key, value in party_details.items() if value})
+    location = details.get("location", DEFAULT_PARTY_DETAILS["location"])
+    map_address = details.get("map_address") or location
+
     slides = [
         {
-            "title": "RSVP Details",
-            "content": "You're signed in for the party portal. Keep an eye here for the latest RSVP details and host updates.",
-        }
-    ]
-    slides.extend(
+            "title": "Party Date",
+            "content": f"{details['date']} at {details['time']}.",
+        },
         {
-            "title": card["title"],
-            "content": card["message"],
-        }
-        for card in party_info_cards()
-    )
+            "title": "Directions",
+            "content": f"Head to {location}. Use the RSVP page map or your preferred maps app for turn-by-turn directions.",
+        },
+        {
+            "title": "Rideshare Reminder",
+            "content": "Uber or Lyft is a good move if costumes, weather, drinks, or parking make driving annoying.",
+        },
+        {
+            "title": "Potluck Details",
+            "content": details["overview"],
+        },
+        {
+            "title": "Later Tonight",
+            "content": "Expect a costume contest, games, and karaoke once the party gets rolling.",
+        },
+    ]
+    if map_address and map_address != location:
+        slides.insert(
+            2,
+            {
+                "title": "Map Address",
+                "content": map_address,
+            },
+        )
     slides.extend(
         {
             "title": update.title,
@@ -2302,83 +2332,53 @@ def build_pre_party_dashboard_slides() -> list[dict[str, str]]:
 def build_rotation_entries() -> List[dict[str, object]]:
     ensure_costume_votes_alignment()
 
-    if not party_has_started():
-        pre_party_entries: List[dict[str, object]] = [
-            {
-                "category": "RSVP",
-                "primary": f"RSVP for {app.config['PARTY_TITLE']}",
-                "secondary": "Visit tnq-halloween.com, enter the party code, and let the hosts know you are coming.",
-                "cta": True,
-                "link": "https://tnq-halloween.com",
-                "link_label": "Open the RSVP page",
-                "cta_details": {
-                    "lede": "RSVP before party night",
-                    "wifi_network": "",
-                    "wifi_password": "",
-                    "portal_url": "tnq-halloween.com",
-                    "portal_label": "tnq-halloween.com",
-                    "portal_note": "Use the party code from your invite to see details and RSVP.",
-                    "reminder": "",
-                },
-            }
-        ]
-        for card in party_info_cards():
-            pre_party_entries.append(
-                {
-                    "category": "Party Details",
-                    "primary": card["title"],
-                    "secondary": card["message"],
-                }
-            )
-        for update in sorted_rsvp_updates():
-            pre_party_entries.append(
-                {
-                    "id": update.id,
-                    "category": "RSVP Update",
-                    "primary": update.title,
-                    "secondary": update.message,
-                    "tertiary": update.created_at,
-                }
-            )
-        return pre_party_entries
-
     rotation_entries: List[dict[str, object]] = [
         {
             "category": "Signup Portal",
-            "primary": "Get guests connected and ready to register.",
-            "secondary": "Share the WiFi credentials and direct them to the Halloween signup page.",
+            "primary": "Connect to WiFi and open the Halloween app.",
+            "secondary": "Sign in or create an account to join the live event flow.",
             "cta": True,
-            "link": "http://tnq.com/party",
+            "link": PARTY_PORTAL_URL,
             "link_label": "Open the signup portal",
             "cta_details": {
-                "lede": "Sign Up Instructions!",
-                "wifi_network": "Halloween Party WiFi",
-                "wifi_password": "halloween",
-                "portal_url": "http://tnq.com/party",
-                "portal_label": "http://tnq.com/party",
-                "portal_note": "Type the address exactly as shown and add a bookmark for quick access later.",
-                "reminder": "",
+                "lede": "Get your phone connected.",
+                "wifi_network": WIFI_NETWORK_LABEL,
+                "wifi_password": WIFI_PASSWORD_LABEL,
+                "portal_url": PARTY_PORTAL_URL,
+                "portal_label": PARTY_PORTAL_URL,
+                "portal_note": "Use your existing account or create one at the party.",
+                "reminder": "Costume entries, karaoke songs, drink orders, and voting all run through the app.",
             },
         },
         {
-            "category": "Event Spotlight",
-            "primary": "Tonight's Lineup",
-            "secondary": "Costume contest judging kicks off at 9:30 PM followed by karaoke at 11:00 PM. Make sure you're signed up!",
+            "category": "Costume Contest",
+            "primary": "Add your costume to the live lineup.",
+            "secondary": "Open the app, tap Costume, and enter your name plus costume before judging starts.",
+            "tertiary": "New costume signups appear here automatically.",
+            "link": PARTY_PORTAL_URL,
+            "link_label": "Open party app",
         },
         {
-            "category": "Event Spotlight",
-            "primary": "Welcome to the Halloween Bash!",
-            "secondary": "Check out the event schedule and make sure to submit your signups.",
+            "category": "Karaoke Stage",
+            "primary": "Reserve your karaoke song.",
+            "secondary": "Open the app, tap Karaoke, and queue the song you want to perform.",
+            "tertiary": "New karaoke signups rotate onto this screen as they come in.",
+            "link": PARTY_PORTAL_URL,
+            "link_label": "Open party app",
         },
         {
-            "category": "Event Spotlight",
-            "primary": "Costume Contest",
-            "secondary": "Summon your most sinister look—compete for spine-tingling glory, devilish loot, and the Trophy of Terror.",
+            "category": "Bar Queue",
+            "primary": "Order event drinks from your phone.",
+            "secondary": "Browse the drink menu in the app, send available drinks to the bar, and watch for the ready email.",
+            "tertiary": "Completed drinks also pop up on this display.",
+            "link": PARTY_PORTAL_URL,
+            "link_label": "Open drink menu",
         },
         {
-            "category": "Event Spotlight",
-            "primary": "Karaoke Night",
-            "secondary": "Choose your eerie anthem and send shivers down the spine.",
+            "category": "Live Updates",
+            "primary": "Watch the party build in real time.",
+            "secondary": "Costumes, karaoke songs, winners, drink-ready cards, and announcements rotate here all night.",
+            "tertiary": "Keep an eye on this screen after each signup.",
         },
     ]
 
@@ -2658,7 +2658,7 @@ def party_dashboard():
     user_orders = user_drink_orders(str(session.get("user_id", "")))
     ready_orders = [order for order in user_orders if order.get("status") == "complete"][:3] if party_day else []
     if party_day:
-        slides = list(SLIDES)
+        slides = list(PARTY_DAY_DASHBOARD_SLIDES)
         winner = contest_state.get("winner")
         if winner:
             slides.append(

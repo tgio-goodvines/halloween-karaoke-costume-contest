@@ -509,10 +509,15 @@ class RedisStateTests(unittest.TestCase):
 
         dashboard_body = dashboard_response.get_data(as_text=True)
         self.assertEqual(200, dashboard_response.status_code)
-        self.assertIn("Pre-Party Portal", dashboard_body)
+        self.assertIn("Party Details", dashboard_body)
         self.assertIn("Saturday, October 31", dashboard_body)
+        self.assertIn("Directions", dashboard_body)
+        self.assertIn("Rideshare Reminder", dashboard_body)
+        self.assertIn("Potluck Details", dashboard_body)
+        self.assertIn("Later Tonight", dashboard_body)
         self.assertIn("Parking", dashboard_body)
         self.assertNotIn("Tonight's Lineup", dashboard_body)
+        self.assertNotIn("Join the Live Party Hub", dashboard_body)
         self.assertNotIn("Costume Contest Signups", dashboard_body)
         self.assertNotIn("Karaoke Signups", dashboard_body)
         self.assertNotIn('href="/party/menu"', dashboard_body)
@@ -1368,7 +1373,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(["morgan@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
         self.assertIn("Resent RSVP update: Parking. Email sent to 1 selected recipient.", body)
 
-    def test_pre_party_display_rotates_only_rsvp_cards_and_updates(self):
+    def test_pre_party_display_rotates_party_night_cards_for_staging(self):
         main.app.config["PARTY_START"] = "2026-10-31T19:00:00-06:00"
         main.costume_signups = [
             main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
@@ -1383,11 +1388,15 @@ class RedisStateTests(unittest.TestCase):
         entries = main.build_rotation_entries()
         serialized_entries = json.dumps(entries)
 
-        self.assertIn("RSVP", {entry["category"] for entry in entries})
-        self.assertIn("RSVP Update", {entry["category"] for entry in entries})
-        self.assertIn("Parking", serialized_entries)
-        self.assertNotIn("Dressed as Vampire", serialized_entries)
-        self.assertNotIn("Thriller", serialized_entries)
+        self.assertIn("Signup Portal", {entry["category"] for entry in entries})
+        self.assertIn("Costume Contest", {entry["category"] for entry in entries})
+        self.assertIn("Karaoke Stage", {entry["category"] for entry in entries})
+        self.assertIn("Bar Queue", {entry["category"] for entry in entries})
+        self.assertIn("Live Updates", {entry["category"] for entry in entries})
+        self.assertIn("Dressed as Vampire", serialized_entries)
+        self.assertIn("Thriller", serialized_entries)
+        self.assertNotIn("RSVP before party night", serialized_entries)
+        self.assertNotIn("Parking", serialized_entries)
 
     def test_regular_user_login_grants_only_regular_route_access(self):
         self.add_user_account()

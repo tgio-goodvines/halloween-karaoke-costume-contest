@@ -24,9 +24,12 @@
   invite for a saved RSVP using the random RSVP ID.
 - `GET /party` -> attendee dashboard; requires a `regular` role session plus
   `session.user_id` and `session.username`. Before the calendar date of
-  `HALLOWEEN_PARTY_START`, Event Highlights shows RSVP detail cards and
-  RSVP updates while event-night signup/menu/drink/voting summaries are hidden.
-  On the party date, it shows the normal event-night dashboard.
+  `HALLOWEEN_PARTY_START`, Event Highlights stays logistics-focused with party
+  date/time, directions/map address, rideshare suggestions, potluck/overview
+  details, host updates, and a light preview that costume contest, games, and
+  karaoke happen later in the night. Event-night signup/menu/drink/voting
+  summaries are hidden. On the party date, it shows the normal event-night
+  dashboard.
 - `GET|POST /party/menu` -> signed-in attendee menu page with food/drink image
   cards. Available drinks can be ordered and create Redis-backed drink orders
   with estimated ready times. Attendee access is redirected back to `/party`
@@ -135,11 +138,14 @@ That function increments `display_update_version` and notifies `display_update_c
 - `cta_details`: WiFi and signup portal details.
 - `scoreboard`: structured top-score rows.
 
-The base rotation always starts with signup instructions and event spotlight cards. Winner and scoreboard cards are appended when the relevant contest state is active. Costume and karaoke entries are then interleaved. Admin stop/reset actions clear matching live-display start overrides without deleting signup lineups.
-
-Before `HALLOWEEN_PARTY_START`, `build_rotation_entries()` returns only RSVP
-prompt, static party detail cards, and admin-posted RSVP updates. Costume and
-karaoke signup/event cards are withheld until the configured party start time.
+The base rotation always starts with WiFi/app sign-in instructions, costume and
+karaoke signup prompts, drink-order promotion, and live-update explanation
+cards. Winner and scoreboard cards are appended when the relevant contest state
+is active. Costume and karaoke entries are then interleaved. Admin stop/reset
+actions clear matching live-display start overrides without deleting signup
+lineups. `build_rotation_entries()` intentionally returns party-night cards
+even before `HALLOWEEN_PARTY_START` so hosts can stage and test the live display
+ahead of the event.
 
 The attendee portal has a related but separate date gate: `party_day_has_arrived()`
 compares the local date of `HALLOWEEN_PARTY_START` to the current date. Before

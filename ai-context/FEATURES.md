@@ -23,7 +23,10 @@
   is enabled. The host recipient is configurable in admin, defaults to
   `tgio1129@gmail.com`, and can be left blank to disable host notifications.
 - Party dashboard at `/party`. Before the party date, Event Highlights shows
-  RSVP details and host updates instead of event-night prompts.
+  logistics: party date/time, directions, rideshare suggestions, potluck/overview
+  details, host updates, and a preview that costume contest, games, and karaoke
+  happen later in the night. It does not promote event-night app actions before
+  those routes are available.
 - Redis-backed attendee account registration at `/party/register` requires an
   email address so registered users can receive RSVP-page host update emails.
 - Successful party account creation sends a welcome email through SES when
@@ -158,9 +161,11 @@ app state.
 - `/health` returns JSON service and Redis readiness for production health
   checks.
 - Shows event title and live counts for costume and karaoke signups.
-- Before `HALLOWEEN_PARTY_START`, live display rotates only RSVP, static party
-  detail, and RSVP update cards.
-- Rotates through signup portal instructions, event spotlight cards, winner/scoreboard cards, costume entries, and karaoke entries.
+- Live display always rotates party-night cards, even before
+  `HALLOWEEN_PARTY_START`, so hosts can stage/test the TV experience.
+- Rotates through WiFi/app sign-in instructions, costume signup prompts, karaoke
+  signup prompts, drink-order promotion, live-update explanation cards,
+  winner/scoreboard cards, costume entries, and karaoke entries.
 - Signup portal card includes WiFi network, WiFi password, and portal link.
 - Display entries rotate every 8 seconds with fade/slide transitions.
 - Display data refreshes every 30 seconds via `/api/display-data`.

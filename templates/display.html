@@ -26,7 +26,7 @@
     {% set cta_reminder = cta_details.get('reminder', first_entry['tertiary'] if first_entry and first_entry.get('tertiary') else '') %}
     <div class="display-wrapper">
       <header class="display-header">
-        <h1>Qiana and Tony's 2nd Annual Halloween Party</h1>
+        <h1>{{ party_title }}</h1>
         <div class="display-metrics">
           <div class="display-count">
             <span class="display-count__number" data-costume-count>{{ costume_count }}</span>

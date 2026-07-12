@@ -41,13 +41,15 @@
 - Optional YouTube link field for karaoke entries.
 - Karaoke signup success redirect and lineup display.
 - Event highlight slide rotation on the party dashboard.
-- Contest status banners on attendee pages when voting is open or the winner is locked.
+- Contest status banners on attendee pages when costume voting is visible or the winner is locked.
 
 ## Costume Contest Features
 
-- Admin can start the costume contest.
+- Admin can start, stop, and reset the costume contest.
 - Starting the contest opens voting, clears previous submitted-voter tracking, clears winner/scoreboard state, and pushes a live-display contest-start override.
-- Voting page is only available while voting is open and no winner is locked.
+- Stopping the contest closes and hides attendee voting without deleting entries or existing results.
+- Resetting the contest clears votes, submitted-voter tracking, winner/scoreboard state, and live-display override without deleting costume entries.
+- Voting page and voting navigation are only visible while the costume contest is started, voting is open, and no winner is locked.
 - Voting page requires a checked-in session.
 - Each guest/session can vote once.
 - Voting requires a score for every costume entry.
@@ -68,8 +70,9 @@
 - Admin can add, edit, delete, and reorder karaoke signups.
 - Admin page highlights the first karaoke signup as the opening act.
 - Admin warning appears when the opening act has no YouTube link.
-- Admin can start the Halloween karaoke party if at least one karaoke signup exists.
+- Admin can start, stop, and reset the Halloween karaoke party if at least one karaoke signup exists for start.
 - Starting karaoke sets a live-display override with countdown to 11:00 PM MST and the current lineup.
+- Stopping or resetting karaoke clears active karaoke state and karaoke-start live-display override without deleting the lineup.
 - Live display has client-side support for countdown and rotating karaoke panels.
 
 ## Admin Features
@@ -82,16 +85,17 @@
   party account signup, party portal, or live display.
 - Admin can set or replace the party code and optional code hint. The party code
   is stored as a hash, not plaintext.
-- Admin can see the RSVP list and total guest count.
+- Admin can add, edit, and delete RSVP entries, and see the total guest count.
 - Admin can edit the static party detail cards and map address shown on the RSVP
   page.
-- Admin can post and remove RSVP updates. Updates appear on `/rsvp` newest first
-  after the static party detail cards. When Halloween email updates are enabled,
-  posted RSVP updates are emailed through SES to deduplicated RSVP and
-  registered-user email recipients.
+- Admin can post, remove, and resend RSVP updates. Updates appear on `/rsvp`
+  newest first after the static party detail cards. When Halloween email updates
+  are enabled, admins can select which eligible RSVP and registered-user
+  recipients receive each posted or resent update email through SES.
 - Admin can add, edit, remove, and disable food/drink menu items, including image
   URLs, descriptions, and drink recipes for bartender reference.
-- Admin can assign or remove the `bartender` role for existing party accounts.
+- Admin can add, edit, and delete party account users, reset account passwords
+  directly, and assign or remove the `bartender` role.
 - Admin can open the bartender view and see bar operations summary counts.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
@@ -101,7 +105,7 @@
   default to improve mobile scanning and reduce scroll fatigue.
 - Admin mutations validate required fields.
 - Admin mutations broadcast live-display updates when they affect display content.
-- Admin can start costume contest, lock winner, show winner, restore display, and start karaoke party.
+- Admin can start, stop, and reset the costume contest; lock winner, show winner, restore display; and start, stop, and reset karaoke party state.
 - Admin receives inline success/error messages.
 - Admin JSON export routes are available for full Redis state, costume results,
   and karaoke lineup at `/admin/export/state`,

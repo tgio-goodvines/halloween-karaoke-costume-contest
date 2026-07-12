@@ -75,24 +75,87 @@
       for {{ rsvp_guest_total }} guest{{ 's' if rsvp_guest_total != 1 else '' }} total.
     </p>
 
+    <details class="admin-entry admin-entry--new">
+      <summary class="admin-entry__summary">
+        <span class="admin-entry__rank">+</span>
+        <span class="admin-entry__summary-text">
+          <strong>Add an RSVP</strong>
+          <span>Create or backfill a host RSVP entry</span>
+        </span>
+      </summary>
+      <form method="post" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="admin-entry__fields">
+          <label>
+            Name
+            <input type="text" name="name" maxlength="80" required>
+          </label>
+          <label>
+            Email
+            <input type="email" name="contact" maxlength="120" required>
+          </label>
+          <label>
+            Guests
+            <input type="number" name="guest_count" min="1" max="12" value="1" required>
+          </label>
+          <label>
+            Note
+            <textarea name="note" maxlength="240"></textarea>
+          </label>
+          <label class="form-check">
+            <input type="checkbox" name="email_updates_acknowledged" value="yes" checked>
+            <span>Receives RSVP update emails</span>
+          </label>
+        </div>
+        <button type="submit" name="action" value="add_rsvp" class="button button--primary">Add RSVP</button>
+      </form>
+    </details>
+
     {% if rsvp_signups %}
-      <div class="rsvp-admin-list">
+      <div class="admin-entry-list">
         {% for signup in rsvp_signups %}
-          <article class="rsvp-admin-item">
-            <div>
-              <h4>{{ signup.name }}</h4>
-              <p>{{ signup.guest_count }} guest{{ 's' if signup.guest_count != 1 else '' }}</p>
-            </div>
-            {% if signup.contact %}
-              <p><strong>Contact:</strong> {{ signup.contact }}</p>
-            {% endif %}
-            {% if signup.note %}
-              <p><strong>Note:</strong> {{ signup.note }}</p>
-            {% endif %}
+          <details class="admin-entry admin-entry--editable">
+            <summary class="admin-entry__summary">
+              <span class="admin-entry__rank">{{ signup.guest_count }}</span>
+              <span class="admin-entry__summary-text">
+                <strong>{{ signup.name }}</strong>
+                <span>{{ signup.contact }}{% if signup.note %} - {{ signup.note }}{% endif %}</span>
+              </span>
+            </summary>
             {% if signup.created_at %}
               <p class="rsvp-admin-item__meta">{{ signup.created_at }}</p>
             {% endif %}
-          </article>
+            <form method="post" class="admin-entry__form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="rsvp_id" value="{{ signup.id }}">
+              <div class="admin-entry__fields">
+                <label>
+                  Name
+                  <input type="text" name="name" maxlength="80" value="{{ signup.name }}" required>
+                </label>
+                <label>
+                  Email
+                  <input type="email" name="contact" maxlength="120" value="{{ signup.contact }}" required>
+                </label>
+                <label>
+                  Guests
+                  <input type="number" name="guest_count" min="1" max="12" value="{{ signup.guest_count }}" required>
+                </label>
+                <label>
+                  Note
+                  <textarea name="note" maxlength="240">{{ signup.note }}</textarea>
+                </label>
+                <label class="form-check">
+                  <input type="checkbox" name="email_updates_acknowledged" value="yes" {% if signup.email_updates_acknowledged %}checked{% endif %}>
+                  <span>Receives RSVP update emails</span>
+                </label>
+              </div>
+              <div class="admin-entry__actions">
+                <button type="submit" name="action" value="update_rsvp" class="button button--primary">Save RSVP</button>
+                <button type="submit" name="action" value="delete_rsvp" class="button button--danger">Remove</button>
+              </div>
+            </form>
+          </details>
         {% endfor %}
       </div>
     {% else %}
@@ -124,7 +187,7 @@
 
   <section class="admin-section admin-section--rsvp-updates">
     <h3>RSVP Updates</h3>
-    <p>Post updates for guests to see on the RSVP page. The newest update appears first.</p>
+    <p>Post updates for guests to see on the RSVP page. Select recipients when you want the update emailed.</p>
 
     <form method="post" class="access-settings__form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -132,6 +195,21 @@
       <input type="text" id="rsvp_update_title" name="title" maxlength="100" required>
       <label for="rsvp_update_message">Message</label>
       <textarea id="rsvp_update_message" name="message" maxlength="2000" required></textarea>
+      <fieldset class="admin-entry__fields">
+        <legend>Email recipients</legend>
+        {% if email_updates_enabled and update_email_recipients %}
+          {% for recipient in update_email_recipients %}
+            <label class="form-check">
+              <input type="checkbox" name="recipient_ids" value="{{ recipient.id }}" checked>
+              <span>{{ recipient.name }} - {{ recipient.email }} ({{ recipient.type }})</span>
+            </label>
+          {% endfor %}
+        {% elif email_updates_enabled %}
+          <p class="contest-status contest-status--inactive">No RSVP or account recipients have opted into update emails yet.</p>
+        {% else %}
+          <p class="contest-status contest-status--inactive">Email notifications are disabled; the update will still appear on the RSVP page.</p>
+        {% endif %}
+      </fieldset>
       <button type="submit" name="action" value="add_rsvp_update" class="button button--primary">
         Post RSVP Update
       </button>
@@ -148,6 +226,28 @@
               {% endif %}
             </div>
             <p>{{ update.message }}</p>
+            <form method="post" class="access-settings__form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="update_id" value="{{ update.id }}">
+              <fieldset class="admin-entry__fields">
+                <legend>Resend to</legend>
+                {% if email_updates_enabled and update_email_recipients %}
+                  {% for recipient in update_email_recipients %}
+                    <label class="form-check">
+                      <input type="checkbox" name="recipient_ids" value="{{ recipient.id }}" checked>
+                      <span>{{ recipient.name }} - {{ recipient.email }} ({{ recipient.type }})</span>
+                    </label>
+                  {% endfor %}
+                {% elif email_updates_enabled %}
+                  <p class="contest-status contest-status--inactive">No eligible email recipients are available.</p>
+                {% else %}
+                  <p class="contest-status contest-status--inactive">Email notifications are disabled.</p>
+                {% endif %}
+              </fieldset>
+              <button type="submit" name="action" value="resend_rsvp_update" class="button" {% if not email_updates_enabled or not update_email_recipients %}disabled{% endif %}>
+                Resend Email
+              </button>
+            </form>
             <form method="post">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="update_id" value="{{ update.id }}">
@@ -172,6 +272,18 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" name="action" value="start_costume_contest" class="button button--primary">
           Start the Costume Contest
+        </button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="stop_costume_contest" class="button button--outline">
+          Stop Costume Contest
+        </button>
+      </form>
+      <form method="post" onsubmit="return confirm('Reset the costume contest? This clears votes, winner, scoreboard state, and the active display override while keeping costume entries.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="reset_costume_contest" class="button button--danger">
+          Reset Costume Contest
         </button>
       </form>
       <form method="post">
@@ -201,6 +313,10 @@
         <strong>Winner locked in:</strong>
         {{ costume_contest_state.winner.name }} as {{ costume_contest_state.winner.costume }}.
       </p>
+    {% elif costume_contest_state.contest_started %}
+      <p class="contest-status contest-status--active">Costume contest is started, but voting is not currently open.</p>
+    {% else %}
+      <p class="contest-status contest-status--inactive">Costume contest is stopped. Attendees cannot see voting.</p>
     {% endif %}
 
     {% if live_override %}
@@ -285,6 +401,18 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" name="action" value="start_karaoke_party" class="button button--primary">
           Start the Halloween Karaoke Party
+        </button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="stop_karaoke_party" class="button button--outline">
+          Stop Karaoke Party
+        </button>
+      </form>
+      <form method="post" onsubmit="return confirm('Reset the karaoke party? This stops karaoke and clears the active singer/display override while keeping the lineup.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="reset_karaoke_party" class="button button--danger">
+          Reset Karaoke Party
         </button>
       </form>
     </div>
@@ -428,27 +556,102 @@
   </section>
 
   <section class="admin-section admin-section--users">
-    <h3>Users and Roles</h3>
-    <p>Assign bartender access to existing party accounts.</p>
+    <h3>User Accounts</h3>
+    <p>Create accounts, edit access, reset passwords, and remove users.</p>
+
+    <details class="admin-entry admin-entry--new">
+      <summary class="admin-entry__summary">
+        <span class="admin-entry__rank">+</span>
+        <span class="admin-entry__summary-text">
+          <strong>Add a user account</strong>
+          <span>Create a party portal login for a guest</span>
+        </span>
+      </summary>
+      <form method="post" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="admin-entry__fields">
+          <label>
+            Username
+            <input type="text" name="username" maxlength="80" required>
+          </label>
+          <label>
+            Email
+            <input type="email" name="email" maxlength="120" required>
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" minlength="8" autocomplete="new-password" required>
+          </label>
+          <label>
+            Confirm Password
+            <input type="password" name="confirm_password" minlength="8" autocomplete="new-password" required>
+          </label>
+          <label class="form-check">
+            <input type="checkbox" name="email_updates_acknowledged" value="yes" checked>
+            <span>Receives RSVP update emails</span>
+          </label>
+          <label class="form-check">
+            <input type="checkbox" name="bartender" value="yes">
+            <span>Bartender</span>
+          </label>
+        </div>
+        <button type="submit" name="action" value="add_user_account" class="button button--primary">Add Account</button>
+      </form>
+    </details>
 
     {% if user_accounts %}
       <div class="admin-entry-list">
         {% for normalized_username, account in user_accounts.items() %}
-          <article class="rsvp-admin-item">
-            <div>
-              <h4>{{ account.username }}</h4>
-              <p class="rsvp-admin-item__meta">{{ account.email }}</p>
-            </div>
-            <form method="post" class="access-settings__form">
+          <details class="admin-entry admin-entry--editable">
+            <summary class="admin-entry__summary">
+              <span class="admin-entry__rank">{{ 'Bar' if 'bartender' in account.roles else 'User' }}</span>
+              <span class="admin-entry__summary-text">
+                <strong>{{ account.username }}</strong>
+                <span>{{ account.email }}</span>
+              </span>
+            </summary>
+            <form method="post" class="admin-entry__form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="account_id" value="{{ account.id }}">
-              <label class="form-check">
-                <input type="checkbox" name="bartender" value="yes" {% if 'bartender' in account.roles %}checked{% endif %}>
-                <span>Bartender</span>
-              </label>
-              <button type="submit" name="action" value="set_user_roles" class="button">Save Roles</button>
+              <div class="admin-entry__fields">
+                <label>
+                  Username
+                  <input type="text" name="username" maxlength="80" value="{{ account.username }}" required>
+                </label>
+                <label>
+                  Email
+                  <input type="email" name="email" maxlength="120" value="{{ account.email }}" required>
+                </label>
+                <label class="form-check">
+                  <input type="checkbox" name="email_updates_acknowledged" value="yes" {% if account.email_updates_acknowledged %}checked{% endif %}>
+                  <span>Receives RSVP update emails</span>
+                </label>
+                <label class="form-check">
+                  <input type="checkbox" name="bartender" value="yes" {% if 'bartender' in account.roles %}checked{% endif %}>
+                  <span>Bartender</span>
+                </label>
+              </div>
+              <div class="admin-entry__actions">
+                <button type="submit" name="action" value="update_user_account" class="button button--primary">Save Account</button>
+                <button type="submit" name="action" value="delete_user_account" class="button button--danger">Delete Account</button>
+              </div>
             </form>
-          </article>
+            <form method="post" class="admin-entry__form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="account_id" value="{{ account.id }}">
+              <div class="admin-entry__fields">
+                <label>
+                  New Password
+                  <input type="password" name="password" minlength="8" autocomplete="new-password" required>
+                </label>
+                <label>
+                  Confirm New Password
+                  <input type="password" name="confirm_password" minlength="8" autocomplete="new-password" required>
+                </label>
+              </div>
+              <button type="submit" name="action" value="reset_user_password" class="button">Reset Password</button>
+            </form>
+          </details>
         {% endfor %}
       </div>
     {% else %}

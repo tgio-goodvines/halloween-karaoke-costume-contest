@@ -39,13 +39,18 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("HALLOWEEN_APP_SECRET", "dev-secret-key")
 app.config["ADMIN_PASSWORD"] = os.environ.get("HALLOWEEN_ADMIN_PASSWORD", "")
 app.config["PARTY_CODE"] = os.environ.get("HALLOWEEN_PARTY_CODE", "")
+app.config["PARTY_TITLE"] = os.environ.get(
+    "HALLOWEEN_PARTY_TITLE",
+    "Qiana and Tony's 3rd Annual Halloween Party",
+)
+app.config["PARTY_YEAR"] = os.environ.get("HALLOWEEN_PARTY_YEAR", "2026")
 app.config["PARTY_START"] = os.environ.get("HALLOWEEN_PARTY_START", "2026-10-31T19:00:00-06:00")
 app.config["PARTY_DATE_LABEL"] = os.environ.get("HALLOWEEN_PARTY_DATE_LABEL", "Saturday, October 31")
 app.config["PARTY_TIME_LABEL"] = os.environ.get("HALLOWEEN_PARTY_TIME_LABEL", "7:00 PM until late")
 app.config["PARTY_LOCATION_LABEL"] = os.environ.get("HALLOWEEN_PARTY_LOCATION_LABEL", "Qiana and Tony's place")
 app.config["PARTY_OVERVIEW"] = os.environ.get(
     "HALLOWEEN_PARTY_OVERVIEW",
-    "Costumes encouraged, karaoke expected, dramatic entrances welcomed.",
+    "The third annual Halloween party: costumes encouraged, karaoke expected, dramatic entrances welcomed.",
 )
 app.config["EMAIL_UPDATES_ENABLED"] = os.environ.get("HALLOWEEN_EMAIL_UPDATES_ENABLED", "").strip().lower() in {
     "1",
@@ -243,6 +248,7 @@ class RSVPUpdate:
 
 
 DEFAULT_CONTEST_STATE: dict[str, object] = {
+    "contest_started": False,
     "voting_open": False,
     "winner": None,
     "winner_locked": False,
@@ -498,6 +504,20 @@ def create_user_account(username: str, password: str, email: str = "") -> dict[s
     }
 
 
+def find_user_account_key_by_id(account_id: str) -> str | None:
+    for normalized_username, account in user_accounts.items():
+        if str(account.get("id", "")) == account_id:
+            return normalized_username
+    return None
+
+
+def find_rsvp_index_by_id(rsvp_id: str) -> int | None:
+    for index, signup in enumerate(rsvp_signups):
+        if signup.id == rsvp_id:
+            return index
+    return None
+
+
 def normalize_account_roles(raw_roles: object) -> list[str]:
     roles = {"regular"}
     if isinstance(raw_roles, list):
@@ -697,23 +717,52 @@ def sorted_rsvp_updates() -> list[RSVPUpdate]:
     )
 
 
-def collect_update_email_recipients() -> list[str]:
-    recipients: list[str] = []
+def available_update_email_recipients() -> list[dict[str, str]]:
+    recipients: list[dict[str, str]] = []
     seen: set[str] = set()
 
-    def add_recipient(raw_email: object) -> None:
+    def add_recipient(recipient_id: str, recipient_type: str, name: object, raw_email: object) -> None:
         email = normalize_email(str(raw_email or ""))
         if email and email not in seen:
-            recipients.append(email)
+            recipients.append(
+                {
+                    "id": recipient_id,
+                    "type": recipient_type,
+                    "name": str(name or "Guest").strip() or "Guest",
+                    "email": email,
+                }
+            )
             seen.add(email)
 
     for signup in rsvp_signups:
         if signup.email_updates_acknowledged:
-            add_recipient(signup.contact)
+            add_recipient(f"rsvp:{signup.id}", "RSVP", signup.name, signup.contact)
 
     for account in user_accounts.values():
         if bool(account.get("email_updates_acknowledged", False)):
-            add_recipient(account.get("email", ""))
+            add_recipient(
+                f"account:{account.get('id', '')}",
+                "Account",
+                account.get("username", ""),
+                account.get("email", ""),
+            )
+
+    return recipients
+
+
+def collect_update_email_recipients(selected_recipient_ids: set[str] | None = None) -> list[str]:
+    recipients: list[str] = []
+    seen: set[str] = set()
+    available_recipients = available_update_email_recipients()
+
+    for recipient in available_recipients:
+        if selected_recipient_ids is not None and recipient["id"] not in selected_recipient_ids:
+            continue
+
+        email = recipient["email"]
+        if email not in seen:
+            recipients.append(email)
+            seen.add(email)
 
     return recipients
 
@@ -724,8 +773,8 @@ def create_ses_client():
     return boto3.client("sesv2", region_name=app.config["SES_REGION"])
 
 
-def send_rsvp_update_emails(update: RSVPUpdate) -> tuple[int, int]:
-    recipients = collect_update_email_recipients()
+def send_rsvp_update_emails(update: RSVPUpdate, selected_recipient_ids: set[str] | None = None) -> tuple[int, int]:
+    recipients = collect_update_email_recipients(selected_recipient_ids)
     if not recipients:
         return 0, 0
 
@@ -745,7 +794,7 @@ def send_rsvp_update_emails(update: RSVPUpdate) -> tuple[int, int]:
         f"{update.message}\n\n"
         f"Read the latest party details: {rsvp_url}\n\n"
         "You are receiving this because you RSVP'd or created a party account for "
-        "Qiana and Tony's Halloween Party."
+        f"{app.config['PARTY_TITLE']}."
     )
     html_body = render_template(
         "email/rsvp_update.html",
@@ -1376,6 +1425,10 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     contest_state.update(copy.deepcopy(DEFAULT_CONTEST_STATE))
     if isinstance(raw_contest_state, dict):
         contest_state.update(copy.deepcopy(raw_contest_state))
+    if not bool(contest_state.get("contest_started")) and (
+        bool(contest_state.get("voting_open")) or bool(contest_state.get("winner_locked"))
+    ):
+        contest_state["contest_started"] = True
 
     raw_karaoke_state = data.get("karaoke_state", {})
     karaoke_state.clear()
@@ -1959,6 +2012,14 @@ def is_costume_lineup_locked_for_voting() -> bool:
     return bool(contest_state.get("voting_open")) and not bool(contest_state.get("winner_locked"))
 
 
+def costume_voting_is_visible() -> bool:
+    return (
+        bool(contest_state.get("contest_started"))
+        and bool(contest_state.get("voting_open"))
+        and not bool(contest_state.get("winner_locked"))
+    )
+
+
 # Demo slides to rotate on the home page
 SLIDES = [
     {
@@ -1987,7 +2048,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
         pre_party_entries: List[dict[str, object]] = [
             {
                 "category": "RSVP",
-                "primary": "RSVP for Qiana and Tony's Halloween Party",
+                "primary": f"RSVP for {app.config['PARTY_TITLE']}",
                 "secondary": "Visit tnq-halloween.com, enter the party code, and let the hosts know you are coming.",
                 "cta": True,
                 "link": "https://tnq-halloween.com",
@@ -2178,7 +2239,9 @@ def display_data():
 def inject_contest_state():
     return {
         "costume_contest_state": {
+            "contest_started": bool(contest_state.get("contest_started")),
             "voting_open": bool(contest_state.get("voting_open")),
+            "voting_visible": costume_voting_is_visible(),
             "winner_locked": bool(contest_state.get("winner_locked")),
             "winner": contest_state.get("winner"),
         },
@@ -2188,6 +2251,8 @@ def inject_contest_state():
         "bartender_authenticated": session_has_role("bartender"),
         "format_time_label": format_time_label,
         "drink_order_status_label": drink_order_status_label,
+        "party_title": app.config["PARTY_TITLE"],
+        "party_year": app.config["PARTY_YEAR"],
     }
 
 
@@ -2846,6 +2911,103 @@ def admin_portal():
             "created_at": existing_created_at or _utc_now_iso(),
         }
 
+    def roles_from_account_form() -> list[str]:
+        roles = {"regular"}
+        if request.form.get("bartender") == "yes":
+            roles.add("bartender")
+        return sorted(roles)
+
+    def account_fields_from_form(existing_key: str | None = None) -> dict[str, object] | None:
+        username = request.form.get("username", "").strip()
+        normalized_username = normalize_username(username)
+        email = request.form.get("email", "").strip()
+        normalized_email = normalize_email(email)
+
+        if not username:
+            errors.append("Account username is required.")
+        elif len(username) > 80:
+            errors.append("Account username must be 80 characters or fewer.")
+        elif normalized_username in user_accounts and normalized_username != existing_key:
+            errors.append("That account username is already registered.")
+
+        if not email:
+            errors.append("Account email is required.")
+        elif len(email) > 120:
+            errors.append("Account email must be 120 characters or fewer.")
+        elif not normalized_email:
+            errors.append("Enter a valid account email address.")
+
+        if errors:
+            return None
+
+        return {
+            "username": username,
+            "normalized_username": normalized_username,
+            "email": normalized_email,
+            "email_updates_acknowledged": request.form.get("email_updates_acknowledged") == "yes",
+            "roles": roles_from_account_form(),
+        }
+
+    def rsvp_from_form(existing_id: str | None = None, existing_created_at: str | None = None) -> RSVPSignup | None:
+        name = request.form.get("name", "").strip()
+        contact = request.form.get("contact", "").strip()
+        normalized_contact = normalize_email(contact)
+        note = request.form.get("note", "").strip()
+        try:
+            guest_count = int(request.form.get("guest_count", "1") or 1)
+        except ValueError:
+            guest_count = 1
+
+        if not name:
+            errors.append("RSVP name is required.")
+        elif len(name) > 80:
+            errors.append("RSVP name must be 80 characters or fewer.")
+        if not contact:
+            errors.append("RSVP email is required.")
+        elif len(contact) > 120:
+            errors.append("RSVP email must be 120 characters or fewer.")
+        elif not normalized_contact:
+            errors.append("Enter a valid RSVP email address.")
+        if not 1 <= guest_count <= 12:
+            errors.append("RSVP guest count must be between 1 and 12.")
+        if len(note) > 240:
+            errors.append("RSVP note must be 240 characters or fewer.")
+
+        if errors:
+            return None
+
+        return RSVPSignup(
+            id=existing_id or uuid4().hex,
+            name=name,
+            contact=normalized_contact,
+            guest_count=guest_count,
+            note=note,
+            created_at=existing_created_at or _utc_now_iso(),
+            email_updates_acknowledged=request.form.get("email_updates_acknowledged") == "yes",
+        )
+
+    def selected_update_recipient_ids() -> set[str]:
+        return {
+            recipient_id.strip()
+            for recipient_id in request.form.getlist("recipient_ids")
+            if recipient_id.strip()
+        }
+
+    def update_email_message(prefix: str, sent_count: int, failed_count: int, selected_count: int) -> str:
+        if not app.config["EMAIL_UPDATES_ENABLED"]:
+            return f"{prefix} Email notifications are disabled."
+        if selected_count == 0:
+            return f"{prefix} No email recipients were selected."
+        if failed_count:
+            return (
+                f"{prefix} Email sent to {sent_count} selected recipient"
+                f"{'s' if sent_count != 1 else ''}; {failed_count} failed."
+            )
+        return (
+            f"{prefix} Email sent to {sent_count} selected recipient"
+            f"{'s' if sent_count != 1 else ''}."
+        )
+
     if request.method == "POST":
         action = request.form.get("action", "")
         should_broadcast = False
@@ -2946,20 +3108,16 @@ def admin_portal():
                     created_at=_utc_now_iso(),
                 )
                 rsvp_updates.append(posted_update)
-                if app.config["EMAIL_UPDATES_ENABLED"]:
-                    sent_count, failed_count = send_rsvp_update_emails(posted_update)
-                    if failed_count:
-                        messages.append(
-                            f"RSVP update posted. Email sent to {sent_count} guest"
-                            f"{'s' if sent_count != 1 else ''}; {failed_count} failed."
-                        )
-                    else:
-                        messages.append(
-                            f"RSVP update posted. Email sent to {sent_count} guest"
-                            f"{'s' if sent_count != 1 else ''}."
-                        )
-                else:
-                    messages.append("RSVP update posted. Email notifications are disabled.")
+                selected_recipients = selected_update_recipient_ids()
+                sent_count, failed_count = send_rsvp_update_emails(posted_update, selected_recipients)
+                messages.append(
+                    update_email_message(
+                        "RSVP update posted.",
+                        sent_count,
+                        failed_count,
+                        len(selected_recipients),
+                    )
+                )
                 should_broadcast = True
 
         elif action == "delete_rsvp_update":
@@ -2974,6 +3132,55 @@ def admin_portal():
                 removed_update = rsvp_updates.pop(update_index)
                 messages.append(f"Removed RSVP update: {removed_update.title}.")
                 should_broadcast = True
+
+        elif action == "resend_rsvp_update":
+            update_id = request.form.get("update_id", "")
+            update = next((candidate for candidate in rsvp_updates if candidate.id == update_id), None)
+            if update is None:
+                errors.append("RSVP update could not be found.")
+            else:
+                selected_recipients = selected_update_recipient_ids()
+                sent_count, failed_count = send_rsvp_update_emails(update, selected_recipients)
+                messages.append(
+                    update_email_message(
+                        f"Resent RSVP update: {update.title}.",
+                        sent_count,
+                        failed_count,
+                        len(selected_recipients),
+                    )
+                )
+
+        elif action == "add_rsvp":
+            new_rsvp = rsvp_from_form()
+            if new_rsvp:
+                rsvp_signups.append(new_rsvp)
+                messages.append(f"Added RSVP for {new_rsvp.name}.")
+
+        elif action == "update_rsvp":
+            rsvp_id = request.form.get("rsvp_id", "").strip()
+            rsvp_index = find_rsvp_index_by_id(rsvp_id)
+            if rsvp_index is None:
+                errors.append("RSVP could not be found.")
+            else:
+                existing_rsvp = rsvp_signups[rsvp_index]
+                updated_rsvp = rsvp_from_form(
+                    existing_id=existing_rsvp.id,
+                    existing_created_at=existing_rsvp.created_at,
+                )
+                if updated_rsvp:
+                    rsvp_signups[rsvp_index] = updated_rsvp
+                    messages.append(f"Updated RSVP for {updated_rsvp.name}.")
+
+        elif action == "delete_rsvp":
+            rsvp_id = request.form.get("rsvp_id", "").strip()
+            rsvp_index = find_rsvp_index_by_id(rsvp_id)
+            if rsvp_index is None:
+                errors.append("RSVP could not be found.")
+            else:
+                removed_rsvp = rsvp_signups.pop(rsvp_index)
+                if session.get("rsvp_id") == removed_rsvp.id:
+                    session.pop("rsvp_id", None)
+                messages.append(f"Removed RSVP for {removed_rsvp.name}.")
 
         elif action == "add_menu_item":
             item = menu_item_from_form()
@@ -3027,6 +3234,81 @@ def admin_portal():
                     roles.add("bartender")
                 account["roles"] = sorted(roles)
                 messages.append(f"Updated roles for {account.get('username')}.")
+
+        elif action == "add_user_account":
+            account_fields = account_fields_from_form()
+            password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+            if len(password) < 8:
+                errors.append("Account password must be at least 8 characters.")
+            elif password != confirm_password:
+                errors.append("Account passwords do not match.")
+            if account_fields and not errors:
+                account = create_user_account(
+                    str(account_fields["username"]),
+                    password,
+                    str(account_fields["email"]),
+                )
+                account["email_updates_acknowledged"] = bool(account_fields["email_updates_acknowledged"])
+                account["roles"] = account_fields["roles"]
+                user_accounts[str(account_fields["normalized_username"])] = account
+                registered_users[str(account["id"])] = str(account["username"])
+                messages.append(f"Added account for {account['username']}.")
+
+        elif action == "update_user_account":
+            account_id = request.form.get("account_id", "").strip()
+            existing_key = find_user_account_key_by_id(account_id)
+            if existing_key is None:
+                errors.append("User account could not be found.")
+            else:
+                account_fields = account_fields_from_form(existing_key)
+                if account_fields:
+                    account = user_accounts.pop(existing_key)
+                    account["username"] = account_fields["username"]
+                    account["email"] = account_fields["email"]
+                    account["email_updates_acknowledged"] = account_fields["email_updates_acknowledged"]
+                    account["roles"] = account_fields["roles"]
+                    new_key = str(account_fields["normalized_username"])
+                    user_accounts[new_key] = account
+                    registered_users[str(account["id"])] = str(account["username"])
+                    messages.append(f"Updated account for {account['username']}.")
+
+        elif action == "reset_user_password":
+            account_id = request.form.get("account_id", "").strip()
+            account_key = find_user_account_key_by_id(account_id)
+            password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+            if account_key is None:
+                errors.append("User account could not be found.")
+            if len(password) < 8:
+                errors.append("New account password must be at least 8 characters.")
+            elif password != confirm_password:
+                errors.append("New account passwords do not match.")
+            if account_key is not None and not errors:
+                account = user_accounts[account_key]
+                account["password_hash"] = generate_password_hash(password)
+                for token_hash, record in list(password_reset_tokens.items()):
+                    if str(record.get("account_id", "")) == account_id:
+                        password_reset_tokens.pop(token_hash, None)
+                messages.append(f"Reset password for {account.get('username')}.")
+
+        elif action == "delete_user_account":
+            account_id = request.form.get("account_id", "").strip()
+            account_key = find_user_account_key_by_id(account_id)
+            if account_key is None:
+                errors.append("User account could not be found.")
+            else:
+                account = user_accounts.pop(account_key)
+                registered_users.pop(account_id, None)
+                submitted_costume_votes.discard(account_id)
+                costume_ballots.pop(account_id, None)
+                for token_hash, record in list(password_reset_tokens.items()):
+                    if (
+                        str(record.get("account_id", "")) == account_id
+                        or normalize_username(str(record.get("normalized_username", ""))) == account_key
+                    ):
+                        password_reset_tokens.pop(token_hash, None)
+                messages.append(f"Deleted account for {account.get('username')}.")
 
         elif action == "delete_costume":
             index = parse_entry_index(
@@ -3185,6 +3467,7 @@ def admin_portal():
                 ],
             }
             messages.append("Live display updated with costume contest kickoff message.")
+            contest_state["contest_started"] = True
             contest_state["voting_open"] = True
             contest_state["winner"] = None
             contest_state["winner_locked"] = False
@@ -3193,6 +3476,25 @@ def admin_portal():
             costume_ballots.clear()
             submitted_costume_votes.clear()
             write_state_backup_if_available("contest-start")
+            should_broadcast = True
+
+        elif action == "stop_costume_contest":
+            contest_state["contest_started"] = False
+            contest_state["voting_open"] = False
+            if live_display_override and live_display_override.get("type") == "contest_start":
+                live_display_override = None
+            messages.append("Costume contest stopped. Attendee voting is now hidden.")
+            write_state_backup_if_available("contest-stop")
+            should_broadcast = True
+
+        elif action == "reset_costume_contest":
+            contest_state.clear()
+            contest_state.update(copy.deepcopy(DEFAULT_CONTEST_STATE))
+            costume_ballots.clear()
+            submitted_costume_votes.clear()
+            live_display_override = None
+            messages.append("Costume contest reset. Votes, winner, and display override were cleared.")
+            write_state_backup_if_available("contest-reset")
             should_broadcast = True
 
         elif action == "show_costume_winner":
@@ -3267,6 +3569,25 @@ def admin_portal():
                     "Add at least one karaoke signup before starting the karaoke party."
                 )
 
+        elif action == "stop_karaoke_party":
+            karaoke_state["party_started"] = False
+            karaoke_state["current_singer_index"] = None
+            karaoke_state["current_singer_id"] = None
+            if live_display_override and live_display_override.get("type") == "karaoke_start":
+                live_display_override = None
+            messages.append("Karaoke party stopped.")
+            write_state_backup_if_available("karaoke-stop")
+            should_broadcast = True
+
+        elif action == "reset_karaoke_party":
+            karaoke_state.clear()
+            karaoke_state.update(copy.deepcopy(DEFAULT_KARAOKE_STATE))
+            if live_display_override and live_display_override.get("type") == "karaoke_start":
+                live_display_override = None
+            messages.append("Karaoke party reset. The lineup was kept.")
+            write_state_backup_if_available("karaoke-reset")
+            should_broadcast = True
+
         elif action == "lock_costume_winner":
             scoreboard, leader = build_costume_scoreboard()
             if leader and leader["count"]:
@@ -3278,6 +3599,7 @@ def admin_portal():
                     "count": leader["count"],
                     "total": leader["total"],
                 }
+                contest_state["contest_started"] = False
                 contest_state["winner_locked"] = True
                 contest_state["voting_open"] = False
                 top_entries = rank_costume_entries(scoreboard)[:3]
@@ -3363,6 +3685,8 @@ def admin_portal():
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
         rsvp_updates=sorted_rsvp_updates(),
+        update_email_recipients=available_update_email_recipients(),
+        email_updates_enabled=app.config["EMAIL_UPDATES_ENABLED"],
         menu_items=menu_items,
         menu_sections=build_menu_sections(),
         drink_orders=drink_orders,
@@ -3495,7 +3819,7 @@ def party_costume_voting():
 
     ensure_costume_votes_alignment()
 
-    if not contest_state.get("voting_open") or contest_state.get("winner_locked"):
+    if not costume_voting_is_visible():
         return redirect(url_for("party_dashboard"))
 
     user_id = session.get("user_id")

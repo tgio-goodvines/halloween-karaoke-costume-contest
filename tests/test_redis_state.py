@@ -282,6 +282,7 @@ class RedisStateTests(unittest.TestCase):
             )
         ]
         main.submitted_costume_votes = {"user-1", "user-2"}
+        main.contest_state["contest_started"] = True
         main.contest_state["voting_open"] = True
         main.karaoke_state["party_started"] = True
         main.live_display_override = {"type": "notice", "title": "Tonight"}
@@ -289,7 +290,7 @@ class RedisStateTests(unittest.TestCase):
         main.party_code_hash = main.generate_password_hash("secret-code")
         main.party_code_hint = "On your invite"
         main.party_details = {
-            "date": "Friday, October 31",
+            "date": "Saturday, October 31",
             "time": "8:00 PM",
             "location": "The haunted house",
             "map_address": "123 Pumpkin Lane, Denver, CO",
@@ -326,13 +327,14 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Parking", main.rsvp_updates[0].title)
         self.assertEqual("Use the west side of the street.", main.rsvp_updates[0].message)
         self.assertEqual({"user-1", "user-2"}, main.submitted_costume_votes)
+        self.assertTrue(main.contest_state["contest_started"])
         self.assertTrue(main.contest_state["voting_open"])
         self.assertTrue(main.karaoke_state["party_started"])
         self.assertEqual({"type": "notice", "title": "Tonight"}, main.live_display_override)
         self.assertEqual("party_login", main.landing_page_target)
         self.assertTrue(main.check_password_hash(main.party_code_hash, "secret-code"))
         self.assertEqual("On your invite", main.party_code_hint)
-        self.assertEqual("Friday, October 31", main.party_details["date"])
+        self.assertEqual("Saturday, October 31", main.party_details["date"])
         self.assertEqual("8:00 PM", main.party_details["time"])
         self.assertEqual("The haunted house", main.party_details["location"])
         self.assertEqual("123 Pumpkin Lane, Denver, CO", main.party_details["map_address"])
@@ -431,6 +433,7 @@ class RedisStateTests(unittest.TestCase):
             main.CostumeSignup("Grace", "Ghost", "", "costume-2"),
         ]
         main.registered_users = {"user-1": "Jamie"}
+        main.contest_state["contest_started"] = True
         main.contest_state["voting_open"] = True
         self.save_current_state()
 
@@ -451,6 +454,110 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, second_response.status_code)
         self.assertEqual({"costume-1": 9, "costume-2": 7}, state["costume_ballots"]["user-1"])
         self.assertEqual(["user-1"], state["submitted_costume_votes"])
+
+    def test_costume_voting_is_hidden_until_contest_is_started(self):
+        main.costume_signups = [
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+        ]
+        main.registered_users = {"user-1": "Jamie"}
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            dashboard_response = client.get("/party")
+            voting_response = client.get("/party/costumes/vote")
+
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, dashboard_response.status_code)
+        self.assertNotIn("Start Voting", dashboard_body)
+        self.assertEqual(302, voting_response.status_code)
+        self.assertEqual("/party", voting_response.headers["Location"])
+
+    def test_admin_can_start_stop_and_reset_costume_contest(self):
+        main.costume_signups = [
+            main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            start_response = client.post("/admin", data={"action": "start_costume_contest"})
+            state_after_start = self.redis_state()
+            stop_response = client.post("/admin", data={"action": "stop_costume_contest"})
+            state_after_stop = self.redis_state()
+
+        self.assertEqual(200, start_response.status_code)
+        self.assertTrue(state_after_start["contest_state"]["contest_started"])
+        self.assertTrue(state_after_start["contest_state"]["voting_open"])
+        self.assertEqual("contest_start", state_after_start["live_display_override"]["type"])
+        self.assertEqual(200, stop_response.status_code)
+        self.assertFalse(state_after_stop["contest_state"]["contest_started"])
+        self.assertFalse(state_after_stop["contest_state"]["voting_open"])
+        self.assertIsNone(state_after_stop["live_display_override"])
+
+        main.load_state_from_redis()
+        main.contest_state["contest_started"] = True
+        main.contest_state["voting_open"] = True
+        main.contest_state["winner"] = {"id": "costume-1", "name": "Ada"}
+        main.contest_state["winner_locked"] = True
+        main.costume_ballots = {"user-1": {"costume-1": 10}}
+        main.submitted_costume_votes = {"user-1"}
+        main.live_display_override = {"type": "winner", "title": "Costume Contest Champion"}
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            reset_response = client.post("/admin", data={"action": "reset_costume_contest"})
+
+        state_after_reset = self.redis_state()
+        self.assertEqual(200, reset_response.status_code)
+        self.assertFalse(state_after_reset["contest_state"]["contest_started"])
+        self.assertFalse(state_after_reset["contest_state"]["voting_open"])
+        self.assertIsNone(state_after_reset["contest_state"]["winner"])
+        self.assertFalse(state_after_reset["contest_state"]["winner_locked"])
+        self.assertEqual({}, state_after_reset["costume_ballots"])
+        self.assertEqual([], state_after_reset["submitted_costume_votes"])
+        self.assertEqual("Ada", state_after_reset["costume_signups"][0]["name"])
+        self.assertIsNone(state_after_reset["live_display_override"])
+
+    def test_admin_can_start_stop_and_reset_karaoke_party(self):
+        main.karaoke_signups = [
+            main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "", "karaoke-1"),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            start_response = client.post("/admin", data={"action": "start_karaoke_party"})
+            state_after_start = self.redis_state()
+            stop_response = client.post("/admin", data={"action": "stop_karaoke_party"})
+            state_after_stop = self.redis_state()
+
+        self.assertEqual(200, start_response.status_code)
+        self.assertTrue(state_after_start["karaoke_state"]["party_started"])
+        self.assertEqual("karaoke-1", state_after_start["karaoke_state"]["current_singer_id"])
+        self.assertEqual("karaoke_start", state_after_start["live_display_override"]["type"])
+        self.assertEqual(200, stop_response.status_code)
+        self.assertFalse(state_after_stop["karaoke_state"]["party_started"])
+        self.assertIsNone(state_after_stop["karaoke_state"]["current_singer_id"])
+        self.assertIsNone(state_after_stop["live_display_override"])
+
+        main.load_state_from_redis()
+        main.karaoke_state["party_started"] = True
+        main.karaoke_state["current_singer_id"] = "karaoke-1"
+        main.live_display_override = {"type": "karaoke_start", "title": "Halloween Karaoke Party"}
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            reset_response = client.post("/admin", data={"action": "reset_karaoke_party"})
+
+        state_after_reset = self.redis_state()
+        self.assertEqual(200, reset_response.status_code)
+        self.assertFalse(state_after_reset["karaoke_state"]["party_started"])
+        self.assertIsNone(state_after_reset["karaoke_state"]["current_singer_id"])
+        self.assertEqual("Grace", state_after_reset["karaoke_signups"][0]["name"])
+        self.assertIsNone(state_after_reset["live_display_override"])
 
     def test_admin_reorder_keeps_votes_aligned_with_costumes(self):
         main.costume_signups = [
@@ -565,6 +672,7 @@ class RedisStateTests(unittest.TestCase):
         ]
         main.registered_users = {"user-1": "Jamie"}
         main.costume_ballots = {"user-1": {"costume-1": 8, "costume-2": 9}}
+        main.contest_state["contest_started"] = True
         main.contest_state["voting_open"] = True
         self.save_current_state()
 
@@ -781,7 +889,7 @@ class RedisStateTests(unittest.TestCase):
                 "/admin",
                 data={
                     "action": "update_party_details",
-                    "party_date": "Friday, October 31",
+                    "party_date": "Saturday, October 31",
                     "party_time": "8:00 PM",
                     "party_location": "The haunted house",
                     "party_map_address": "123 Pumpkin Lane, Denver, CO",
@@ -794,11 +902,11 @@ class RedisStateTests(unittest.TestCase):
         state = self.redis_state()
         body = rsvp_response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
-        self.assertEqual("Friday, October 31", state["party_details"]["date"])
+        self.assertEqual("Saturday, October 31", state["party_details"]["date"])
         self.assertEqual("8:00 PM", state["party_details"]["time"])
         self.assertEqual("The haunted house", state["party_details"]["location"])
         self.assertEqual("123 Pumpkin Lane, Denver, CO", state["party_details"]["map_address"])
-        self.assertIn("Friday, October 31", body)
+        self.assertIn("Saturday, October 31", body)
         self.assertIn("8:00 PM", body)
         self.assertIn("The haunted house", body)
         self.assertIn("Bring a costume and your best karaoke song.", body)
@@ -829,6 +937,56 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Casey", body)
         self.assertIn("casey@example.com", body)
         self.assertIn("Vegetarian", body)
+
+    def test_admin_can_add_update_and_delete_rsvps(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            add_response = client.post(
+                "/admin",
+                data={
+                    "action": "add_rsvp",
+                    "name": "Morgan",
+                    "contact": "Morgan@Example.COM",
+                    "guest_count": "2",
+                    "note": "Needs parking",
+                    "email_updates_acknowledged": "yes",
+                },
+            )
+            state_after_add = self.redis_state()
+            rsvp_id = state_after_add["rsvp_signups"][0]["id"]
+            update_response = client.post(
+                "/admin",
+                data={
+                    "action": "update_rsvp",
+                    "rsvp_id": rsvp_id,
+                    "name": "Morgan Lee",
+                    "contact": "morgan.lee@example.com",
+                    "guest_count": "3",
+                    "note": "Arriving at 8",
+                    "email_updates_acknowledged": "yes",
+                },
+            )
+            state_after_update = self.redis_state()
+            delete_response = client.post(
+                "/admin",
+                data={
+                    "action": "delete_rsvp",
+                    "rsvp_id": rsvp_id,
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, add_response.status_code)
+        self.assertEqual(200, update_response.status_code)
+        self.assertEqual(200, delete_response.status_code)
+        self.assertEqual("Morgan", state_after_add["rsvp_signups"][0]["name"])
+        self.assertEqual("morgan@example.com", state_after_add["rsvp_signups"][0]["contact"])
+        self.assertEqual("Morgan Lee", state_after_update["rsvp_signups"][0]["name"])
+        self.assertEqual(3, state_after_update["rsvp_signups"][0]["guest_count"])
+        self.assertEqual("Arriving at 8", state_after_update["rsvp_signups"][0]["note"])
+        self.assertEqual([], state["rsvp_signups"])
 
     def test_admin_can_post_rsvp_updates_and_rsvp_page_shows_newest_first(self):
         self.save_current_state()
@@ -924,6 +1082,7 @@ class RedisStateTests(unittest.TestCase):
     def test_admin_rsvp_update_sends_email_without_blocking_on_partial_failure(self):
         main.rsvp_signups = [
             main.RSVPSignup(
+                id="rsvp-casey",
                 name="Casey",
                 contact="casey@example.com",
                 email_updates_acknowledged=True,
@@ -945,6 +1104,7 @@ class RedisStateTests(unittest.TestCase):
                     "action": "add_rsvp_update",
                     "title": "Parking",
                     "message": "Use the west side of the street.",
+                    "recipient_ids": ["rsvp:rsvp-casey", f"account:{main.user_accounts['morgan']['id']}"],
                 },
             )
 
@@ -954,7 +1114,48 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Parking", state["rsvp_updates"][0]["title"])
         self.assertEqual(1, len(fake_ses.sent_messages))
         self.assertEqual(["casey@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
-        self.assertIn("Email sent to 1 guest; 1 failed.", body)
+        self.assertIn("Email sent to 1 selected recipient; 1 failed.", body)
+
+    def test_admin_can_resend_rsvp_update_to_selected_recipients(self):
+        account = main.create_user_account("Morgan", "party-password", "morgan@example.com")
+        main.user_accounts = {"morgan": account}
+        main.rsvp_signups = [
+            main.RSVPSignup(
+                id="rsvp-casey",
+                name="Casey",
+                contact="casey@example.com",
+                email_updates_acknowledged=True,
+            )
+        ]
+        main.rsvp_updates = [
+            main.RSVPUpdate(
+                id="update-1",
+                title="Parking",
+                message="Use the west side of the street.",
+                created_at="2026-07-07T00:00:00Z",
+            )
+        ]
+        self.save_current_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "resend_rsvp_update",
+                    "update_id": "update-1",
+                    "recipient_ids": [f"account:{account['id']}"],
+                },
+            )
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        self.assertEqual(["morgan@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
+        self.assertIn("Resent RSVP update: Parking. Email sent to 1 selected recipient.", body)
 
     def test_pre_party_display_rotates_only_rsvp_cards_and_updates(self):
         main.costume_signups = [
@@ -1052,6 +1253,93 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Witch Margarita", state["menu_items"][0]["name"])
         self.assertEqual("https://example.test/witch.jpg", state["menu_items"][0]["image_url"])
         self.assertIn("bartender", state["user_accounts"]["jamie"]["roles"])
+
+    def test_admin_can_crud_user_accounts_and_reset_passwords(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            add_response = client.post(
+                "/admin",
+                data={
+                    "action": "add_user_account",
+                    "username": "Morgan",
+                    "email": "Morgan@Example.COM",
+                    "password": "party-password",
+                    "confirm_password": "party-password",
+                    "email_updates_acknowledged": "yes",
+                    "bartender": "yes",
+                },
+            )
+            state_after_add = self.redis_state()
+            account_id = state_after_add["user_accounts"]["morgan"]["id"]
+            update_response = client.post(
+                "/admin",
+                data={
+                    "action": "update_user_account",
+                    "account_id": account_id,
+                    "username": "Morgan Lee",
+                    "email": "morgan.lee@example.com",
+                    "email_updates_acknowledged": "yes",
+                },
+            )
+            reset_response = client.post(
+                "/admin",
+                data={
+                    "action": "reset_user_password",
+                    "account_id": account_id,
+                    "password": "new-party-password",
+                    "confirm_password": "new-party-password",
+                },
+            )
+
+        state_after_reset = self.redis_state()
+        self.assertEqual(200, add_response.status_code)
+        self.assertEqual(200, update_response.status_code)
+        self.assertEqual(200, reset_response.status_code)
+        self.assertEqual("morgan@example.com", state_after_add["user_accounts"]["morgan"]["email"])
+        self.assertIn("bartender", state_after_add["user_accounts"]["morgan"]["roles"])
+        self.assertNotIn("morgan", state_after_reset["user_accounts"])
+        self.assertEqual("Morgan Lee", state_after_reset["user_accounts"]["morgan lee"]["username"])
+        self.assertEqual(["regular"], state_after_reset["user_accounts"]["morgan lee"]["roles"])
+        self.assertTrue(
+            main.check_password_hash(
+                state_after_reset["user_accounts"]["morgan lee"]["password_hash"],
+                "new-party-password",
+            )
+        )
+
+        main.load_state_from_redis()
+        main.costume_ballots[account_id] = {"costume-1": 9}
+        main.submitted_costume_votes.add(account_id)
+        main.registered_users[account_id] = "Morgan Lee"
+        main.password_reset_tokens["token-hash"] = {
+            "normalized_username": "morgan lee",
+            "account_id": account_id,
+            "email": "morgan.lee@example.com",
+            "created_at": "2026-12-01T00:00:00Z",
+            "expires_at": "2026-12-01T00:45:00Z",
+            "used_at": "",
+        }
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            delete_response = client.post(
+                "/admin",
+                data={
+                    "action": "delete_user_account",
+                    "account_id": account_id,
+                },
+            )
+
+        state_after_delete = self.redis_state()
+        self.assertEqual(200, delete_response.status_code)
+        self.assertEqual({}, state_after_delete["user_accounts"])
+        self.assertNotIn(account_id, state_after_delete["registered_users"])
+        self.assertNotIn(account_id, state_after_delete["costume_ballots"])
+        self.assertNotIn(account_id, state_after_delete["submitted_costume_votes"])
+        self.assertEqual({}, state_after_delete["password_reset_tokens"])
 
     def test_attendee_can_order_drink_and_menu_displays_images(self):
         main.menu_items = [

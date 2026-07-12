@@ -46,7 +46,7 @@
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
 - `GET|POST /party/costumes` -> attendee costume signup form.
 - `GET|POST /party/karaoke` -> attendee karaoke signup form.
-- `GET|POST /party/costumes/vote` -> logged-in one-ballot-per-session voting while contest is open.
+- `GET|POST /party/costumes/vote` -> logged-in one-ballot-per-session voting while the costume contest is started, voting is open, and no winner is locked.
 - Legacy attendee paths redirect to the canonical `/party` paths:
   `/halloween`, `/halloween/login`, `/halloween/register`,
   `/costume-signup`, `/karaoke-signup`, and `/costume-voting`.
@@ -123,7 +123,7 @@ That function increments `display_update_version` and notifies `display_update_c
 - `cta_details`: WiFi and signup portal details.
 - `scoreboard`: structured top-score rows.
 
-The base rotation always starts with signup instructions and event spotlight cards. Winner and scoreboard cards are appended when the relevant contest state is active. Costume and karaoke entries are then interleaved.
+The base rotation always starts with signup instructions and event spotlight cards. Winner and scoreboard cards are appended when the relevant contest state is active. Costume and karaoke entries are then interleaved. Admin stop/reset actions clear matching live-display start overrides without deleting signup lineups.
 
 Before `HALLOWEEN_PARTY_START`, `build_rotation_entries()` returns only RSVP
 prompt, static party detail cards, and admin-posted RSVP updates. Costume and
@@ -172,8 +172,9 @@ karaoke signup/event cards are withheld until the configured party start time.
 - `party_code_gate.html`: invite-code gate shown before direct login/register
   pages reveal their forms.
 - `admin.html`: all admin actions, public landing/party-code settings, RSVP
-  list, party detail/map address editing, RSVP update posting/removal, and live
-  contest/karaoke state, menu management, bartender role assignment, and bar
+  list CRUD, party detail/map address editing, selective RSVP update
+  posting/resending/removal, and live
+  contest/karaoke state, menu management, user account CRUD/password reset/bartender role assignment, and bar
   operations summary; add/edit entry forms are disclosure rows to keep mobile
   admin scanning manageable.
 - `display.html`: standalone live-display page without `base.html`; includes

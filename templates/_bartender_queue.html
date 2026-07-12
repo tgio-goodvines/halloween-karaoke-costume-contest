@@ -75,17 +75,17 @@
 <section class="admin-section">
   <h3>Recently Completed</h3>
   {% if completed_orders %}
-    <div class="order-list">
+    <div class="order-list bartender-completed-list">
       {% for order in completed_orders %}
-        <article class="order-card order-card--complete">
-          {% if order.item_image_url %}
-            <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image">
-          {% endif %}
+        <article class="order-card order-card--complete bartender-completed-card">
+          <div class="bartender-completed-card__mark" aria-hidden="true">Done</div>
           <div class="order-card__body">
-            <p class="order-card__status">Complete</p>
-            <div class="menu-card__badges">
-              <span>{{ drink_type_label(order.drink_type) }}</span>
-              <span>{{ beverage_type_label(order.beverage_type) }}</span>
+            <div class="bartender-completed-card__header">
+              <p class="order-card__status">Complete</p>
+              <div class="menu-card__badges">
+                <span>{{ drink_type_label(order.drink_type) }}</span>
+                <span>{{ beverage_type_label(order.beverage_type) }}</span>
+              </div>
             </div>
             <h4>{{ order.item_name }}</h4>
             <p>{{ order.username }}{% if order.completed_at %} • {{ format_time_label(order.completed_at) }}{% endif %}</p>

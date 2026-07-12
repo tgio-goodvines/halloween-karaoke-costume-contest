@@ -930,6 +930,56 @@ main.container {
   box-shadow: 0 0 28px rgba(255, 49, 49, 0.58);
 }
 
+.bartender-completed-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+
+.bartender-completed-card {
+  grid-template-columns: minmax(3.35rem, 4.35rem) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.bartender-completed-card__mark {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0.65rem 0.35rem;
+  border-right: 1px solid rgba(255, 49, 49, 0.35);
+  background:
+    var(--scanline),
+    linear-gradient(180deg, rgba(255, 49, 49, 0.18), rgba(13, 12, 13, 0.88));
+  color: var(--primary);
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+.bartender-completed-card .order-card__body {
+  min-width: 0;
+  gap: 0.45rem;
+}
+
+.bartender-completed-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.bartender-completed-card__header .order-card__status {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.bartender-completed-card__header .menu-card__badges {
+  justify-content: flex-end;
+}
+
 .tip-disclosure {
   display: grid;
   gap: 0.65rem;
@@ -1999,6 +2049,20 @@ textarea:focus,
   .order-card,
   .bartender-card {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bartender-completed-card {
+    grid-template-columns: minmax(3rem, 3.6rem) minmax(0, 1fr);
+    padding: 0;
+  }
+
+  .bartender-completed-card__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bartender-completed-card__header .menu-card__badges {
+    justify-content: flex-start;
   }
 
   .order-card__image,

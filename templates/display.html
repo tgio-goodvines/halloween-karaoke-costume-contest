@@ -148,11 +148,31 @@
             </div>
           </div>
         </section>
+        <section class="display-notice" data-notice-state{% if not notice_override %} hidden{% endif %}>
+          <div class="display-notice__card">
+            <h2 class="display-notice__title" data-notice-title>{{ notice_override.title if notice_override else '' }}</h2>
+            <p class="display-notice__highlight" data-notice-highlight{% if not notice_override or not notice_override.get('highlight') %} hidden{% endif %}>{{ notice_override.highlight if notice_override and notice_override.get('highlight') else '' }}</p>
+            <img
+              class="display-notice__image"
+              data-notice-image
+              {% if notice_override and notice_override.get('image_url') %}src="{{ notice_override.image_url }}" alt="{{ notice_override.highlight if notice_override.get('highlight') else notice_override.title }}"{% else %}hidden alt=""{% endif %}
+            >
+            <p class="display-notice__message" data-notice-message>{{ notice_override.message if notice_override else '' }}</p>
+            <ul class="display-notice__details" data-notice-details{% if not notice_override or not notice_override.get('details') %} hidden{% endif %}>
+              {% if notice_override and notice_override.get('details') %}
+                {% for detail in notice_override.details %}
+                  <li>{{ detail }}</li>
+                {% endfor %}
+              {% endif %}
+            </ul>
+          </div>
+        </section>
       </main>
     </div>
 
     <script id="entries-data" type="application/json">{{ entries | tojson }}</script>
     <script id="override-data" type="application/json">{{ override | tojson }}</script>
+    <script id="notice-override-data" type="application/json">{{ notice_override | tojson }}</script>
     <script src="{{ url_for('static', filename='display.js') }}"></script>
   </body>
 </html>

@@ -161,7 +161,11 @@ the process-local cache:
   `HALLOWEEN_DISPLAY_WIFI_NETWORK` and `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank
   values are allowed so the display can hide either row.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
-- `live_display_override`: current full-screen override card, or `None`.
+- `live_display_event_override`: current full-screen event override card
+  (`contest_start`, `winner`, or `karaoke_start`), or `None`.
+- `live_display_notice_override`: current temporary notice card, currently
+  `drink_ready`, or `None`. The legacy `live_display_override` snapshot field
+  remains as the effective override for compatibility.
 - `landing_page_target`: admin-selected root redirect target, defaulting to
   `/rsvp`.
 - `party_code_hash` and `party_code_hint`: RSVP submission code settings. The
@@ -175,7 +179,9 @@ the process-local cache:
 
 Drink orders move from `received` to `in_progress` to `complete`. Completed
 orders track prep duration from `started_at` when available, and drink-ready
-events create a temporary live-display override with the drink image.
+events create a temporary 10-second live-display notice with the drink image.
+Drink notices render above active contest/karaoke/winner event overrides
+without replacing them.
 
 `HALLOWEEN_PARTY_START` controls attendee route availability and the dashboard
 mode, but not the live display rotation. The live display is intentionally

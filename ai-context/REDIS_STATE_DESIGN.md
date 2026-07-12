@@ -74,6 +74,8 @@ Shape:
   "submitted_costume_votes": [],
   "contest_state": {},
   "karaoke_state": {},
+  "live_display_event_override": null,
+  "live_display_notice_override": null,
   "live_display_override": null,
   "display_update_version": 0,
   "updated_at": "2026-07-05T00:00:00Z"

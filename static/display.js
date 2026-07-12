@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const dataElement = document.getElementById('entries-data');
   const overrideElement = document.getElementById('override-data');
+  const noticeOverrideElement = document.getElementById('notice-override-data');
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
   const overrideContainer = document.querySelector('[data-override-state]');
@@ -18,6 +19,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const overrideMessageElement = overrideContainer ? overrideContainer.querySelector('[data-override-message]') : null;
   const overrideDetailsElement = overrideContainer ? overrideContainer.querySelector('[data-override-details]') : null;
   const overrideImageElement = overrideContainer ? overrideContainer.querySelector('[data-override-image]') : null;
+  const noticeContainer = document.querySelector('[data-notice-state]');
+  const noticeTitleElement = noticeContainer ? noticeContainer.querySelector('[data-notice-title]') : null;
+  const noticeHighlightElement = noticeContainer ? noticeContainer.querySelector('[data-notice-highlight]') : null;
+  const noticeMessageElement = noticeContainer ? noticeContainer.querySelector('[data-notice-message]') : null;
+  const noticeDetailsElement = noticeContainer ? noticeContainer.querySelector('[data-notice-details]') : null;
+  const noticeImageElement = noticeContainer ? noticeContainer.querySelector('[data-notice-image]') : null;
   const karaokeTitleElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-title]')
     : null;
@@ -83,8 +90,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  let initialNoticeOverrideState = null;
+  if (noticeOverrideElement) {
+    try {
+      const parsed = JSON.parse(noticeOverrideElement.textContent || 'null');
+      if (parsed && typeof parsed === 'object') {
+        initialNoticeOverrideState = parsed;
+      }
+    } catch (error) {
+      console.error('Unable to parse notice override state', error);
+    }
+  }
+
   let overrideState = null;
   let overrideSignature = 'null';
+  let noticeOverrideState = null;
+  let noticeOverrideSignature = 'null';
 
   const defaultContent = card.querySelector('[data-entry-default]');
   const ctaLayout = card.querySelector('[data-cta-layout]');
@@ -659,6 +680,82 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const updateNoticeOverrideContent = () => {
+    if (!noticeContainer) {
+      return;
+    }
+
+    const titleText = noticeOverrideState && noticeOverrideState.title ? noticeOverrideState.title : '';
+    const highlightText =
+      noticeOverrideState && noticeOverrideState.highlight ? noticeOverrideState.highlight : '';
+    const messageText = noticeOverrideState && noticeOverrideState.message ? noticeOverrideState.message : '';
+    const details =
+      noticeOverrideState && Array.isArray(noticeOverrideState.details)
+        ? noticeOverrideState.details
+        : [];
+
+    if (noticeTitleElement) {
+      noticeTitleElement.textContent = titleText;
+    }
+
+    if (noticeHighlightElement) {
+      if (highlightText) {
+        noticeHighlightElement.textContent = highlightText;
+        noticeHighlightElement.removeAttribute('hidden');
+      } else {
+        noticeHighlightElement.textContent = '';
+        noticeHighlightElement.setAttribute('hidden', '');
+      }
+    }
+
+    if (noticeMessageElement) {
+      noticeMessageElement.textContent = messageText;
+    }
+
+    if (noticeDetailsElement) {
+      noticeDetailsElement.innerHTML = '';
+      if (details.length) {
+        details.forEach((detail) => {
+          const item = document.createElement('li');
+          item.textContent = detail;
+          noticeDetailsElement.appendChild(item);
+        });
+        noticeDetailsElement.removeAttribute('hidden');
+      } else {
+        noticeDetailsElement.setAttribute('hidden', '');
+      }
+    }
+
+    if (noticeImageElement) {
+      const imageUrl =
+        noticeOverrideState && noticeOverrideState.image_url
+          ? String(noticeOverrideState.image_url)
+          : '';
+      if (imageUrl) {
+        noticeImageElement.src = imageUrl;
+        noticeImageElement.alt = highlightText || titleText || 'Drink image';
+        noticeImageElement.removeAttribute('hidden');
+      } else {
+        noticeImageElement.removeAttribute('src');
+        noticeImageElement.alt = '';
+        noticeImageElement.setAttribute('hidden', '');
+      }
+    }
+  };
+
+  const updateNoticeOverrideDisplay = () => {
+    if (!noticeContainer) {
+      return;
+    }
+
+    if (noticeOverrideState) {
+      refreshDisplayStylesheet();
+      noticeContainer.removeAttribute('hidden');
+    } else {
+      noticeContainer.setAttribute('hidden', '');
+    }
+  };
+
   const applyEntry = (entry) => {
     typeElement.textContent = entry.category || '';
     primaryElement.textContent = entry.primary || '';
@@ -955,7 +1052,26 @@ document.addEventListener('DOMContentLoaded', () => {
     renderEntries({ resetIndex: true });
   };
 
+  const setNoticeOverrideState = (state, { force = false } = {}) => {
+    let signature = 'null';
+    try {
+      signature = JSON.stringify(state ?? null);
+    } catch (error) {
+      signature = 'null';
+    }
+
+    if (!force && signature === noticeOverrideSignature) {
+      return;
+    }
+
+    noticeOverrideSignature = signature;
+    noticeOverrideState = state && typeof state === 'object' ? state : null;
+    updateNoticeOverrideContent();
+    updateNoticeOverrideDisplay();
+  };
+
   setOverrideState(initialOverrideState ?? null, { force: true });
+  setNoticeOverrideState(initialNoticeOverrideState ?? null, { force: true });
 
   const updateCounts = (costumeCount, karaokeCount) => {
     if (costumeCountElement && Number.isFinite(costumeCount)) {
@@ -983,10 +1099,13 @@ document.addEventListener('DOMContentLoaded', () => {
         costume_count: costumeCount,
         karaoke_count: karaokeCount,
         override: newOverride,
+        event_override: newEventOverride,
+        notice_override: newNoticeOverride,
       } = payload;
 
       updateCounts(costumeCount, karaokeCount);
-      setOverrideState(newOverride || null);
+      setOverrideState(newEventOverride || newOverride || null);
+      setNoticeOverrideState(newNoticeOverride || null);
 
       if (Array.isArray(newEntries)) {
         const newSignature = JSON.stringify(newEntries);

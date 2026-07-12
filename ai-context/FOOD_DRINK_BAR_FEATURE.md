@@ -71,7 +71,7 @@ Do not alter GoodVines SES identities or sender addresses.
 
 ## Live Display
 
-Completing a drink creates `live_display_override` with `type="drink_ready"`, attendee name, drink name, `image_url`, and an `expires_at` timestamp. `/live-display` and `/api/display-data` clean up expired overrides. `static/display.js` renders the image in the general override layout and applies drink-specific styling.
+Completing a drink creates `live_display_notice_override` with `type="drink_ready"`, attendee name, drink name, `image_url`, and an `expires_at` timestamp 10 seconds in the future. `/live-display` and `/api/display-data` clean up expired notices. `static/display.js` renders the image in a top-layer notice card above either normal rotation or the current contest/karaoke/winner event override.
 
 ## Templates And Styling
 

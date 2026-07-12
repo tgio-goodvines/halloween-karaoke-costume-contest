@@ -92,6 +92,8 @@ Implementation detail:
   "submitted_costume_votes": [],
   "contest_state": {},
   "karaoke_state": {},
+  "live_display_event_override": null,
+  "live_display_notice_override": null,
   "live_display_override": null,
   "display_update_version": 0
 }

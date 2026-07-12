@@ -155,10 +155,14 @@ cards. The WiFi network/password values come from Redis-backed
 `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank values are allowed so the live display
 can omit either row. Winner and scoreboard cards are appended when the relevant
 contest state is active. Costume and karaoke entries are then interleaved. Admin
-stop/reset actions clear matching live-display start overrides without deleting
-signup lineups. `build_rotation_entries()` intentionally returns party-night
-cards even before `HALLOWEEN_PARTY_START` so hosts can stage and test the live
-display ahead of the event.
+stop/reset actions clear matching live-display event overrides without deleting
+signup lineups. Starting costume stops active karaoke event mode, and starting
+karaoke closes active costume voting so costume/karaoke do not compete for the
+static event card. Drink-ready notices are a separate temporary
+`notice_override` layer and can render over an active contest/karaoke/winner
+event card without replacing it. `build_rotation_entries()` intentionally
+returns party-night cards even before `HALLOWEEN_PARTY_START` so hosts can
+stage and test the live display ahead of the event.
 
 The attendee portal has a related but separate date gate: `party_day_has_arrived()`
 compares the local date of `HALLOWEEN_PARTY_START` to the current date. Before
@@ -174,18 +178,20 @@ to have started/open voting with no locked winner.
 
 - `#entries-data`
 - `#override-data`
+- `#notice-override-data`
 
 `static/display.js` then owns:
 
-- Parsing initial entries and override state.
+- Parsing initial entries, event override state, and temporary notice override
+  state.
 - Applying display entries to the card DOM.
 - Switching between default, CTA, and scoreboard layouts.
 - Applying costume/winner styling classes.
 - Rotating cards every 8 seconds.
 - Fetching latest display data.
 - Connecting and reconnecting to SSE updates.
-- Rendering override content.
-- Rendering drink-ready override images.
+- Rendering event override content.
+- Rendering drink-ready notice images above event overrides or normal rotation.
 - Running karaoke countdown timers and karaoke panel rotation.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.

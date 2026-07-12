@@ -163,7 +163,8 @@ class RedisStateTests(unittest.TestCase):
         main.rsvp_signups = []
         main.rsvp_updates = []
         main.submitted_costume_votes = set()
-        main.live_display_override = None
+        main.live_display_event_override = None
+        main.live_display_notice_override = None
         main.landing_page_target = main.DEFAULT_LANDING_PAGE_TARGET
         main.party_code_hash = main.generate_password_hash("invite-code")
         main.party_code_hint = ""
@@ -300,7 +301,7 @@ class RedisStateTests(unittest.TestCase):
         main.contest_state["contest_started"] = True
         main.contest_state["voting_open"] = True
         main.karaoke_state["party_started"] = True
-        main.live_display_override = {"type": "notice", "title": "Tonight"}
+        main.live_display_notice_override = {"type": "drink_ready", "title": "Tonight"}
         main.landing_page_target = "party_login"
         main.party_code_hash = main.generate_password_hash("secret-code")
         main.party_code_hint = "On your invite"
@@ -364,7 +365,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(main.contest_state["contest_started"])
         self.assertTrue(main.contest_state["voting_open"])
         self.assertTrue(main.karaoke_state["party_started"])
-        self.assertEqual({"type": "notice", "title": "Tonight"}, main.live_display_override)
+        self.assertIsNone(main.live_display_event_override)
+        self.assertEqual({"type": "drink_ready", "title": "Tonight"}, main.live_display_notice_override)
         self.assertEqual("party_login", main.landing_page_target)
         self.assertTrue(main.check_password_hash(main.party_code_hash, "secret-code"))
         self.assertEqual("On your invite", main.party_code_hint)
@@ -416,6 +418,8 @@ class RedisStateTests(unittest.TestCase):
             "submitted_costume_votes": ["user-1", "user-2"],
             "contest_state": {},
             "karaoke_state": {},
+            "live_display_event_override": None,
+            "live_display_notice_override": None,
             "live_display_override": None,
             "display_update_version": 4,
         }
@@ -591,6 +595,8 @@ class RedisStateTests(unittest.TestCase):
         main.costume_signups = [
             main.CostumeSignup("Ada", "Vampire", "", "costume-1"),
         ]
+        main.karaoke_state["party_started"] = True
+        main.karaoke_state["current_singer_id"] = "karaoke-1"
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -603,11 +609,13 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, start_response.status_code)
         self.assertTrue(state_after_start["contest_state"]["contest_started"])
         self.assertTrue(state_after_start["contest_state"]["voting_open"])
-        self.assertEqual("contest_start", state_after_start["live_display_override"]["type"])
+        self.assertFalse(state_after_start["karaoke_state"]["party_started"])
+        self.assertIsNone(state_after_start["karaoke_state"]["current_singer_id"])
+        self.assertEqual("contest_start", state_after_start["live_display_event_override"]["type"])
         self.assertEqual(200, stop_response.status_code)
         self.assertFalse(state_after_stop["contest_state"]["contest_started"])
         self.assertFalse(state_after_stop["contest_state"]["voting_open"])
-        self.assertIsNone(state_after_stop["live_display_override"])
+        self.assertIsNone(state_after_stop["live_display_event_override"])
 
         main.load_state_from_redis()
         main.contest_state["contest_started"] = True
@@ -616,7 +624,7 @@ class RedisStateTests(unittest.TestCase):
         main.contest_state["winner_locked"] = True
         main.costume_ballots = {"user-1": {"costume-1": 10}}
         main.submitted_costume_votes = {"user-1"}
-        main.live_display_override = {"type": "winner", "title": "Costume Contest Champion"}
+        main.live_display_event_override = {"type": "winner", "title": "Costume Contest Champion"}
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -632,12 +640,14 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual({}, state_after_reset["costume_ballots"])
         self.assertEqual([], state_after_reset["submitted_costume_votes"])
         self.assertEqual("Ada", state_after_reset["costume_signups"][0]["name"])
-        self.assertIsNone(state_after_reset["live_display_override"])
+        self.assertIsNone(state_after_reset["live_display_event_override"])
 
     def test_admin_can_start_stop_and_reset_karaoke_party(self):
         main.karaoke_signups = [
             main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "", "karaoke-1"),
         ]
+        main.contest_state["contest_started"] = True
+        main.contest_state["voting_open"] = True
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -650,16 +660,18 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, start_response.status_code)
         self.assertTrue(state_after_start["karaoke_state"]["party_started"])
         self.assertEqual("karaoke-1", state_after_start["karaoke_state"]["current_singer_id"])
-        self.assertEqual("karaoke_start", state_after_start["live_display_override"]["type"])
+        self.assertFalse(state_after_start["contest_state"]["contest_started"])
+        self.assertFalse(state_after_start["contest_state"]["voting_open"])
+        self.assertEqual("karaoke_start", state_after_start["live_display_event_override"]["type"])
         self.assertEqual(200, stop_response.status_code)
         self.assertFalse(state_after_stop["karaoke_state"]["party_started"])
         self.assertIsNone(state_after_stop["karaoke_state"]["current_singer_id"])
-        self.assertIsNone(state_after_stop["live_display_override"])
+        self.assertIsNone(state_after_stop["live_display_event_override"])
 
         main.load_state_from_redis()
         main.karaoke_state["party_started"] = True
         main.karaoke_state["current_singer_id"] = "karaoke-1"
-        main.live_display_override = {"type": "karaoke_start", "title": "Halloween Karaoke Party"}
+        main.live_display_event_override = {"type": "karaoke_start", "title": "Halloween Karaoke Party"}
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -671,7 +683,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(state_after_reset["karaoke_state"]["party_started"])
         self.assertIsNone(state_after_reset["karaoke_state"]["current_singer_id"])
         self.assertEqual("Grace", state_after_reset["karaoke_signups"][0]["name"])
-        self.assertIsNone(state_after_reset["live_display_override"])
+        self.assertIsNone(state_after_reset["live_display_event_override"])
 
     def test_admin_reorder_keeps_votes_aligned_with_costumes(self):
         main.costume_signups = [
@@ -1582,6 +1594,13 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("bartender", state_after_add["user_accounts"]["morgan"]["roles"])
         self.assertEqual(1, len(fake_ses.sent_messages))
         self.assertEqual(["morgan@example.com"], fake_ses.sent_messages[0]["Destination"]["ToAddresses"])
+        welcome_body = fake_ses.sent_messages[0]["Content"]["Simple"]["Body"]
+        self.assertNotIn("/party/menu", welcome_body["Text"]["Data"])
+        self.assertNotIn("/party/costumes", welcome_body["Text"]["Data"])
+        self.assertNotIn("/party/karaoke", welcome_body["Text"]["Data"])
+        self.assertNotIn("/party/menu", welcome_body["Html"]["Data"])
+        self.assertNotIn("/party/costumes", welcome_body["Html"]["Data"])
+        self.assertNotIn("/party/karaoke", welcome_body["Html"]["Data"])
         self.assertNotIn("morgan", state_after_reset["user_accounts"])
         self.assertEqual("Morgan Lee", state_after_reset["user_accounts"]["morgan lee"]["username"])
         self.assertEqual(["regular"], state_after_reset["user_accounts"]["morgan lee"]["roles"])
@@ -2100,6 +2119,7 @@ class RedisStateTests(unittest.TestCase):
                 "completed_seconds": None,
             }
         ]
+        main.live_display_event_override = {"type": "contest_start", "title": "Contest Is Live"}
         self.save_current_state()
 
         fake_ses = FakeSESClient()
@@ -2126,11 +2146,35 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, complete_response.status_code)
         self.assertEqual("complete", state["drink_orders"][0]["status"])
         self.assertGreater(state["drink_orders"][0]["completed_seconds"], 0)
-        self.assertEqual("drink_ready", state["live_display_override"]["type"])
-        self.assertEqual("https://example.test/witch.jpg", state["live_display_override"]["image_url"])
+        self.assertEqual("drink_ready", state["live_display_notice_override"]["type"])
+        self.assertEqual("https://example.test/witch.jpg", state["live_display_notice_override"]["image_url"])
+        self.assertEqual("contest_start", state["live_display_event_override"]["type"])
         self.assertEqual(1, len(fake_ses.sent_messages))
         self.assertEqual(200, display_response.status_code)
-        self.assertEqual("drink_ready", display_response.get_json()["override"]["type"])
+        display_payload = display_response.get_json()
+        self.assertEqual("contest_start", display_payload["event_override"]["type"])
+        self.assertEqual("drink_ready", display_payload["notice_override"]["type"])
+
+    def test_expired_drink_notice_clears_without_clearing_event_override(self):
+        main.live_display_event_override = {"type": "karaoke_start", "title": "Halloween Karaoke Party"}
+        main.live_display_notice_override = {
+            "type": "drink_ready",
+            "title": "Drink Ready",
+            "expires_at": "2000-01-01T00:00:00Z",
+        }
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/api/display-data")
+
+        state = self.redis_state()
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertIsNone(state["live_display_notice_override"])
+        self.assertEqual("karaoke_start", state["live_display_event_override"]["type"])
+        self.assertIsNone(payload["notice_override"])
+        self.assertEqual("karaoke_start", payload["event_override"]["type"])
 
     def test_bartender_view_requires_bartender_or_admin(self):
         self.add_user_account(username="Jamie", user_id="user-1")

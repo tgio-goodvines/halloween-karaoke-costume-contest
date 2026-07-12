@@ -198,8 +198,8 @@ app state.
 - Display data refreshes every 30 seconds via `/api/display-data`.
 - Display also updates immediately through server-sent events from `/api/display-updates`.
 - SSE endpoint sends keep-alive comments on idle intervals.
-- Display supports full-screen override cards for contest start, winner announcement, and karaoke start.
-- Display supports temporary drink-ready override cards with drink images.
+- Display supports full-screen event override cards for contest start, winner announcement, and karaoke start. Costume and karaoke event modes are mutually exclusive.
+- Display supports temporary 10-second drink-ready notice cards with drink images. Drink notices render above the active event override or normal rotation without replacing the event card.
 - Live-display cards use dynamic browser-size scaling, long/dense text classes,
   and overflow wrapping so normal desktop/laptop browser windows and narrow
   browsers do not clip cards.

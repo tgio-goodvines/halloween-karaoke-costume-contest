@@ -270,7 +270,7 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
 }
 
 DEFAULT_DRINK_ESTIMATE_SECONDS = 8 * 60
-DRINK_READY_OVERRIDE_SECONDS = 24
+DRINK_READY_OVERRIDE_SECONDS = 10
 DRINK_READY_DASHBOARD_SECONDS = 5 * 60
 SPECIALTY_DRINK_INCLUDED_LIMIT = 3
 SPECIALTY_EXTRA_ORDER_HOUR = 23
@@ -346,7 +346,8 @@ drink_orders: list[dict[str, object]] = []
 rsvp_signups: List[RSVPSignup] = []
 rsvp_updates: List[RSVPUpdate] = []
 submitted_costume_votes: set[str] = set()
-live_display_override: dict[str, object] | None = None
+live_display_event_override: dict[str, object] | None = None
+live_display_notice_override: dict[str, object] | None = None
 landing_page_target = DEFAULT_LANDING_PAGE_TARGET
 party_code_hash = generate_password_hash(app.config["PARTY_CODE"]) if app.config["PARTY_CODE"] else ""
 party_code_hint = ""
@@ -984,26 +985,17 @@ def send_account_welcome_email(account: dict[str, object]) -> bool:
 
     base_url = app.config["PUBLIC_BASE_URL"].rstrip("/")
     dashboard_url = base_url + url_for("party_dashboard")
-    menu_url = base_url + url_for("party_menu")
-    costume_url = base_url + url_for("party_costumes")
-    karaoke_url = base_url + url_for("party_karaoke")
     subject = f"Welcome to {app.config['PARTY_TITLE']}"
     text_body = (
         f"Hi {account.get('username', 'there')},\n\n"
         f"Your account for {app.config['PARTY_TITLE']} is ready.\n\n"
-        f"Party portal: {dashboard_url}\n"
-        f"Food and drinks: {menu_url}\n"
-        f"Costume signup: {costume_url}\n"
-        f"Karaoke signup: {karaoke_url}\n\n"
+        f"Party portal: {dashboard_url}\n\n"
         "See you at the party."
     )
     html_body = render_template(
         "email/account_welcome.html",
         account=account,
         dashboard_url=dashboard_url,
-        menu_url=menu_url,
-        costume_url=costume_url,
-        karaoke_url=karaoke_url,
     )
 
     try:
@@ -1509,16 +1501,36 @@ def build_drink_ready_override(order: dict[str, object]) -> dict[str, object]:
     }
 
 
-def cleanup_expired_display_override() -> bool:
-    global live_display_override
-    if not live_display_override:
+def cleanup_expired_display_notices() -> bool:
+    global live_display_notice_override
+    if not live_display_notice_override:
         return False
-    expires_at = parse_utc_iso(live_display_override.get("expires_at"))
+    expires_at = parse_utc_iso(live_display_notice_override.get("expires_at"))
     if expires_at and expires_at <= datetime.now(timezone.utc):
-        live_display_override = None
+        live_display_notice_override = None
         persist_state_if_available()
         return True
     return False
+
+
+def display_notice_types() -> set[str]:
+    return {"drink_ready"}
+
+
+def split_legacy_display_override(
+    override: dict[str, object] | None,
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    if not override:
+        return None, None
+
+    override_type = str(override.get("type", "") or "")
+    if override_type in display_notice_types():
+        return None, copy.deepcopy(override)
+    return copy.deepcopy(override), None
+
+
+def current_display_override() -> dict[str, object] | None:
+    return live_display_notice_override or live_display_event_override
 
 
 def build_menu_sections() -> dict[str, list[dict[str, object]]]:
@@ -1691,7 +1703,9 @@ def snapshot_state() -> dict[str, object]:
         "party_details": copy.deepcopy(party_details),
         "display_settings": copy.deepcopy(display_settings),
         "bartender_tip_settings": copy.deepcopy(bartender_tip_settings),
-        "live_display_override": copy.deepcopy(live_display_override),
+        "live_display_event_override": copy.deepcopy(live_display_event_override),
+        "live_display_notice_override": copy.deepcopy(live_display_notice_override),
+        "live_display_override": copy.deepcopy(current_display_override()),
         "landing_page_target": normalize_landing_page_target(landing_page_target),
         "party_code_hash": party_code_hash,
         "party_code_hint": party_code_hint,
@@ -1703,7 +1717,8 @@ def snapshot_state() -> dict[str, object]:
 
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
-    global user_accounts, costume_ballots, submitted_costume_votes, live_display_override
+    global user_accounts, costume_ballots, submitted_costume_votes
+    global live_display_event_override, live_display_notice_override
     global landing_page_target, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
     global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email, bartender_tip_settings
 
@@ -1866,9 +1881,21 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         for key in DEFAULT_DISPLAY_SETTINGS:
             display_settings[key] = str(raw_display_settings.get(key, display_settings[key]) or "").strip()
 
-    raw_override = data.get("live_display_override")
-    live_display_override = copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
-    cleanup_expired_display_override()
+    raw_event_override = data.get("live_display_event_override")
+    raw_notice_override = data.get("live_display_notice_override")
+    if isinstance(raw_event_override, dict) or isinstance(raw_notice_override, dict):
+        live_display_event_override = (
+            copy.deepcopy(raw_event_override) if isinstance(raw_event_override, dict) else None
+        )
+        live_display_notice_override = (
+            copy.deepcopy(raw_notice_override) if isinstance(raw_notice_override, dict) else None
+        )
+    else:
+        raw_override = data.get("live_display_override")
+        live_display_event_override, live_display_notice_override = split_legacy_display_override(
+            copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
+        )
+    cleanup_expired_display_notices()
     landing_page_target = normalize_landing_page_target(data.get("landing_page_target"))
     party_code_hash = str(data.get("party_code_hash", party_code_hash) or "")
     party_code_hint = str(data.get("party_code_hint", party_code_hint) or "").strip()
@@ -2542,7 +2569,6 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "category": "Karaoke Stage",
             "primary": "Reserve your karaoke song.",
             "secondary": "Use the party portal to queue the song you want to perform.",
-            "tertiary": "New karaoke signups rotate onto this screen as they come in.",
         },
         {
             "category": "Bar Queue",
@@ -2613,7 +2639,7 @@ def health():
 
 @app.route("/live-display")
 def live_display():
-    cleanup_expired_display_override()
+    cleanup_expired_display_notices()
     rotation_entries = build_rotation_entries()
 
     return render_template(
@@ -2621,7 +2647,8 @@ def live_display():
         entries=rotation_entries,
         costume_count=len(costume_signups),
         karaoke_count=len(karaoke_signups),
-        override=live_display_override,
+        override=live_display_event_override,
+        notice_override=live_display_notice_override,
     )
 
 
@@ -2655,7 +2682,7 @@ def display_updates():
 
 @app.route("/api/display-data")
 def display_data():
-    cleanup_expired_display_override()
+    cleanup_expired_display_notices()
     rotation_entries = build_rotation_entries()
 
     return jsonify(
@@ -2663,7 +2690,9 @@ def display_data():
             "entries": rotation_entries,
             "costume_count": len(costume_signups),
             "karaoke_count": len(karaoke_signups),
-            "override": live_display_override,
+            "override": live_display_event_override,
+            "event_override": live_display_event_override,
+            "notice_override": live_display_notice_override,
             "display_update_version": display_update_version,
         }
     )
@@ -3176,7 +3205,7 @@ def party_drink_history():
 
 @app.route("/bartender", methods=["GET", "POST"])
 def bartender_portal():
-    global live_display_override
+    global live_display_notice_override
     errors: List[str] = []
     messages: List[str] = []
 
@@ -3213,7 +3242,7 @@ def bartender_portal():
                     int((datetime.now(timezone.utc) - started_or_created_at).total_seconds()),
                 )
                 send_drink_ready_email(order)
-                live_display_override = build_drink_ready_override(order)
+                live_display_notice_override = build_drink_ready_override(order)
                 messages.append(f"Marked {order.get('item_name')} ready for {order.get('username')}.")
                 broadcast_display_update()
             persist_state_if_available()
@@ -3285,7 +3314,8 @@ def admin_login():
 def admin_portal():
     errors: List[str] = []
     messages: List[str] = []
-    global live_display_override, submitted_costume_votes, costume_ballots, karaoke_state
+    global live_display_event_override, live_display_notice_override
+    global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
     global bartender_tip_settings
 
@@ -3984,7 +4014,7 @@ def admin_portal():
 
         elif action == "start_costume_contest":
             voting_url = url_for("party_costume_voting", _external=True)
-            live_display_override = {
+            live_display_event_override = {
                 "type": "contest_start",
                 "title": "The Costume Contest Has Begun!",
                 "highlight": "Submit your votes now",
@@ -4000,6 +4030,9 @@ def admin_portal():
             contest_state["winner_locked"] = False
             contest_state["scoreboard_card"] = None
             contest_state["show_scoreboard_card"] = False
+            karaoke_state["party_started"] = False
+            karaoke_state["current_singer_index"] = None
+            karaoke_state["current_singer_id"] = None
             costume_ballots.clear()
             submitted_costume_votes.clear()
             write_state_backup_if_available("contest-start")
@@ -4008,8 +4041,11 @@ def admin_portal():
         elif action == "stop_costume_contest":
             contest_state["contest_started"] = False
             contest_state["voting_open"] = False
-            if live_display_override and live_display_override.get("type") == "contest_start":
-                live_display_override = None
+            if live_display_event_override and live_display_event_override.get("type") in {
+                "contest_start",
+                "winner",
+            }:
+                live_display_event_override = None
             messages.append("Costume contest stopped. Attendee voting is now hidden.")
             write_state_backup_if_available("contest-stop")
             should_broadcast = True
@@ -4019,7 +4055,11 @@ def admin_portal():
             contest_state.update(copy.deepcopy(DEFAULT_CONTEST_STATE))
             costume_ballots.clear()
             submitted_costume_votes.clear()
-            live_display_override = None
+            if live_display_event_override and live_display_event_override.get("type") in {
+                "contest_start",
+                "winner",
+            }:
+                live_display_event_override = None
             messages.append("Costume contest reset. Votes, winner, and display override were cleared.")
             write_state_backup_if_available("contest-reset")
             should_broadcast = True
@@ -4027,7 +4067,7 @@ def admin_portal():
         elif action == "show_costume_winner":
             winner = contest_state.get("winner")
             if winner:
-                live_display_override = {
+                live_display_event_override = {
                     "type": "winner",
                     "title": "Costume Contest Champion",
                     "highlight": winner.get("name"),
@@ -4045,7 +4085,8 @@ def admin_portal():
                 errors.append("Lock a costume contest winner before announcing it on the live display.")
 
         elif action == "clear_display_override":
-            live_display_override = None
+            live_display_event_override = None
+            live_display_notice_override = None
             messages.append("Live display has been restored to the rotating schedule.")
             if contest_state.get("winner_locked") and contest_state.get("scoreboard_card"):
                 contest_state["show_scoreboard_card"] = True
@@ -4066,6 +4107,8 @@ def admin_portal():
                 karaoke_state["party_started"] = True
                 karaoke_state["current_singer_index"] = None
                 karaoke_state["current_singer_id"] = karaoke_signups[0].id if karaoke_signups else None
+                contest_state["contest_started"] = False
+                contest_state["voting_open"] = False
 
                 mountain_offset = timezone(timedelta(hours=-7), name="MST")
                 now_mountain = datetime.now(mountain_offset)
@@ -4075,7 +4118,7 @@ def admin_portal():
                 if countdown_target <= now_mountain:
                     countdown_target += timedelta(days=1)
 
-                live_display_override = {
+                live_display_event_override = {
                     "type": "karaoke_start",
                     "title": "Halloween Karaoke Party",
                     "highlight": "Showtime begins at 11:00 PM MST",
@@ -4100,8 +4143,8 @@ def admin_portal():
             karaoke_state["party_started"] = False
             karaoke_state["current_singer_index"] = None
             karaoke_state["current_singer_id"] = None
-            if live_display_override and live_display_override.get("type") == "karaoke_start":
-                live_display_override = None
+            if live_display_event_override and live_display_event_override.get("type") == "karaoke_start":
+                live_display_event_override = None
             messages.append("Karaoke party stopped.")
             write_state_backup_if_available("karaoke-stop")
             should_broadcast = True
@@ -4109,8 +4152,8 @@ def admin_portal():
         elif action == "reset_karaoke_party":
             karaoke_state.clear()
             karaoke_state.update(copy.deepcopy(DEFAULT_KARAOKE_STATE))
-            if live_display_override and live_display_override.get("type") == "karaoke_start":
-                live_display_override = None
+            if live_display_event_override and live_display_event_override.get("type") == "karaoke_start":
+                live_display_event_override = None
             messages.append("Karaoke party reset. The lineup was kept.")
             write_state_backup_if_available("karaoke-reset")
             should_broadcast = True
@@ -4200,7 +4243,7 @@ def admin_portal():
         show_admin_link=True,
         costume_scores=costume_scores,
         costume_leader=costume_leader,
-        live_override=live_display_override,
+        live_override=current_display_override(),
         top_costume_rankings=top_costume_rankings,
         karaoke_state=karaoke_state,
         costume_lineup_locked=is_costume_lineup_locked_for_voting(),

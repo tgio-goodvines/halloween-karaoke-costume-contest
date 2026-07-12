@@ -106,7 +106,12 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    `/party/costumes`.
 7. On the party date, attendees can submit karaoke songs at `/party/karaoke`.
 8. On the party date, attendees can view food and drink menu cards with images
-   at `/party/menu` and order available drinks from the bar.
+   at `/party/menu` and order available/orderable drinks from the bar.
+   Specialty drinks are limited to 3 included attendee orders; after 11:00 PM,
+   4th+ specialty requests are allowed while supplies remain. `/party/drink-history`
+   shows the signed-in attendee's full order history, supports reorder for
+   currently available/orderable drinks, and shows a per-order bartender tip
+   disclosure when admin tipping is enabled.
 9. Bartenders assigned from existing user accounts can manage drink orders at
    `/bartender`; admins can access the same view.
 10. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
@@ -134,11 +139,15 @@ the process-local cache:
   reset records with email, created/expiration timestamps, and used timestamp.
   Plaintext reset tokens are only sent in the emailed link and are not stored.
 - `menu_items`: admin-managed food/drink entries with stable IDs, category,
-  description, image URL, optional drink recipe, availability, and created
-  timestamp.
-- `drink_orders`: attendee drink orders with account/menu snapshots, status,
-  estimated ready time, created/started/completed timestamps, and completed prep
-  duration.
+  description, image URL, optional drink recipe, availability, drink type
+  (`standard`/`specialty`), beverage type (`alcoholic`/`non_alcoholic`),
+  orderable flag, and created timestamp.
+- `drink_orders`: attendee drink orders with account/menu snapshots, drink type,
+  beverage type, specialty sequence/extra-request metadata, status, estimated
+  ready time, created/started/completed timestamps, and completed prep duration.
+- `bartender_tip_settings`: admin-managed bartender tip prompt settings with an
+  enable flag, display name, note, QR/payment image URL, and optional Zelle,
+  PayPal, Venmo, or Cash App handles.
 - `registered_users`: maps session `user_id` to display name.
 - `rsvp_signups`: independent host RSVP list entries with name, required email
   contact, guest count, note, created timestamp, and stable ID.

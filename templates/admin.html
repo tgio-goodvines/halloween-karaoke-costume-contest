@@ -488,11 +488,63 @@
     <h3>Bar Operations</h3>
     <p>
       {{ active_drink_order_count }} active drink order{{ 's' if active_drink_order_count != 1 else '' }}.
+      {{ specialty_drink_order_count }} specialty drink order{{ 's' if specialty_drink_order_count != 1 else '' }} logged.
+      {{ specialty_limit_user_count }} attendee{{ 's' if specialty_limit_user_count != 1 else '' }} at or over the 3 specialty drink limit.
       Current estimate basis: about {{ (average_drink_completion_seconds / 60)|round(0, 'ceil')|int }} minute{{ 's' if (average_drink_completion_seconds / 60)|round(0, 'ceil')|int != 1 else '' }} per drink.
     </p>
     <div class="contest-actions">
       <a href="{{ url_for('bartender_portal') }}" class="button button--primary">Open Bartender View</a>
     </div>
+    <details class="admin-entry admin-entry--editable">
+      <summary class="admin-entry__summary">
+        <span class="admin-entry__rank">Tips</span>
+        <span class="admin-entry__summary-text">
+          <strong>Bartender tipping display</strong>
+          <span>{% if bartender_tip_settings.enabled %}Enabled{% else %}Disabled{% endif %}</span>
+        </span>
+      </summary>
+      {% if bartender_tip_settings.image_url %}
+        <img class="menu-admin-entry__image" src="{{ bartender_tip_settings.image_url }}" alt="Bartender tip QR code">
+      {% endif %}
+      <form method="post" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="admin-entry__fields">
+          <label class="form-check">
+            <input type="checkbox" name="tip_enabled" value="yes" {% if bartender_tip_settings.enabled %}checked{% endif %}>
+            <span>Show bartender tip prompt</span>
+          </label>
+          <label>
+            Display Name
+            <input type="text" name="tip_display_name" maxlength="80" value="{{ bartender_tip_settings.display_name }}">
+          </label>
+          <label>
+            Tip Note
+            <textarea name="tip_note" maxlength="240">{{ bartender_tip_settings.note }}</textarea>
+          </label>
+          <label>
+            QR / Payment Image URL
+            <input type="text" name="tip_image_url" maxlength="500" value="{{ bartender_tip_settings.image_url }}" placeholder="https://... or /static/..." inputmode="url">
+          </label>
+          <label>
+            Zelle
+            <input type="text" name="tip_zelle" maxlength="120" value="{{ bartender_tip_settings.zelle }}">
+          </label>
+          <label>
+            PayPal
+            <input type="text" name="tip_paypal" maxlength="120" value="{{ bartender_tip_settings.paypal }}">
+          </label>
+          <label>
+            Venmo
+            <input type="text" name="tip_venmo" maxlength="120" value="{{ bartender_tip_settings.venmo }}">
+          </label>
+          <label>
+            Cash App
+            <input type="text" name="tip_cash_app" maxlength="120" value="{{ bartender_tip_settings.cash_app }}">
+          </label>
+        </div>
+        <button type="submit" name="action" value="update_bartender_tip_settings" class="button button--primary">Save Tip Settings</button>
+      </form>
+    </details>
   </section>
 
   <section class="admin-section admin-section--menu">
@@ -522,6 +574,20 @@
             </select>
           </label>
           <label>
+            Drink Type
+            <select name="drink_type">
+              <option value="standard">Standard</option>
+              <option value="specialty">Specialty</option>
+            </select>
+          </label>
+          <label>
+            Beverage Type
+            <select name="beverage_type">
+              <option value="alcoholic">Alcoholic</option>
+              <option value="non_alcoholic">Non-alcoholic</option>
+            </select>
+          </label>
+          <label>
             Image URL
             <input type="text" name="image_url" maxlength="500" placeholder="https://... or /static/..." inputmode="url">
           </label>
@@ -537,6 +603,11 @@
             <input type="checkbox" name="available" value="yes" checked>
             <span>Available tonight</span>
           </label>
+          <label class="form-check">
+            <input type="hidden" name="orderable" value="no">
+            <input type="checkbox" name="orderable" value="yes" checked>
+            <span>Can be ordered from portal</span>
+          </label>
         </div>
         <button type="submit" name="action" value="add_menu_item" class="button button--primary">Add Menu Item</button>
       </form>
@@ -550,7 +621,11 @@
               <span class="admin-entry__rank">{{ item.category|title }}</span>
               <span class="admin-entry__summary-text">
                 <strong>{{ item.name }}</strong>
-                <span>{% if item.available %}Available{% else %}Unavailable{% endif %}</span>
+                <span>
+                  {% if item.category == 'drink' %}{{ drink_type_label(item.drink_type) }} · {{ beverage_type_label(item.beverage_type) }} · {% endif %}
+                  {% if item.available %}Available{% else %}Unavailable{% endif %}
+                  {% if item.category == 'drink' %} · {% if item.orderable %}Orderable{% else %}Bar pickup{% endif %}{% endif %}
+                </span>
               </span>
             </summary>
             {% if item.image_url %}
@@ -572,6 +647,20 @@
                   </select>
                 </label>
                 <label>
+                  Drink Type
+                  <select name="drink_type">
+                    <option value="standard" {% if item.drink_type == 'standard' %}selected{% endif %}>Standard</option>
+                    <option value="specialty" {% if item.drink_type == 'specialty' %}selected{% endif %}>Specialty</option>
+                  </select>
+                </label>
+                <label>
+                  Beverage Type
+                  <select name="beverage_type">
+                    <option value="alcoholic" {% if item.beverage_type == 'alcoholic' %}selected{% endif %}>Alcoholic</option>
+                    <option value="non_alcoholic" {% if item.beverage_type == 'non_alcoholic' %}selected{% endif %}>Non-alcoholic</option>
+                  </select>
+                </label>
+                <label>
                   Image URL
                   <input type="text" name="image_url" maxlength="500" value="{{ item.image_url }}" placeholder="https://... or /static/..." inputmode="url">
                 </label>
@@ -586,6 +675,11 @@
                 <label class="form-check">
                   <input type="checkbox" name="available" value="yes" {% if item.available %}checked{% endif %}>
                   <span>Available tonight</span>
+                </label>
+                <label class="form-check">
+                  <input type="hidden" name="orderable" value="no">
+                  <input type="checkbox" name="orderable" value="yes" {% if item.orderable %}checked{% endif %}>
+                  <span>Can be ordered from portal</span>
                 </label>
               </div>
               <div class="admin-entry__actions">

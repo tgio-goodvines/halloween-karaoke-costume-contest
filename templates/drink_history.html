@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% set title = "Drink Order History" %}
+
+{% block content %}
+<section class="form-section">
+  <h2>Drink Order History</h2>
+  <p>Review every drink order tied to your party account and reorder available favorites.</p>
+  <p class="contest-status">
+    Specialty drinks: {{ specialty_drink_count }} of {{ specialty_drink_limit }} included orders used.
+    {% if specialty_extra_orders_open %}
+      Extra specialty requests are open while supplies last.
+    {% else %}
+      Extra specialty requests open after 11:00 PM if supplies last.
+    {% endif %}
+  </p>
+
+  {% if errors %}
+    <div class="errors">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if messages %}
+    <div class="success">
+      <ul>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+</section>
+
+<section class="submitted-list">
+  <h3>All Drink Orders</h3>
+  {% if drink_orders %}
+    <div class="order-list order-list--history">
+      {% for order in drink_orders %}
+        <article class="order-card order-card--{{ order.status }}">
+          {% if order.item_image_url %}
+            <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image">
+          {% endif %}
+          <div class="order-card__body">
+            <p class="order-card__status">{{ drink_order_status_label(order.status) }}</p>
+            <div class="menu-card__badges">
+              <span>{{ drink_type_label(order.drink_type) }}</span>
+              <span>{{ beverage_type_label(order.beverage_type) }}</span>
+              {% if order.specialty_sequence_number %}
+                <span>Specialty #{{ order.specialty_sequence_number }}</span>
+              {% endif %}
+            </div>
+            <h4>{{ order.item_name }}</h4>
+            <p>For {{ order.username }}</p>
+            <p class="rsvp-admin-item__meta">Order {{ order.id }}</p>
+            <p>Ordered: {{ format_time_label(order.created_at) or 'Tonight' }}</p>
+            {% if order.status == 'complete' and order.completed_at %}
+              <p>Completed: {{ format_time_label(order.completed_at) }}</p>
+            {% elif order.estimated_ready_at %}
+              <p>Estimated ready: {{ format_time_label(order.estimated_ready_at) }}</p>
+            {% endif %}
+            {% if order.menu_item_id in reorderable_item_ids %}
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="order_id" value="{{ order.id }}">
+                <button type="submit" class="button button--primary">Reorder</button>
+              </form>
+            {% endif %}
+            {% if bartender_tip_settings.enabled %}
+              <details class="tip-disclosure">
+                <summary class="button">Tip Bartender</summary>
+                <div class="tip-disclosure__body">
+                  {% if bartender_tip_settings.image_url %}
+                    <img src="{{ bartender_tip_settings.image_url }}" alt="Bartender payment QR code" class="tip-disclosure__image">
+                  {% endif %}
+                  <p>{{ bartender_tip_settings.note }}</p>
+                  {% if bartender_tip_methods %}
+                    <div class="menu-card__badges">
+                      {% for method in bartender_tip_methods %}
+                        <span>{{ method.label }}: {{ method.value }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </details>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="admin-empty">No drink orders yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

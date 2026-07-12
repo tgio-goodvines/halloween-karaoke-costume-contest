@@ -34,7 +34,7 @@
         {{ ready_drink_orders[0].item_name }} is ready for pickup at the bar.
       </p>
     </div>
-    <a class="contest-banner__button" href="{{ url_for('party_menu') }}">View Orders</a>
+    <a class="contest-banner__button" href="{{ url_for('party_drink_history') }}">View Orders</a>
   </section>
 {% endif %}
 
@@ -76,6 +76,9 @@
         </article>
       {% endfor %}
     </div>
+    <div class="contest-actions">
+      <a class="button" href="{{ url_for('party_drink_history') }}">View Full History</a>
+    </div>
   </section>
 {% endif %}
 
@@ -84,8 +87,18 @@
   <div class="slides-wrapper">
     {% for slide in slides %}
       <article class="slide{% if loop.first %} active{% endif %}">
+        {% if slide.image_url %}
+          <img class="slide__image" src="{{ slide.image_url }}" alt="{{ slide.title }}">
+        {% endif %}
         <h3>{{ slide.title }}</h3>
         <p>{{ slide.content }}</p>
+        {% if slide.methods %}
+          <div class="menu-card__badges">
+            {% for method in slide.methods %}
+              <span>{{ method.label }}: {{ method.value }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
       </article>
     {% endfor %}
   </div>

@@ -45,8 +45,24 @@
             </div>
             <div class="bartender-card__body">
               <p class="order-card__status">{{ drink_order_status_label(order.status) }}</p>
+              <div class="menu-card__badges">
+                <span>{{ drink_type_label(order.drink_type) }}</span>
+                <span>{{ beverage_type_label(order.beverage_type) }}</span>
+                {% if order.specialty_sequence_number %}
+                  <span>Specialty #{{ order.specialty_sequence_number }}</span>
+                {% endif %}
+              </div>
               <h4>{{ order.item_name }}</h4>
               <p>For {{ order.username }}</p>
+              {% if order.specialty_extra_request %}
+                <p class="bartender-card__priority-note">
+                  After-11 PM 4+ specialty request. Check drink availability before preparing; included specialty orders stay ahead of this request.
+                </p>
+              {% elif order.drink_type == 'specialty' %}
+                <p class="bartender-card__priority-note">
+                  Included specialty order {{ order.specialty_sequence_number }} of 3.
+                </p>
+              {% endif %}
               {% if order.estimated_ready_at %}
                 <p class="rsvp-admin-item__meta">Estimated ready: {{ format_time_label(order.estimated_ready_at) }}</p>
               {% endif %}
@@ -97,6 +113,10 @@
             {% endif %}
             <div class="order-card__body">
               <p class="order-card__status">Complete</p>
+              <div class="menu-card__badges">
+                <span>{{ drink_type_label(order.drink_type) }}</span>
+                <span>{{ beverage_type_label(order.beverage_type) }}</span>
+              </div>
               <h4>{{ order.item_name }}</h4>
               <p>{{ order.username }}{% if order.completed_at %} • {{ format_time_label(order.completed_at) }}{% endif %}</p>
             </div>

@@ -110,6 +110,7 @@ class RedisStateTests(unittest.TestCase):
         self.original_public_base_url = main.app.config["PUBLIC_BASE_URL"]
         self.original_rsvp_notification_email = main.rsvp_notification_email
         self.original_create_ses_client = main.create_ses_client
+        self.original_specialty_extra_orders_are_open = main.specialty_extra_orders_are_open
         self.original_app_env = os.environ.get("APP_ENV")
 
         main.redis_client = self.fake_redis
@@ -142,6 +143,7 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["PUBLIC_BASE_URL"] = self.original_public_base_url
         main.rsvp_notification_email = self.original_rsvp_notification_email
         main.create_ses_client = self.original_create_ses_client
+        main.specialty_extra_orders_are_open = self.original_specialty_extra_orders_are_open
         if self.original_app_env is None:
             os.environ.pop("APP_ENV", None)
         else:
@@ -167,6 +169,7 @@ class RedisStateTests(unittest.TestCase):
         main.party_code_hint = ""
         main.rsvp_notification_email = main.DEFAULT_RSVP_NOTIFICATION_EMAIL
         main.display_settings = main.copy.deepcopy(main.DEFAULT_DISPLAY_SETTINGS)
+        main.bartender_tip_settings = main.copy.deepcopy(main.DEFAULT_BARTENDER_TIP_SETTINGS)
         main.display_update_version = 0
         main.contest_state.clear()
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
@@ -247,6 +250,9 @@ class RedisStateTests(unittest.TestCase):
                 "image_url": "https://example.test/margarita.jpg",
                 "recipe": "Shake with ice.",
                 "available": True,
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
                 "created_at": "2026-07-06T00:00:00Z",
             }
         ]
@@ -260,6 +266,10 @@ class RedisStateTests(unittest.TestCase):
                 "item_name": "Witch Margarita",
                 "item_image_url": "https://example.test/margarita.jpg",
                 "recipe": "Shake with ice.",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
                 "status": "complete",
                 "estimated_ready_at": "2026-07-06T00:08:00Z",
                 "created_at": "2026-07-06T00:00:00Z",
@@ -306,6 +316,16 @@ class RedisStateTests(unittest.TestCase):
             "wifi_network": "Upside Down LAN",
             "wifi_password": "friends-dont-lie",
         }
+        main.bartender_tip_settings = {
+            "enabled": True,
+            "display_name": "Casey",
+            "note": "Tip the bar if you had fun.",
+            "image_url": "https://example.test/tip.png",
+            "zelle": "casey@example.com",
+            "paypal": "caseypay",
+            "venmo": "@casey",
+            "cash_app": "$casey",
+        }
         main.display_update_version = 7
 
         snapshot = main.snapshot_state()
@@ -329,8 +349,12 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(main.check_password_hash(main.user_accounts["ada"]["password_hash"], "party-password"))
         self.assertEqual("Witch Margarita", main.menu_items[0]["name"])
         self.assertEqual("https://example.test/margarita.jpg", main.menu_items[0]["image_url"])
+        self.assertEqual("specialty", main.menu_items[0]["drink_type"])
+        self.assertTrue(main.menu_items[0]["orderable"])
         self.assertEqual("order-1", main.drink_orders[0]["id"])
         self.assertEqual(360, main.drink_orders[0]["completed_seconds"])
+        self.assertEqual("specialty", main.drink_orders[0]["drink_type"])
+        self.assertEqual(1, main.drink_orders[0]["specialty_sequence_number"])
         self.assertEqual("Morgan", main.rsvp_signups[0].name)
         self.assertEqual(2, main.rsvp_signups[0].guest_count)
         self.assertEqual("Bringing cider", main.rsvp_signups[0].note)
@@ -348,6 +372,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Saturday, October 31", main.party_details["date"])
         self.assertEqual("8:00 PM", main.party_details["time"])
         self.assertEqual("The haunted house", main.party_details["location"])
+        self.assertTrue(main.bartender_tip_settings["enabled"])
+        self.assertEqual("https://example.test/tip.png", main.bartender_tip_settings["image_url"])
         self.assertEqual("123 Pumpkin Lane, Denver, CO", main.party_details["map_address"])
         self.assertEqual("Bring a costume.", main.party_details["overview"])
         self.assertEqual("Upside Down LAN", main.display_settings["wifi_network"])
@@ -1694,6 +1720,364 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertIn("Only drinks can be ordered", response.get_data(as_text=True))
         self.assertEqual([], state["drink_orders"])
+
+    def test_specialty_drink_limit_blocks_fourth_order_before_11(self):
+        main.specialty_extra_orders_are_open = lambda now=None: False
+        main.menu_items = [
+            {
+                "id": "drink-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "Lime, smoke, and salt.",
+                "image_url": "",
+                "recipe": "",
+                "available": True,
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            }
+        ]
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        main.drink_orders = [
+            {
+                "id": f"order-{index}",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": index,
+                "status": "complete",
+                "estimated_ready_at": "",
+                "created_at": f"2026-07-06T00:0{index}:00Z",
+                "started_at": "",
+                "completed_at": f"2026-07-06T00:1{index}:00Z",
+                "completed_seconds": 60,
+            }
+            for index in range(1, 4)
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.post("/party/menu", data={"menu_item_id": "drink-1"})
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIn("More specialty requests open after 11:00 PM", response.get_data(as_text=True))
+        self.assertEqual(3, len(state["drink_orders"]))
+
+    def test_standard_drinks_do_not_count_against_specialty_limit_and_after_11_allows_extra_specialty(self):
+        main.specialty_extra_orders_are_open = lambda now=None: True
+        main.menu_items = [
+            {
+                "id": "specialty-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "",
+                "image_url": "",
+                "recipe": "",
+                "available": True,
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            },
+            {
+                "id": "standard-1",
+                "name": "Sparkling Water",
+                "category": "drink",
+                "description": "",
+                "image_url": "",
+                "recipe": "",
+                "available": True,
+                "drink_type": "standard",
+                "beverage_type": "non_alcoholic",
+                "orderable": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            },
+        ]
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        main.drink_orders = [
+            {
+                "id": f"specialty-order-{index}",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "specialty-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": index,
+                "status": "complete",
+                "estimated_ready_at": "",
+                "created_at": f"2026-07-06T00:0{index}:00Z",
+                "started_at": "",
+                "completed_at": f"2026-07-06T00:1{index}:00Z",
+                "completed_seconds": 60,
+            }
+            for index in range(1, 4)
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            standard_response = client.post("/party/menu", data={"menu_item_id": "standard-1"})
+            specialty_response = client.post("/party/menu", data={"menu_item_id": "specialty-1"})
+
+        state = self.redis_state()
+        self.assertEqual(302, standard_response.status_code)
+        self.assertEqual(302, specialty_response.status_code)
+        self.assertEqual(5, len(state["drink_orders"]))
+        self.assertEqual("standard", state["drink_orders"][3]["drink_type"])
+        self.assertEqual(0, state["drink_orders"][3]["specialty_sequence_number"])
+        self.assertEqual(4, state["drink_orders"][4]["specialty_sequence_number"])
+        self.assertTrue(state["drink_orders"][4]["specialty_extra_request"])
+        self.assertTrue(state["drink_orders"][4]["specialty_extra_window_open"])
+
+    def test_drink_history_is_user_scoped_and_reorder_creates_unique_order(self):
+        main.menu_items = [
+            {
+                "id": "drink-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "",
+                "image_url": "https://example.test/witch.jpg",
+                "recipe": "",
+                "available": True,
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            }
+        ]
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        self.add_user_account(username="Morgan", user_id="user-2", email="morgan@example.com")
+        main.drink_orders = [
+            {
+                "id": "order-1",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "https://example.test/witch.jpg",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "status": "complete",
+                "estimated_ready_at": "",
+                "created_at": "2026-07-06T00:00:00Z",
+                "started_at": "",
+                "completed_at": "2026-07-06T00:05:00Z",
+                "completed_seconds": 300,
+            },
+            {
+                "id": "order-2",
+                "user_id": "user-2",
+                "username": "Morgan",
+                "email": "morgan@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "https://example.test/witch.jpg",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "status": "complete",
+                "estimated_ready_at": "",
+                "created_at": "2026-07-06T00:00:00Z",
+                "started_at": "",
+                "completed_at": "2026-07-06T00:05:00Z",
+                "completed_seconds": 300,
+            },
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            history_response = client.get("/party/drink-history")
+            reorder_response = client.post("/party/drink-history", data={"order_id": "order-1"})
+
+        state = self.redis_state()
+        history_html = history_response.get_data(as_text=True)
+        self.assertEqual(200, history_response.status_code)
+        self.assertIn("Jamie", history_html)
+        self.assertNotIn("Morgan", history_html)
+        self.assertEqual(302, reorder_response.status_code)
+        self.assertEqual(3, len(state["drink_orders"]))
+        self.assertNotEqual("order-1", state["drink_orders"][2]["id"])
+        self.assertEqual("user-1", state["drink_orders"][2]["user_id"])
+        self.assertEqual(2, state["drink_orders"][2]["specialty_sequence_number"])
+
+    def test_admin_tip_settings_rotate_on_party_overview(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        main.drink_orders = [
+            {
+                "id": "order-1",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "status": "complete",
+                "estimated_ready_at": "",
+                "created_at": "2026-07-06T00:00:00Z",
+                "started_at": "",
+                "completed_at": "2026-07-06T00:05:00Z",
+                "completed_seconds": 300,
+            }
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            admin_response = client.post(
+                "/admin",
+                data={
+                    "action": "update_bartender_tip_settings",
+                    "tip_enabled": "yes",
+                    "tip_display_name": "Casey",
+                    "tip_note": "Thanks for keeping the bar moving.",
+                    "tip_image_url": "https://example.test/tip.png",
+                    "tip_venmo": "@casey",
+                },
+            )
+            self.login_regular(client)
+            overview_response = client.get("/party")
+            history_response = client.get("/party/drink-history")
+
+        state = self.redis_state()
+        overview_html = overview_response.get_data(as_text=True)
+        history_html = history_response.get_data(as_text=True)
+        self.assertEqual(200, admin_response.status_code)
+        self.assertTrue(state["bartender_tip_settings"]["enabled"])
+        self.assertIn("Tip Casey", overview_html)
+        self.assertIn("https://example.test/tip.png", overview_html)
+        self.assertIn("@casey", overview_html)
+        self.assertIn("Tip Bartender", history_html)
+        self.assertIn("Bartender payment QR code", history_html)
+        self.assertIn("@casey", history_html)
+
+    def test_dashboard_ready_drink_notifications_expire_but_history_retains_orders(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        old_completed_at = (
+            main.datetime.now(main.timezone.utc) - main.timedelta(minutes=6)
+        ).isoformat().replace("+00:00", "Z")
+        main.drink_orders = [
+            {
+                "id": "old-ready-order",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "status": "complete",
+                "estimated_ready_at": "",
+                "created_at": "2026-07-06T00:00:00Z",
+                "started_at": "",
+                "completed_at": old_completed_at,
+                "completed_seconds": 300,
+            }
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            overview_response = client.get("/party")
+            history_response = client.get("/party/drink-history")
+
+        self.assertEqual(200, overview_response.status_code)
+        self.assertEqual(200, history_response.status_code)
+        self.assertNotIn("Your Drink Is Ready", overview_response.get_data(as_text=True))
+        self.assertIn("old-ready-order", history_response.get_data(as_text=True))
+
+    def test_bartender_queue_prioritizes_included_orders_before_extra_specialty_requests(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        account["roles"] = ["regular", "bartender"]
+        main.drink_orders = [
+            {
+                "id": "extra-order",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Fourth Witch Margarita",
+                "item_image_url": "",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 4,
+                "specialty_extra_request": True,
+                "specialty_extra_window_open": True,
+                "status": "received",
+                "estimated_ready_at": "",
+                "created_at": "2026-07-06T00:01:00Z",
+                "started_at": "",
+                "completed_at": "",
+                "completed_seconds": None,
+            },
+            {
+                "id": "included-order",
+                "user_id": "user-2",
+                "username": "Morgan",
+                "email": "morgan@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "First Witch Margarita",
+                "item_image_url": "",
+                "recipe": "",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "specialty_extra_request": False,
+                "specialty_extra_window_open": True,
+                "status": "received",
+                "estimated_ready_at": "",
+                "created_at": "2026-07-06T00:02:00Z",
+                "started_at": "",
+                "completed_at": "",
+                "completed_seconds": None,
+            },
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["regular", "bartender"]
+            response = client.get("/bartender")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertLess(body.index("First Witch Margarita"), body.index("Fourth Witch Margarita"))
+        self.assertIn("After-11 PM 4+ specialty request", body)
+        self.assertIn("Included specialty order 1 of 3", body)
 
     def test_bartender_can_complete_order_and_publish_ready_override(self):
         account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")

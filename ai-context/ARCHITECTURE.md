@@ -31,11 +31,20 @@
   summaries are hidden. On the party date, it shows the normal event-night
   dashboard.
 - `GET|POST /party/menu` -> signed-in attendee menu page with food/drink image
-  cards. Available drinks can be ordered and create Redis-backed drink orders
-  with estimated ready times. Attendee access is redirected back to `/party`
-  until the party date.
+  cards. Available, orderable drinks can be ordered and create Redis-backed
+  drink orders with estimated ready times. Specialty drinks count toward the 3
+  specialty drink rule; 4th+ specialty requests are blocked until 11:00 PM and
+  still require the drink to be available. Attendee access is redirected back
+  to `/party` until the party date.
+- `GET|POST /party/drink-history` -> signed-in attendee order history page,
+  available on the party date. Shows all drink orders tied to the current
+  `session.user_id`, supports reorder for currently available/orderable drinks,
+  and shows the admin-configured bartender tip QR/payment disclosure on each
+  order when enabled.
 - `GET|POST /bartender` -> bartender/admin drink order queue with image and
-  recipe reference; transitions orders to `in_progress` or `complete`.
+  recipe reference; transitions orders to `in_progress` or `complete`. Active
+  queue sorting keeps in-progress orders first, then normal/included orders,
+  then first-come-first-served 4th+ specialty requests.
 - `GET|POST /party/login` -> public attendee account sign-in form; validates a
   Redis-stored password hash and grants the `regular` role.
 - `GET|POST /party/password-reset` -> public account recovery request form;
@@ -75,8 +84,9 @@
 - Flask app setup and route definitions.
 - Dataclasses: `CostumeSignup`, `KaraokeSignup`.
 - Redis-backed state serialization/hydration, with process-local global caches.
-- Food/drink menu management, drink order lifecycle, bartender role checks,
-  prep-time estimates, and drink notification emails.
+- Food/drink menu management, specialty drink limit enforcement, drink order
+  lifecycle, bartender role checks, prep-time estimates, bartender tip settings,
+  and drink notification emails.
 - RSVP confirmation/update recipient collection, account welcome email,
   password reset email, and Amazon SES email sending when enabled.
 - Display update broadcasting via `threading.Condition`.
@@ -180,19 +190,26 @@ to have started/open voting with no locked winner.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.
 
-`static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds. The server chooses the slide set: pre-party RSVP details/updates before the party date, and event-night slides on the party date.
+`static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds. The server chooses the slide set: pre-party RSVP details/updates before the party date, and event-night slides on the party date. When bartender tipping is enabled, the party-day slides include a tip prompt with the configured QR/payment image and payment handles.
 
 ## Template Responsibilities
 
 - `base.html`: shared shell, title, CSS include, header menu with signed-in
   identity and single logout action, footer, and script block. Regular attendee
-  Menu/Costume/Karaoke/Voting links are hidden until the party date.
+  Menu/Drink History/Costume/Karaoke/Voting links are hidden until the party
+  date.
 - `index.html`: attendee dashboard, contest status banners, event highlights,
   drink order status cards, and signup summaries. It renders pre-party RSVP
   details/updates before the party date and event-night sections on the party
-  date.
-- `menu.html`: attendee food/drink menu with images, drink ordering, and recent order status cards.
-- `bartender.html`: bartender/admin drink order queue with image and recipe reference.
+  date. Completed ready-drink notices are shown for 5 minutes after
+  `completed_at`; older completed orders remain in drink history.
+- `menu.html`: attendee food/drink menu with images, drink ordering, drink type
+  badges, specialty count status, and recent order status cards.
+- `drink_history.html`: attendee order history with all account-bound drink
+  orders, status/timestamp metadata, reorder buttons, and per-order bartender
+  tip disclosure when enabled.
+- `bartender.html`: bartender/admin drink order queue with image, specialty
+  sequence labels, extra specialty availability notes, and recipe reference.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
@@ -207,9 +224,10 @@ to have started/open voting with no locked winner.
   notification email configuration, live-display WiFi settings, RSVP list CRUD,
   party detail/map address editing, selective RSVP update
   posting/resending/removal, and live
-  contest/karaoke state, menu management, user account CRUD/password reset/bartender role assignment, and bar
-  operations summary; add/edit entry forms are disclosure rows to keep mobile
-  admin scanning manageable.
+  contest/karaoke state, menu management with specialty/orderable drink
+  controls, bartender tip settings, user account CRUD/password reset/bartender
+  role assignment, and bar operations summary; add/edit entry forms are
+  disclosure rows to keep mobile admin scanning manageable.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
   panel markup.

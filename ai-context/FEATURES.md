@@ -37,10 +37,22 @@
   registered.
 - On the party date, food and drink menu at `/party/menu` shows admin-managed
   cards with images, descriptions, and availability.
-- On the party date, signed-in attendees can order available drinks from
-  `/party/menu`; food items are currently view-only.
+- On the party date, signed-in attendees can order available, orderable drinks
+  from `/party/menu`; food items are currently view-only, and drinks can be
+  listed as bar-pickup/general availability without enabling portal orders.
+- Specialty drinks are limited to 3 included attendee orders. After 11:00 PM,
+  4th+ specialty drink requests are allowed while the selected drink remains
+  available. Standard alcoholic and non-alcoholic drinks do not count against
+  the specialty limit.
 - On the party date, attendees can see recent drink order statuses and
-  dashboard ready-drink cards.
+  dashboard ready-drink cards. Ready-drink dashboard notices expire after 5
+  minutes without deleting the underlying order.
+- `/party/drink-history` shows the signed-in attendee's full drink order
+  history, including completed orders older than 5 minutes, and supports
+  reordering currently available/orderable drinks.
+- Drink history cards include a bartender tip button when tipping is enabled;
+  the button opens the admin-configured QR/payment image and Zelle, PayPal,
+  Venmo, or Cash App handles.
 - A single logout action inside the shared header menu clears the current
   browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
@@ -117,7 +129,13 @@
   are enabled, admins can select which eligible RSVP and registered-user
   recipients receive each posted or resent update email through SES.
 - Admin can add, edit, remove, and disable food/drink menu items, including image
-  URLs, descriptions, and drink recipes for bartender reference.
+  URLs, descriptions, drink recipes for bartender reference, specialty/standard
+  classification, alcoholic/non-alcoholic classification, and whether a drink is
+  orderable from the portal.
+- Admin can configure a bartender tip prompt with an enable switch, display
+  name, note, placeholder/payment QR image URL, and optional Zelle, PayPal,
+  Venmo, or Cash App handles. Enabled tipping appears in party-day Event
+  Highlights and per drink-history order.
 - Admin can add, edit, and delete party account users, reset account passwords
   directly, and assign or remove the `bartender` role.
 - Admin can open the bartender view and see bar operations summary counts.
@@ -143,6 +161,11 @@
 - Drink orders progress from `received` to `in_progress` to `complete`.
 - Bartender view shows drink image and recipe reference; in-progress orders keep
   the recipe visible.
+- Bartender view labels specialty drink sequence numbers and flags after-11 PM
+  4th+ specialty requests with a reminder to check availability.
+- Bartender active queue sorting keeps in-progress orders first, then
+  normal/included orders for attendees still within their 3 specialty drinks,
+  then first-come-first-served 4th+ specialty requests.
 - Completed orders track prep duration and feed future estimated ready times.
 - Drink order confirmation emails include estimated ready time when Halloween
   email sending is enabled.

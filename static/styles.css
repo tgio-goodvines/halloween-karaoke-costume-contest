@@ -385,7 +385,7 @@ main.container {
 .slides-wrapper {
   position: relative;
   overflow: hidden;
-  min-height: 140px;
+  min-height: 220px;
 }
 
 .slide {
@@ -401,6 +401,16 @@ main.container {
 .slide.active {
   opacity: 1;
   transform: translateX(0);
+}
+
+.slide__image {
+  width: min(100%, 220px);
+  max-height: 220px;
+  object-fit: contain;
+  display: block;
+  margin: 0 0 1rem;
+  border: 1px solid rgba(255, 49, 49, 0.45);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .signup-summary {
@@ -853,12 +863,42 @@ main.container {
   margin: 0;
 }
 
+.bartender-card__priority-note {
+  border-left: 3px solid rgba(255, 49, 49, 0.75);
+  padding-left: 0.65rem;
+  color: rgba(255, 220, 225, 0.96);
+  font-weight: 700;
+}
+
 .menu-card__eyebrow,
 .order-card__status {
   color: var(--primary);
   font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.menu-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.menu-card__badges span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 1.65rem;
+  align-items: center;
+  border: 1px solid rgba(255, 49, 49, 0.42);
+  padding: 0.2rem 0.45rem;
+  background: rgba(255, 49, 49, 0.1);
+  color: rgba(246, 237, 240, 0.92);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 
@@ -888,6 +928,35 @@ main.container {
 .order-card--complete {
   border-color: rgba(255, 134, 134, 0.9);
   box-shadow: 0 0 28px rgba(255, 49, 49, 0.58);
+}
+
+.tip-disclosure {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.tip-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+  width: fit-content;
+}
+
+.tip-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tip-disclosure__body {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 18rem;
+}
+
+.tip-disclosure__image {
+  width: min(100%, 180px);
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 1px solid rgba(255, 49, 49, 0.45);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 .bartender-grid {

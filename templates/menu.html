@@ -5,6 +5,14 @@
 <section class="form-section">
   <h2>Food and Drink Menu</h2>
   <p>Browse what is available tonight and send drink orders straight to the bar.</p>
+  <p class="contest-status">
+    Specialty drinks: {{ specialty_drink_count }} of {{ specialty_drink_limit }} included orders used.
+    {% if specialty_extra_orders_open %}
+      Extra specialty requests are open while supplies last.
+    {% else %}
+      Extra specialty requests open after 11:00 PM if supplies last.
+    {% endif %}
+  </p>
 
   {% if errors %}
     <div class="errors">
@@ -48,6 +56,9 @@
         </article>
       {% endfor %}
     </div>
+    <div class="contest-actions">
+      <a class="button" href="{{ url_for('party_drink_history') }}">View Full History</a>
+    </div>
   </section>
 {% endif %}
 
@@ -66,15 +77,25 @@
           </div>
           <div class="menu-card__body">
             <p class="menu-card__eyebrow">{% if item.available %}Available{% else %}Unavailable{% endif %}</p>
+            <div class="menu-card__badges">
+              <span>{{ drink_type_label(item.drink_type) }}</span>
+              <span>{{ beverage_type_label(item.beverage_type) }}</span>
+              <span>{% if item.orderable %}Orderable{% else %}Bar Pickup{% endif %}</span>
+            </div>
             <h4>{{ item.name }}</h4>
             {% if item.description %}
               <p>{{ item.description }}</p>
             {% endif %}
+            {% if item.drink_type == 'specialty' %}
+              <p class="rsvp-admin-item__meta">
+                Counts toward the 3 specialty drink rule.
+              </p>
+            {% endif %}
             <form method="post">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="menu_item_id" value="{{ item.id }}">
-              <button type="submit" class="button button--primary" {% if not item.available %}disabled{% endif %}>
-                Order Drink
+              <button type="submit" class="button button--primary" {% if not item.available or not item.orderable %}disabled{% endif %}>
+                {% if item.orderable %}Order Drink{% else %}Available at Bar{% endif %}
               </button>
             </form>
           </div>

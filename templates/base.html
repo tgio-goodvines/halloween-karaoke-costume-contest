@@ -32,6 +32,7 @@
                   <a href="{{ url_for('party_dashboard') }}">Overview</a>
                   {% if party_day_has_arrived %}
                     <a href="{{ url_for('party_menu') }}">Menu</a>
+                    <a href="{{ url_for('party_drink_history') }}">Drink History</a>
                     <a href="{{ url_for('party_costumes') }}">Costume</a>
                     {% if costume_contest_state.voting_visible %}
                       <a href="{{ url_for('party_costume_voting') }}">Voting</a>

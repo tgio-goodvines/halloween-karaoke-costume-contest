@@ -51,12 +51,7 @@
               <p data-jukebox-artist>{{ jukebox.now_playing.artist if jukebox and jukebox.now_playing else 'Connect the host Apple Music account on this display' }}</p>
               <p class="jukebox-display__requester" data-jukebox-requester></p>
             </div>
-            <div class="jukebox-display__controls" data-jukebox-host-controls{% if not show_host_controls %} hidden{% endif %}>
-              <button type="button" class="button button--primary" data-jukebox-connect>Connect Host Apple Music</button>
-              <button type="button" class="button button--outline" data-jukebox-start>Start</button>
-              <button type="button" class="button button--outline" data-jukebox-skip>Skip</button>
-            </div>
-            <p class="jukebox-display__status" data-jukebox-status{% if not show_host_controls %} hidden{% endif %}>Host Apple Music authorization powers playback for everyone. Cast this Chrome tab for TV audio.</p>
+            <p class="jukebox-display__status" data-jukebox-status hidden>Host Apple Music authorization powers playback for everyone. Cast this Chrome tab for TV audio.</p>
             <div class="jukebox-display__queue">
               <p class="display-category">Up Next</p>
               <ol data-jukebox-queue></ol>
@@ -334,8 +329,8 @@
     <script id="jukebox-data" type="application/json">{{ jukebox | tojson }}</script>
     <script id="layout-data" type="application/json">{{ display_layout | tojson }}</script>
     <script id="activity-data" type="application/json">{{ display_activity | tojson }}</script>
-    <script src="{{ url_for('static', filename='display.js', v='20260725-dj8') }}"></script>
+    <script src="{{ url_for('static', filename='display.js', v='20260725-dj9') }}"></script>
     <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js"></script>
-    <script src="{{ url_for('static', filename='jukebox-player.js', v='20260725-dj8') }}"></script>
+    <script src="{{ url_for('static', filename='jukebox-player.js', v='20260725-dj9') }}"></script>
   </body>
 </html>

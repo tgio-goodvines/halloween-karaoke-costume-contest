@@ -91,12 +91,23 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   position while rejected requests remain visible as request history. The live
   display jukebox card now shows only the active now-playing song, not upcoming
   queue rows.
+- 2026-07-25: Removed persistent Connect/Start/Skip transport buttons from the
+  live display. Admin is the only control surface for Connect, Play, Pause,
+  Stop, Skip, and Play Now; the display may still show the Apple authorization
+  prompt when MusicKit requires a gesture in the playback tab.
+- 2026-07-25: Apple Music song search now paginates beyond the first 8 results.
+  `/api/jukebox-search` accepts `limit` and `offset`, returns `has_more` and
+  `next_offset`, and `static/jukebox-search.js` appends more result pages from
+  a More Results button.
 
 ## Design Notes
 
 - The Flask/Redis app owns the canonical jukebox state and queue order. MusicKit is treated as the playback surface, not the source of truth.
 - Admin Play Now queue commands intentionally bypass the upcoming list in
   MusicKit so hosts can jump to a specific approved request or playlist item.
+- Keep admin as the only persistent DJ transport surface. Avoid reintroducing
+  always-visible playback buttons on `/live-display`; use admin commands plus
+  the display-tab authorization prompt when MusicKit/browser policy requires it.
 - Attendee accounts do not authenticate with Apple Music and must never receive
   the MusicKit token endpoint. The host/admin authorizes Apple Music on the
   live-display browser, and attendees use that playback session indirectly by

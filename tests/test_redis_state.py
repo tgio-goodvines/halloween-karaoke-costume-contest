@@ -1546,6 +1546,20 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Sign In To Apple Music", body)
         self.assertIn("/live-display?host_controls=1", body)
 
+    def test_live_display_does_not_render_host_transport_buttons(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/live-display?host_controls=1")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertNotIn("data-jukebox-connect", body)
+        self.assertNotIn("data-jukebox-start", body)
+        self.assertNotIn("data-jukebox-skip", body)
+
     def test_admin_can_add_update_and_delete_rsvps(self):
         self.save_current_state()
 
@@ -3251,7 +3265,7 @@ class RedisStateTests(unittest.TestCase):
     def test_admin_jukebox_search_works_before_party_day_even_with_regular_role(self):
         main.event_experience_mode = "pre_party"
         main.jukebox_settings["enabled"] = True
-        main.apple_music_catalog_search = lambda query: [
+        main.apple_music_catalog_search = lambda query, limit=8, offset=0: [
             main.normalize_jukebox_track(
                 {
                     "apple_music_id": "apple-song-1",
@@ -3269,6 +3283,37 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(200, response.status_code)
         self.assertEqual("ghost Song", response.get_json()["results"][0]["title"])
+        self.assertEqual(0, response.get_json()["offset"])
+
+    def test_jukebox_search_paginates_results(self):
+        main.jukebox_settings["enabled"] = True
+
+        def fake_catalog_search(query, limit=8, offset=0):
+            return [
+                main.normalize_jukebox_track(
+                    {
+                        "apple_music_id": f"apple-song-{index}",
+                        "title": f"{query} Song {index}",
+                        "artist": "Host Account Catalog",
+                    }
+                )
+                for index in range(offset, offset + limit)
+            ]
+
+        main.apple_music_catalog_search = fake_catalog_search
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/api/jukebox-search?q=ghost&limit=8&offset=8")
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(8, payload["offset"])
+        self.assertEqual(16, payload["next_offset"])
+        self.assertTrue(payload["has_more"])
+        self.assertEqual(8, len(payload["results"]))
+        self.assertEqual("ghost Song 8", payload["results"][0]["title"])
 
     def test_display_layout_is_idle_without_party_activity(self):
         self.save_current_state()
@@ -3360,7 +3405,7 @@ class RedisStateTests(unittest.TestCase):
         account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
         main.event_experience_mode = "party_day"
         main.jukebox_settings["enabled"] = True
-        main.apple_music_catalog_search = lambda query: [
+        main.apple_music_catalog_search = lambda query, limit=8, offset=0: [
             main.normalize_jukebox_track(
                 {
                     "apple_music_id": "apple-song-1",

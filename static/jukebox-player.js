@@ -35,9 +35,6 @@
   const status = root.querySelector('[data-jukebox-status]');
   const stateLabel = root.querySelector('[data-jukebox-state-label]');
   const queueList = root.querySelector('[data-jukebox-queue]');
-  const connectButton = root.querySelector('[data-jukebox-connect]');
-  const startButton = root.querySelector('[data-jukebox-start]');
-  const skipButton = root.querySelector('[data-jukebox-skip]');
   const authPrompt = document.querySelector('[data-jukebox-auth]');
   const authTitle = document.querySelector('[data-jukebox-auth-title]');
   const authMessage = document.querySelector('[data-jukebox-auth-message]');
@@ -555,33 +552,6 @@
     }, 2000);
   };
 
-  if (connectButton) {
-    connectButton.addEventListener('click', async () => {
-      try {
-        await configureMusic();
-      } catch (error) {
-        setStatus(error.message || 'Apple Music connection failed.');
-      }
-    });
-  }
-  if (startButton) {
-    startButton.addEventListener('click', async () => {
-      try {
-        await startPlayback();
-      } catch (error) {
-        setStatus(error.message || 'Apple Music playback failed.');
-      }
-    });
-  }
-  if (skipButton) {
-    skipButton.addEventListener('click', async () => {
-      try {
-        await skipPlayback();
-      } catch (error) {
-        setStatus(error.message || 'Unable to skip song.');
-      }
-    });
-  }
   if (authActionButton) {
     authActionButton.addEventListener('click', completeAuthPrompt);
   }

@@ -33,23 +33,32 @@
     }
   };
 
-  const renderResults = (form, results) => {
+  const renderResults = (form, results, options = {}) => {
+    const append = Boolean(options.append);
     const container = form.querySelector('[data-jukebox-search-results]');
     if (!container) {
       return;
     }
-    container.innerHTML = '';
-    if (!results.length) {
+    if (!append) {
+      container.innerHTML = '';
+    } else {
+      const existingMore = container.querySelector('[data-jukebox-search-more]');
+      if (existingMore) {
+        existingMore.remove();
+      }
+    }
+    if (!results.length && !append) {
       setStatus(form, 'No Apple Music songs found.', true);
       return;
     }
-    setStatus(form, `${results.length} song${results.length === 1 ? '' : 's'} found.`, false);
+    const totalShown = container.querySelectorAll('.song-search-result').length + results.length;
+    setStatus(form, `${totalShown} song${totalShown === 1 ? '' : 's'} shown.`, false);
     results.forEach((track) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'song-search-result';
       const image = track.artwork_url
-        ? `<img src="${track.artwork_url}" alt="">`
+        ? `<img src="${track.artwork_url}" alt="" loading="lazy" decoding="async">`
         : '<span class="song-search-result__art"></span>';
       const explicit = track.explicit ? '<span class="status-pill">Explicit</span>' : '';
       button.innerHTML = `
@@ -67,9 +76,18 @@
       button.addEventListener('click', () => selectTrack(form, track));
       container.appendChild(button);
     });
+    if (options.hasMore) {
+      const moreButton = document.createElement('button');
+      moreButton.type = 'button';
+      moreButton.className = 'button button--outline song-search-more';
+      moreButton.dataset.jukeboxSearchMore = 'yes';
+      moreButton.textContent = 'More Results';
+      moreButton.addEventListener('click', () => search(form, { append: true }));
+      container.appendChild(moreButton);
+    }
   };
 
-  const search = async (form) => {
+  const search = async (form, options = {}) => {
     const input = form.querySelector('[data-jukebox-search-input]');
     const query = input ? input.value.trim() : '';
     if (query.length < 2) {
@@ -77,16 +95,29 @@
       return;
     }
 
-    setStatus(form, 'Searching Apple Music...', false);
+    const append = Boolean(options.append);
+    const previousQuery = form.dataset.jukeboxSearchQuery || '';
+    const offset = append && previousQuery === query ? Number(form.dataset.jukeboxSearchNextOffset || 0) : 0;
+    setStatus(form, append ? 'Loading more Apple Music songs...' : 'Searching Apple Music...', false);
     try {
-      const response = await fetch(`/api/jukebox-search?q=${encodeURIComponent(query)}`, {
+      const params = new URLSearchParams({
+        q: query,
+        offset: String(Number.isFinite(offset) ? offset : 0),
+        limit: '8',
+      });
+      const response = await fetch(`/api/jukebox-search?${params.toString()}`, {
         headers: { Accept: 'application/json' },
       });
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || 'Apple Music search failed.');
       }
-      renderResults(form, Array.isArray(payload.results) ? payload.results : []);
+      form.dataset.jukeboxSearchQuery = query;
+      form.dataset.jukeboxSearchNextOffset = String(payload.next_offset || 0);
+      renderResults(form, Array.isArray(payload.results) ? payload.results : [], {
+        append,
+        hasMore: Boolean(payload.has_more),
+      });
     } catch (error) {
       setStatus(form, error.message || 'Apple Music search failed.', true);
     }

@@ -2300,12 +2300,19 @@ def jukebox_state_payload() -> dict[str, object]:
     }
 
 
-def apple_music_catalog_search(query: str, limit: int = 8) -> list[dict[str, object]]:
+def apple_music_catalog_search(query: str, limit: int = 8, offset: int = 0) -> list[dict[str, object]]:
     token = str(app.config.get("APPLE_MUSIC_DEVELOPER_TOKEN", "") or "").strip()
     if not token:
         raise RuntimeError("Apple Music developer token is not configured.")
     storefront = quote(str(app.config.get("APPLE_MUSIC_STOREFRONT", "us") or "us"))
-    params = urlencode({"term": query, "types": "songs", "limit": max(1, min(limit, 25))})
+    params = urlencode(
+        {
+            "term": query,
+            "types": "songs",
+            "limit": max(1, min(limit, 25)),
+            "offset": max(0, offset),
+        }
+    )
     url = f"https://api.music.apple.com/v1/catalog/{storefront}/search?{params}"
     api_request = UrlRequest(url, headers={"Authorization": f"Bearer {token}"})
     with urlopen(api_request, timeout=8) as response:
@@ -4477,18 +4484,38 @@ def jukebox_search():
         return jsonify({"error": "Enter a song or artist to search."}), 400
     if len(query) > 160:
         return jsonify({"error": "Search terms must be 160 characters or fewer."}), 400
+    try:
+        requested_limit = int(request.args.get("limit", "8") or 8)
+    except ValueError:
+        requested_limit = 8
+    try:
+        requested_offset = int(request.args.get("offset", "0") or 0)
+    except ValueError:
+        requested_offset = 0
+    result_limit = max(1, min(requested_limit, 12))
+    result_offset = max(0, min(requested_offset, 200))
     if not jukebox_developer_token_configured():
         return jsonify({"error": "Apple Music search is not configured yet."}), 503
 
     try:
-        results = apple_music_catalog_search(query)
+        fetched_results = apple_music_catalog_search(query, limit=result_limit + 1, offset=result_offset)
     except (HTTPError, URLError, TimeoutError, RuntimeError, json.JSONDecodeError) as exc:
         app.logger.warning("Unable to search Apple Music for jukebox query %r: %s", query, exc)
         return jsonify({"error": "Apple Music search is unavailable right now."}), 502
 
+    has_more = len(fetched_results) > result_limit
+    results = fetched_results[:result_limit]
     if not jukebox_settings.get("explicit_allowed"):
         results = [item for item in results if not item.get("explicit")]
-    return jsonify({"results": results})
+    return jsonify(
+        {
+            "results": results,
+            "limit": result_limit,
+            "offset": result_offset,
+            "next_offset": result_offset + result_limit,
+            "has_more": has_more,
+        }
+    )
 
 
 @app.route("/api/apple-music-token")

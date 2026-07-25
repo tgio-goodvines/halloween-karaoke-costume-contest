@@ -197,7 +197,45 @@
   <div class="admin-tab-panel" data-admin-tab-panel="jukebox">
   <section class="admin-section admin-section--jukebox">
     <h3>Apple Music Jukebox</h3>
-    <p>Build the party playlist, approve attendee requests, and let the admin-authorized live display drive Apple Music playback for everyone.</p>
+    <p>Build the party playlist, approve attendee requests, and command the live display that owns Apple Music playback.</p>
+
+    <div class="access-settings">
+      <form method="post" class="access-settings__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h4>DJ Controls</h4>
+        <div class="party-code-status">
+          <p class="contest-status {% if jukebox_playback_control.status == 'error' %}contest-status--inactive{% elif jukebox_playback_control.status == 'pending' %}contest-status--warning{% else %}contest-status--active{% endif %}">
+            Last command: {{ jukebox_playback_control.command or 'none' }} · {{ jukebox_playback_control.status }}
+          </p>
+          {% if jukebox_now_playing.title %}
+            <p class="contest-status">Now playing: {{ jukebox_now_playing.title }}{% if jukebox_now_playing.artist %} by {{ jukebox_now_playing.artist }}{% endif %}</p>
+          {% else %}
+            <p class="contest-status">No song is marked as playing yet.</p>
+          {% endif %}
+          {% if jukebox_playback_control.error %}
+            <p class="contest-status contest-status--inactive">{{ jukebox_playback_control.error }}</p>
+          {% endif %}
+        </div>
+        <p class="form-helper">Keep the live display open on the TV browser. Use Authorize Display to show the Apple Music sign-in prompt there, then run playback from these admin controls.</p>
+        <p class="form-helper" data-apple-music-signin-status></p>
+        <div class="contest-actions">
+          <button
+            type="button"
+            class="button button--primary"
+            data-apple-music-signin
+            data-csrf-token="{{ csrf_token() }}"
+          >
+            Authorize Display
+          </button>
+          <button type="submit" name="jukebox_command" value="connect" class="button button--outline">Connect</button>
+          <button type="submit" name="jukebox_command" value="play" class="button button--primary">Play</button>
+          <button type="submit" name="jukebox_command" value="pause" class="button button--outline">Pause</button>
+          <button type="submit" name="jukebox_command" value="stop" class="button button--outline">Stop</button>
+          <button type="submit" name="jukebox_command" value="skip" class="button button--danger">Skip</button>
+          <input type="hidden" name="action" value="jukebox_dj_command">
+        </div>
+      </form>
+    </div>
 
     <div class="access-settings">
       <form method="post" class="access-settings__form">
@@ -318,44 +356,6 @@
         <input type="hidden" name="explicit" data-jukebox-field="explicit">
         <p class="form-helper" data-jukebox-selected>Choose a song from search before adding it.</p>
         <button type="submit" name="action" value="add_jukebox_track" class="button button--primary">Add To Playlist</button>
-      </form>
-    </div>
-
-    <div class="access-settings">
-      <form method="post" class="access-settings__form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <h4>DJ Controls</h4>
-        <div class="party-code-status">
-          <p class="contest-status {% if jukebox_playback_control.status == 'error' %}contest-status--inactive{% elif jukebox_playback_control.status == 'pending' %}contest-status--warning{% else %}contest-status--active{% endif %}">
-            Last command: {{ jukebox_playback_control.command or 'none' }} · {{ jukebox_playback_control.status }}
-          </p>
-          {% if jukebox_now_playing.title %}
-            <p class="contest-status">Now playing: {{ jukebox_now_playing.title }}{% if jukebox_now_playing.artist %} by {{ jukebox_now_playing.artist }}{% endif %}</p>
-          {% else %}
-            <p class="contest-status">No song is marked as playing yet.</p>
-          {% endif %}
-          {% if jukebox_playback_control.error %}
-            <p class="contest-status contest-status--inactive">{{ jukebox_playback_control.error }}</p>
-          {% endif %}
-        </div>
-        <p class="form-helper">Sign in once from admin with the host Apple Music subscriber account. The live display still owns playback audio, and admin controls command it during the party.</p>
-        <p class="form-helper" data-apple-music-signin-status></p>
-        <div class="contest-actions">
-          <button
-            type="button"
-            class="button button--primary"
-            data-apple-music-signin
-            data-csrf-token="{{ csrf_token() }}"
-          >
-            Sign In To Apple Music
-          </button>
-          <button type="submit" name="jukebox_command" value="connect" class="button button--outline">Connect</button>
-          <button type="submit" name="jukebox_command" value="play" class="button button--primary">Play</button>
-          <button type="submit" name="jukebox_command" value="pause" class="button button--outline">Pause</button>
-          <button type="submit" name="jukebox_command" value="stop" class="button button--outline">Stop</button>
-          <button type="submit" name="jukebox_command" value="skip" class="button button--danger">Skip</button>
-          <input type="hidden" name="action" value="jukebox_dj_command">
-        </div>
       </form>
     </div>
 

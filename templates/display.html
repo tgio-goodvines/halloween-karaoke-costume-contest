@@ -314,10 +314,10 @@
     >
       <div class="jukebox-auth__panel">
         <p class="display-category">Host Apple Music</p>
-        <h2 data-jukebox-auth-title>Connect Apple Music</h2>
-        <p data-jukebox-auth-message>Sign in with the host Apple Music subscriber account to start jukebox playback.</p>
+        <h2 data-jukebox-auth-title>Authorize Apple Music Display</h2>
+        <p data-jukebox-auth-message>Use this display browser to sign in with the host Apple Music subscriber account before playback starts.</p>
         <div class="jukebox-auth__actions">
-          <button type="button" class="button button--primary" data-jukebox-auth-action>Sign In With Apple Music</button>
+          <button type="button" class="button button--primary" data-jukebox-auth-action>Authorize Apple Music</button>
           <button type="button" class="button button--outline" data-jukebox-auth-dismiss>Dismiss</button>
         </div>
       </div>
@@ -331,6 +331,6 @@
     <script id="activity-data" type="application/json">{{ display_activity | tojson }}</script>
     <script src="{{ url_for('static', filename='display.js', v='20260725-dj9') }}"></script>
     <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js"></script>
-    <script src="{{ url_for('static', filename='jukebox-player.js', v='20260725-dj9') }}"></script>
+    <script src="{{ url_for('static', filename='jukebox-player.js', v='20260725-dj10') }}"></script>
   </body>
 </html>

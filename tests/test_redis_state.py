@@ -1543,9 +1543,23 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Casey", body)
         self.assertIn("casey@example.com", body)
         self.assertIn("Vegetarian", body)
-        self.assertIn("Sign In To Apple Music", body)
+        self.assertIn("Authorize Display", body)
         self.assertIn("data-apple-music-signin", body)
         self.assertNotIn("/live-display?host_controls=1", body)
+
+    def test_admin_jukebox_renders_dj_controls_before_settings_and_search(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/admin")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertLess(body.index("DJ Controls"), body.index("Jukebox Settings"))
+        self.assertLess(body.index("DJ Controls"), body.index("Add Playlist Song"))
+        self.assertIn("Authorize Display", body)
 
     def test_live_display_does_not_render_host_transport_buttons(self):
         main.jukebox_settings["enabled"] = True
@@ -1557,6 +1571,8 @@ class RedisStateTests(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
+        self.assertIn("data-jukebox-auth", body)
+        self.assertIn("Authorize Apple Music Display", body)
         self.assertNotIn("data-jukebox-connect", body)
         self.assertNotIn("data-jukebox-start", body)
         self.assertNotIn("data-jukebox-skip", body)
@@ -3262,6 +3278,22 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual("error", main.jukebox_playback_control["status"])
         self.assertEqual("MusicKit did not load.", main.jukebox_playback_control["error"])
+
+    def test_admin_jukebox_shows_live_display_command_error(self):
+        main.jukebox_settings["enabled"] = True
+        main.jukebox_playback_control = main.issue_jukebox_dj_command("connect")
+        main.jukebox_playback_control["status"] = "error"
+        main.jukebox_playback_control["error"] = "Apple Music authorization is blocked on the display."
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/admin")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("connect · error", body)
+        self.assertIn("Apple Music authorization is blocked on the display.", body)
 
     def test_admin_jukebox_search_works_before_party_day_even_with_regular_role(self):
         main.event_experience_mode = "pre_party"

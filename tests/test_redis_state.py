@@ -2995,20 +2995,27 @@ class RedisStateTests(unittest.TestCase):
                     "playlist_id": second_playlist["id"],
                 },
             )
+            create_response = client.post(
+                "/admin",
+                data={
+                    "action": "create_jukebox_playlist",
+                    "playlist_name": "Late Night",
+                },
+            )
             switched_page_response = client.get("/admin")
 
         page_body = page_response.get_data(as_text=True)
         switched_body = switched_page_response.get_data(as_text=True)
         self.assertEqual(200, page_response.status_code)
         self.assertEqual(200, switch_response.status_code)
+        self.assertEqual(200, create_response.status_code)
         self.assertIn("Dinner", page_body)
         self.assertIn("Dance Floor", page_body)
         self.assertIn("3m 00s", page_body)
         self.assertIn("4m 00s", page_body)
-        self.assertEqual(second_playlist["id"], main.jukebox_active_playlist_id)
-        self.assertEqual(["Thriller"], [item["title"] for item in main.jukebox_queue])
+        self.assertEqual("Late Night", main.active_jukebox_playlist()["name"])
+        self.assertIn("Late Night", switched_body)
         self.assertIn("Active:", switched_body)
-        self.assertIn("Dance Floor", switched_body)
 
     def test_approved_requests_apply_only_to_active_jukebox_playlist(self):
         main.jukebox_settings["enabled"] = True

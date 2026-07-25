@@ -213,16 +213,26 @@
         return;
       }
       form.dataset.adminAjaxBound = 'yes';
+      form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach((button) => {
+        button.addEventListener('click', () => {
+          form._lastSubmitter = button;
+        });
+      });
       form.addEventListener('submit', async (event) => {
         if (event.defaultPrevented) {
           return;
         }
         event.preventDefault();
-        const submitter = event.submitter;
+        const submitter = event.submitter || form._lastSubmitter || null;
         const savedScrollY = window.scrollY;
         const activeTab = window.localStorage.getItem(tabStorageKey) || defaultTab;
         const openSummaries = openDetailsSnapshot();
-        const formData = new FormData(form);
+        let formData;
+        try {
+          formData = submitter ? new FormData(form, submitter) : new FormData(form);
+        } catch (error) {
+          formData = new FormData(form);
+        }
         if (submitter && submitter.name && !formData.has(submitter.name)) {
           formData.append(submitter.name, submitter.value);
         }
@@ -258,14 +268,24 @@
         return;
       }
       form.dataset.jukeboxDjBound = 'yes';
+      form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach((button) => {
+        button.addEventListener('click', () => {
+          form._lastSubmitter = button;
+        });
+      });
       form.addEventListener('submit', async (event) => {
         if (event.defaultPrevented) {
           return;
         }
         event.preventDefault();
-        const submitter = event.submitter;
+        const submitter = event.submitter || form._lastSubmitter || null;
         const endpoint = form.dataset.jukeboxDjEndpoint || '/api/jukebox/dj-command';
-        const formData = new FormData(form);
+        let formData;
+        try {
+          formData = submitter ? new FormData(form, submitter) : new FormData(form);
+        } catch (error) {
+          formData = new FormData(form);
+        }
         formData.delete('action');
         if (submitter && submitter.name) {
           formData.set(submitter.name, submitter.value);

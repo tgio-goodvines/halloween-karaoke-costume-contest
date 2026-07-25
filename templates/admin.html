@@ -353,11 +353,12 @@
         </div>
         <form method="post" class="admin-entry__fields">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="create_jukebox_playlist">
           <label>
             New playlist name
             <input type="text" name="playlist_name" maxlength="80" placeholder="Dinner, Dance Floor, Late Night">
           </label>
-          <button type="submit" name="action" value="create_jukebox_playlist" class="button button--primary">Create Playlist</button>
+          <button type="submit" class="button button--primary">Create Playlist</button>
         </form>
         {% if jukebox_playlists %}
           <div class="admin-entry-list">
@@ -373,14 +374,25 @@
                 <div class="admin-entry__actions">
                   <form method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="rename_jukebox_playlist">
                     <input type="hidden" name="playlist_id" value="{{ playlist.id }}">
                     <input type="text" name="playlist_name" value="{{ playlist.name }}" maxlength="80" aria-label="Playlist name">
-                    <button type="submit" name="action" value="rename_jukebox_playlist" class="button">Rename</button>
-                    {% if not playlist.is_active %}
-                      <button type="submit" name="action" value="set_active_jukebox_playlist" class="button button--primary">Make Active</button>
-                      <button type="submit" name="action" value="delete_jukebox_playlist" class="button button--danger">Delete</button>
-                    {% endif %}
+                    <button type="submit" class="button">Rename</button>
                   </form>
+                  {% if not playlist.is_active %}
+                    <form method="post">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="set_active_jukebox_playlist">
+                      <input type="hidden" name="playlist_id" value="{{ playlist.id }}">
+                      <button type="submit" class="button button--primary">Make Active</button>
+                    </form>
+                    <form method="post">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="action" value="delete_jukebox_playlist">
+                      <input type="hidden" name="playlist_id" value="{{ playlist.id }}">
+                      <button type="submit" class="button button--danger">Delete</button>
+                    </form>
+                  {% endif %}
                 </div>
               </article>
             {% endfor %}
@@ -445,9 +457,20 @@
               <form method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="queue_item_id" value="{{ item.id }}">
-                <button type="submit" name="action" value="move_jukebox_queue_item_up" class="button">Move Up</button>
-                <button type="submit" name="action" value="move_jukebox_queue_item_down" class="button">Move Down</button>
-                <button type="submit" name="action" value="remove_jukebox_queue_item" class="button button--danger">Remove</button>
+                <input type="hidden" name="action" value="move_jukebox_queue_item_up">
+                <button type="submit" class="button">Move Up</button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="queue_item_id" value="{{ item.id }}">
+                <input type="hidden" name="action" value="move_jukebox_queue_item_down">
+                <button type="submit" class="button">Move Down</button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="queue_item_id" value="{{ item.id }}">
+                <input type="hidden" name="action" value="remove_jukebox_queue_item">
+                <button type="submit" class="button button--danger">Remove</button>
               </form>
             </div>
           </article>
@@ -476,13 +499,26 @@
                 {% if request_item.note %}<span>{{ request_item.note }}</span>{% endif %}
               </span>
             </div>
-            <form method="post" class="admin-entry__actions">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="request_id" value="{{ request_item.id }}">
-              <button type="submit" name="action" value="approve_jukebox_request" class="button button--primary">Approve</button>
-              <button type="submit" name="action" value="reject_jukebox_request" class="button button--outline">Reject</button>
-              <button type="submit" name="action" value="skip_jukebox_request" class="button button--danger">Skip</button>
-            </form>
+            <div class="admin-entry__actions">
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="request_id" value="{{ request_item.id }}">
+                <input type="hidden" name="action" value="approve_jukebox_request">
+                <button type="submit" class="button button--primary">Approve</button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="request_id" value="{{ request_item.id }}">
+                <input type="hidden" name="action" value="reject_jukebox_request">
+                <button type="submit" class="button button--outline">Reject</button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="request_id" value="{{ request_item.id }}">
+                <input type="hidden" name="action" value="skip_jukebox_request">
+                <button type="submit" class="button button--danger">Skip</button>
+              </form>
+            </div>
           </article>
         {% endfor %}
       </div>

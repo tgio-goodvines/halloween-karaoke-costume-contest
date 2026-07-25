@@ -302,12 +302,14 @@ DEFAULT_JUKEBOX_SETTINGS: dict[str, object] = {
     "request_insert_max_position": 6,
     "duplicate_cooldown": 8,
     "loop_playlist": True,
+    "shuffle_playlist": False,
     "autoplay_fallback": True,
     "seed_kind": "song",
     "seed_id": "",
     "seed_title": "",
     "seed_artist": "",
 }
+DEFAULT_JUKEBOX_PLAYLIST_NAME = "Main Party Playlist"
 DEFAULT_JUKEBOX_PLAYBACK_CONTROL: dict[str, object] = {
     "id": "",
     "command": "",
@@ -460,6 +462,8 @@ display_settings: dict[str, str] = copy.deepcopy(DEFAULT_DISPLAY_SETTINGS)
 bartender_tip_settings: dict[str, object] = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
 jukebox_settings: dict[str, object] = copy.deepcopy(DEFAULT_JUKEBOX_SETTINGS)
 jukebox_playlist: list[dict[str, object]] = []
+jukebox_playlists: list[dict[str, object]] = []
+jukebox_active_playlist_id = ""
 jukebox_requests: list[dict[str, object]] = []
 jukebox_queue: list[dict[str, object]] = []
 jukebox_now_playing: dict[str, object] = {}
@@ -2048,7 +2052,7 @@ def normalize_jukebox_settings(raw_settings: object) -> dict[str, object]:
     settings["provider"] = provider if provider in JUKEBOX_PROVIDERS else "apple_music"
     mode = str(settings.get("mode", "manual_playlist") or "manual_playlist")
     settings["mode"] = mode if mode in JUKEBOX_MODES else "manual_playlist"
-    for key in ("requests_enabled", "approval_required", "explicit_allowed", "loop_playlist", "autoplay_fallback"):
+    for key in ("requests_enabled", "approval_required", "explicit_allowed", "loop_playlist", "shuffle_playlist", "autoplay_fallback"):
         settings[key] = bool(settings.get(key))
     settings["max_requests_per_user"] = clamp_int(settings.get("max_requests_per_user"), 2, 0, 10)
     settings["request_insert_min_position"] = clamp_int(settings.get("request_insert_min_position"), 2, 1, 50)
@@ -2080,6 +2084,117 @@ def normalize_jukebox_track(data: dict[str, object], existing_id: str | None = N
         "explicit": bool(data.get("explicit", False)),
         "created_at": str(data.get("created_at", "") or _utc_now_iso()),
     }
+
+
+def jukebox_duration_label(duration_ms: int) -> str:
+    total_seconds = max(0, int(duration_ms or 0) // 1000)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    if minutes:
+        return f"{minutes}m {seconds:02d}s"
+    return f"{seconds}s"
+
+
+def jukebox_tracks_duration_ms(tracks: list[dict[str, object]]) -> int:
+    return sum(int(track.get("duration_ms", 0) or 0) for track in tracks)
+
+
+def normalize_jukebox_playlist_record(data: dict[str, object]) -> dict[str, object] | None:
+    raw_tracks = data.get("tracks", [])
+    tracks: list[dict[str, object]] = []
+    if isinstance(raw_tracks, list):
+        for raw_track in raw_tracks:
+            if isinstance(raw_track, dict):
+                track = normalize_jukebox_track(raw_track)
+                if track:
+                    tracks.append(track)
+    name = str(data.get("name", "") or "").strip()[:80]
+    return {
+        "id": str(data.get("id", "") or uuid4().hex),
+        "name": name or DEFAULT_JUKEBOX_PLAYLIST_NAME,
+        "tracks": tracks,
+        "created_at": str(data.get("created_at", "") or _utc_now_iso()),
+        "updated_at": str(data.get("updated_at", "") or _utc_now_iso()),
+    }
+
+
+def ensure_jukebox_playlists() -> None:
+    global jukebox_playlist, jukebox_playlists, jukebox_active_playlist_id
+    normalized_playlists = [
+        playlist
+        for playlist in (
+            normalize_jukebox_playlist_record(playlist)
+            for playlist in jukebox_playlists
+            if isinstance(playlist, dict)
+        )
+        if playlist
+    ]
+    if not normalized_playlists:
+        normalized_playlists = [
+            normalize_jukebox_playlist_record(
+                {
+                    "name": DEFAULT_JUKEBOX_PLAYLIST_NAME,
+                    "tracks": jukebox_playlist,
+                }
+            )
+        ]
+    jukebox_playlists = [playlist for playlist in normalized_playlists if playlist]
+    if not jukebox_playlists:
+        jukebox_playlist = []
+        jukebox_active_playlist_id = ""
+        return
+    if not any(str(playlist.get("id", "")) == jukebox_active_playlist_id for playlist in jukebox_playlists):
+        jukebox_active_playlist_id = str(jukebox_playlists[0].get("id", ""))
+    active_playlist = active_jukebox_playlist()
+    jukebox_playlist = active_playlist["tracks"] if active_playlist else []
+
+
+def active_jukebox_playlist() -> dict[str, object] | None:
+    if not jukebox_playlists:
+        return None
+    return next(
+        (playlist for playlist in jukebox_playlists if str(playlist.get("id", "")) == jukebox_active_playlist_id),
+        jukebox_playlists[0],
+    )
+
+
+def set_active_jukebox_playlist_tracks(tracks: list[dict[str, object]]) -> None:
+    global jukebox_playlist
+    ensure_jukebox_playlists()
+    active_playlist = active_jukebox_playlist()
+    if not active_playlist:
+        jukebox_playlist = []
+        return
+    active_playlist["tracks"] = tracks
+    active_playlist["updated_at"] = _utc_now_iso()
+    jukebox_playlist = active_playlist["tracks"]
+
+
+def jukebox_playlist_summaries() -> list[dict[str, object]]:
+    ensure_jukebox_playlists()
+    summaries = []
+    for playlist in jukebox_playlists:
+        tracks = playlist.get("tracks", [])
+        if not isinstance(tracks, list):
+            tracks = []
+        duration_ms = jukebox_tracks_duration_ms(tracks)
+        summaries.append(
+            {
+                "id": str(playlist.get("id", "")),
+                "name": str(playlist.get("name", "") or DEFAULT_JUKEBOX_PLAYLIST_NAME),
+                "track_count": len(tracks),
+                "duration_ms": duration_ms,
+                "duration_label": jukebox_duration_label(duration_ms),
+                "is_active": str(playlist.get("id", "")) == jukebox_active_playlist_id,
+            }
+        )
+    return summaries
+
+
+def active_jukebox_queue_duration_ms() -> int:
+    return jukebox_tracks_duration_ms(queued_jukebox_items())
 
 
 def normalize_jukebox_request(data: dict[str, object]) -> dict[str, object] | None:
@@ -2274,6 +2389,18 @@ def find_jukebox_queue_item(queue_item_id: str) -> dict[str, object] | None:
     return next((item for item in jukebox_queue if str(item.get("id", "")) == queue_item_id), None)
 
 
+def find_jukebox_queue_index(queue_item_id: str) -> int | None:
+    return next((index for index, item in enumerate(jukebox_queue) if str(item.get("id", "")) == queue_item_id), None)
+
+
+def active_jukebox_queue_indices() -> list[int]:
+    return [
+        index
+        for index, item in enumerate(jukebox_queue)
+        if str(item.get("status", "")) in {"queued", "playing"}
+    ]
+
+
 def next_jukebox_queue_item() -> dict[str, object] | None:
     return next((item for item in jukebox_queue if str(item.get("status", "")) == "queued"), None)
 
@@ -2310,6 +2437,7 @@ def create_jukebox_queue_item(
 
 def regenerate_jukebox_queue() -> None:
     global jukebox_queue
+    ensure_jukebox_playlists()
     existing_done = [
         item for item in jukebox_queue if str(item.get("status", "")) in {"played", "skipped"}
     ][-50:]
@@ -2318,6 +2446,9 @@ def regenerate_jukebox_queue() -> None:
         for track in jukebox_playlist
         if normalize_jukebox_track(track)
     ]
+    rng = random.SystemRandom()
+    if bool(jukebox_settings.get("shuffle_playlist")):
+        rng.shuffle(queue_items)
     if not queue_items and jukebox_settings.get("mode") == "autoplay_seed" and jukebox_settings.get("seed_id"):
         seed_track = {
             "apple_music_id": jukebox_settings.get("seed_id", ""),
@@ -2337,9 +2468,8 @@ def regenerate_jukebox_queue() -> None:
         if str(item.get("status", "")) in {"approved", "queued"}
         and str(item.get("apple_music_id", "")) not in recent_ids
     ]
-    rng = random.SystemRandom()
-    min_position = int(jukebox_settings.get("request_insert_min_position", 2) or 2)
-    max_position = int(jukebox_settings.get("request_insert_max_position", 6) or 6)
+    min_position = 1
+    max_position = 2
     for request_item in approved_requests:
         requester_id = str(request_item.get("requester_user_id", ""))
         if requester_id and requester_id in requester_window[-2:]:
@@ -2380,15 +2510,23 @@ def restart_jukebox_playlist() -> dict[str, object]:
 
 
 def jukebox_state_payload() -> dict[str, object]:
+    ensure_jukebox_playlists()
     upcoming = queued_jukebox_items()[:20]
+    active_playlist = active_jukebox_playlist() or {}
+    active_queue_duration = active_jukebox_queue_duration_ms()
     return {
         "settings": copy.deepcopy(jukebox_settings),
         "enabled": bool(jukebox_settings.get("enabled")),
         "provider": str(jukebox_settings.get("provider", "apple_music")),
         "developer_token_configured": jukebox_developer_token_configured(),
         "storefront": str(app.config.get("APPLE_MUSIC_STOREFRONT", "us") or "us"),
-        "playlist_count": len(jukebox_playlist),
+        "playlists": jukebox_playlist_summaries(),
+        "playlist_count": len(jukebox_playlists),
+        "active_playlist_id": jukebox_active_playlist_id,
+        "active_playlist_name": str(active_playlist.get("name", "") or DEFAULT_JUKEBOX_PLAYLIST_NAME),
         "active_playlist_count": len(jukebox_playlist),
+        "active_playlist_duration_ms": active_queue_duration,
+        "active_playlist_duration_label": jukebox_duration_label(active_queue_duration),
         "request_count": len(jukebox_requests),
         "pending_request_count": sum(1 for item in jukebox_requests if item.get("status") == "pending"),
         "queue": upcoming,
@@ -2646,6 +2784,7 @@ def snapshot_state() -> dict[str, object]:
     rebuild_legacy_vote_rows_from_ballots()
     cleanup_password_reset_tokens()
     cleanup_display_pairing_tokens()
+    ensure_jukebox_playlists()
 
     return {
         "schema_version": STATE_SCHEMA_VERSION,
@@ -2675,6 +2814,8 @@ def snapshot_state() -> dict[str, object]:
         "bartender_tip_settings": copy.deepcopy(bartender_tip_settings),
         "jukebox_settings": copy.deepcopy(jukebox_settings),
         "jukebox_playlist": copy.deepcopy(jukebox_playlist),
+        "jukebox_playlists": copy.deepcopy(jukebox_playlists),
+        "jukebox_active_playlist_id": jukebox_active_playlist_id,
         "jukebox_requests": copy.deepcopy(jukebox_requests),
         "jukebox_queue": copy.deepcopy(jukebox_queue),
         "jukebox_now_playing": copy.deepcopy(jukebox_now_playing),
@@ -2699,7 +2840,8 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global live_display_event_override, live_display_notice_override
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
     global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email, bartender_tip_settings
-    global jukebox_settings, jukebox_playlist, jukebox_requests, jukebox_queue, jukebox_now_playing, jukebox_playback_control
+    global jukebox_settings, jukebox_playlist, jukebox_playlists, jukebox_active_playlist_id
+    global jukebox_requests, jukebox_queue, jukebox_now_playing, jukebox_playback_control
     global display_pairing_tokens
 
     raw_costume_signups = data.get("costume_signups", [])
@@ -2786,14 +2928,35 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     bartender_tip_settings = normalize_bartender_tip_settings(data.get("bartender_tip_settings", {}))
 
     jukebox_settings = normalize_jukebox_settings(data.get("jukebox_settings", {}))
-    jukebox_playlist = []
+    legacy_jukebox_playlist: list[dict[str, object]] = []
     raw_jukebox_playlist = data.get("jukebox_playlist", [])
     if isinstance(raw_jukebox_playlist, list):
         for raw_track in raw_jukebox_playlist:
             if isinstance(raw_track, dict):
                 track = normalize_jukebox_track(raw_track)
                 if track:
-                    jukebox_playlist.append(track)
+                    legacy_jukebox_playlist.append(track)
+
+    jukebox_playlists = []
+    raw_jukebox_playlists = data.get("jukebox_playlists", [])
+    if isinstance(raw_jukebox_playlists, list):
+        for raw_playlist in raw_jukebox_playlists:
+            if isinstance(raw_playlist, dict):
+                playlist = normalize_jukebox_playlist_record(raw_playlist)
+                if playlist:
+                    jukebox_playlists.append(playlist)
+    if not jukebox_playlists and legacy_jukebox_playlist:
+        migrated_playlist = normalize_jukebox_playlist_record(
+            {
+                "name": DEFAULT_JUKEBOX_PLAYLIST_NAME,
+                "tracks": legacy_jukebox_playlist,
+            }
+        )
+        if migrated_playlist:
+            jukebox_playlists.append(migrated_playlist)
+    jukebox_active_playlist_id = str(data.get("jukebox_active_playlist_id", "") or "")
+    jukebox_playlist = legacy_jukebox_playlist
+    ensure_jukebox_playlists()
 
     jukebox_requests = []
     raw_jukebox_requests = data.get("jukebox_requests", [])
@@ -4823,7 +4986,8 @@ def admin_portal():
     global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
     global bartender_tip_settings
-    global jukebox_settings, jukebox_playlist, jukebox_queue, jukebox_now_playing, jukebox_playback_control
+    global jukebox_settings, jukebox_playlist, jukebox_playlists, jukebox_active_playlist_id
+    global jukebox_requests, jukebox_queue, jukebox_now_playing, jukebox_playback_control
 
     ensure_costume_votes_alignment()
 
@@ -5192,6 +5356,7 @@ def admin_portal():
                     "request_insert_max_position": request.form.get("jukebox_insert_max", "6"),
                     "duplicate_cooldown": request.form.get("jukebox_duplicate_cooldown", "8"),
                     "loop_playlist": request.form.get("jukebox_loop_playlist") == "yes",
+                    "shuffle_playlist": request.form.get("jukebox_shuffle_playlist") == "yes",
                     "autoplay_fallback": request.form.get("jukebox_autoplay_fallback") == "yes",
                     "seed_kind": request.form.get("jukebox_seed_kind", "song"),
                     "seed_id": request.form.get("jukebox_seed_id", "").strip(),
@@ -5206,13 +5371,88 @@ def admin_portal():
             messages.append("Jukebox settings updated.")
             should_broadcast = True
 
+        elif action == "create_jukebox_playlist":
+            playlist_name = request.form.get("playlist_name", "").strip()[:80]
+            new_playlist = normalize_jukebox_playlist_record(
+                {
+                    "name": playlist_name or f"Playlist {len(jukebox_playlists) + 1}",
+                    "tracks": [],
+                }
+            )
+            if new_playlist:
+                ensure_jukebox_playlists()
+                jukebox_playlists.append(new_playlist)
+                jukebox_active_playlist_id = str(new_playlist.get("id", ""))
+                jukebox_playlist = new_playlist["tracks"]
+                reset_jukebox_playlist_queue()
+                messages.append(f"Created and activated playlist: {new_playlist.get('name')}.")
+                should_broadcast = True
+
+        elif action == "set_active_jukebox_playlist":
+            playlist_id = request.form.get("playlist_id", "").strip()
+            ensure_jukebox_playlists()
+            selected_playlist = next(
+                (playlist for playlist in jukebox_playlists if str(playlist.get("id", "")) == playlist_id),
+                None,
+            )
+            if not selected_playlist:
+                errors.append("Choose a valid jukebox playlist.")
+            else:
+                jukebox_active_playlist_id = playlist_id
+                jukebox_playlist = selected_playlist["tracks"]
+                reset_jukebox_playlist_queue()
+                messages.append(f"Activated playlist: {selected_playlist.get('name')}.")
+                should_broadcast = True
+
+        elif action == "rename_jukebox_playlist":
+            playlist_id = request.form.get("playlist_id", "").strip()
+            playlist_name = request.form.get("playlist_name", "").strip()[:80]
+            ensure_jukebox_playlists()
+            selected_playlist = next(
+                (playlist for playlist in jukebox_playlists if str(playlist.get("id", "")) == playlist_id),
+                None,
+            )
+            if not selected_playlist:
+                errors.append("Choose a valid jukebox playlist.")
+            elif not playlist_name:
+                errors.append("Playlist name is required.")
+            else:
+                selected_playlist["name"] = playlist_name
+                selected_playlist["updated_at"] = _utc_now_iso()
+                messages.append(f"Renamed playlist: {playlist_name}.")
+
+        elif action == "delete_jukebox_playlist":
+            playlist_id = request.form.get("playlist_id", "").strip()
+            ensure_jukebox_playlists()
+            if len(jukebox_playlists) <= 1:
+                errors.append("Keep at least one jukebox playlist.")
+            elif not any(str(playlist.get("id", "")) == playlist_id for playlist in jukebox_playlists):
+                errors.append("Choose a valid jukebox playlist.")
+            else:
+                removed_playlist = next(
+                    playlist for playlist in jukebox_playlists if str(playlist.get("id", "")) == playlist_id
+                )
+                jukebox_playlists = [
+                    playlist for playlist in jukebox_playlists if str(playlist.get("id", "")) != playlist_id
+                ]
+                if jukebox_active_playlist_id == playlist_id:
+                    jukebox_active_playlist_id = str(jukebox_playlists[0].get("id", ""))
+                    jukebox_playlist = jukebox_playlists[0]["tracks"]
+                    reset_jukebox_playlist_queue()
+                    should_broadcast = True
+                messages.append(f"Deleted playlist: {removed_playlist.get('name')}.")
+
         elif action == "add_jukebox_track":
             track = jukebox_track_from_form()
             if track and not errors:
+                ensure_jukebox_playlists()
                 if any(item.get("apple_music_id") == track.get("apple_music_id") for item in jukebox_playlist):
                     errors.append("That song is already in the jukebox playlist.")
                 else:
                     jukebox_playlist.append(track)
+                    active_playlist = active_jukebox_playlist()
+                    if active_playlist:
+                        active_playlist["updated_at"] = _utc_now_iso()
                     regenerate_jukebox_queue()
                     messages.append(f"Added {track['title']} to the active playlist.")
                     should_broadcast = True
@@ -5240,6 +5480,87 @@ def admin_portal():
                 messages.append(f"Sent DJ command to the live display: {label}.")
                 should_broadcast = True
 
+        elif action in {"move_jukebox_queue_item_up", "move_jukebox_queue_item_down", "remove_jukebox_queue_item"}:
+            queue_item_id = request.form.get("queue_item_id", "").strip()
+            queue_index = find_jukebox_queue_index(queue_item_id)
+            if queue_index is None:
+                errors.append("Jukebox playlist song could not be found.")
+            elif action == "remove_jukebox_queue_item":
+                removed_item = jukebox_queue.pop(queue_index)
+                playlist_track_id = str(removed_item.get("playlist_track_id", "") or "")
+                request_id = str(removed_item.get("request_id", "") or "")
+                if playlist_track_id:
+                    set_active_jukebox_playlist_tracks([
+                        track for track in jukebox_playlist if str(track.get("id", "")) != playlist_track_id
+                    ])
+                if request_id:
+                    jukebox_requests = [
+                        request_item for request_item in jukebox_requests if str(request_item.get("id", "")) != request_id
+                    ]
+                if str(jukebox_now_playing.get("id", "") or "") == queue_item_id:
+                    jukebox_now_playing = {}
+                messages.append(f"Removed {removed_item.get('title')} from the active playlist.")
+                should_broadcast = True
+            else:
+                active_indices = active_jukebox_queue_indices()
+                active_position = active_indices.index(queue_index) if queue_index in active_indices else None
+                if active_position is None:
+                    errors.append("Only active playlist songs can be reordered.")
+                elif action == "move_jukebox_queue_item_up":
+                    if active_position == 0:
+                        messages.append("That active playlist song is already at the top.")
+                    else:
+                        swap_index = active_indices[active_position - 1]
+                        jukebox_queue[swap_index], jukebox_queue[queue_index] = (
+                            jukebox_queue[queue_index],
+                            jukebox_queue[swap_index],
+                        )
+                        moving_playlist_track_id = str(jukebox_queue[swap_index].get("playlist_track_id", "") or "")
+                        swapped_playlist_track_id = str(jukebox_queue[queue_index].get("playlist_track_id", "") or "")
+                        if moving_playlist_track_id and swapped_playlist_track_id:
+                            playlist_indices = {
+                                str(track.get("id", "")): index for index, track in enumerate(jukebox_playlist)
+                            }
+                            moving_playlist_index = playlist_indices.get(moving_playlist_track_id)
+                            swapped_playlist_index = playlist_indices.get(swapped_playlist_track_id)
+                            if moving_playlist_index is not None and swapped_playlist_index is not None:
+                                jukebox_playlist[moving_playlist_index], jukebox_playlist[swapped_playlist_index] = (
+                                    jukebox_playlist[swapped_playlist_index],
+                                    jukebox_playlist[moving_playlist_index],
+                                )
+                                active_playlist = active_jukebox_playlist()
+                                if active_playlist:
+                                    active_playlist["updated_at"] = _utc_now_iso()
+                        messages.append("Moved active playlist song up.")
+                        should_broadcast = True
+                elif action == "move_jukebox_queue_item_down":
+                    if active_position == len(active_indices) - 1:
+                        messages.append("That active playlist song is already at the bottom.")
+                    else:
+                        swap_index = active_indices[active_position + 1]
+                        jukebox_queue[swap_index], jukebox_queue[queue_index] = (
+                            jukebox_queue[queue_index],
+                            jukebox_queue[swap_index],
+                        )
+                        moving_playlist_track_id = str(jukebox_queue[swap_index].get("playlist_track_id", "") or "")
+                        swapped_playlist_track_id = str(jukebox_queue[queue_index].get("playlist_track_id", "") or "")
+                        if moving_playlist_track_id and swapped_playlist_track_id:
+                            playlist_indices = {
+                                str(track.get("id", "")): index for index, track in enumerate(jukebox_playlist)
+                            }
+                            moving_playlist_index = playlist_indices.get(moving_playlist_track_id)
+                            swapped_playlist_index = playlist_indices.get(swapped_playlist_track_id)
+                            if moving_playlist_index is not None and swapped_playlist_index is not None:
+                                jukebox_playlist[moving_playlist_index], jukebox_playlist[swapped_playlist_index] = (
+                                    jukebox_playlist[swapped_playlist_index],
+                                    jukebox_playlist[moving_playlist_index],
+                                )
+                                active_playlist = active_jukebox_playlist()
+                                if active_playlist:
+                                    active_playlist["updated_at"] = _utc_now_iso()
+                        messages.append("Moved active playlist song down.")
+                        should_broadcast = True
+
         elif action in {"remove_jukebox_track", "move_jukebox_track_up", "move_jukebox_track_down"}:
             track_id = request.form.get("track_id", "").strip()
             track_index = next(
@@ -5249,7 +5570,9 @@ def admin_portal():
             if track_index is None:
                 errors.append("Jukebox playlist song could not be found.")
             elif action == "remove_jukebox_track":
-                removed_track = jukebox_playlist.pop(track_index)
+                updated_tracks = list(jukebox_playlist)
+                removed_track = updated_tracks.pop(track_index)
+                set_active_jukebox_playlist_tracks(updated_tracks)
                 regenerate_jukebox_queue()
                 messages.append(f"Removed {removed_track.get('title')} from the active playlist.")
                 should_broadcast = True
@@ -5261,6 +5584,9 @@ def admin_portal():
                         jukebox_playlist[track_index],
                         jukebox_playlist[track_index - 1],
                     )
+                    active_playlist = active_jukebox_playlist()
+                    if active_playlist:
+                        active_playlist["updated_at"] = _utc_now_iso()
                     regenerate_jukebox_queue()
                     messages.append("Moved active playlist song up.")
                     should_broadcast = True
@@ -5272,6 +5598,9 @@ def admin_portal():
                         jukebox_playlist[track_index],
                         jukebox_playlist[track_index + 1],
                     )
+                    active_playlist = active_jukebox_playlist()
+                    if active_playlist:
+                        active_playlist["updated_at"] = _utc_now_iso()
                     regenerate_jukebox_queue()
                     messages.append("Moved active playlist song down.")
                     should_broadcast = True
@@ -5288,9 +5617,12 @@ def admin_portal():
                 messages.append(f"Approved request and added it into the active playlist queue: {request_item.get('title')}.")
                 should_broadcast = True
             elif action == "reject_jukebox_request":
-                request_item["status"] = "rejected"
-                request_item["decided_at"] = _utc_now_iso()
-                regenerate_jukebox_queue()
+                jukebox_requests = [
+                    item for item in jukebox_requests if str(item.get("id", "")) != request_id
+                ]
+                jukebox_queue = [
+                    item for item in jukebox_queue if str(item.get("request_id", "")) != request_id
+                ]
                 messages.append(f"Rejected jukebox request: {request_item.get('title')}.")
                 should_broadcast = True
             elif action == "skip_jukebox_request":
@@ -6023,12 +6355,15 @@ def admin_portal():
     current_karaoke_signup = (
         karaoke_signups[current_karaoke_index] if current_karaoke_index is not None else None
     )
+    ensure_jukebox_playlists()
     current_jukebox_queue = queued_jukebox_items()
+    active_jukebox_duration_ms = active_jukebox_queue_duration_ms()
     jukebox_request_queue_positions = {
         str(item.get("request_id", "")): index
         for index, item in enumerate(current_jukebox_queue, start=1)
         if str(item.get("request_id", ""))
     }
+    current_active_playlist = active_jukebox_playlist() or {}
 
     return render_template(
         "admin.html",
@@ -6080,12 +6415,18 @@ def admin_portal():
         bartender_tip_methods=bartender_tip_methods(),
         jukebox_settings=jukebox_settings,
         jukebox_playlist=jukebox_playlist,
+        jukebox_playlists=jukebox_playlist_summaries(),
+        jukebox_active_playlist_id=jukebox_active_playlist_id,
+        jukebox_active_playlist_name=str(current_active_playlist.get("name", "") or DEFAULT_JUKEBOX_PLAYLIST_NAME),
         jukebox_requests=sorted(
             jukebox_requests,
             key=lambda request_item: str(request_item.get("submitted_at", "")),
             reverse=True,
         ),
         jukebox_queue=current_jukebox_queue,
+        jukebox_active_duration_ms=active_jukebox_duration_ms,
+        jukebox_active_duration_label=jukebox_duration_label(active_jukebox_duration_ms),
+        jukebox_duration_label=jukebox_duration_label,
         jukebox_request_queue_positions=jukebox_request_queue_positions,
         jukebox_now_playing=jukebox_now_playing,
         jukebox_playback_control=normalize_jukebox_playback_control(jukebox_playback_control),

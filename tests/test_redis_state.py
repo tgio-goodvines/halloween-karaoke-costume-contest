@@ -189,6 +189,8 @@ class RedisStateTests(unittest.TestCase):
         main.bartender_tip_settings = main.copy.deepcopy(main.DEFAULT_BARTENDER_TIP_SETTINGS)
         main.jukebox_settings = main.copy.deepcopy(main.DEFAULT_JUKEBOX_SETTINGS)
         main.jukebox_playlist = []
+        main.jukebox_playlists = []
+        main.jukebox_active_playlist_id = ""
         main.jukebox_requests = []
         main.jukebox_queue = []
         main.jukebox_now_playing = {}
@@ -1568,6 +1570,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Pair & Authorize Display", body)
         self.assertIn("Active Playlist", body)
         self.assertIn("Play Now", body)
+        self.assertIn("Move Up", body)
+        self.assertIn("Move Down", body)
+        self.assertIn("Remove", body)
         self.assertNotIn("Upcoming Active Playlist", body)
         self.assertIn("Reset Playlist", body)
         self.assertIn("Restart Playlist", body)
@@ -2955,8 +2960,141 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertTrue(main.jukebox_settings["enabled"])
         self.assertEqual("Monster Mash", main.jukebox_playlist[0]["title"])
+        self.assertEqual(1, len(main.jukebox_playlists))
+        self.assertEqual("Monster Mash", main.jukebox_playlists[0]["tracks"][0]["title"])
         self.assertEqual("queued", main.jukebox_requests[0]["status"])
         self.assertTrue(any(item["source"] == "request" for item in main.jukebox_queue))
+
+    def test_admin_can_build_multiple_jukebox_playlists_and_show_active_runtime(self):
+        main.jukebox_settings["enabled"] = True
+        first_track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby", "duration_ms": 180000}
+        )
+        second_track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-2", "title": "Thriller", "artist": "Michael", "duration_ms": 240000}
+        )
+        first_playlist = main.normalize_jukebox_playlist_record(
+            {"name": "Dinner", "tracks": [first_track]}
+        )
+        second_playlist = main.normalize_jukebox_playlist_record(
+            {"name": "Dance Floor", "tracks": [second_track]}
+        )
+        main.jukebox_playlists = [first_playlist, second_playlist]
+        main.jukebox_active_playlist_id = first_playlist["id"]
+        main.ensure_jukebox_playlists()
+        main.regenerate_jukebox_queue()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            page_response = client.get("/admin")
+            switch_response = client.post(
+                "/admin",
+                data={
+                    "action": "set_active_jukebox_playlist",
+                    "playlist_id": second_playlist["id"],
+                },
+            )
+            switched_page_response = client.get("/admin")
+
+        page_body = page_response.get_data(as_text=True)
+        switched_body = switched_page_response.get_data(as_text=True)
+        self.assertEqual(200, page_response.status_code)
+        self.assertEqual(200, switch_response.status_code)
+        self.assertIn("Dinner", page_body)
+        self.assertIn("Dance Floor", page_body)
+        self.assertIn("3m 00s", page_body)
+        self.assertIn("4m 00s", page_body)
+        self.assertEqual(second_playlist["id"], main.jukebox_active_playlist_id)
+        self.assertEqual(["Thriller"], [item["title"] for item in main.jukebox_queue])
+        self.assertIn("Active:", switched_body)
+        self.assertIn("Dance Floor", switched_body)
+
+    def test_approved_requests_apply_only_to_active_jukebox_playlist(self):
+        main.jukebox_settings["enabled"] = True
+        inactive_track = main.normalize_jukebox_track(
+            {"apple_music_id": "inactive-song", "title": "Slow Song", "artist": "Host", "duration_ms": 120000}
+        )
+        active_track = main.normalize_jukebox_track(
+            {"apple_music_id": "active-song", "title": "Fast Song", "artist": "Host", "duration_ms": 180000}
+        )
+        inactive_playlist = main.normalize_jukebox_playlist_record(
+            {"name": "Dinner", "tracks": [inactive_track]}
+        )
+        active_playlist = main.normalize_jukebox_playlist_record(
+            {"name": "Dance Floor", "tracks": [active_track]}
+        )
+        request_item = main.normalize_jukebox_request(
+            {
+                "apple_music_id": "request-song",
+                "title": "Requested Song",
+                "artist": "Guest Artist",
+                "requester_user_id": "user-1",
+                "requester_name": "Jamie",
+                "duration_ms": 210000,
+                "status": "pending",
+            }
+        )
+        main.jukebox_playlists = [inactive_playlist, active_playlist]
+        main.jukebox_active_playlist_id = active_playlist["id"]
+        main.jukebox_requests = [request_item]
+        main.ensure_jukebox_playlists()
+        main.regenerate_jukebox_queue()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "approve_jukebox_request",
+                    "request_id": request_item["id"],
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(["Slow Song"], [track["title"] for track in inactive_playlist["tracks"]])
+        self.assertEqual(["Fast Song"], [track["title"] for track in active_playlist["tracks"]])
+        self.assertIn("Requested Song", [item["title"] for item in main.jukebox_queue])
+        self.assertNotIn("Slow Song", [item["title"] for item in main.jukebox_queue])
+        self.assertEqual(390000, main.active_jukebox_queue_duration_ms())
+
+    def test_jukebox_shuffle_randomizes_playlist_before_priority_requests(self):
+        class ReversingRandom:
+            def shuffle(self, values):
+                values.reverse()
+
+            def randint(self, lower, upper):
+                return lower
+
+        original_system_random = main.random.SystemRandom
+        main.random.SystemRandom = lambda: ReversingRandom()
+        try:
+            main.jukebox_settings["enabled"] = True
+            main.jukebox_settings["shuffle_playlist"] = True
+            main.jukebox_playlist = [
+                main.normalize_jukebox_track({"apple_music_id": f"base-{index}", "title": f"Base {index}", "artist": "Host"})
+                for index in range(3)
+            ]
+            request_item = main.normalize_jukebox_request(
+                {
+                    "apple_music_id": "request-song",
+                    "title": "Requested Song",
+                    "artist": "Guest Artist",
+                    "requester_user_id": "user-1",
+                    "requester_name": "Jamie",
+                    "status": "approved",
+                }
+            )
+            main.jukebox_requests = [request_item]
+
+            main.regenerate_jukebox_queue()
+        finally:
+            main.random.SystemRandom = original_system_random
+
+        self.assertEqual("Base 2", main.jukebox_queue[0]["title"])
+        self.assertEqual("Requested Song", main.jukebox_queue[1]["title"])
+        self.assertIn(main.jukebox_queue.index(next(item for item in main.jukebox_queue if item["source"] == "request")), {1, 2})
 
     def test_jukebox_state_round_trip_preserves_dj_control(self):
         main.jukebox_playback_control = main.issue_jukebox_dj_command("play")
@@ -3151,8 +3289,66 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(1, len(queued_request_items))
         self.assertIn("Queued #", body)
         self.assertIn("Guest request from Jamie", body)
-        self.assertIn("Rejected and kept in request history", body)
-        self.assertIn("No Song", body)
+        self.assertNotIn("Rejected and kept in request history", body)
+        self.assertNotIn("No Song", body)
+        self.assertNotIn(rejected_request["id"], [item["id"] for item in main.jukebox_requests])
+
+    def test_admin_can_reorder_and_remove_active_playlist_queue_rows(self):
+        main.jukebox_settings["enabled"] = True
+        first_track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        second_track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-2", "title": "Thriller", "artist": "Michael"}
+        )
+        request_item = main.normalize_jukebox_request(
+            {
+                "apple_music_id": "request-song",
+                "title": "Requested Song",
+                "artist": "Guest Artist",
+                "requester_user_id": "user-1",
+                "requester_name": "Jamie",
+                "status": "queued",
+            }
+        )
+        main.jukebox_playlist = [first_track, second_track]
+        main.jukebox_requests = [request_item]
+        main.jukebox_queue = [
+            main.create_jukebox_queue_item(first_track),
+            main.create_jukebox_queue_item(second_track),
+            main.create_jukebox_queue_item(request_item, source="request", request_item=request_item),
+        ]
+        second_queue_id = main.jukebox_queue[1]["id"]
+        request_queue_id = main.jukebox_queue[2]["id"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            move_response = client.post(
+                "/admin",
+                data={
+                    "action": "move_jukebox_queue_item_up",
+                    "queue_item_id": second_queue_id,
+                },
+            )
+            remove_response = client.post(
+                "/admin",
+                data={
+                    "action": "remove_jukebox_queue_item",
+                    "queue_item_id": request_queue_id,
+                },
+            )
+            page_response = client.get("/admin")
+
+        body = page_response.get_data(as_text=True)
+        self.assertEqual(200, move_response.status_code)
+        self.assertEqual(200, remove_response.status_code)
+        self.assertEqual(["Thriller", "Monster Mash"], [item["title"] for item in main.jukebox_queue])
+        self.assertFalse(main.jukebox_requests)
+        self.assertIn("Move Up", body)
+        self.assertIn("Move Down", body)
+        self.assertIn("Remove", body)
+        self.assertNotIn("Requested Song", body)
 
     def test_display_data_includes_jukebox_state(self):
         main.jukebox_settings["enabled"] = True

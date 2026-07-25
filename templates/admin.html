@@ -297,14 +297,6 @@
             <input type="number" name="jukebox_max_requests_per_user" min="0" max="10" value="{{ jukebox_settings.max_requests_per_user }}">
           </label>
           <label>
-            Insert after at least this many songs
-            <input type="number" name="jukebox_insert_min" min="1" max="50" value="{{ jukebox_settings.request_insert_min_position }}">
-          </label>
-          <label>
-            Insert before this queue position
-            <input type="number" name="jukebox_insert_max" min="1" max="50" value="{{ jukebox_settings.request_insert_max_position }}">
-          </label>
-          <label>
             Duplicate cooldown
             <input type="number" name="jukebox_duplicate_cooldown" min="0" max="50" value="{{ jukebox_settings.duplicate_cooldown }}">
           </label>
@@ -314,6 +306,13 @@
           <select name="jukebox_loop_playlist">
             <option value="yes" {% if jukebox_settings.loop_playlist %}selected{% endif %}>Loop when queue ends</option>
             <option value="no" {% if not jukebox_settings.loop_playlist %}selected{% endif %}>Stop when queue ends</option>
+          </select>
+        </label>
+        <label>
+          Shuffle playback
+          <select name="jukebox_shuffle_playlist">
+            <option value="yes" {% if jukebox_settings.shuffle_playlist %}selected{% endif %}>Shuffle active playlist</option>
+            <option value="no" {% if not jukebox_settings.shuffle_playlist %}selected{% endif %}>Keep playlist order</option>
           </select>
         </label>
         <label>
@@ -343,6 +342,51 @@
         </div>
         <button type="submit" name="action" value="update_jukebox_settings" class="button button--primary">Save Jukebox Settings</button>
       </form>
+
+      <div class="access-settings__form">
+        <h4>Playlists</h4>
+        <p class="form-helper">Build multiple playlists, choose one active playlist, and use it as the live display queue source.</p>
+        <div class="party-code-status">
+          <p class="contest-status contest-status--active">
+            Active: <span data-jukebox-active-playlist-name>{{ jukebox_active_playlist_name }}</span> · <span data-jukebox-active-playlist-count>{{ jukebox_queue|length }}</span> song{{ 's' if jukebox_queue|length != 1 else '' }} · <span data-jukebox-active-playlist-duration>{{ jukebox_active_duration_label }}</span>
+          </p>
+        </div>
+        <form method="post" class="admin-entry__fields">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>
+            New playlist name
+            <input type="text" name="playlist_name" maxlength="80" placeholder="Dinner, Dance Floor, Late Night">
+          </label>
+          <button type="submit" name="action" value="create_jukebox_playlist" class="button button--primary">Create Playlist</button>
+        </form>
+        {% if jukebox_playlists %}
+          <div class="admin-entry-list">
+            {% for playlist in jukebox_playlists %}
+              <article class="admin-entry admin-entry--static">
+                <div class="admin-entry__summary">
+                  <span class="admin-entry__rank">{% if playlist.is_active %}Active{% else %}{{ loop.index }}{% endif %}</span>
+                  <span class="admin-entry__summary-text">
+                    <strong>{{ playlist.name }}</strong>
+                    <span>{{ playlist.track_count }} song{{ 's' if playlist.track_count != 1 else '' }} · {{ playlist.duration_label }}</span>
+                  </span>
+                </div>
+                <div class="admin-entry__actions">
+                  <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="playlist_id" value="{{ playlist.id }}">
+                    <input type="text" name="playlist_name" value="{{ playlist.name }}" maxlength="80" aria-label="Playlist name">
+                    <button type="submit" name="action" value="rename_jukebox_playlist" class="button">Rename</button>
+                    {% if not playlist.is_active %}
+                      <button type="submit" name="action" value="set_active_jukebox_playlist" class="button button--primary">Make Active</button>
+                      <button type="submit" name="action" value="delete_jukebox_playlist" class="button button--danger">Delete</button>
+                    {% endif %}
+                  </form>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
 
       <form method="post" class="access-settings__form jukebox-search-form" data-jukebox-search-form>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -386,6 +430,7 @@
                     Curated playlist
                   {% endif %}
                   {% if item.artist %} · {{ item.artist }}{% endif %}
+                  {% if item.duration_ms %} · {{ jukebox_duration_label(item.duration_ms) }}{% endif %}
                 </span>
               </span>
             </div>
@@ -397,21 +442,13 @@
                 <input type="hidden" name="queue_item_id" value="{{ item.id }}">
                 <button type="submit" class="button button--primary">Play Now</button>
               </form>
-              {% if item.playlist_track_id %}
-                <form method="post">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="track_id" value="{{ item.playlist_track_id }}">
-                  <button type="submit" name="action" value="move_jukebox_track_up" class="button">Move Up</button>
-                  <button type="submit" name="action" value="move_jukebox_track_down" class="button">Move Down</button>
-                  <button type="submit" name="action" value="remove_jukebox_track" class="button button--danger">Remove</button>
-                </form>
-              {% elif item.request_id %}
-                <form method="post">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="request_id" value="{{ item.request_id }}">
-                  <button type="submit" name="action" value="skip_jukebox_request" class="button button--danger">Skip</button>
-                </form>
-              {% endif %}
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="queue_item_id" value="{{ item.id }}">
+                <button type="submit" name="action" value="move_jukebox_queue_item_up" class="button">Move Up</button>
+                <button type="submit" name="action" value="move_jukebox_queue_item_down" class="button">Move Down</button>
+                <button type="submit" name="action" value="remove_jukebox_queue_item" class="button button--danger">Remove</button>
+              </form>
             </div>
           </article>
         {% endfor %}
@@ -421,7 +458,7 @@
     {% endif %}
 
     <h4>Requests</h4>
-    <p class="form-helper">Approve requests to add them into the active playlist queue. Rejected requests stay visible here as history.</p>
+    <p class="form-helper">Approve requests to add them into the active playlist. Rejecting a request removes it from this list.</p>
     {% if jukebox_requests %}
       <div class="admin-entry-list">
         {% for request_item in jukebox_requests %}
@@ -433,8 +470,6 @@
                 <span>{{ request_item.artist }} · requested by {{ request_item.requester_name or 'Guest' }}</span>
                 {% if jukebox_request_queue_positions.get(request_item.id) %}
                   <span>Queued #{{ jukebox_request_queue_positions.get(request_item.id) }}</span>
-                {% elif request_item.status == 'rejected' %}
-                  <span>Rejected and kept in request history</span>
                 {% elif request_item.status == 'pending' %}
                   <span>Waiting for host approval</span>
                 {% endif %}
@@ -1351,5 +1386,5 @@
 
 {% block scripts %}
   <script src="{{ url_for('static', filename='jukebox-search.js') }}"></script>
-  <script src="{{ url_for('static', filename='admin.js', v='20260725-single-playlist') }}"></script>
+  <script src="{{ url_for('static', filename='admin.js', v='20260725-multi-playlist') }}"></script>
 {% endblock %}

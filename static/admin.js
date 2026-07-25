@@ -105,6 +105,18 @@
         nowPlayingElement.textContent = 'No song is marked as playing yet.';
       }
     }
+    const activePlaylistName = document.querySelector('[data-jukebox-active-playlist-name]');
+    if (activePlaylistName && jukebox && jukebox.active_playlist_name) {
+      activePlaylistName.textContent = jukebox.active_playlist_name;
+    }
+    const activePlaylistCount = document.querySelector('[data-jukebox-active-playlist-count]');
+    if (activePlaylistCount && jukebox && Array.isArray(jukebox.queue)) {
+      activePlaylistCount.textContent = String(jukebox.queue.length);
+    }
+    const activePlaylistDuration = document.querySelector('[data-jukebox-active-playlist-duration]');
+    if (activePlaylistDuration && jukebox && jukebox.active_playlist_duration_label) {
+      activePlaylistDuration.textContent = jukebox.active_playlist_duration_label;
+    }
   };
 
   const reinitializeDynamicControls = () => {

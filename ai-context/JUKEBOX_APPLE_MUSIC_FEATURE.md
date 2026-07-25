@@ -148,6 +148,22 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   has Play Now, curated rows keep Move/Remove controls, and approved request
   rows can be skipped. Queue items store `playlist_track_id` for curated songs
   so regenerated queue rows can still map back to playlist management actions.
+- 2026-07-25: Expanded the single Active Playlist controls so every playable
+  row, including approved request songs, has Play Now, Move Up, Move Down, and
+  Remove. Queue-level Remove deletes curated songs from the source playlist and
+  deletes request songs from the request store so removed songs do not return on
+  the next refresh. Rejected requests are removed immediately instead of staying
+  visible as rejected history.
+- 2026-07-25: Added multiple admin-buildable jukebox playlists. Existing
+  `jukebox_playlist` data migrates into a default Main Party Playlist, while
+  new state stores `jukebox_playlists` plus `jukebox_active_playlist_id`.
+  Admin can create, rename, activate, and delete playlists. Song requests apply
+  only to the active playlist queue; inactive saved playlists do not receive
+  attendee requests. Apple Music `duration_ms` metadata is summed for playlist
+  summaries and the active queue runtime, which updates as songs or approved
+  requests are added/removed. Added shuffle playback for curated active
+  playlist tracks, but approved requests are still inserted into the next 1-2
+  songs regardless of shuffle.
 
 ## Design Notes
 

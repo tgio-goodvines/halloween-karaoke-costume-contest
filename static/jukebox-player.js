@@ -17,6 +17,7 @@
   let music = null;
   let currentQueueItem = null;
   let lastEndedItemId = '';
+  let lastDjCommandId = '';
   let playbackPollId = null;
 
   const body = document.body;
@@ -60,6 +61,16 @@
   const visibleQueue = () => {
     const queue = Array.isArray(state.queue) ? state.queue : [];
     return queue.filter((item) => item && item.status !== 'played' && item.status !== 'skipped');
+  };
+
+  const syncCurrentQueueItem = () => {
+    if (state && state.now_playing && state.now_playing.id) {
+      currentQueueItem = state.now_playing;
+      return;
+    }
+    if (!currentQueueItem) {
+      currentQueueItem = visibleQueue()[0] || null;
+    }
   };
 
   const setFitClasses = (classes) => {
@@ -166,11 +177,13 @@
     fitJukeboxCard();
   };
 
-  const postPlaybackEvent = async (event, item) => {
+  const postPlaybackEvent = async (event, item, commandId, errorMessage) => {
     const formData = new FormData();
     formData.append('csrf_token', csrfToken);
     formData.append('event', event);
     formData.append('queue_item_id', item && item.id ? item.id : '');
+    formData.append('command_id', commandId || '');
+    formData.append('error', errorMessage || '');
     const response = await fetch('/api/jukebox/playback-event', {
       method: 'POST',
       body: formData,
@@ -190,7 +203,9 @@
       const payload = await response.json();
       if (response.ok) {
         state = payload;
+        syncCurrentQueueItem();
         render();
+        await handleDjCommand();
       }
     } catch (error) {
       setStatus('Jukebox state refresh failed.');
@@ -241,7 +256,7 @@
     }
   };
 
-  const startPlayback = async () => {
+  const startPlayback = async (commandId) => {
     await refreshState();
     const nextItem = visibleQueue()[0];
     if (!nextItem) {
@@ -256,11 +271,23 @@
     }
     currentQueueItem = nextItem;
     lastEndedItemId = '';
-    await postPlaybackEvent('started', currentQueueItem);
+    await postPlaybackEvent('started', currentQueueItem, commandId);
     setStatus('Jukebox playing from the host Apple Music account. Cast this Chrome tab for TV audio.');
   };
 
-  const skipPlayback = async () => {
+  const pausePlayback = async (commandId, eventName) => {
+    if (music && music.player && typeof music.player.pause === 'function') {
+      await music.player.pause();
+    } else if (music && typeof music.pause === 'function') {
+      await music.pause();
+    } else {
+      throw new Error('Apple Music is not connected on this display yet.');
+    }
+    await postPlaybackEvent(eventName || 'paused', currentQueueItem, commandId);
+    setStatus(eventName === 'stopped' ? 'Jukebox stopped from admin.' : 'Jukebox paused from admin.');
+  };
+
+  const skipPlayback = async (commandId) => {
     if (music && music.player && typeof music.player.skipToNextItem === 'function') {
       try {
         await music.player.skipToNextItem();
@@ -269,11 +296,41 @@
       }
     }
     if (currentQueueItem) {
-      await postPlaybackEvent('skipped', currentQueueItem);
+      await postPlaybackEvent('skipped', currentQueueItem, commandId);
     }
     currentQueueItem = visibleQueue()[0] || null;
     if (currentQueueItem) {
       await startPlayback();
+    }
+  };
+
+  const handleDjCommand = async () => {
+    const control = state && state.playback_control ? state.playback_control : null;
+    if (!control || control.status !== 'pending' || !control.id || control.id === lastDjCommandId) {
+      return;
+    }
+    lastDjCommandId = control.id;
+    try {
+      if (control.command === 'connect') {
+        await configureMusic();
+        await postPlaybackEvent('sync', currentQueueItem, control.id);
+      } else if (control.command === 'play') {
+        await startPlayback(control.id);
+      } else if (control.command === 'pause') {
+        await pausePlayback(control.id, 'paused');
+      } else if (control.command === 'stop') {
+        await pausePlayback(control.id, 'stopped');
+      } else if (control.command === 'skip') {
+        await skipPlayback(control.id);
+      }
+    } catch (error) {
+      const message = error.message || 'Unable to complete DJ command on the live display.';
+      setStatus(message);
+      try {
+        await postPlaybackEvent('command_error', currentQueueItem, control.id, message);
+      } catch (ackError) {
+        setStatus(ackError.message || message);
+      }
     }
   };
 
@@ -333,5 +390,5 @@
 
   render();
   watchForEnded();
-  window.setInterval(refreshState, 15000);
+  window.setInterval(refreshState, 3000);
 })();

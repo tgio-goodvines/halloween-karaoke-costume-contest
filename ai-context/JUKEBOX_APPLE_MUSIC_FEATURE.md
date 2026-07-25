@@ -55,6 +55,12 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   scroll/client dimensions and progressively applies compact, micro, no-art,
   fewer-queue-row, and minimal modes so long song/artist/request content fits
   the assigned viewport region without clipping.
+- 2026-07-25: Added admin-console DJ controls for Apple Music playback. Admin
+  can send Connect, Play, Pause, Stop, and Skip commands from `/admin`; the
+  admin-authorized live display polls the app-owned command state, executes the
+  command through MusicKit, and acknowledges success/error through the existing
+  playback event endpoint. Normal attendee-visible `/live-display` remains
+  display-only with no Apple Music buttons.
 
 ## Design Notes
 
@@ -63,7 +69,9 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   the MusicKit token endpoint. The host/admin authorizes Apple Music on the
   live-display browser, and attendees use that playback session indirectly by
   submitting app-owned requests.
-- Browser audio autoplay still requires a user gesture; the live display should expose explicit Connect/Start controls.
+- Browser audio autoplay still requires a user gesture; the host should open
+  the admin-authorized live display once so MusicKit can authorize the Apple
+  Music subscriber session, then use `/admin` DJ controls during the party.
 - Chromecast audio should work when casting the Chrome tab containing `/live-display`; casting a full screen can keep audio on the computer on some platforms.
 - YouTube remains unsuitable for audio-only playback because YouTube API policies do not allow separating or hiding the video/audio components.
 - Apple Music catalog search and MusicKit playback require

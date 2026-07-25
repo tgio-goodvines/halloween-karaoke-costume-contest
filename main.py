@@ -308,6 +308,14 @@ DEFAULT_JUKEBOX_SETTINGS: dict[str, object] = {
     "seed_title": "",
     "seed_artist": "",
 }
+DEFAULT_JUKEBOX_PLAYBACK_CONTROL: dict[str, object] = {
+    "id": "",
+    "command": "",
+    "status": "idle",
+    "issued_at": "",
+    "acknowledged_at": "",
+    "error": "",
+}
 JUKEBOX_REQUEST_STATUSES = {
     "pending",
     "approved",
@@ -318,6 +326,8 @@ JUKEBOX_REQUEST_STATUSES = {
     "skipped",
 }
 JUKEBOX_QUEUE_STATUSES = {"queued", "playing", "played", "skipped"}
+JUKEBOX_DJ_COMMANDS = {"connect", "play", "pause", "stop", "skip"}
+JUKEBOX_CONTROL_STATUSES = {"idle", "pending", "acknowledged", "error"}
 JUKEBOX_PROVIDERS = {"apple_music"}
 JUKEBOX_MODES = {"manual_playlist", "autoplay_seed"}
 
@@ -451,6 +461,7 @@ jukebox_playlist: list[dict[str, object]] = []
 jukebox_requests: list[dict[str, object]] = []
 jukebox_queue: list[dict[str, object]] = []
 jukebox_now_playing: dict[str, object] = {}
+jukebox_playback_control: dict[str, object] = copy.deepcopy(DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -2114,6 +2125,46 @@ def normalize_jukebox_now_playing(data: object) -> dict[str, object]:
     return item
 
 
+def normalize_jukebox_playback_control(data: object) -> dict[str, object]:
+    control = copy.deepcopy(DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
+    if isinstance(data, dict):
+        control.update(copy.deepcopy(data))
+    command = str(control.get("command", "") or "").strip()
+    control["command"] = command if command in JUKEBOX_DJ_COMMANDS else ""
+    status = str(control.get("status", "idle") or "idle").strip()
+    control["status"] = status if status in JUKEBOX_CONTROL_STATUSES else "idle"
+    control["id"] = str(control.get("id", "") or "")[:80]
+    control["issued_at"] = str(control.get("issued_at", "") or "")
+    control["acknowledged_at"] = str(control.get("acknowledged_at", "") or "")
+    control["error"] = str(control.get("error", "") or "").strip()[:240]
+    if not control["command"]:
+        control["status"] = "idle"
+    return control
+
+
+def issue_jukebox_dj_command(command: str) -> dict[str, object]:
+    normalized_command = str(command or "").strip()
+    if normalized_command not in JUKEBOX_DJ_COMMANDS:
+        raise ValueError("Choose a valid jukebox DJ command.")
+    return {
+        "id": uuid4().hex,
+        "command": normalized_command,
+        "status": "pending",
+        "issued_at": _utc_now_iso(),
+        "acknowledged_at": "",
+        "error": "",
+    }
+
+
+def acknowledge_jukebox_dj_command(command_id: str, error: str = "") -> None:
+    command_id = str(command_id or "").strip()
+    if not command_id or command_id != str(jukebox_playback_control.get("id", "")):
+        return
+    jukebox_playback_control["status"] = "error" if error else "acknowledged"
+    jukebox_playback_control["acknowledged_at"] = _utc_now_iso()
+    jukebox_playback_control["error"] = str(error or "").strip()[:240]
+
+
 def jukebox_developer_token_configured() -> bool:
     return bool(str(app.config.get("APPLE_MUSIC_DEVELOPER_TOKEN", "") or "").strip())
 
@@ -2241,6 +2292,7 @@ def jukebox_state_payload() -> dict[str, object]:
         "pending_request_count": sum(1 for item in jukebox_requests if item.get("status") == "pending"),
         "queue": upcoming,
         "now_playing": copy.deepcopy(jukebox_now_playing),
+        "playback_control": normalize_jukebox_playback_control(jukebox_playback_control),
     }
 
 
@@ -2516,6 +2568,7 @@ def snapshot_state() -> dict[str, object]:
         "jukebox_requests": copy.deepcopy(jukebox_requests),
         "jukebox_queue": copy.deepcopy(jukebox_queue),
         "jukebox_now_playing": copy.deepcopy(jukebox_now_playing),
+        "jukebox_playback_control": normalize_jukebox_playback_control(jukebox_playback_control),
         "live_display_event_override": copy.deepcopy(live_display_event_override),
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
         "live_display_override": copy.deepcopy(current_display_override()),
@@ -2535,7 +2588,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global live_display_event_override, live_display_notice_override
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
     global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email, bartender_tip_settings
-    global jukebox_settings, jukebox_playlist, jukebox_requests, jukebox_queue, jukebox_now_playing
+    global jukebox_settings, jukebox_playlist, jukebox_requests, jukebox_queue, jukebox_now_playing, jukebox_playback_control
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -2648,6 +2701,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                 if queue_item:
                     jukebox_queue.append(queue_item)
     jukebox_now_playing = normalize_jukebox_now_playing(data.get("jukebox_now_playing", {}))
+    jukebox_playback_control = normalize_jukebox_playback_control(data.get("jukebox_playback_control", {}))
 
     raw_password_reset_tokens = data.get("password_reset_tokens", {})
     password_reset_tokens = {}
@@ -4464,10 +4518,15 @@ def jukebox_playback_event():
     global jukebox_now_playing
     event_type = request.form.get("event", "").strip()
     queue_item_id = request.form.get("queue_item_id", "").strip()
+    command_id = request.form.get("command_id", "").strip()
+    command_error = request.form.get("error", "").strip()
     item = find_jukebox_queue_item(queue_item_id) if queue_item_id else None
     now_iso = _utc_now_iso()
 
-    if event_type == "started" and item:
+    if event_type == "command_error":
+        acknowledge_jukebox_dj_command(command_id, command_error or "Live display could not complete the DJ command.")
+        broadcast_display_update()
+    elif event_type == "started" and item:
         for queue_item in jukebox_queue:
             if queue_item is not item and queue_item.get("status") == "playing":
                 queue_item["status"] = "played"
@@ -4475,9 +4534,18 @@ def jukebox_playback_event():
         item["status"] = "playing"
         item["started_at"] = now_iso
         jukebox_now_playing = copy.deepcopy(item)
+        jukebox_now_playing["playback_state"] = "playing"
         request_item = find_jukebox_request(str(item.get("request_id", "")))
         if request_item:
             request_item["status"] = "playing"
+        acknowledge_jukebox_dj_command(command_id)
+        broadcast_display_update()
+    elif event_type in {"paused", "stopped"}:
+        if jukebox_now_playing:
+            jukebox_now_playing["playback_state"] = event_type
+        if item:
+            item["status"] = "playing"
+        acknowledge_jukebox_dj_command(command_id)
         broadcast_display_update()
     elif event_type in {"ended", "skipped"} and item:
         item["status"] = "skipped" if event_type == "skipped" else "played"
@@ -4490,8 +4558,10 @@ def jukebox_playback_event():
         jukebox_now_playing = copy.deepcopy(next_item) if next_item else {}
         if not next_item and bool(jukebox_settings.get("loop_playlist")) and jukebox_playlist:
             regenerate_jukebox_queue()
+        acknowledge_jukebox_dj_command(command_id)
         broadcast_display_update()
     elif event_type == "sync":
+        acknowledge_jukebox_dj_command(command_id)
         broadcast_display_update()
     else:
         return jsonify({"error": "Unknown jukebox playback event."}), 400
@@ -4546,7 +4616,7 @@ def admin_portal():
     global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
     global bartender_tip_settings
-    global jukebox_settings, jukebox_playlist, jukebox_queue, jukebox_now_playing
+    global jukebox_settings, jukebox_playlist, jukebox_queue, jukebox_now_playing, jukebox_playback_control
 
     ensure_costume_votes_alignment()
 
@@ -4933,6 +5003,23 @@ def admin_portal():
                     regenerate_jukebox_queue()
                     messages.append(f"Added {track['title']} to the jukebox playlist.")
                     should_broadcast = True
+
+        elif action == "jukebox_dj_command":
+            requested_command = request.form.get("jukebox_command", "").strip()
+            try:
+                jukebox_playback_control = issue_jukebox_dj_command(requested_command)
+            except ValueError as exc:
+                errors.append(str(exc))
+            else:
+                label = {
+                    "connect": "Connect Apple Music",
+                    "play": "Play",
+                    "pause": "Pause",
+                    "stop": "Stop",
+                    "skip": "Skip",
+                }.get(requested_command, requested_command.title())
+                messages.append(f"Sent DJ command to the live display: {label}.")
+                should_broadcast = True
 
         elif action in {"remove_jukebox_track", "move_jukebox_track_up", "move_jukebox_track_down"}:
             track_id = request.form.get("track_id", "").strip()
@@ -5770,6 +5857,7 @@ def admin_portal():
         ),
         jukebox_queue=queued_jukebox_items(),
         jukebox_now_playing=jukebox_now_playing,
+        jukebox_playback_control=normalize_jukebox_playback_control(jukebox_playback_control),
         jukebox_developer_token_configured=jukebox_developer_token_configured(),
         user_accounts=user_accounts,
     )

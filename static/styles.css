@@ -1135,6 +1135,11 @@ main.container {
   font-weight: 600;
 }
 
+.contest-status--warning {
+  color: #ffcc6e;
+  font-weight: 600;
+}
+
 .karaoke-lineup {
   margin-top: 1rem;
   padding: 1rem 1.25rem;

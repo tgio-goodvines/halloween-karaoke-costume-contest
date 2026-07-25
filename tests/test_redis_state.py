@@ -192,6 +192,7 @@ class RedisStateTests(unittest.TestCase):
         main.jukebox_requests = []
         main.jukebox_queue = []
         main.jukebox_now_playing = {}
+        main.jukebox_playback_control = main.copy.deepcopy(main.DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
         main.display_update_version = 0
         main.contest_state.clear()
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
@@ -2908,6 +2909,16 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("queued", main.jukebox_requests[0]["status"])
         self.assertTrue(any(item["source"] == "request" for item in main.jukebox_queue))
 
+    def test_jukebox_state_round_trip_preserves_dj_control(self):
+        main.jukebox_playback_control = main.issue_jukebox_dj_command("play")
+        self.save_current_state()
+        self.reset_state()
+
+        main.load_state_from_redis()
+
+        self.assertEqual("play", main.jukebox_playback_control["command"])
+        self.assertEqual("pending", main.jukebox_playback_control["status"])
+
     def test_jukebox_request_page_limits_active_requests(self):
         account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
         main.jukebox_settings.update(
@@ -3008,6 +3019,53 @@ class RedisStateTests(unittest.TestCase):
         payload = response.get_json()
         self.assertIn("jukebox", payload)
         self.assertTrue(payload["jukebox"]["enabled"])
+        self.assertIn("playback_control", payload["jukebox"])
+
+    def test_admin_can_send_jukebox_dj_command_to_live_display(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={"action": "jukebox_dj_command", "jukebox_command": "play"},
+            )
+            display_response = client.get("/api/display-data")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("play", main.jukebox_playback_control["command"])
+        self.assertEqual("pending", main.jukebox_playback_control["status"])
+        payload = display_response.get_json()
+        self.assertEqual("play", payload["jukebox"]["playback_control"]["command"])
+        self.assertEqual("pending", payload["jukebox"]["playback_control"]["status"])
+
+    def test_jukebox_playback_event_acknowledges_admin_command(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_queue = [main.create_jukebox_queue_item(track)]
+        main.jukebox_playback_control = main.issue_jukebox_dj_command("play")
+        command_id = main.jukebox_playback_control["id"]
+        queue_item_id = main.jukebox_queue[0]["id"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/api/jukebox/playback-event",
+                data={
+                    "event": "started",
+                    "queue_item_id": queue_item_id,
+                    "command_id": command_id,
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("playing", main.jukebox_queue[0]["status"])
+        self.assertEqual("acknowledged", main.jukebox_playback_control["status"])
+        self.assertEqual("playing", main.jukebox_now_playing["playback_state"])
 
     def test_display_layout_is_idle_without_party_activity(self):
         self.save_current_state()

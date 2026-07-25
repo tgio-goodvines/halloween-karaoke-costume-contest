@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% set title = "Jukebox" %}
+
+{% block content %}
+<section class="portal-card">
+  <header class="section-heading">
+    <p class="eyebrow">Apple Music</p>
+    <h2>Jukebox Requests</h2>
+    <p>Send a song into the party mix. The hosts handle Apple Music playback, so guests only need this party account.</p>
+  </header>
+
+  {% if errors %}
+    <div class="flash flash--error">
+      <ul>
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if messages %}
+    <div class="flash flash--success">
+      <ul>
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <div class="jukebox-status-grid">
+    <article class="status-card">
+      <span class="status-card__label">Now Playing</span>
+      <strong>{{ jukebox.now_playing.title if jukebox.now_playing else 'Waiting for the next song' }}</strong>
+      {% if jukebox.now_playing and jukebox.now_playing.artist %}
+        <span>{{ jukebox.now_playing.artist }}</span>
+      {% endif %}
+    </article>
+    <article class="status-card">
+      <span class="status-card__label">Requests</span>
+      <strong>{% if jukebox.settings.requests_enabled %}Open{% else %}Paused{% endif %}</strong>
+      <span>{{ jukebox.pending_request_count }} pending</span>
+    </article>
+  </div>
+
+  {% if jukebox.enabled and jukebox.settings.requests_enabled %}
+    <form method="post" class="song-request-form jukebox-search-form" data-jukebox-search-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="jukebox_search_query">Find a song</label>
+      <div class="song-search__controls">
+        <input type="search" id="jukebox_search_query" data-jukebox-search-input placeholder="Song or artist">
+        <button type="button" class="button button--outline" data-jukebox-search-button>Search</button>
+      </div>
+      <div class="song-search__status" data-jukebox-search-status></div>
+      <div class="song-search__results" data-jukebox-search-results></div>
+
+      <input type="hidden" name="apple_music_id" data-jukebox-field="apple_music_id">
+      <input type="hidden" name="title" data-jukebox-field="title">
+      <input type="hidden" name="artist" data-jukebox-field="artist">
+      <input type="hidden" name="album" data-jukebox-field="album">
+      <input type="hidden" name="artwork_url" data-jukebox-field="artwork_url">
+      <input type="hidden" name="duration_ms" data-jukebox-field="duration_ms">
+      <input type="hidden" name="explicit" data-jukebox-field="explicit">
+
+      <p class="form-helper" data-jukebox-selected>Choose a song from search before sending it to the hosts.</p>
+      <label for="jukebox_note">Request note</label>
+      <input type="text" id="jukebox_note" name="note" maxlength="240" placeholder="Optional dedication or vibe check">
+      <button type="submit" class="button button--primary">Request Song</button>
+    </form>
+  {% else %}
+    <p class="contest-status contest-status--inactive">Jukebox requests are not open right now.</p>
+  {% endif %}
+</section>
+
+<section class="portal-card">
+  <header class="section-heading">
+    <h3>Your Requests</h3>
+  </header>
+  {% if user_requests %}
+    <div class="request-list">
+      {% for request_item in user_requests %}
+        <article class="request-card">
+          {% if request_item.artwork_url %}
+            <img src="{{ request_item.artwork_url }}" alt="">
+          {% endif %}
+          <div>
+            <strong>{{ request_item.title }}</strong>
+            <span>{{ request_item.artist }}</span>
+            <span class="status-pill">{{ request_item.status }}</span>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="admin-empty">No song requests yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='jukebox-search.js') }}"></script>
+{% endblock %}

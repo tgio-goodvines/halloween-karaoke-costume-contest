@@ -5,7 +5,9 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
 from typing import List, Tuple
 from threading import Condition, Thread
-from urllib.parse import quote, quote_plus, unquote, urlparse
+from urllib.parse import parse_qs, quote, quote_plus, urlencode, unquote, urlparse
+from urllib.request import Request as UrlRequest, urlopen
+from urllib.error import HTTPError, URLError
 from uuid import uuid4
 import copy
 import hashlib
@@ -15,6 +17,7 @@ import os
 import re
 import secrets
 import time
+import random
 
 import redis
 from werkzeug.utils import secure_filename
@@ -44,6 +47,10 @@ app.config["PARTY_TITLE"] = os.environ.get(
     "HALLOWEEN_PARTY_TITLE",
     "Qiana and Tony's 3rd Annual Halloween Party",
 )
+YOUTUBE_API_KEY_ENV_VALUE = os.environ.get("HALLOWEEN_YOUTUBE_API_KEY", "")
+app.config["YOUTUBE_API_KEY"] = YOUTUBE_API_KEY_ENV_VALUE
+app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = os.environ.get("HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN", "")
+app.config["APPLE_MUSIC_STOREFRONT"] = os.environ.get("HALLOWEEN_APPLE_MUSIC_STOREFRONT", "us")
 app.config["PARTY_YEAR"] = os.environ.get("HALLOWEEN_PARTY_YEAR", "2026")
 app.config["PARTY_START"] = os.environ.get("HALLOWEEN_PARTY_START", "2026-10-31T19:00:00-06:00")
 app.config["PARTY_DATE_LABEL"] = os.environ.get("HALLOWEEN_PARTY_DATE_LABEL", "Saturday, October 31")
@@ -237,6 +244,14 @@ class KaraokeSignup:
     artist: str
     youtube_link: str = ""
     id: str = ""
+    youtube_video_id: str = ""
+    youtube_watch_url: str = ""
+    youtube_embed_status: str = "missing"
+    youtube_title: str = ""
+    youtube_channel: str = ""
+    youtube_thumbnail_url: str = ""
+    youtube_duration: str = ""
+    youtube_last_checked_at: str = ""
 
 
 @dataclass
@@ -272,7 +287,49 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
     "party_started": False,
     "current_singer_index": None,
     "current_singer_id": None,
+    "stage_mode": "intro",
 }
+
+DEFAULT_JUKEBOX_SETTINGS: dict[str, object] = {
+    "enabled": False,
+    "provider": "apple_music",
+    "mode": "manual_playlist",
+    "requests_enabled": True,
+    "approval_required": True,
+    "explicit_allowed": True,
+    "max_requests_per_user": 2,
+    "request_insert_min_position": 2,
+    "request_insert_max_position": 6,
+    "duplicate_cooldown": 8,
+    "loop_playlist": True,
+    "autoplay_fallback": True,
+    "seed_kind": "song",
+    "seed_id": "",
+    "seed_title": "",
+    "seed_artist": "",
+}
+JUKEBOX_REQUEST_STATUSES = {
+    "pending",
+    "approved",
+    "queued",
+    "playing",
+    "played",
+    "rejected",
+    "skipped",
+}
+JUKEBOX_QUEUE_STATUSES = {"queued", "playing", "played", "skipped"}
+JUKEBOX_PROVIDERS = {"apple_music"}
+JUKEBOX_MODES = {"manual_playlist", "autoplay_seed"}
+
+YOUTUBE_EMBED_STATUSES = {
+    "missing",
+    "verified_embeddable",
+    "not_embeddable",
+    "unverified",
+    "invalid",
+}
+YOUTUBE_VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
+YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3"
 
 DEFAULT_DRINK_ESTIMATE_SECONDS = 8 * 60
 DRINK_READY_OVERRIDE_SECONDS = 10
@@ -389,6 +446,11 @@ karaoke_state: dict[str, object] = copy.deepcopy(DEFAULT_KARAOKE_STATE)
 party_details: dict[str, str] = copy.deepcopy(DEFAULT_PARTY_DETAILS)
 display_settings: dict[str, str] = copy.deepcopy(DEFAULT_DISPLAY_SETTINGS)
 bartender_tip_settings: dict[str, object] = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
+jukebox_settings: dict[str, object] = copy.deepcopy(DEFAULT_JUKEBOX_SETTINGS)
+jukebox_playlist: list[dict[str, object]] = []
+jukebox_requests: list[dict[str, object]] = []
+jukebox_queue: list[dict[str, object]] = []
+jukebox_now_playing: dict[str, object] = {}
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -403,6 +465,7 @@ STATE_MUTATION_ENDPOINTS = {
     "party_drink_history",
     "party_costumes",
     "party_karaoke",
+    "party_jukebox",
     "party_costume_voting",
 }
 STATE_REFRESH_ENDPOINTS = {
@@ -417,6 +480,7 @@ STATE_REFRESH_ENDPOINTS = {
     "bartender_queue_data",
     "party_costumes",
     "party_karaoke",
+    "party_jukebox",
     "party_costume_voting",
     "live_display",
     "display_data",
@@ -437,6 +501,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_bartender_tip",
     "party_costumes",
     "party_karaoke",
+    "party_jukebox",
     "party_costume_voting",
 }
 DISPLAY_ENDPOINTS = {
@@ -1273,6 +1338,367 @@ def safe_image_url(raw_url: str) -> str:
     return ""
 
 
+def parse_youtube_video_id(raw_value: str) -> str:
+    value = raw_value.strip()
+    if not value:
+        return ""
+    if YOUTUBE_VIDEO_ID_PATTERN.match(value):
+        return value
+
+    parsed = urlparse(value)
+    host = parsed.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host == "youtu.be":
+        candidate = parsed.path.strip("/").split("/")[0]
+        return candidate if YOUTUBE_VIDEO_ID_PATTERN.match(candidate) else ""
+    if host in {"youtube.com", "m.youtube.com", "music.youtube.com", "youtube-nocookie.com"}:
+        if parsed.path == "/watch":
+            candidate = parse_qs(parsed.query).get("v", [""])[0]
+            return candidate if YOUTUBE_VIDEO_ID_PATTERN.match(candidate) else ""
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if len(path_parts) >= 2 and path_parts[0] in {"embed", "shorts", "live"}:
+            candidate = path_parts[1]
+            return candidate if YOUTUBE_VIDEO_ID_PATTERN.match(candidate) else ""
+    return ""
+
+
+def youtube_watch_url(video_id: str) -> str:
+    return f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
+
+
+def youtube_thumbnail_url(video_id: str) -> str:
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else ""
+
+
+def youtube_duration_label(duration: str) -> str:
+    if not duration:
+        return ""
+    match = re.fullmatch(
+        r"P(?:(?P<days>\d+)D)?T?(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?",
+        duration,
+    )
+    if not match:
+        return ""
+    days = int(match.group("days") or 0)
+    hours = int(match.group("hours") or 0) + days * 24
+    minutes = int(match.group("minutes") or 0)
+    seconds = int(match.group("seconds") or 0)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
+def youtube_api_get(path: str, params: dict[str, object]) -> dict[str, object]:
+    api_key = app.config.get("YOUTUBE_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("YouTube API key is not configured.")
+    query_params = {**params, "key": api_key}
+    url = f"{YOUTUBE_API_BASE_URL}/{path}?{urlencode(query_params)}"
+    request_object = UrlRequest(url, headers={"Accept": "application/json"})
+    with urlopen(request_object, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def verify_youtube_video(video_id: str) -> dict[str, str]:
+    if not video_id:
+        return {
+            "youtube_video_id": "",
+            "youtube_watch_url": "",
+            "youtube_embed_status": "missing",
+            "youtube_title": "",
+            "youtube_channel": "",
+            "youtube_thumbnail_url": "",
+            "youtube_duration": "",
+            "youtube_last_checked_at": "",
+        }
+
+    metadata = {
+        "youtube_video_id": video_id,
+        "youtube_watch_url": youtube_watch_url(video_id),
+        "youtube_embed_status": "unverified",
+        "youtube_title": "",
+        "youtube_channel": "",
+        "youtube_thumbnail_url": youtube_thumbnail_url(video_id),
+        "youtube_duration": "",
+        "youtube_last_checked_at": "",
+    }
+
+    if not app.config.get("YOUTUBE_API_KEY", ""):
+        return metadata
+
+    try:
+        response = youtube_api_get(
+            "videos",
+            {
+                "part": "snippet,status,contentDetails",
+                "id": video_id,
+                "maxResults": 1,
+            },
+        )
+    except (HTTPError, URLError, TimeoutError, RuntimeError, json.JSONDecodeError) as exc:
+        app.logger.warning("Unable to verify YouTube video %s: %s", video_id, exc)
+        return metadata
+
+    items = response.get("items", [])
+    if not items:
+        metadata["youtube_embed_status"] = "invalid"
+        metadata["youtube_last_checked_at"] = _utc_now_iso()
+        return metadata
+
+    video = items[0] if isinstance(items[0], dict) else {}
+    snippet = video.get("snippet", {}) if isinstance(video.get("snippet"), dict) else {}
+    status = video.get("status", {}) if isinstance(video.get("status"), dict) else {}
+    content_details = (
+        video.get("contentDetails", {}) if isinstance(video.get("contentDetails"), dict) else {}
+    )
+    thumbnails = snippet.get("thumbnails", {}) if isinstance(snippet.get("thumbnails"), dict) else {}
+    thumbnail = ""
+    for thumbnail_key in ("high", "medium", "default"):
+        candidate = thumbnails.get(thumbnail_key, {})
+        if isinstance(candidate, dict) and candidate.get("url"):
+            thumbnail = str(candidate.get("url") or "")
+            break
+
+    metadata.update(
+        {
+            "youtube_embed_status": (
+                "verified_embeddable" if bool(status.get("embeddable")) else "not_embeddable"
+            ),
+            "youtube_title": str(snippet.get("title", "") or ""),
+            "youtube_channel": str(snippet.get("channelTitle", "") or ""),
+            "youtube_thumbnail_url": thumbnail or metadata["youtube_thumbnail_url"],
+            "youtube_duration": youtube_duration_label(str(content_details.get("duration", "") or "")),
+            "youtube_last_checked_at": _utc_now_iso(),
+        }
+    )
+    return metadata
+
+
+def karaoke_video_status_label(status: str) -> str:
+    return {
+        "verified_embeddable": "Playable on live display",
+        "not_embeddable": "Not embeddable",
+        "unverified": "Unverified",
+        "invalid": "Invalid link",
+        "missing": "No video selected",
+    }.get(status, "Unverified")
+
+
+def youtube_api_key_is_configured() -> bool:
+    return bool(str(app.config.get("YOUTUBE_API_KEY", "") or "").strip())
+
+
+def youtube_api_key_source() -> str:
+    configured_key = str(app.config.get("YOUTUBE_API_KEY", "") or "")
+    if not configured_key:
+        return "Not configured"
+    if YOUTUBE_API_KEY_ENV_VALUE and configured_key == YOUTUBE_API_KEY_ENV_VALUE:
+        return "Environment or Vault"
+    return "Admin runtime override"
+
+
+def test_youtube_api_key(api_key: str) -> tuple[bool, str]:
+    previous_key = app.config.get("YOUTUBE_API_KEY", "")
+    app.config["YOUTUBE_API_KEY"] = api_key
+    try:
+        response = youtube_api_get(
+            "videos",
+            {
+                "part": "id,status",
+                "id": "dQw4w9WgXcQ",
+                "maxResults": 1,
+            },
+        )
+    except (HTTPError, URLError, TimeoutError, RuntimeError, json.JSONDecodeError) as exc:
+        app.config["YOUTUBE_API_KEY"] = previous_key
+        return False, str(exc)
+
+    if not response.get("items"):
+        app.config["YOUTUBE_API_KEY"] = previous_key
+        return False, "YouTube did not return a test video for this key."
+
+    return True, ""
+
+
+def infer_song_fields_from_youtube_title(title: str) -> tuple[str, str]:
+    cleaned = re.sub(r"\s+", " ", title).strip()
+    cleaned = re.sub(r"\s*\[[^\]]*karaoke[^\]]*\]\s*", " ", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"\s*\([^)]*karaoke[^)]*\)\s*", " ", cleaned, flags=re.IGNORECASE).strip()
+    if " - " in cleaned:
+        artist, song_title = cleaned.split(" - ", 1)
+        return song_title.strip(" -\"'"), artist.strip(" -\"'")
+    return cleaned.strip(" -\"'"), ""
+
+
+def build_youtube_result(item: dict[str, object], details_by_id: dict[str, dict[str, object]]) -> dict[str, str]:
+    id_data = item.get("id", {}) if isinstance(item.get("id"), dict) else {}
+    video_id = str(id_data.get("videoId", "") or "")
+    snippet = item.get("snippet", {}) if isinstance(item.get("snippet"), dict) else {}
+    details = details_by_id.get(video_id, {})
+    status = details.get("status", {}) if isinstance(details.get("status"), dict) else {}
+    content_details = (
+        details.get("contentDetails", {}) if isinstance(details.get("contentDetails"), dict) else {}
+    )
+    thumbnails = snippet.get("thumbnails", {}) if isinstance(snippet.get("thumbnails"), dict) else {}
+    thumbnail = ""
+    for thumbnail_key in ("high", "medium", "default"):
+        candidate = thumbnails.get(thumbnail_key, {})
+        if isinstance(candidate, dict) and candidate.get("url"):
+            thumbnail = str(candidate.get("url") or "")
+            break
+    title = str(snippet.get("title", "") or "")
+    suggested_song, suggested_artist = infer_song_fields_from_youtube_title(title)
+    embed_status = "verified_embeddable" if bool(status.get("embeddable")) else "not_embeddable"
+    return {
+        "video_id": video_id,
+        "watch_url": youtube_watch_url(video_id),
+        "title": title,
+        "channel": str(snippet.get("channelTitle", "") or ""),
+        "thumbnail_url": thumbnail or youtube_thumbnail_url(video_id),
+        "duration": youtube_duration_label(str(content_details.get("duration", "") or "")),
+        "embed_status": embed_status,
+        "embed_status_label": karaoke_video_status_label(embed_status),
+        "suggested_song_title": suggested_song,
+        "suggested_artist": suggested_artist,
+    }
+
+
+def youtube_search_results(query: str, max_results: int = 8) -> list[dict[str, str]]:
+    response = youtube_api_get(
+        "search",
+        {
+            "part": "snippet",
+            "type": "video",
+            "videoEmbeddable": "true",
+            "videoSyndicated": "true",
+            "safeSearch": "none",
+            "maxResults": max(1, min(max_results, 10)),
+            "q": query,
+        },
+    )
+    items = [item for item in response.get("items", []) if isinstance(item, dict)]
+    video_ids = [
+        str(item.get("id", {}).get("videoId", "") or "")
+        for item in items
+        if isinstance(item.get("id"), dict) and item.get("id", {}).get("videoId")
+    ]
+    details_by_id: dict[str, dict[str, object]] = {}
+    if video_ids:
+        details_response = youtube_api_get(
+            "videos",
+            {
+                "part": "status,contentDetails",
+                "id": ",".join(video_ids),
+                "maxResults": len(video_ids),
+            },
+        )
+        for video in details_response.get("items", []):
+            if isinstance(video, dict) and video.get("id"):
+                details_by_id[str(video.get("id"))] = video
+    return [
+        build_youtube_result(item, details_by_id)
+        for item in items
+        if isinstance(item.get("id"), dict) and item.get("id", {}).get("videoId")
+    ]
+
+
+def karaoke_signup_video_metadata_from_form(existing_signup: KaraokeSignup | None = None) -> dict[str, str]:
+    form_video_id = parse_youtube_video_id(request.form.get("youtube_video_id", ""))
+    link_video_id = parse_youtube_video_id(request.form.get("youtube_link", ""))
+    video_id = form_video_id or link_video_id
+    metadata = verify_youtube_video(video_id)
+
+    youtube_link = request.form.get("youtube_link", "").strip()
+    if video_id:
+        metadata["youtube_watch_url"] = youtube_watch_url(video_id)
+        metadata["youtube_video_id"] = video_id
+        youtube_link = metadata["youtube_watch_url"]
+    elif youtube_link:
+        metadata["youtube_embed_status"] = "invalid"
+
+    if (
+        existing_signup
+        and video_id
+        and existing_signup.youtube_video_id == video_id
+        and existing_signup.youtube_embed_status in YOUTUBE_EMBED_STATUSES
+        and existing_signup.youtube_embed_status != "missing"
+        and metadata.get("youtube_embed_status") in {"unverified", "missing"}
+    ):
+        metadata["youtube_embed_status"] = existing_signup.youtube_embed_status
+
+    for key in ("youtube_title", "youtube_channel", "youtube_thumbnail_url", "youtube_duration"):
+        submitted_value = request.form.get(key, "").strip()
+        if submitted_value and not metadata.get(key):
+            metadata[key] = submitted_value
+
+    metadata["youtube_link"] = youtube_link
+    if not metadata.get("youtube_embed_status") in YOUTUBE_EMBED_STATUSES:
+        metadata["youtube_embed_status"] = "unverified" if video_id else "missing"
+    return metadata
+
+
+def karaoke_signup_video_dict(signup: KaraokeSignup) -> dict[str, str | bool]:
+    status = signup.youtube_embed_status if signup.youtube_embed_status in YOUTUBE_EMBED_STATUSES else "unverified"
+    return {
+        "video_id": signup.youtube_video_id,
+        "watch_url": signup.youtube_watch_url or youtube_watch_url(signup.youtube_video_id),
+        "embed_status": status,
+        "embed_status_label": karaoke_video_status_label(status),
+        "playable": status == "verified_embeddable",
+        "title": signup.youtube_title,
+        "channel": signup.youtube_channel,
+        "thumbnail_url": signup.youtube_thumbnail_url,
+        "duration": signup.youtube_duration,
+    }
+
+
+def find_karaoke_signup_index(signup_id: str) -> int | None:
+    for index, signup in enumerate(karaoke_signups):
+        if signup.id == signup_id:
+            return index
+    return None
+
+
+def build_karaoke_stage_override(
+    signup: KaraokeSignup,
+    *,
+    mode: str = "intro",
+    lineup_index: int | None = None,
+) -> dict[str, object]:
+    if lineup_index is None:
+        lineup_index = find_karaoke_signup_index(signup.id)
+    next_signup = None
+    if lineup_index is not None and lineup_index + 1 < len(karaoke_signups):
+        next_signup = karaoke_signups[lineup_index + 1]
+    video = karaoke_signup_video_dict(signup)
+    video_enabled = mode == "video" and bool(video["playable"]) and bool(video["video_id"])
+    return {
+        "type": "karaoke_stage",
+        "mode": "video" if video_enabled else "intro",
+        "title": "Halloween Karaoke Party",
+        "highlight": signup.name,
+        "message": f'“{signup.song_title}” by {signup.artist}',
+        "singer_id": signup.id,
+        "singer_name": signup.name,
+        "song_title": signup.song_title,
+        "artist": signup.artist,
+        "youtube": video,
+        "video_enabled": video_enabled,
+        "video_playable": bool(video["playable"]),
+        "next_singer": (
+            {
+                "id": next_signup.id,
+                "name": next_signup.name,
+                "song_title": next_signup.song_title,
+                "artist": next_signup.artist,
+            }
+            if next_signup
+            else None
+        ),
+    }
+
+
 def image_bytes_match_extension(filename: str, image_bytes: bytes) -> bool:
     extension = os.path.splitext(filename)[1].lower()
     if extension in {".jpg", ".jpeg"}:
@@ -1584,6 +2010,283 @@ def build_drink_ready_override(order: dict[str, object]) -> dict[str, object]:
     }
 
 
+def clamp_int(raw_value: object, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = default
+    return min(max(value, minimum), maximum)
+
+
+def normalize_jukebox_settings(raw_settings: object) -> dict[str, object]:
+    settings = copy.deepcopy(DEFAULT_JUKEBOX_SETTINGS)
+    if isinstance(raw_settings, dict):
+        settings.update(copy.deepcopy(raw_settings))
+
+    settings["enabled"] = bool(settings.get("enabled"))
+    provider = str(settings.get("provider", "apple_music") or "apple_music")
+    settings["provider"] = provider if provider in JUKEBOX_PROVIDERS else "apple_music"
+    mode = str(settings.get("mode", "manual_playlist") or "manual_playlist")
+    settings["mode"] = mode if mode in JUKEBOX_MODES else "manual_playlist"
+    for key in ("requests_enabled", "approval_required", "explicit_allowed", "loop_playlist", "autoplay_fallback"):
+        settings[key] = bool(settings.get(key))
+    settings["max_requests_per_user"] = clamp_int(settings.get("max_requests_per_user"), 2, 0, 10)
+    settings["request_insert_min_position"] = clamp_int(settings.get("request_insert_min_position"), 2, 1, 50)
+    settings["request_insert_max_position"] = clamp_int(settings.get("request_insert_max_position"), 6, 1, 50)
+    if int(settings["request_insert_max_position"]) < int(settings["request_insert_min_position"]):
+        settings["request_insert_max_position"] = settings["request_insert_min_position"]
+    settings["duplicate_cooldown"] = clamp_int(settings.get("duplicate_cooldown"), 8, 0, 50)
+    settings["seed_kind"] = str(settings.get("seed_kind", "song") or "song")[:40]
+    settings["seed_id"] = str(settings.get("seed_id", "") or "")[:160]
+    settings["seed_title"] = str(settings.get("seed_title", "") or "").strip()[:160]
+    settings["seed_artist"] = str(settings.get("seed_artist", "") or "").strip()[:160]
+    return settings
+
+
+def normalize_jukebox_track(data: dict[str, object], existing_id: str | None = None) -> dict[str, object] | None:
+    apple_music_id = str(data.get("apple_music_id", "") or data.get("id", "") or "").strip()
+    title = str(data.get("title", "") or "").strip()
+    artist = str(data.get("artist", "") or "").strip()
+    if not apple_music_id or not title:
+        return None
+    return {
+        "id": existing_id or str(data.get("id", "") or uuid4().hex),
+        "apple_music_id": apple_music_id[:160],
+        "title": title[:160],
+        "artist": artist[:160],
+        "album": str(data.get("album", "") or "").strip()[:160],
+        "artwork_url": safe_image_url(str(data.get("artwork_url", "") or "")),
+        "duration_ms": clamp_int(data.get("duration_ms"), 0, 0, 24 * 60 * 60 * 1000),
+        "explicit": bool(data.get("explicit", False)),
+        "created_at": str(data.get("created_at", "") or _utc_now_iso()),
+    }
+
+
+def normalize_jukebox_request(data: dict[str, object]) -> dict[str, object] | None:
+    track = normalize_jukebox_track(data)
+    if not track:
+        return None
+    status = str(data.get("status", "pending") or "pending")
+    if status not in JUKEBOX_REQUEST_STATUSES:
+        status = "pending"
+    return {
+        **track,
+        "id": str(data.get("id", "") or uuid4().hex),
+        "requester_user_id": str(data.get("requester_user_id", "") or ""),
+        "requester_name": str(data.get("requester_name", "") or "").strip()[:80],
+        "note": str(data.get("note", "") or "").strip()[:240],
+        "status": status,
+        "submitted_at": str(data.get("submitted_at", "") or _utc_now_iso()),
+        "decided_at": str(data.get("decided_at", "") or ""),
+        "queued_at": str(data.get("queued_at", "") or ""),
+        "played_at": str(data.get("played_at", "") or ""),
+    }
+
+
+def normalize_jukebox_queue_item(data: dict[str, object]) -> dict[str, object] | None:
+    track = normalize_jukebox_track(data)
+    if not track:
+        return None
+    status = str(data.get("status", "queued") or "queued")
+    if status not in JUKEBOX_QUEUE_STATUSES:
+        status = "queued"
+    return {
+        **track,
+        "id": str(data.get("id", "") or uuid4().hex),
+        "source": str(data.get("source", "playlist") or "playlist")[:40],
+        "request_id": str(data.get("request_id", "") or ""),
+        "requester_user_id": str(data.get("requester_user_id", "") or ""),
+        "requester_name": str(data.get("requester_name", "") or "").strip()[:80],
+        "status": status,
+        "queued_at": str(data.get("queued_at", "") or _utc_now_iso()),
+        "started_at": str(data.get("started_at", "") or ""),
+        "played_at": str(data.get("played_at", "") or ""),
+    }
+
+
+def normalize_jukebox_now_playing(data: object) -> dict[str, object]:
+    if not isinstance(data, dict):
+        return {}
+    item = normalize_jukebox_queue_item(data)
+    if not item:
+        return {}
+    item["playback_state"] = str(data.get("playback_state", "") or "")
+    return item
+
+
+def jukebox_developer_token_configured() -> bool:
+    return bool(str(app.config.get("APPLE_MUSIC_DEVELOPER_TOKEN", "") or "").strip())
+
+
+def jukebox_active_request_count(user_id: str) -> int:
+    return sum(
+        1
+        for request_item in jukebox_requests
+        if str(request_item.get("requester_user_id", "")) == user_id
+        and str(request_item.get("status", "")) in {"pending", "approved", "queued"}
+    )
+
+
+def jukebox_recent_track_ids(limit: int | None = None) -> list[str]:
+    completed = [
+        str(item.get("apple_music_id", ""))
+        for item in jukebox_queue
+        if str(item.get("status", "")) in {"played", "skipped", "playing"}
+    ]
+    if limit is None:
+        return [track_id for track_id in completed if track_id]
+    return [track_id for track_id in completed if track_id][-limit:]
+
+
+def find_jukebox_request(request_id: str) -> dict[str, object] | None:
+    return next((item for item in jukebox_requests if str(item.get("id", "")) == request_id), None)
+
+
+def find_jukebox_queue_item(queue_item_id: str) -> dict[str, object] | None:
+    return next((item for item in jukebox_queue if str(item.get("id", "")) == queue_item_id), None)
+
+
+def next_jukebox_queue_item() -> dict[str, object] | None:
+    return next((item for item in jukebox_queue if str(item.get("status", "")) == "queued"), None)
+
+
+def queued_jukebox_items() -> list[dict[str, object]]:
+    return [item for item in jukebox_queue if str(item.get("status", "")) in {"queued", "playing"}]
+
+
+def create_jukebox_queue_item(
+    track: dict[str, object],
+    source: str = "playlist",
+    request_item: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "id": uuid4().hex,
+        "apple_music_id": str(track.get("apple_music_id", "")),
+        "title": str(track.get("title", "")),
+        "artist": str(track.get("artist", "")),
+        "album": str(track.get("album", "")),
+        "artwork_url": str(track.get("artwork_url", "")),
+        "duration_ms": int(track.get("duration_ms", 0) or 0),
+        "explicit": bool(track.get("explicit", False)),
+        "source": source,
+        "request_id": str(request_item.get("id", "") if request_item else ""),
+        "requester_user_id": str(request_item.get("requester_user_id", "") if request_item else ""),
+        "requester_name": str(request_item.get("requester_name", "") if request_item else ""),
+        "status": "queued",
+        "queued_at": _utc_now_iso(),
+        "started_at": "",
+        "played_at": "",
+    }
+
+
+def regenerate_jukebox_queue() -> None:
+    global jukebox_queue
+    existing_done = [
+        item for item in jukebox_queue if str(item.get("status", "")) in {"played", "skipped"}
+    ][-50:]
+    queue_items = [
+        create_jukebox_queue_item(track, source="playlist")
+        for track in jukebox_playlist
+        if normalize_jukebox_track(track)
+    ]
+    if not queue_items and jukebox_settings.get("mode") == "autoplay_seed" and jukebox_settings.get("seed_id"):
+        seed_track = {
+            "apple_music_id": jukebox_settings.get("seed_id", ""),
+            "title": jukebox_settings.get("seed_title", "Apple Music Autoplay Seed"),
+            "artist": jukebox_settings.get("seed_artist", ""),
+        }
+        normalized_seed = normalize_jukebox_track(seed_track)
+        if normalized_seed:
+            queue_items.append(create_jukebox_queue_item(normalized_seed, source="seed"))
+
+    cooldown = int(jukebox_settings.get("duplicate_cooldown", 0) or 0)
+    recent_ids = set(jukebox_recent_track_ids(cooldown))
+    requester_window: list[str] = []
+    approved_requests = [
+        item
+        for item in jukebox_requests
+        if str(item.get("status", "")) in {"approved", "queued"}
+        and str(item.get("apple_music_id", "")) not in recent_ids
+    ]
+    rng = random.SystemRandom()
+    min_position = int(jukebox_settings.get("request_insert_min_position", 2) or 2)
+    max_position = int(jukebox_settings.get("request_insert_max_position", 6) or 6)
+    for request_item in approved_requests:
+        requester_id = str(request_item.get("requester_user_id", ""))
+        if requester_id and requester_id in requester_window[-2:]:
+            insert_at = min(len(queue_items), max_position)
+        else:
+            upper = min(max_position, max(len(queue_items), min_position))
+            lower = min(min_position, upper)
+            insert_at = rng.randint(lower, upper) if upper >= lower else len(queue_items)
+        queue_items.insert(insert_at, create_jukebox_queue_item(request_item, source="request", request_item=request_item))
+        request_item["status"] = "queued"
+        request_item["queued_at"] = _utc_now_iso()
+        if requester_id:
+            requester_window.append(requester_id)
+
+    jukebox_queue = existing_done + queue_items
+
+
+def jukebox_state_payload() -> dict[str, object]:
+    upcoming = queued_jukebox_items()[:8]
+    return {
+        "settings": copy.deepcopy(jukebox_settings),
+        "enabled": bool(jukebox_settings.get("enabled")),
+        "provider": str(jukebox_settings.get("provider", "apple_music")),
+        "developer_token_configured": jukebox_developer_token_configured(),
+        "storefront": str(app.config.get("APPLE_MUSIC_STOREFRONT", "us") or "us"),
+        "playlist_count": len(jukebox_playlist),
+        "request_count": len(jukebox_requests),
+        "pending_request_count": sum(1 for item in jukebox_requests if item.get("status") == "pending"),
+        "queue": upcoming,
+        "now_playing": copy.deepcopy(jukebox_now_playing),
+    }
+
+
+def apple_music_catalog_search(query: str, limit: int = 8) -> list[dict[str, object]]:
+    token = str(app.config.get("APPLE_MUSIC_DEVELOPER_TOKEN", "") or "").strip()
+    if not token:
+        raise RuntimeError("Apple Music developer token is not configured.")
+    storefront = quote(str(app.config.get("APPLE_MUSIC_STOREFRONT", "us") or "us"))
+    params = urlencode({"term": query, "types": "songs", "limit": max(1, min(limit, 25))})
+    url = f"https://api.music.apple.com/v1/catalog/{storefront}/search?{params}"
+    api_request = UrlRequest(url, headers={"Authorization": f"Bearer {token}"})
+    with urlopen(api_request, timeout=8) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    songs = (
+        payload.get("results", {}).get("songs", {}).get("data", [])
+        if isinstance(payload, dict)
+        else []
+    )
+    results: list[dict[str, object]] = []
+    for song in songs:
+        if not isinstance(song, dict):
+            continue
+        attributes = song.get("attributes", {})
+        if not isinstance(attributes, dict):
+            continue
+        artwork = attributes.get("artwork", {})
+        artwork_url = ""
+        if isinstance(artwork, dict):
+            artwork_url = str(artwork.get("url", "") or "").replace("{w}", "512").replace("{h}", "512")
+        normalized = normalize_jukebox_track(
+            {
+                "apple_music_id": song.get("id", ""),
+                "title": attributes.get("name", ""),
+                "artist": attributes.get("artistName", ""),
+                "album": attributes.get("albumName", ""),
+                "artwork_url": artwork_url,
+                "duration_ms": attributes.get("durationInMillis", 0),
+                "explicit": str(attributes.get("contentRating", "") or "").lower() == "explicit",
+            }
+        )
+        if normalized:
+            results.append(normalized)
+    return results
+
+
 def cleanup_expired_display_notices() -> bool:
     global live_display_notice_override
     if not live_display_notice_override:
@@ -1648,16 +2351,38 @@ def karaoke_signup_to_dict(signup: KaraokeSignup) -> dict[str, str]:
         "song_title": signup.song_title,
         "artist": signup.artist,
         "youtube_link": signup.youtube_link,
+        "youtube_video_id": signup.youtube_video_id,
+        "youtube_watch_url": signup.youtube_watch_url,
+        "youtube_embed_status": signup.youtube_embed_status,
+        "youtube_title": signup.youtube_title,
+        "youtube_channel": signup.youtube_channel,
+        "youtube_thumbnail_url": signup.youtube_thumbnail_url,
+        "youtube_duration": signup.youtube_duration,
+        "youtube_last_checked_at": signup.youtube_last_checked_at,
     }
 
 
 def karaoke_signup_from_dict(data: dict[str, object]) -> KaraokeSignup:
+    youtube_link = str(data.get("youtube_link", "") or "")
+    youtube_video_id = str(data.get("youtube_video_id", "") or "") or parse_youtube_video_id(youtube_link)
+    youtube_watch = str(data.get("youtube_watch_url", "") or "") or youtube_watch_url(youtube_video_id)
+    embed_status = str(data.get("youtube_embed_status", "") or "")
+    if not embed_status:
+        embed_status = "unverified" if youtube_video_id else "missing"
     return KaraokeSignup(
         id=str(data.get("id", "") or uuid4().hex),
         name=str(data.get("name", "") or ""),
         song_title=str(data.get("song_title", "") or ""),
         artist=str(data.get("artist", "") or ""),
-        youtube_link=str(data.get("youtube_link", "") or ""),
+        youtube_link=youtube_link,
+        youtube_video_id=youtube_video_id,
+        youtube_watch_url=youtube_watch,
+        youtube_embed_status=embed_status if embed_status in YOUTUBE_EMBED_STATUSES else "unverified",
+        youtube_title=str(data.get("youtube_title", "") or ""),
+        youtube_channel=str(data.get("youtube_channel", "") or ""),
+        youtube_thumbnail_url=str(data.get("youtube_thumbnail_url", "") or ""),
+        youtube_duration=str(data.get("youtube_duration", "") or ""),
+        youtube_last_checked_at=str(data.get("youtube_last_checked_at", "") or ""),
     )
 
 
@@ -1786,6 +2511,11 @@ def snapshot_state() -> dict[str, object]:
         "party_details": copy.deepcopy(party_details),
         "display_settings": copy.deepcopy(display_settings),
         "bartender_tip_settings": copy.deepcopy(bartender_tip_settings),
+        "jukebox_settings": copy.deepcopy(jukebox_settings),
+        "jukebox_playlist": copy.deepcopy(jukebox_playlist),
+        "jukebox_requests": copy.deepcopy(jukebox_requests),
+        "jukebox_queue": copy.deepcopy(jukebox_queue),
+        "jukebox_now_playing": copy.deepcopy(jukebox_now_playing),
         "live_display_event_override": copy.deepcopy(live_display_event_override),
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
         "live_display_override": copy.deepcopy(current_display_override()),
@@ -1805,6 +2535,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global live_display_event_override, live_display_notice_override
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
     global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email, bartender_tip_settings
+    global jukebox_settings, jukebox_playlist, jukebox_requests, jukebox_queue, jukebox_now_playing
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -1888,6 +2619,35 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                     drink_orders.append(order)
 
     bartender_tip_settings = normalize_bartender_tip_settings(data.get("bartender_tip_settings", {}))
+
+    jukebox_settings = normalize_jukebox_settings(data.get("jukebox_settings", {}))
+    jukebox_playlist = []
+    raw_jukebox_playlist = data.get("jukebox_playlist", [])
+    if isinstance(raw_jukebox_playlist, list):
+        for raw_track in raw_jukebox_playlist:
+            if isinstance(raw_track, dict):
+                track = normalize_jukebox_track(raw_track)
+                if track:
+                    jukebox_playlist.append(track)
+
+    jukebox_requests = []
+    raw_jukebox_requests = data.get("jukebox_requests", [])
+    if isinstance(raw_jukebox_requests, list):
+        for raw_request in raw_jukebox_requests:
+            if isinstance(raw_request, dict):
+                request_item = normalize_jukebox_request(raw_request)
+                if request_item:
+                    jukebox_requests.append(request_item)
+
+    jukebox_queue = []
+    raw_jukebox_queue = data.get("jukebox_queue", [])
+    if isinstance(raw_jukebox_queue, list):
+        for raw_item in raw_jukebox_queue:
+            if isinstance(raw_item, dict):
+                queue_item = normalize_jukebox_queue_item(raw_item)
+                if queue_item:
+                    jukebox_queue.append(queue_item)
+    jukebox_now_playing = normalize_jukebox_now_playing(data.get("jukebox_now_playing", {}))
 
     raw_password_reset_tokens = data.get("password_reset_tokens", {})
     password_reset_tokens = {}
@@ -2658,6 +3418,12 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "secondary": "Use the party portal to queue the song you want to perform.",
         },
         {
+            "category": "Jukebox",
+            "primary": "Request a song for the room.",
+            "secondary": "Use the party portal to send Apple Music requests into the party mix.",
+            "tertiary": "Approved requests are shuffled into the upcoming playlist.",
+        },
+        {
             "category": "Bar Queue",
             "primary": "Order event drinks from your phone.",
             "secondary": "Browse the drink menu in the app, send available drinks to the bar, and watch for the ready email.",
@@ -2736,6 +3502,7 @@ def live_display():
         karaoke_count=len(karaoke_signups),
         override=live_display_event_override,
         notice_override=live_display_notice_override,
+        jukebox=jukebox_state_payload(),
     )
 
 
@@ -2780,6 +3547,7 @@ def display_data():
             "override": live_display_event_override,
             "event_override": live_display_event_override,
             "notice_override": live_display_notice_override,
+            "jukebox": jukebox_state_payload(),
             "display_update_version": display_update_version,
         }
     )
@@ -2800,6 +3568,7 @@ def inject_contest_state():
         "regular_authenticated": session_has_role("regular"),
         "bartender_authenticated": session_has_role("bartender"),
         "format_time_label": format_time_label,
+        "karaoke_video_status_label": karaoke_video_status_label,
         "drink_order_status_label": drink_order_status_label,
         "drink_type_label": drink_type_label,
         "beverage_type_label": beverage_type_label,
@@ -3311,6 +4080,96 @@ def party_bartender_tip():
     )
 
 
+@app.route("/party/jukebox", methods=["GET", "POST"])
+def party_jukebox():
+    errors: List[str] = []
+    messages: List[str] = []
+    user_id = str(session.get("user_id", "") or "")
+    account = current_user_account()
+
+    if not user_id or not account:
+        return redirect(url_for("party_login", next=url_for("party_jukebox")))
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
+
+    if request.method == "POST":
+        if not jukebox_settings.get("enabled"):
+            errors.append("The jukebox is not taking requests right now.")
+        if not jukebox_settings.get("requests_enabled"):
+            errors.append("Song requests are paused right now.")
+
+        track = normalize_jukebox_track(
+            {
+                "apple_music_id": request.form.get("apple_music_id", "").strip(),
+                "title": request.form.get("title", "").strip(),
+                "artist": request.form.get("artist", "").strip(),
+                "album": request.form.get("album", "").strip(),
+                "artwork_url": request.form.get("artwork_url", "").strip(),
+                "duration_ms": request.form.get("duration_ms", "0"),
+                "explicit": request.form.get("explicit") == "yes",
+            }
+        )
+        if not track:
+            errors.append("Choose a valid Apple Music song before requesting it.")
+        elif track.get("explicit") and not jukebox_settings.get("explicit_allowed"):
+            errors.append("Explicit songs are not available for jukebox requests right now.")
+
+        max_active = int(jukebox_settings.get("max_requests_per_user", 0) or 0)
+        if max_active and jukebox_active_request_count(user_id) >= max_active:
+            errors.append(f"You already have {max_active} active jukebox request{'s' if max_active != 1 else ''}.")
+
+        duplicate_ids = {
+            str(item.get("apple_music_id", ""))
+            for item in queued_jukebox_items()
+        } | set(jukebox_recent_track_ids(int(jukebox_settings.get("duplicate_cooldown", 0) or 0)))
+        if track and str(track.get("apple_music_id", "")) in duplicate_ids:
+            errors.append("That song is already in the recent or upcoming jukebox mix.")
+
+        if not errors and track:
+            request_item = normalize_jukebox_request(
+                {
+                    **track,
+                    "requester_user_id": user_id,
+                    "requester_name": str(account.get("username", session.get("username", "Guest"))),
+                    "note": request.form.get("note", "").strip(),
+                    "status": "pending" if jukebox_settings.get("approval_required") else "approved",
+                    "submitted_at": _utc_now_iso(),
+                    "decided_at": "" if jukebox_settings.get("approval_required") else _utc_now_iso(),
+                }
+            )
+            if request_item:
+                jukebox_requests.append(request_item)
+                if request_item["status"] == "approved":
+                    regenerate_jukebox_queue()
+                    messages.append(f"{request_item['title']} was added to the jukebox queue.")
+                else:
+                    messages.append(f"{request_item['title']} was sent to the hosts for approval.")
+                persist_state_if_available()
+                broadcast_display_update()
+                return redirect(url_for("party_jukebox", requested="1"))
+
+    if request.args.get("requested") == "1":
+        messages.append("Your song request was received.")
+
+    user_requests = sorted(
+        [
+            request_item
+            for request_item in jukebox_requests
+            if str(request_item.get("requester_user_id", "")) == user_id
+        ],
+        key=lambda request_item: str(request_item.get("submitted_at", "")),
+        reverse=True,
+    )
+    return render_template(
+        "jukebox.html",
+        errors=errors,
+        messages=messages,
+        jukebox=jukebox_state_payload(),
+        user_requests=user_requests,
+        show_admin_link=False,
+    )
+
+
 def bartender_queue_context() -> dict[str, object]:
     sorted_orders = sorted(
         drink_orders,
@@ -3417,6 +4276,123 @@ def bartender_queue_data():
     )
 
 
+@app.route("/api/youtube-search")
+def youtube_search():
+    if not (session_has_role("regular") or session_has_role("admin")):
+        return jsonify({"error": "Sign in before searching YouTube."}), 401
+    if session_has_role("regular") and not party_day_has_arrived():
+        return jsonify({"error": "Karaoke song search opens on the party date."}), 403
+
+    query = request.args.get("q", "").strip()
+    if len(query) < 2:
+        return jsonify({"error": "Enter a song or artist to search."}), 400
+    if len(query) > 160:
+        return jsonify({"error": "Search terms must be 160 characters or fewer."}), 400
+    if not app.config.get("YOUTUBE_API_KEY", ""):
+        return jsonify({"error": "YouTube search is not configured yet."}), 503
+
+    try:
+        results = youtube_search_results(query)
+    except (HTTPError, URLError, TimeoutError, RuntimeError, json.JSONDecodeError) as exc:
+        app.logger.warning("Unable to search YouTube for karaoke query %r: %s", query, exc)
+        return jsonify({"error": "YouTube search is unavailable right now."}), 502
+
+    return jsonify({"results": results})
+
+
+@app.route("/api/jukebox-search")
+def jukebox_search():
+    if not (session_has_role("regular") or session_has_role("admin")):
+        return jsonify({"error": "Sign in to the party app before searching Apple Music."}), 401
+    if session_has_role("regular") and not party_day_has_arrived():
+        return jsonify({"error": "Jukebox requests open on the party date."}), 403
+
+    query = request.args.get("q", "").strip()
+    if len(query) < 2:
+        return jsonify({"error": "Enter a song or artist to search."}), 400
+    if len(query) > 160:
+        return jsonify({"error": "Search terms must be 160 characters or fewer."}), 400
+    if not jukebox_developer_token_configured():
+        return jsonify({"error": "Apple Music search is not configured yet."}), 503
+
+    try:
+        results = apple_music_catalog_search(query)
+    except (HTTPError, URLError, TimeoutError, RuntimeError, json.JSONDecodeError) as exc:
+        app.logger.warning("Unable to search Apple Music for jukebox query %r: %s", query, exc)
+        return jsonify({"error": "Apple Music search is unavailable right now."}), 502
+
+    if not jukebox_settings.get("explicit_allowed"):
+        results = [item for item in results if not item.get("explicit")]
+    return jsonify({"results": results})
+
+
+@app.route("/api/apple-music-token")
+def apple_music_token():
+    if not session_has_role("admin"):
+        return jsonify({"error": "Host admin sign-in is required for Apple Music playback authorization."}), 401
+    token = str(app.config.get("APPLE_MUSIC_DEVELOPER_TOKEN", "") or "").strip()
+    if not token:
+        return jsonify({"error": "Apple Music developer token is not configured."}), 503
+    return jsonify(
+        {
+            "developer_token": token,
+            "storefront": str(app.config.get("APPLE_MUSIC_STOREFRONT", "us") or "us"),
+        }
+    )
+
+
+@app.route("/api/jukebox-state")
+def jukebox_state_api():
+    if not (session_has_role("regular") or session_has_role("admin")):
+        return jsonify({"error": "Sign in before viewing jukebox state."}), 401
+    if session_has_role("regular") and not party_day_has_arrived():
+        return jsonify({"error": "Jukebox opens on the party date."}), 403
+    return jsonify(jukebox_state_payload())
+
+
+@app.route("/api/jukebox/playback-event", methods=["POST"])
+def jukebox_playback_event():
+    if not session_has_role("admin"):
+        return jsonify({"error": "Admin sign-in is required for jukebox playback."}), 401
+
+    global jukebox_now_playing
+    event_type = request.form.get("event", "").strip()
+    queue_item_id = request.form.get("queue_item_id", "").strip()
+    item = find_jukebox_queue_item(queue_item_id) if queue_item_id else None
+    now_iso = _utc_now_iso()
+
+    if event_type == "started" and item:
+        for queue_item in jukebox_queue:
+            if queue_item is not item and queue_item.get("status") == "playing":
+                queue_item["status"] = "played"
+                queue_item["played_at"] = now_iso
+        item["status"] = "playing"
+        item["started_at"] = now_iso
+        jukebox_now_playing = copy.deepcopy(item)
+        request_item = find_jukebox_request(str(item.get("request_id", "")))
+        if request_item:
+            request_item["status"] = "playing"
+        broadcast_display_update()
+    elif event_type in {"ended", "skipped"} and item:
+        item["status"] = "skipped" if event_type == "skipped" else "played"
+        item["played_at"] = now_iso
+        request_item = find_jukebox_request(str(item.get("request_id", "")))
+        if request_item:
+            request_item["status"] = "skipped" if event_type == "skipped" else "played"
+            request_item["played_at"] = now_iso
+        next_item = next_jukebox_queue_item()
+        jukebox_now_playing = copy.deepcopy(next_item) if next_item else {}
+        if not next_item and bool(jukebox_settings.get("loop_playlist")) and jukebox_playlist:
+            regenerate_jukebox_queue()
+        broadcast_display_update()
+    elif event_type == "sync":
+        broadcast_display_update()
+    else:
+        return jsonify({"error": "Unknown jukebox playback event."}), 400
+
+    return jsonify(jukebox_state_payload())
+
+
 @app.route("/party/logout", methods=["POST"])
 @app.route("/admin/logout", methods=["POST"])
 @app.route("/logout", methods=["POST"])
@@ -3464,6 +4440,7 @@ def admin_portal():
     global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
     global bartender_tip_settings
+    global jukebox_settings, jukebox_playlist, jukebox_queue, jukebox_now_playing
 
     ensure_costume_votes_alignment()
 
@@ -3580,6 +4557,24 @@ def admin_portal():
         if errors:
             return None
         return normalize_bartender_tip_settings(settings)
+
+    def jukebox_track_from_form() -> dict[str, object] | None:
+        track = normalize_jukebox_track(
+            {
+                "apple_music_id": request.form.get("apple_music_id", "").strip(),
+                "title": request.form.get("title", "").strip(),
+                "artist": request.form.get("artist", "").strip(),
+                "album": request.form.get("album", "").strip(),
+                "artwork_url": request.form.get("artwork_url", "").strip(),
+                "duration_ms": request.form.get("duration_ms", "0"),
+                "explicit": request.form.get("explicit") == "yes",
+            }
+        )
+        if not track:
+            errors.append("Choose a valid Apple Music song before saving it to the jukebox.")
+        elif track.get("explicit") and not jukebox_settings.get("explicit_allowed"):
+            errors.append("Explicit songs are disabled for the jukebox.")
+        return track
 
     def roles_from_account_form() -> list[str]:
         roles = {"regular"}
@@ -3770,6 +4765,145 @@ def admin_portal():
                 display_settings = updated_display_settings
                 messages.append("Live display WiFi settings updated.")
                 should_broadcast = True
+
+        elif action == "update_youtube_api_key":
+            submitted_key = request.form.get("youtube_api_key", "").strip()
+            if not submitted_key:
+                errors.append("Paste a YouTube Data API key before saving.")
+            elif len(submitted_key) > 200:
+                errors.append("YouTube API key must be 200 characters or fewer.")
+            else:
+                key_ok, key_error = test_youtube_api_key(submitted_key)
+                if key_ok:
+                    app.config["YOUTUBE_API_KEY"] = submitted_key
+                    messages.append(
+                        "YouTube API key validated and enabled for this running app. Add it to Vault as youtube_api_key for production restarts."
+                    )
+                else:
+                    errors.append(f"YouTube API key could not be validated: {key_error}")
+
+        elif action == "clear_youtube_api_key_override":
+            app.config["YOUTUBE_API_KEY"] = YOUTUBE_API_KEY_ENV_VALUE
+            if YOUTUBE_API_KEY_ENV_VALUE:
+                messages.append("YouTube API key reset to the environment/Vault value.")
+            else:
+                messages.append("YouTube API key runtime override cleared. YouTube search is disabled until a key is configured.")
+
+        elif action == "update_jukebox_settings":
+            requested_settings = normalize_jukebox_settings(
+                {
+                    "enabled": request.form.get("jukebox_enabled") == "yes",
+                    "provider": "apple_music",
+                    "mode": request.form.get("jukebox_mode", "manual_playlist"),
+                    "requests_enabled": request.form.get("jukebox_requests_enabled") == "yes",
+                    "approval_required": request.form.get("jukebox_approval_required") == "yes",
+                    "explicit_allowed": request.form.get("jukebox_explicit_allowed") == "yes",
+                    "max_requests_per_user": request.form.get("jukebox_max_requests_per_user", "2"),
+                    "request_insert_min_position": request.form.get("jukebox_insert_min", "2"),
+                    "request_insert_max_position": request.form.get("jukebox_insert_max", "6"),
+                    "duplicate_cooldown": request.form.get("jukebox_duplicate_cooldown", "8"),
+                    "loop_playlist": request.form.get("jukebox_loop_playlist") == "yes",
+                    "autoplay_fallback": request.form.get("jukebox_autoplay_fallback") == "yes",
+                    "seed_kind": request.form.get("jukebox_seed_kind", "song"),
+                    "seed_id": request.form.get("jukebox_seed_id", "").strip(),
+                    "seed_title": request.form.get("jukebox_seed_title", "").strip(),
+                    "seed_artist": request.form.get("jukebox_seed_artist", "").strip(),
+                }
+            )
+            if requested_settings["enabled"] and not jukebox_developer_token_configured():
+                messages.append("Jukebox settings saved. Add an Apple Music developer token before live playback/search will work.")
+            jukebox_settings = requested_settings
+            regenerate_jukebox_queue()
+            messages.append("Jukebox settings updated.")
+            should_broadcast = True
+
+        elif action == "add_jukebox_track":
+            track = jukebox_track_from_form()
+            if track and not errors:
+                if any(item.get("apple_music_id") == track.get("apple_music_id") for item in jukebox_playlist):
+                    errors.append("That song is already in the jukebox playlist.")
+                else:
+                    jukebox_playlist.append(track)
+                    regenerate_jukebox_queue()
+                    messages.append(f"Added {track['title']} to the jukebox playlist.")
+                    should_broadcast = True
+
+        elif action in {"remove_jukebox_track", "move_jukebox_track_up", "move_jukebox_track_down"}:
+            track_id = request.form.get("track_id", "").strip()
+            track_index = next(
+                (index for index, item in enumerate(jukebox_playlist) if str(item.get("id", "")) == track_id),
+                None,
+            )
+            if track_index is None:
+                errors.append("Jukebox playlist song could not be found.")
+            elif action == "remove_jukebox_track":
+                removed_track = jukebox_playlist.pop(track_index)
+                regenerate_jukebox_queue()
+                messages.append(f"Removed {removed_track.get('title')} from the jukebox playlist.")
+                should_broadcast = True
+            elif action == "move_jukebox_track_up":
+                if track_index == 0:
+                    messages.append("That jukebox song is already at the top.")
+                else:
+                    jukebox_playlist[track_index - 1], jukebox_playlist[track_index] = (
+                        jukebox_playlist[track_index],
+                        jukebox_playlist[track_index - 1],
+                    )
+                    regenerate_jukebox_queue()
+                    messages.append("Moved jukebox song up.")
+                    should_broadcast = True
+            elif action == "move_jukebox_track_down":
+                if track_index == len(jukebox_playlist) - 1:
+                    messages.append("That jukebox song is already at the bottom.")
+                else:
+                    jukebox_playlist[track_index + 1], jukebox_playlist[track_index] = (
+                        jukebox_playlist[track_index],
+                        jukebox_playlist[track_index + 1],
+                    )
+                    regenerate_jukebox_queue()
+                    messages.append("Moved jukebox song down.")
+                    should_broadcast = True
+
+        elif action in {"approve_jukebox_request", "reject_jukebox_request", "skip_jukebox_request"}:
+            request_id = request.form.get("request_id", "").strip()
+            request_item = find_jukebox_request(request_id)
+            if not request_item:
+                errors.append("Jukebox request could not be found.")
+            elif action == "approve_jukebox_request":
+                request_item["status"] = "approved"
+                request_item["decided_at"] = _utc_now_iso()
+                regenerate_jukebox_queue()
+                messages.append(f"Approved jukebox request: {request_item.get('title')}.")
+                should_broadcast = True
+            elif action == "reject_jukebox_request":
+                request_item["status"] = "rejected"
+                request_item["decided_at"] = _utc_now_iso()
+                regenerate_jukebox_queue()
+                messages.append(f"Rejected jukebox request: {request_item.get('title')}.")
+                should_broadcast = True
+            elif action == "skip_jukebox_request":
+                request_item["status"] = "skipped"
+                request_item["played_at"] = _utc_now_iso()
+                for queue_item in jukebox_queue:
+                    if str(queue_item.get("request_id", "")) == request_id and queue_item.get("status") in {"queued", "playing"}:
+                        queue_item["status"] = "skipped"
+                        queue_item["played_at"] = request_item["played_at"]
+                messages.append(f"Skipped jukebox request: {request_item.get('title')}.")
+                should_broadcast = True
+
+        elif action == "regenerate_jukebox_queue":
+            regenerate_jukebox_queue()
+            messages.append("Jukebox queue regenerated with approved requests randomly inserted.")
+            should_broadcast = True
+
+        elif action == "clear_jukebox_queue":
+            jukebox_queue = []
+            jukebox_now_playing = {}
+            for request_item in jukebox_requests:
+                if request_item.get("status") in {"queued", "playing"}:
+                    request_item["status"] = "approved"
+            messages.append("Jukebox queue cleared. Approved requests were kept for the next regeneration.")
+            should_broadcast = True
 
         elif action == "update_bartender_tip_settings":
             updated_tip_settings = bartender_tip_settings_from_form()
@@ -4077,6 +5211,8 @@ def admin_portal():
             song_title = request.form.get("song_title", "").strip()
             artist = request.form.get("artist", "").strip()
             youtube_link = request.form.get("youtube_link", "").strip()
+            existing_signup = karaoke_signups[index] if index is not None else None
+            youtube_metadata = karaoke_signup_video_metadata_from_form(existing_signup)
 
             if not name:
                 errors.append("Karaoke signup name is required.")
@@ -4091,7 +5227,15 @@ def admin_portal():
                     name=name,
                     song_title=song_title,
                     artist=artist,
-                    youtube_link=youtube_link,
+                    youtube_link=youtube_metadata["youtube_link"] or youtube_link,
+                    youtube_video_id=youtube_metadata["youtube_video_id"],
+                    youtube_watch_url=youtube_metadata["youtube_watch_url"],
+                    youtube_embed_status=youtube_metadata["youtube_embed_status"],
+                    youtube_title=youtube_metadata["youtube_title"],
+                    youtube_channel=youtube_metadata["youtube_channel"],
+                    youtube_thumbnail_url=youtube_metadata["youtube_thumbnail_url"],
+                    youtube_duration=youtube_metadata["youtube_duration"],
+                    youtube_last_checked_at=youtube_metadata["youtube_last_checked_at"],
                 )
                 messages.append(f"Updated karaoke signup for {name}.")
                 should_broadcast = True
@@ -4108,6 +5252,12 @@ def admin_portal():
                 if karaoke_state.get("current_singer_id") == removed.id:
                     karaoke_state["current_singer_id"] = None
                     karaoke_state["current_singer_index"] = None
+                    if (
+                        live_display_event_override
+                        and live_display_event_override.get("type") == "karaoke_stage"
+                        and live_display_event_override.get("singer_id") == removed.id
+                    ):
+                        live_display_event_override = None
                 messages.append(f"Removed karaoke signup for {removed.name}.")
                 should_broadcast = True
 
@@ -4116,6 +5266,7 @@ def admin_portal():
             song_title = request.form.get("song_title", "").strip()
             artist = request.form.get("artist", "").strip()
             youtube_link = request.form.get("youtube_link", "").strip()
+            youtube_metadata = karaoke_signup_video_metadata_from_form()
 
             if not name:
                 errors.append("Karaoke signup name is required to add a new entry.")
@@ -4131,7 +5282,15 @@ def admin_portal():
                         name=name,
                         song_title=song_title,
                         artist=artist,
-                        youtube_link=youtube_link,
+                        youtube_link=youtube_metadata["youtube_link"] or youtube_link,
+                        youtube_video_id=youtube_metadata["youtube_video_id"],
+                        youtube_watch_url=youtube_metadata["youtube_watch_url"],
+                        youtube_embed_status=youtube_metadata["youtube_embed_status"],
+                        youtube_title=youtube_metadata["youtube_title"],
+                        youtube_channel=youtube_metadata["youtube_channel"],
+                        youtube_thumbnail_url=youtube_metadata["youtube_thumbnail_url"],
+                        youtube_duration=youtube_metadata["youtube_duration"],
+                        youtube_last_checked_at=youtube_metadata["youtube_last_checked_at"],
                     )
                 )
                 messages.append(f"Added karaoke signup for {name}.")
@@ -4257,43 +5416,17 @@ def admin_portal():
 
         elif action == "start_karaoke_party":
             if karaoke_signups:
-                lineup_entries = [
-                    {
-                        "id": signup.id,
-                        "name": signup.name,
-                        "song_title": signup.song_title,
-                        "artist": signup.artist,
-                    }
-                    for signup in karaoke_signups
-                ]
-
                 karaoke_state["party_started"] = True
-                karaoke_state["current_singer_index"] = None
+                karaoke_state["current_singer_index"] = 0
                 karaoke_state["current_singer_id"] = karaoke_signups[0].id if karaoke_signups else None
+                karaoke_state["stage_mode"] = "intro"
                 contest_state["contest_started"] = False
                 contest_state["voting_open"] = False
-
-                mountain_offset = timezone(timedelta(hours=-7), name="MST")
-                now_mountain = datetime.now(mountain_offset)
-                countdown_target = now_mountain.replace(
-                    hour=23, minute=0, second=0, microsecond=0
+                live_display_event_override = build_karaoke_stage_override(
+                    karaoke_signups[0], mode="intro", lineup_index=0
                 )
-                if countdown_target <= now_mountain:
-                    countdown_target += timedelta(days=1)
-
-                live_display_event_override = {
-                    "type": "karaoke_start",
-                    "title": "Halloween Karaoke Party",
-                    "highlight": "Showtime begins at 11:00 PM MST",
-                    "message": "The lineup is getting ready. Countdown to the first singers!",
-                    "karaoke": {
-                        "lineup": lineup_entries,
-                        "countdown_target": countdown_target.isoformat(),
-                        "countdown_label": "11:00 PM MST",
-                    },
-                }
                 messages.append(
-                    "Live display updated with the karaoke kickoff countdown."
+                    f"Live display staged {karaoke_signups[0].name} as the opening karaoke singer."
                 )
                 write_state_backup_if_available("karaoke-start")
                 should_broadcast = True
@@ -4302,11 +5435,81 @@ def admin_portal():
                     "Add at least one karaoke signup before starting the karaoke party."
                 )
 
+        elif action in {"set_karaoke_stage", "start_karaoke_song"}:
+            index = parse_entry_index(
+                karaoke_signups,
+                "karaoke signup",
+                request.form.get("entry_id"),
+                request.form.get("index"),
+            )
+            if index is not None:
+                signup = karaoke_signups[index]
+                requested_mode = "video" if action == "start_karaoke_song" else "intro"
+                if requested_mode == "video" and signup.youtube_embed_status != "verified_embeddable":
+                    errors.append(
+                        f"{signup.name}'s YouTube video is not marked playable on the live display."
+                    )
+                else:
+                    karaoke_state["party_started"] = True
+                    karaoke_state["current_singer_index"] = index
+                    karaoke_state["current_singer_id"] = signup.id
+                    karaoke_state["stage_mode"] = requested_mode
+                    contest_state["contest_started"] = False
+                    contest_state["voting_open"] = False
+                    live_display_event_override = build_karaoke_stage_override(
+                        signup, mode=requested_mode, lineup_index=index
+                    )
+                    if requested_mode == "video":
+                        messages.append(f"Live display is playing {signup.name}'s karaoke video.")
+                    else:
+                        messages.append(f"Live display staged {signup.name}.")
+                    write_state_backup_if_available(f"karaoke-{requested_mode}")
+                    should_broadcast = True
+
+        elif action == "next_karaoke_singer":
+            if not karaoke_signups:
+                errors.append("Add at least one karaoke signup before advancing singers.")
+            else:
+                current_index = find_karaoke_signup_index(str(karaoke_state.get("current_singer_id") or ""))
+                next_index = 0 if current_index is None else current_index + 1
+                if next_index >= len(karaoke_signups):
+                    errors.append("There are no more singers in the karaoke lineup.")
+                else:
+                    signup = karaoke_signups[next_index]
+                    karaoke_state["party_started"] = True
+                    karaoke_state["current_singer_index"] = next_index
+                    karaoke_state["current_singer_id"] = signup.id
+                    karaoke_state["stage_mode"] = "intro"
+                    live_display_event_override = build_karaoke_stage_override(
+                        signup, mode="intro", lineup_index=next_index
+                    )
+                    messages.append(f"Live display advanced to {signup.name}.")
+                    write_state_backup_if_available("karaoke-next")
+                    should_broadcast = True
+
+        elif action == "return_karaoke_stage_intro":
+            current_index = find_karaoke_signup_index(str(karaoke_state.get("current_singer_id") or ""))
+            if current_index is None:
+                errors.append("Choose a karaoke singer before returning to the stage card.")
+            else:
+                signup = karaoke_signups[current_index]
+                karaoke_state["stage_mode"] = "intro"
+                live_display_event_override = build_karaoke_stage_override(
+                    signup, mode="intro", lineup_index=current_index
+                )
+                messages.append(f"Live display returned to {signup.name}'s stage card.")
+                write_state_backup_if_available("karaoke-intro")
+                should_broadcast = True
+
         elif action == "stop_karaoke_party":
             karaoke_state["party_started"] = False
             karaoke_state["current_singer_index"] = None
             karaoke_state["current_singer_id"] = None
-            if live_display_event_override and live_display_event_override.get("type") == "karaoke_start":
+            karaoke_state["stage_mode"] = "intro"
+            if live_display_event_override and live_display_event_override.get("type") in {
+                "karaoke_start",
+                "karaoke_stage",
+            }:
                 live_display_event_override = None
             messages.append("Karaoke party stopped.")
             write_state_backup_if_available("karaoke-stop")
@@ -4315,7 +5518,10 @@ def admin_portal():
         elif action == "reset_karaoke_party":
             karaoke_state.clear()
             karaoke_state.update(copy.deepcopy(DEFAULT_KARAOKE_STATE))
-            if live_display_event_override and live_display_event_override.get("type") == "karaoke_start":
+            if live_display_event_override and live_display_event_override.get("type") in {
+                "karaoke_start",
+                "karaoke_stage",
+            }:
                 live_display_event_override = None
             messages.append("Karaoke party reset. The lineup was kept.")
             write_state_backup_if_available("karaoke-reset")
@@ -4396,6 +5602,10 @@ def admin_portal():
 
     costume_scores, costume_leader = build_costume_scoreboard()
     top_costume_rankings = rank_costume_entries(costume_scores)[:5]
+    current_karaoke_index = find_karaoke_signup_index(str(karaoke_state.get("current_singer_id") or ""))
+    current_karaoke_signup = (
+        karaoke_signups[current_karaoke_index] if current_karaoke_index is not None else None
+    )
 
     return render_template(
         "admin.html",
@@ -4409,6 +5619,8 @@ def admin_portal():
         live_override=current_display_override(),
         top_costume_rankings=top_costume_rankings,
         karaoke_state=karaoke_state,
+        current_karaoke_signup=current_karaoke_signup,
+        current_karaoke_index=current_karaoke_index,
         costume_lineup_locked=is_costume_lineup_locked_for_voting(),
         landing_page_target=normalize_landing_page_target(landing_page_target),
         landing_page_targets=LANDING_PAGE_TARGETS,
@@ -4419,6 +5631,8 @@ def admin_portal():
         party_code_hint=party_code_hint,
         rsvp_notification_email=rsvp_notification_email,
         display_settings=display_settings,
+        youtube_api_configured=youtube_api_key_is_configured(),
+        youtube_api_key_source=youtube_api_key_source(),
         party_details=party_details,
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),
@@ -4441,6 +5655,16 @@ def admin_portal():
         ),
         bartender_tip_settings=bartender_tip_settings,
         bartender_tip_methods=bartender_tip_methods(),
+        jukebox_settings=jukebox_settings,
+        jukebox_playlist=jukebox_playlist,
+        jukebox_requests=sorted(
+            jukebox_requests,
+            key=lambda request_item: str(request_item.get("submitted_at", "")),
+            reverse=True,
+        ),
+        jukebox_queue=queued_jukebox_items(),
+        jukebox_now_playing=jukebox_now_playing,
+        jukebox_developer_token_configured=jukebox_developer_token_configured(),
         user_accounts=user_accounts,
     )
 
@@ -4531,6 +5755,7 @@ def party_karaoke():
         song_title = request.form.get("song_title", "").strip()
         artist = request.form.get("artist", "").strip()
         youtube_link = request.form.get("youtube_link", "").strip()
+        youtube_metadata = karaoke_signup_video_metadata_from_form()
 
         if not name:
             errors.append("Name is required.")
@@ -4546,7 +5771,15 @@ def party_karaoke():
                     name=name,
                     song_title=song_title,
                     artist=artist,
-                    youtube_link=youtube_link,
+                    youtube_link=youtube_metadata["youtube_link"] or youtube_link,
+                    youtube_video_id=youtube_metadata["youtube_video_id"],
+                    youtube_watch_url=youtube_metadata["youtube_watch_url"],
+                    youtube_embed_status=youtube_metadata["youtube_embed_status"],
+                    youtube_title=youtube_metadata["youtube_title"],
+                    youtube_channel=youtube_metadata["youtube_channel"],
+                    youtube_thumbnail_url=youtube_metadata["youtube_thumbnail_url"],
+                    youtube_duration=youtube_metadata["youtube_duration"],
+                    youtube_last_checked_at=youtube_metadata["youtube_last_checked_at"],
                 )
             )
             submitted = True

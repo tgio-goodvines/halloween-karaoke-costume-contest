@@ -110,8 +110,13 @@ class RedisStateTests(unittest.TestCase):
         self.original_email_updates_enabled = main.app.config["EMAIL_UPDATES_ENABLED"]
         self.original_email_from = main.app.config["EMAIL_FROM"]
         self.original_public_base_url = main.app.config["PUBLIC_BASE_URL"]
+        self.original_youtube_api_key = main.app.config["YOUTUBE_API_KEY"]
+        self.original_apple_music_developer_token = main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"]
+        self.original_apple_music_storefront = main.app.config["APPLE_MUSIC_STOREFRONT"]
         self.original_rsvp_notification_email = main.rsvp_notification_email
         self.original_create_ses_client = main.create_ses_client
+        self.original_youtube_api_get = main.youtube_api_get
+        self.original_apple_music_catalog_search = main.apple_music_catalog_search
         self.original_specialty_extra_orders_are_open = main.specialty_extra_orders_are_open
         self.original_app_env = os.environ.get("APP_ENV")
 
@@ -131,6 +136,9 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["EMAIL_UPDATES_ENABLED"] = False
         main.app.config["EMAIL_FROM"] = "Halloween Party <no-reply@tnq-halloween.com>"
         main.app.config["PUBLIC_BASE_URL"] = "https://tnq-halloween.com"
+        main.app.config["YOUTUBE_API_KEY"] = ""
+        main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = "test-token"
+        main.app.config["APPLE_MUSIC_STOREFRONT"] = "us"
         self.reset_state()
 
     def tearDown(self):
@@ -143,8 +151,13 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["EMAIL_UPDATES_ENABLED"] = self.original_email_updates_enabled
         main.app.config["EMAIL_FROM"] = self.original_email_from
         main.app.config["PUBLIC_BASE_URL"] = self.original_public_base_url
+        main.app.config["YOUTUBE_API_KEY"] = self.original_youtube_api_key
+        main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = self.original_apple_music_developer_token
+        main.app.config["APPLE_MUSIC_STOREFRONT"] = self.original_apple_music_storefront
         main.rsvp_notification_email = self.original_rsvp_notification_email
         main.create_ses_client = self.original_create_ses_client
+        main.youtube_api_get = self.original_youtube_api_get
+        main.apple_music_catalog_search = self.original_apple_music_catalog_search
         main.specialty_extra_orders_are_open = self.original_specialty_extra_orders_are_open
         if self.original_app_env is None:
             os.environ.pop("APP_ENV", None)
@@ -174,6 +187,11 @@ class RedisStateTests(unittest.TestCase):
         main.rsvp_notification_email = main.DEFAULT_RSVP_NOTIFICATION_EMAIL
         main.display_settings = main.copy.deepcopy(main.DEFAULT_DISPLAY_SETTINGS)
         main.bartender_tip_settings = main.copy.deepcopy(main.DEFAULT_BARTENDER_TIP_SETTINGS)
+        main.jukebox_settings = main.copy.deepcopy(main.DEFAULT_JUKEBOX_SETTINGS)
+        main.jukebox_playlist = []
+        main.jukebox_requests = []
+        main.jukebox_queue = []
+        main.jukebox_now_playing = {}
         main.display_update_version = 0
         main.contest_state.clear()
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
@@ -667,7 +685,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("karaoke-1", state_after_start["karaoke_state"]["current_singer_id"])
         self.assertFalse(state_after_start["contest_state"]["contest_started"])
         self.assertFalse(state_after_start["contest_state"]["voting_open"])
-        self.assertEqual("karaoke_start", state_after_start["live_display_event_override"]["type"])
+        self.assertEqual("karaoke_stage", state_after_start["live_display_event_override"]["type"])
+        self.assertEqual("intro", state_after_start["live_display_event_override"]["mode"])
+        self.assertEqual("Grace", state_after_start["live_display_event_override"]["singer_name"])
         self.assertEqual(200, stop_response.status_code)
         self.assertFalse(state_after_stop["karaoke_state"]["party_started"])
         self.assertIsNone(state_after_stop["karaoke_state"]["current_singer_id"])
@@ -676,7 +696,7 @@ class RedisStateTests(unittest.TestCase):
         main.load_state_from_redis()
         main.karaoke_state["party_started"] = True
         main.karaoke_state["current_singer_id"] = "karaoke-1"
-        main.live_display_event_override = {"type": "karaoke_start", "title": "Halloween Karaoke Party"}
+        main.live_display_event_override = {"type": "karaoke_stage", "title": "Halloween Karaoke Party"}
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -689,6 +709,247 @@ class RedisStateTests(unittest.TestCase):
         self.assertIsNone(state_after_reset["karaoke_state"]["current_singer_id"])
         self.assertEqual("Grace", state_after_reset["karaoke_signups"][0]["name"])
         self.assertIsNone(state_after_reset["live_display_event_override"])
+
+    def test_admin_can_stage_play_and_advance_karaoke_singers(self):
+        main.karaoke_signups = [
+            main.KaraokeSignup(
+                "Grace",
+                "Thriller",
+                "Michael Jackson",
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "karaoke-1",
+                "dQw4w9WgXcQ",
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "verified_embeddable",
+            ),
+            main.KaraokeSignup("Ada", "Monster Mash", "Bobby Pickett", "", "karaoke-2"),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            stage_response = client.post(
+                "/admin",
+                data={"action": "set_karaoke_stage", "entry_id": "karaoke-1"},
+            )
+            state_after_stage = self.redis_state()
+            play_response = client.post(
+                "/admin",
+                data={"action": "start_karaoke_song", "entry_id": "karaoke-1"},
+            )
+            state_after_play = self.redis_state()
+            next_response = client.post("/admin", data={"action": "next_karaoke_singer"})
+            state_after_next = self.redis_state()
+
+        self.assertEqual(200, stage_response.status_code)
+        self.assertEqual("karaoke_stage", state_after_stage["live_display_event_override"]["type"])
+        self.assertEqual("intro", state_after_stage["live_display_event_override"]["mode"])
+        self.assertEqual("karaoke-1", state_after_stage["karaoke_state"]["current_singer_id"])
+        self.assertEqual(200, play_response.status_code)
+        self.assertEqual("video", state_after_play["live_display_event_override"]["mode"])
+        self.assertTrue(state_after_play["live_display_event_override"]["video_enabled"])
+        self.assertEqual("dQw4w9WgXcQ", state_after_play["live_display_event_override"]["youtube"]["video_id"])
+        self.assertEqual(200, next_response.status_code)
+        self.assertEqual("karaoke-2", state_after_next["karaoke_state"]["current_singer_id"])
+        self.assertEqual("Ada", state_after_next["live_display_event_override"]["singer_name"])
+        self.assertEqual("intro", state_after_next["live_display_event_override"]["mode"])
+
+    def test_admin_cannot_start_unverified_karaoke_video(self):
+        main.karaoke_signups = [
+            main.KaraokeSignup("Ada", "Monster Mash", "Bobby Pickett", "", "karaoke-2"),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={"action": "start_karaoke_song", "entry_id": "karaoke-2"},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIsNone(state["live_display_event_override"])
+
+    def test_youtube_url_parser_accepts_common_video_urls(self):
+        self.assertEqual("dQw4w9WgXcQ", main.parse_youtube_video_id("dQw4w9WgXcQ"))
+        self.assertEqual(
+            "dQw4w9WgXcQ",
+            main.parse_youtube_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+        )
+        self.assertEqual(
+            "dQw4w9WgXcQ",
+            main.parse_youtube_video_id("https://youtu.be/dQw4w9WgXcQ"),
+        )
+        self.assertEqual(
+            "dQw4w9WgXcQ",
+            main.parse_youtube_video_id("https://www.youtube.com/shorts/dQw4w9WgXcQ"),
+        )
+        self.assertEqual("", main.parse_youtube_video_id("https://example.com/watch?v=dQw4w9WgXcQ"))
+
+    def test_party_karaoke_signup_persists_selected_youtube_metadata(self):
+        self.add_user_account(username="Grace", user_id="user-1")
+        self.save_current_state()
+        main.app.config["YOUTUBE_API_KEY"] = "test-key"
+
+        def fake_youtube_api_get(path, params):
+            self.assertEqual("videos", path)
+            return {
+                "items": [
+                    {
+                        "id": "dQw4w9WgXcQ",
+                        "snippet": {
+                            "title": "Thriller Karaoke",
+                            "channelTitle": "Karaoke Channel",
+                            "thumbnails": {
+                                "high": {
+                                    "url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+                                }
+                            },
+                        },
+                        "status": {"embeddable": True},
+                        "contentDetails": {"duration": "PT4M1S"},
+                    }
+                ]
+            }
+
+        main.youtube_api_get = fake_youtube_api_get
+
+        with main.app.test_client() as client:
+            self.login_regular(client, username="Grace")
+            response = client.post(
+                "/party/karaoke",
+                data={
+                    "name": "Grace",
+                    "song_title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "youtube_link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "youtube_video_id": "dQw4w9WgXcQ",
+                    "youtube_embed_status": "verified_embeddable",
+                    "youtube_title": "Thriller Karaoke",
+                    "youtube_channel": "Karaoke Channel",
+                    "youtube_thumbnail_url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+                    "youtube_duration": "4:01",
+                },
+            )
+
+        state = self.redis_state()
+        self.assertEqual(302, response.status_code)
+        signup = state["karaoke_signups"][0]
+        self.assertEqual("dQw4w9WgXcQ", signup["youtube_video_id"])
+        self.assertEqual("https://www.youtube.com/watch?v=dQw4w9WgXcQ", signup["youtube_watch_url"])
+        self.assertEqual("verified_embeddable", signup["youtube_embed_status"])
+        self.assertEqual("Thriller Karaoke", signup["youtube_title"])
+
+    def test_youtube_search_endpoint_returns_embeddable_results(self):
+        self.add_user_account(username="Grace", user_id="user-1")
+        self.save_current_state()
+        main.app.config["YOUTUBE_API_KEY"] = "test-key"
+
+        def fake_youtube_api_get(path, params):
+            if path == "search":
+                return {
+                    "items": [
+                        {
+                            "id": {"videoId": "dQw4w9WgXcQ"},
+                            "snippet": {
+                                "title": "Michael Jackson - Thriller Karaoke",
+                                "channelTitle": "Karaoke Channel",
+                                "thumbnails": {
+                                    "medium": {
+                                        "url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg"
+                                    }
+                                },
+                            },
+                        }
+                    ]
+                }
+            self.assertEqual("videos", path)
+            return {
+                "items": [
+                    {
+                        "id": "dQw4w9WgXcQ",
+                        "status": {"embeddable": True},
+                        "contentDetails": {"duration": "PT4M1S"},
+                    }
+                ]
+            }
+
+        main.youtube_api_get = fake_youtube_api_get
+
+        with main.app.test_client() as client:
+            self.login_regular(client, username="Grace")
+            response = client.get("/api/youtube-search?q=thriller%20karaoke")
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("dQw4w9WgXcQ", payload["results"][0]["video_id"])
+        self.assertEqual("verified_embeddable", payload["results"][0]["embed_status"])
+        self.assertEqual("4:01", payload["results"][0]["duration"])
+        self.assertEqual("Thriller Karaoke", payload["results"][0]["suggested_song_title"])
+        self.assertEqual("Michael Jackson", payload["results"][0]["suggested_artist"])
+
+    def test_admin_can_validate_and_enable_runtime_youtube_api_key(self):
+        self.save_current_state()
+
+        def fake_youtube_api_get(path, params):
+            self.assertEqual("videos", path)
+            self.assertEqual("id,status", params["part"])
+            return {"items": [{"id": "dQw4w9WgXcQ", "status": {"embeddable": True}}]}
+
+        main.youtube_api_get = fake_youtube_api_get
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_youtube_api_key",
+                    "youtube_api_key": "runtime-key",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("runtime-key", main.app.config["YOUTUBE_API_KEY"])
+        self.assertIn("YouTube API key validated", response.get_data(as_text=True))
+
+    def test_admin_youtube_api_key_validation_failure_preserves_existing_key(self):
+        self.save_current_state()
+        main.app.config["YOUTUBE_API_KEY"] = "existing-key"
+
+        def fake_youtube_api_get(path, params):
+            raise RuntimeError("bad key")
+
+        main.youtube_api_get = fake_youtube_api_get
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "update_youtube_api_key",
+                    "youtube_api_key": "bad-runtime-key",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("existing-key", main.app.config["YOUTUBE_API_KEY"])
+        self.assertIn("could not be validated", response.get_data(as_text=True))
+
+    def test_admin_can_clear_youtube_api_key_runtime_override(self):
+        self.save_current_state()
+        main.app.config["YOUTUBE_API_KEY"] = "runtime-key"
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={"action": "clear_youtube_api_key_override"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(main.YOUTUBE_API_KEY_ENV_VALUE, main.app.config["YOUTUBE_API_KEY"])
+        self.assertIn("YouTube API key", response.get_data(as_text=True))
 
     def test_admin_reorder_keeps_votes_aligned_with_costumes(self):
         main.costume_signups = [
@@ -2603,6 +2864,179 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, display_response.status_code)
         self.assertEqual(302, halloween_response.status_code)
         self.assertIn("/party/login", halloween_response.headers["Location"])
+
+    def test_jukebox_state_round_trip_preserves_playlist_requests_and_queue(self):
+        main.jukebox_settings["enabled"] = True
+        main.jukebox_playlist = [
+            {
+                "id": "track-1",
+                "apple_music_id": "apple-song-1",
+                "title": "Monster Mash",
+                "artist": "Bobby Pickett",
+                "album": "Halloween Hits",
+                "artwork_url": "https://example.com/art.jpg",
+                "duration_ms": 180000,
+                "explicit": False,
+                "created_at": "2026-07-25T00:00:00Z",
+            }
+        ]
+        main.jukebox_requests = [
+            {
+                "id": "request-1",
+                "apple_music_id": "apple-song-2",
+                "title": "Somebody's Watching Me",
+                "artist": "Rockwell",
+                "album": "",
+                "artwork_url": "",
+                "duration_ms": 240000,
+                "explicit": False,
+                "requester_user_id": "user-1",
+                "requester_name": "Jamie",
+                "note": "Please",
+                "status": "approved",
+                "submitted_at": "2026-07-25T00:01:00Z",
+            }
+        ]
+        main.regenerate_jukebox_queue()
+        self.save_current_state()
+        self.reset_state()
+
+        main.load_state_from_redis()
+
+        self.assertTrue(main.jukebox_settings["enabled"])
+        self.assertEqual("Monster Mash", main.jukebox_playlist[0]["title"])
+        self.assertEqual("queued", main.jukebox_requests[0]["status"])
+        self.assertTrue(any(item["source"] == "request" for item in main.jukebox_queue))
+
+    def test_jukebox_request_page_limits_active_requests(self):
+        account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        main.jukebox_settings.update(
+            {
+                "enabled": True,
+                "requests_enabled": True,
+                "approval_required": True,
+                "max_requests_per_user": 1,
+            }
+        )
+        main.jukebox_requests = [
+            {
+                "id": "request-1",
+                "apple_music_id": "apple-song-1",
+                "title": "Thriller",
+                "artist": "Michael Jackson",
+                "requester_user_id": account["id"],
+                "requester_name": "Jamie",
+                "status": "pending",
+                "submitted_at": "2026-07-25T00:00:00Z",
+            }
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client, user_id=account["id"], username="Jamie")
+            response = client.post(
+                "/party/jukebox",
+                data={
+                    "apple_music_id": "apple-song-2",
+                    "title": "Ghostbusters",
+                    "artist": "Ray Parker Jr.",
+                    "explicit": "no",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("already have 1 active jukebox request", response.get_data(as_text=True))
+        self.assertEqual(1, len(main.jukebox_requests))
+
+    def test_jukebox_auto_approved_request_is_inserted_into_queue(self):
+        account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        main.jukebox_settings.update(
+            {
+                "enabled": True,
+                "requests_enabled": True,
+                "approval_required": False,
+                "request_insert_min_position": 1,
+                "request_insert_max_position": 2,
+            }
+        )
+        main.jukebox_playlist = [
+            main.normalize_jukebox_track({"apple_music_id": f"base-{index}", "title": f"Base {index}", "artist": "Host"})
+            for index in range(4)
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client, user_id=account["id"], username="Jamie")
+            response = client.post(
+                "/party/jukebox",
+                data={
+                    "apple_music_id": "request-song",
+                    "title": "Requested Song",
+                    "artist": "Guest Artist",
+                    "explicit": "no",
+                },
+            )
+
+        self.assertEqual(302, response.status_code)
+        request_items = [item for item in main.jukebox_queue if item.get("source") == "request"]
+        self.assertEqual(1, len(request_items))
+        self.assertIn(main.jukebox_queue.index(request_items[0]), {1, 2})
+
+    def test_jukebox_route_is_blocked_before_party_day(self):
+        account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        main.event_experience_mode = "pre_party"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client, user_id=account["id"], username="Jamie")
+            response = client.get("/party/jukebox")
+
+        self.assertEqual(302, response.status_code)
+        self.assertIn("/party", response.headers["Location"])
+
+    def test_display_data_includes_jukebox_state(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            protected_response = client.get("/api/display-data")
+            self.login_admin(client)
+            response = client.get("/api/display-data")
+
+        self.assertEqual(302, protected_response.status_code)
+        self.assertEqual(200, response.status_code)
+        payload = response.get_json()
+        self.assertIn("jukebox", payload)
+        self.assertTrue(payload["jukebox"]["enabled"])
+
+    def test_attendee_search_uses_app_config_while_music_token_stays_admin_only(self):
+        account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        main.event_experience_mode = "party_day"
+        main.jukebox_settings["enabled"] = True
+        main.apple_music_catalog_search = lambda query: [
+            main.normalize_jukebox_track(
+                {
+                    "apple_music_id": "apple-song-1",
+                    "title": f"{query} Song",
+                    "artist": "Host Account Catalog",
+                }
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client, user_id=account["id"], username="Jamie")
+            search_response = client.get("/api/jukebox-search?q=ghost")
+            token_response = client.get("/api/apple-music-token")
+            self.login_admin(client)
+            admin_token_response = client.get("/api/apple-music-token")
+
+        self.assertEqual(200, search_response.status_code)
+        self.assertEqual("ghost Song", search_response.get_json()["results"][0]["title"])
+        self.assertEqual(401, token_response.status_code)
+        self.assertIn("Host admin sign-in", token_response.get_json()["error"])
+        self.assertEqual(200, admin_token_response.status_code)
+        self.assertEqual("test-token", admin_token_response.get_json()["developer_token"])
 
     def test_csrf_rejects_post_without_token_outside_testing_mode(self):
         main.app.config["TESTING"] = False

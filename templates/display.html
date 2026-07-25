@@ -8,9 +8,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='display.css') }}">
   </head>
   <body
-    class="display-mode"
+    class="display-mode{% if jukebox and jukebox.enabled %} display-mode--jukebox{% endif %}"
     data-display-api="{{ url_for('display_data') }}"
     data-display-updates="{{ url_for('display_updates') }}"
+    data-csrf-token="{{ csrf_token() }}"
   >
     {% set first_entry = entries[0] if entries else None %}
     {% set cta_details = first_entry.get('cta_details', {}) if first_entry else {} %}
@@ -34,6 +35,31 @@
       </header>
 
       <main class="display-main">
+        <section class="jukebox-display" data-jukebox-display{% if not jukebox or not jukebox.enabled %} hidden{% endif %}>
+          <div class="jukebox-display__player">
+            <p class="display-category">Apple Music Jukebox</p>
+            <div class="jukebox-display__art-wrap">
+              <img class="jukebox-display__art" data-jukebox-art alt="" hidden>
+              <div class="jukebox-display__art-placeholder" data-jukebox-art-placeholder>AM</div>
+            </div>
+            <div class="jukebox-display__meta">
+              <p class="jukebox-display__eyebrow" data-jukebox-state-label>Ready</p>
+              <h2 data-jukebox-title>{{ jukebox.now_playing.title if jukebox and jukebox.now_playing else 'Start the jukebox' }}</h2>
+              <p data-jukebox-artist>{{ jukebox.now_playing.artist if jukebox and jukebox.now_playing else 'Connect the host Apple Music account on this display' }}</p>
+              <p class="jukebox-display__requester" data-jukebox-requester></p>
+            </div>
+            <div class="jukebox-display__controls">
+              <button type="button" class="button button--primary" data-jukebox-connect>Connect Host Apple Music</button>
+              <button type="button" class="button button--outline" data-jukebox-start>Start</button>
+              <button type="button" class="button button--outline" data-jukebox-skip>Skip</button>
+            </div>
+            <p class="jukebox-display__status" data-jukebox-status>Host Apple Music authorization powers playback for everyone. Cast this Chrome tab for TV audio.</p>
+          </div>
+          <aside class="jukebox-display__queue">
+            <p class="display-category">Up Next</p>
+            <ol data-jukebox-queue></ol>
+          </aside>
+        </section>
         <section class="display-card{% if first_entry and not override %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry or override %} hidden{% endif %}>
           <div class="display-card__default" data-entry-default{% if first_entry and first_entry.get('cta_details') %} hidden{% endif %}>
             <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
@@ -129,6 +155,36 @@
               <h2 class="karaoke-card__title" data-karaoke-title></h2>
               <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
               <p class="karaoke-card__message" data-karaoke-message></p>
+              <div class="karaoke-stage" data-karaoke-stage hidden>
+                <div class="karaoke-stage__intro" data-karaoke-stage-intro>
+                  <p class="karaoke-stage__eyebrow">Now Singing</p>
+                  <h3 class="karaoke-stage__singer" data-karaoke-stage-singer></h3>
+                  <p class="karaoke-stage__song" data-karaoke-stage-song></p>
+                  <a
+                    class="karaoke-stage__youtube"
+                    data-karaoke-stage-youtube
+                    href="#"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    hidden
+                  >
+                    Open YouTube
+                  </a>
+                  <p class="karaoke-stage__next" data-karaoke-stage-next hidden></p>
+                </div>
+                <div class="karaoke-video" data-karaoke-video hidden>
+                  <div class="karaoke-video__frame-wrap">
+                    <iframe
+                      class="karaoke-video__frame"
+                      data-karaoke-video-frame
+                      title="Karaoke YouTube player"
+                      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                      allowfullscreen
+                    ></iframe>
+                  </div>
+                  <p class="karaoke-video__fallback" data-karaoke-video-fallback hidden></p>
+                </div>
+              </div>
               <div class="karaoke-card__content">
                 <div class="karaoke-card__rotator" data-karaoke-rotator>
                   <section
@@ -178,6 +234,9 @@
     <script id="entries-data" type="application/json">{{ entries | tojson }}</script>
     <script id="override-data" type="application/json">{{ override | tojson }}</script>
     <script id="notice-override-data" type="application/json">{{ notice_override | tojson }}</script>
+    <script id="jukebox-data" type="application/json">{{ jukebox | tojson }}</script>
     <script src="{{ url_for('static', filename='display.js') }}"></script>
+    <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js"></script>
+    <script src="{{ url_for('static', filename='jukebox-player.js') }}"></script>
   </body>
 </html>

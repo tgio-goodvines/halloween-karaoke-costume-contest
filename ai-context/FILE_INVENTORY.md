@@ -4,20 +4,23 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP party-code validation, RSVP confirmation/update emails, RSVP calendar `.ics` generation, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, specialty drink limits, drink history/reorder, bartender tip settings, bartender roles/order queue, editable party details/map address, live-display WiFi settings, role-based session auth, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP party-code validation, RSVP confirmation/update emails, RSVP calendar `.ics` generation, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, specialty drink limits, drink history/reorder, bartender tip settings, bartender roles/order queue, Apple Music jukebox settings/playlist/requests/queue/playback sync, editable party details/map address, live-display WiFi settings, YouTube karaoke search/verification helpers, role-based session auth, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
 | `requirements.txt` | Python dependency declaration; includes Flask 3.x, redis-py for Redis state, boto3 for SES email, and gunicorn for production. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
-| `deploy/start_halloween.sh` | systemd start wrapper that authenticates to Vault using AWS IAM auth, exports Halloween app/Redis/email secrets, and execs gunicorn. |
+| `deploy/start_halloween.sh` | systemd start wrapper that authenticates to Vault using AWS IAM auth, exports Halloween app/Redis/email/YouTube secrets, and execs gunicorn. |
 | `deploy/halloween-party.service` | systemd unit for running the Halloween Flask app through gunicorn on `127.0.0.1:8081`. |
 | `deploy/nginx-halloween.conf` | nginx host-routing config for `tnq-halloween.com` and `www.tnq-halloween.com`, including SSE-friendly proxy settings. |
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
-| `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, live-display WiFi defaults, and Halloween email update settings. |
-| `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, food/drink ordering, specialty drink limits, drink history/reorder, bartender tipping, bartender priority sorting, bartender roles/order status transitions, display update publishing, and JSON exports using an in-memory Redis fake. |
-| `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, header menu, single logout action, menu cards, order cards, bartender tip disclosures, and bartender queue. |
+| `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, live-display WiFi defaults, YouTube Data API key, Apple Music MusicKit developer token/storefront, and Halloween email update settings. |
+| `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, food/drink ordering, specialty drink limits, drink history/reorder, bartender tipping, bartender priority sorting, bartender roles/order status transitions, Apple Music jukebox state/request/queue behavior, display update publishing, and JSON exports using an in-memory Redis fake. |
+| `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, header menu, single logout action, menu cards, order cards, Apple Music search/request cards, bartender tip disclosures, and bartender queue. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, event override cards, top-layer drink-ready notices, CTA layout, scoreboard layout, and karaoke display panels. |
-| `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
+| `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown/panel rotation, karaoke stage cards, and maximized embedded YouTube video mode. |
+| `static/jukebox-search.js` | Apple Music search controller used by attendee jukebox and admin playlist forms; fetches `/api/jukebox-search`, renders selectable results, and fills normalized hidden track metadata. |
+| `static/jukebox-player.js` | Live-display MusicKit controller for the Apple Music jukebox; fetches the admin token config, authorizes the host browser, starts/skips playback, renders now-playing/queue UI, polls jukebox state, and posts playback events. |
+| `static/karaoke-search.js` | Attendee karaoke signup YouTube search controller; fetches `/api/youtube-search`, renders selectable results, and fills song/video metadata fields. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
@@ -38,11 +41,12 @@
 | `templates/email/password_reset.html` | Dark lab-terminal styled HTML email body for one-time password reset links. |
 | `templates/email/_components.html` | Shared inline-safe HTML email macros for the refined lab-terminal shell, buttons, and detail tables used by generated email templates. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
-| `templates/karaoke_signup.html` | Karaoke signup form and submitted karaoke lineup. |
+| `templates/karaoke_signup.html` | Karaoke signup form with YouTube search-and-fill controls and submitted karaoke lineup. |
+| `templates/jukebox.html` | Attendee Apple Music jukebox request page with catalog search, selected-song submission, optional request note, now-playing status, and request history. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
-| `templates/admin.html` | Admin dashboard for public landing, party-code controls, live-display WiFi settings, RSVP list, party detail/map address editing, RSVP update posting/removal, food/drink menu CRUD with images/recipes/specialty/orderable controls, bartender tip settings, bartender role assignment, entry CRUD/reordering, contest controls, vote tally, winner state, and karaoke launch. |
-| `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including event override markup and top-layer notice image markup for drink-ready cards. |
+| `templates/admin.html` | Admin dashboard for public landing, party-code controls, live-display WiFi settings, Apple Music jukebox settings/playlist/request/queue controls, RSVP list, party detail/map address editing, RSVP update posting/removal, food/drink menu CRUD with images/recipes/specialty/orderable controls, bartender tip settings, bartender role assignment, entry CRUD/reordering, contest controls, vote tally, winner state, karaoke readiness badges, and karaoke stage/video/next-singer controls. |
+| `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including jukebox split-mode markup, event override markup, karaoke stage/video markup, and top-layer notice image markup for drink-ready cards. |
 
 ## Untracked Local Files Present During Review
 
@@ -72,6 +76,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/ARCHITECTURE.md` | Durable route map, data flow, frontend behavior, constraints, and extension guidance. |
 | `ai-context/FILE_INVENTORY.md` | Durable file-by-file inventory. |
 | `ai-context/FOOD_DRINK_BAR_FEATURE.md` | Durable implementation notes for menu items, drink orders, bartender role, emails, estimates, and live-display ready overrides. |
+| `ai-context/JUKEBOX_APPLE_MUSIC_FEATURE.md` | Durable progress notes for the Apple Music jukebox playlist, attendee requests, app-owned queue, MusicKit live-display playback, and implementation caveats. |
 | `ai-context/AWS_EXISTING_INFRA_HOSTING_PLAN.md` | Hosting plan for reusing the existing GoodVines ALB/EC2 infrastructure for `tnq-halloween.com`. |
 | `ai-context/AWS_IMPLEMENTATION_CHECKLIST.md` | Step-by-step AWS, nginx, systemd, DNS, TLS, deploy, and smoke-test checklist. |
 | `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` | Launch template version 2 bootstrap details for installing Halloween automatically on replacement API EC2 instances. |
@@ -109,6 +114,7 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md
 │   ├── GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md
 │   ├── GITLAB_AWS_DEPLOYMENT_DESIGN.md
+│   ├── JUKEBOX_APPLE_MUSIC_FEATURE.md
 │   ├── NO_SQL_DATA_POLICY.md
 │   ├── PROJECT_OVERVIEW.md
 │   ├── UI_UX_DESIGN_SYSTEM.md
@@ -131,6 +137,9 @@ These files are present locally but not tracked by Git at the time this context 
 ├── static/
 │   ├── display.css
 │   ├── display.js
+│   ├── jukebox-player.js
+│   ├── jukebox-search.js
+│   ├── karaoke-search.js
 │   ├── slides.js
 │   └── styles.css
 ├── tests/
@@ -150,6 +159,7 @@ These files are present locally but not tracked by Git at the time this context 
     ├── halloween_login.html
     ├── halloween_register.html
     ├── index.html
+    ├── jukebox.html
     ├── karaoke_signup.html
     ├── menu.html
     └── rsvp.html

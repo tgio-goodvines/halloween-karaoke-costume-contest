@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repo contains a Flask web app for "Qiana and Tony's 3rd Annual Halloween Party." It supports RSVP, attendee check-in, food/drink menu and drink ordering, costume contest signup and voting, karaoke signup, admin management, bartender operations, and a large-format live display for a TV/projector.
+This repo contains a Flask web app for "Qiana and Tony's 3rd Annual Halloween Party." It supports RSVP, attendee check-in, food/drink menu and drink ordering, Apple Music jukebox requests/playback, costume contest signup and voting, karaoke signup, admin management, bartender operations, and a large-format live display for a TV/projector.
 
 The app is optimized for a short-lived party environment. Event state is
 persisted in Redis as a compact JSON document, with module-level Python globals
@@ -107,22 +107,26 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 6. On the party date, attendees can submit costume entries at
    `/party/costumes`.
 7. On the party date, attendees can submit karaoke songs at `/party/karaoke`.
-8. On the party date, attendees can view food and drink menu cards with images
+8. On the party date, attendees can request Apple Music songs at
+   `/party/jukebox` when admin enables the jukebox. Requests can require host
+   approval or auto-approve; approved requests are randomly inserted into the
+   upcoming app-owned jukebox queue.
+9. On the party date, attendees can view food and drink menu cards with images
    at `/party/menu` and order available/orderable drinks from the bar.
    Specialty drinks are limited to 3 included attendee orders; after 11:00 PM,
    4th+ specialty requests are allowed while supplies remain. `/party/drink-history`
    shows the signed-in attendee's full order history, supports reorder for
    currently available/orderable drinks, and shows a per-order bartender tip
    disclosure when admin tipping is enabled.
-9. Bartenders assigned from existing user accounts can manage drink orders at
+10. Bartenders assigned from existing user accounts can manage drink orders at
    `/bartender`; admins can access the same view.
-10. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
+11. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
     explicit party-code replacement/status/hint controls, live-display WiFi
     details, and event state at `/admin`.
-11. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
-12. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
-13. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
-14. Regular and admin sessions use one logout action in the header menu; it
+12. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
+13. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
+14. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
+15. Regular and admin sessions use one logout action in the header menu; it
     clears the current browser session regardless of role.
 
 ## State Model
@@ -150,6 +154,18 @@ the process-local cache:
 - `bartender_tip_settings`: admin-managed bartender tip prompt settings with an
   enable flag, display name, note, QR/payment image URL, and optional Zelle,
   PayPal, Venmo, or Cash App handles.
+- `jukebox_settings`: admin-managed Apple Music jukebox enable flag, provider,
+  mode, request rules, explicit-song setting, request insertion bounds, duplicate
+  cooldown, playlist looping, and autoplay fallback seed metadata.
+- `jukebox_playlist`: admin-curated Apple Music track records with Apple Music
+  IDs, title, artist, album, artwork URL, duration, explicit flag, and stable ID.
+- `jukebox_requests`: attendee song requests with requester metadata, track
+  metadata, note, status, and timestamps.
+- `jukebox_queue`: app-owned play order combining playlist tracks and randomly
+  inserted approved requests; MusicKit is the playback surface, not the source
+  of truth.
+- `jukebox_now_playing`: current Apple Music queue item and playback snapshot
+  for display refreshes.
 - `registered_users`: maps session `user_id` to display name.
 - `rsvp_signups`: independent host RSVP list entries with name, required email
   contact, guest count, note, created timestamp, and stable ID.
@@ -196,7 +212,7 @@ it can be tested and staged before guests arrive.
 
 The attendee dashboard uses the calendar date from `HALLOWEEN_PARTY_START`.
 Before that date, `/party` shows logistics-oriented Event Highlights and blocks
-attendee access to `/party/menu`, `/party/costumes`, and `/party/karaoke`. On
+attendee access to `/party/menu`, `/party/jukebox`, `/party/costumes`, and `/party/karaoke`. On
 the party date, those attendee routes and navigation links become available.
 Costume voting remains separately admin-gated and only appears when the admin
 starts/opens voting.

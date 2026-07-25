@@ -22,8 +22,30 @@
 
   <form method="post" class="signup-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" id="youtube_video_id" name="youtube_video_id">
+    <input type="hidden" id="youtube_embed_status" name="youtube_embed_status">
+    <input type="hidden" id="youtube_title" name="youtube_title">
+    <input type="hidden" id="youtube_channel" name="youtube_channel">
+    <input type="hidden" id="youtube_thumbnail_url" name="youtube_thumbnail_url">
+    <input type="hidden" id="youtube_duration" name="youtube_duration">
     <label for="name">Name *</label>
     <input type="text" id="name" name="name" required>
+
+    <div class="youtube-search" data-youtube-search data-search-url="{{ url_for('youtube_search') }}">
+      <label for="youtube_search_query">Find Your Karaoke Song On YouTube</label>
+      <div class="youtube-search__controls">
+        <input
+          type="search"
+          id="youtube_search_query"
+          name="youtube_search_query"
+          placeholder="Search song, artist, or karaoke version"
+          autocomplete="off"
+        >
+        <button type="button" class="button button--outline" data-youtube-search-button>Search</button>
+      </div>
+      <p class="form-helper" data-youtube-search-status>Pick a YouTube result to fill in the song fields below.</p>
+      <div class="youtube-search__results" data-youtube-search-results hidden></div>
+    </div>
 
     <label for="song_title">Song Title *</label>
     <input type="text" id="song_title" name="song_title" required>
@@ -58,4 +80,8 @@
     <p>No songs submitted yet. Choose yours above!</p>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='karaoke-search.js') }}"></script>
 {% endblock %}

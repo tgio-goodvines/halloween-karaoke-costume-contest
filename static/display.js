@@ -49,6 +49,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeRotatorElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-rotator]')
     : null;
+  const karaokeStageElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-stage]')
+    : null;
+  const karaokeStageIntroElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-intro]')
+    : null;
+  const karaokeStageSingerElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-singer]')
+    : null;
+  const karaokeStageSongElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-song]')
+    : null;
+  const karaokeStageYoutubeElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-youtube]')
+    : null;
+  const karaokeStageNextElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-next]')
+    : null;
+  const karaokeVideoElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-video]')
+    : null;
+  const karaokeVideoFrameElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-video-frame]')
+    : null;
+  const karaokeVideoFallbackElement = karaokeOverrideElement
+    ? karaokeOverrideElement.querySelector('[data-karaoke-video-fallback]')
+    : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
   let hasRefreshedDisplayStylesheet = false;
@@ -352,6 +379,134 @@ document.addEventListener('DOMContentLoaded', () => {
     return '';
   };
 
+  const resetKaraokeStage = () => {
+    if (karaokeStageElement) {
+      karaokeStageElement.setAttribute('hidden', '');
+    }
+    if (karaokeStageIntroElement) {
+      karaokeStageIntroElement.removeAttribute('hidden');
+    }
+    if (karaokeStageSingerElement) {
+      karaokeStageSingerElement.textContent = '';
+    }
+    if (karaokeStageSongElement) {
+      karaokeStageSongElement.textContent = '';
+    }
+    if (karaokeStageYoutubeElement) {
+      karaokeStageYoutubeElement.href = '#';
+      karaokeStageYoutubeElement.setAttribute('hidden', '');
+    }
+    if (karaokeStageNextElement) {
+      karaokeStageNextElement.textContent = '';
+      karaokeStageNextElement.setAttribute('hidden', '');
+    }
+    if (karaokeVideoElement) {
+      karaokeVideoElement.setAttribute('hidden', '');
+    }
+    if (karaokeVideoFrameElement) {
+      karaokeVideoFrameElement.removeAttribute('src');
+      karaokeVideoFrameElement.onerror = null;
+    }
+    if (karaokeVideoFallbackElement) {
+      karaokeVideoFallbackElement.textContent = '';
+      karaokeVideoFallbackElement.setAttribute('hidden', '');
+    }
+  };
+
+  const applyKaraokeStage = () => {
+    if (!karaokeStageElement) {
+      return;
+    }
+
+    const youtubeData =
+      overrideState && overrideState.youtube && typeof overrideState.youtube === 'object'
+        ? overrideState.youtube
+        : {};
+    const singerName =
+      overrideState && overrideState.singer_name ? String(overrideState.singer_name).trim() : 'Next Singer';
+    const songTitle =
+      overrideState && overrideState.song_title ? String(overrideState.song_title).trim() : '';
+    const artist = overrideState && overrideState.artist ? String(overrideState.artist).trim() : '';
+    const songLine = formatPerformerSong({ song_title: songTitle, artist });
+    const watchUrl = youtubeData.watch_url ? String(youtubeData.watch_url) : '';
+    const videoId = youtubeData.video_id ? String(youtubeData.video_id) : '';
+    const shouldShowVideo = Boolean(
+      overrideState &&
+        overrideState.mode === 'video' &&
+        overrideState.video_enabled &&
+        overrideState.video_playable &&
+        videoId
+    );
+
+    karaokeStageElement.removeAttribute('hidden');
+
+    if (karaokeStageSingerElement) {
+      karaokeStageSingerElement.textContent = singerName;
+    }
+    if (karaokeStageSongElement) {
+      karaokeStageSongElement.textContent = songLine || 'Song details coming up';
+    }
+    if (karaokeStageYoutubeElement) {
+      if (watchUrl) {
+        karaokeStageYoutubeElement.href = watchUrl;
+        karaokeStageYoutubeElement.removeAttribute('hidden');
+      } else {
+        karaokeStageYoutubeElement.href = '#';
+        karaokeStageYoutubeElement.setAttribute('hidden', '');
+      }
+    }
+
+    const nextSinger =
+      overrideState && overrideState.next_singer && typeof overrideState.next_singer === 'object'
+        ? overrideState.next_singer
+        : null;
+    if (karaokeStageNextElement) {
+      if (nextSinger && nextSinger.name) {
+        const nextSong = formatPerformerSong(nextSinger);
+        karaokeStageNextElement.textContent = nextSong
+          ? `Up next: ${nextSinger.name} • ${nextSong}`
+          : `Up next: ${nextSinger.name}`;
+        karaokeStageNextElement.removeAttribute('hidden');
+      } else {
+        karaokeStageNextElement.textContent = '';
+        karaokeStageNextElement.setAttribute('hidden', '');
+      }
+    }
+
+    if (karaokeStageIntroElement) {
+      if (shouldShowVideo) {
+        karaokeStageIntroElement.setAttribute('hidden', '');
+      } else {
+        karaokeStageIntroElement.removeAttribute('hidden');
+      }
+    }
+
+    if (karaokeVideoElement && karaokeVideoFrameElement) {
+      if (shouldShowVideo) {
+        const embedUrl = new URL(`https://www.youtube.com/embed/${videoId}`);
+        embedUrl.searchParams.set('autoplay', '1');
+        embedUrl.searchParams.set('playsinline', '1');
+        embedUrl.searchParams.set('rel', '0');
+        embedUrl.searchParams.set('origin', window.location.origin);
+        karaokeVideoFrameElement.src = embedUrl.toString();
+        karaokeVideoFrameElement.onerror = () => {
+          karaokeVideoElement.setAttribute('hidden', '');
+          if (karaokeStageIntroElement) {
+            karaokeStageIntroElement.removeAttribute('hidden');
+          }
+          if (karaokeVideoFallbackElement) {
+            karaokeVideoFallbackElement.textContent = 'Video playback was blocked. Use the stage card controls.';
+            karaokeVideoFallbackElement.removeAttribute('hidden');
+          }
+        };
+        karaokeVideoElement.removeAttribute('hidden');
+      } else {
+        karaokeVideoElement.setAttribute('hidden', '');
+        karaokeVideoFrameElement.removeAttribute('src');
+      }
+    }
+  };
+
   const updateKaraokeLineup = (entries) => {
     if (!karaokeLineupElement) {
       return;
@@ -497,7 +652,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageText = overrideState && overrideState.message ? overrideState.message : '';
     const details = overrideState && Array.isArray(overrideState.details) ? overrideState.details : [];
     const overrideType = overrideState && overrideState.type ? String(overrideState.type) : '';
-    const isKaraokeOverride = Boolean(overrideType === 'karaoke_start' && karaokeOverrideElement);
+    const isKaraokeOverride = Boolean(
+      (overrideType === 'karaoke_start' || overrideType === 'karaoke_stage') && karaokeOverrideElement
+    );
+    const isKaraokeStageOverride = overrideType === 'karaoke_stage';
     const isContestStartOverride = overrideType === 'contest_start';
     const isContestWinnerOverride = overrideType === 'winner';
     const isDrinkReadyOverride = overrideType === 'drink_ready';
@@ -584,24 +742,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      const karaokeData =
-        overrideState && overrideState.karaoke && typeof overrideState.karaoke === 'object'
-          ? overrideState.karaoke
-          : {};
+      if (isKaraokeStageOverride) {
+        if (karaokeRotatorElement) {
+          karaokeRotatorElement.setAttribute('hidden', '');
+          karaokeRotatorElement.style.height = '';
+        }
+        stopKaraokeRotator();
+        stopKaraokeCountdown();
+        updateKaraokeLineup([]);
+        applyKaraokeStage();
+      } else {
+        resetKaraokeStage();
+        if (karaokeRotatorElement) {
+          karaokeRotatorElement.removeAttribute('hidden');
+        }
+        const karaokeData =
+          overrideState && overrideState.karaoke && typeof overrideState.karaoke === 'object'
+            ? overrideState.karaoke
+            : {};
 
-      const lineup = Array.isArray(karaokeData.lineup) ? karaokeData.lineup : [];
-      const countdownTarget =
-        karaokeData.countdown_target && typeof karaokeData.countdown_target === 'string'
-          ? karaokeData.countdown_target
-          : '';
-      const countdownLabel =
-        karaokeData.countdown_label && typeof karaokeData.countdown_label === 'string'
-          ? karaokeData.countdown_label
-          : '';
+        const lineup = Array.isArray(karaokeData.lineup) ? karaokeData.lineup : [];
+        const countdownTarget =
+          karaokeData.countdown_target && typeof karaokeData.countdown_target === 'string'
+            ? karaokeData.countdown_target
+            : '';
+        const countdownLabel =
+          karaokeData.countdown_label && typeof karaokeData.countdown_label === 'string'
+            ? karaokeData.countdown_label
+            : '';
 
-      updateKaraokeLineup(lineup);
-      startKaraokeCountdown(countdownTarget, countdownLabel);
-      startKaraokeRotator();
+        updateKaraokeLineup(lineup);
+        startKaraokeCountdown(countdownTarget, countdownLabel);
+        startKaraokeRotator();
+      }
     } else {
       if (generalOverrideElement) {
         generalOverrideElement.removeAttribute('hidden');
@@ -615,6 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (karaokeRotatorElement) {
         karaokeRotatorElement.style.height = '';
       }
+      resetKaraokeStage();
 
       if (karaokeTitleElement) {
         karaokeTitleElement.textContent = '';

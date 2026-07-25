@@ -3017,6 +3017,48 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Late Night", switched_body)
         self.assertIn("Active:", switched_body)
 
+    def test_admin_can_delete_active_jukebox_playlist_when_another_exists(self):
+        main.jukebox_settings["enabled"] = True
+        first_track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby", "duration_ms": 180000}
+        )
+        second_track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-2", "title": "Thriller", "artist": "Michael", "duration_ms": 240000}
+        )
+        first_playlist = main.normalize_jukebox_playlist_record(
+            {"name": "Dinner", "tracks": [first_track]}
+        )
+        second_playlist = main.normalize_jukebox_playlist_record(
+            {"name": "Dance Floor", "tracks": [second_track]}
+        )
+        main.jukebox_playlists = [first_playlist, second_playlist]
+        main.jukebox_active_playlist_id = first_playlist["id"]
+        main.ensure_jukebox_playlists()
+        main.regenerate_jukebox_queue()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            page_response = client.get("/admin")
+            delete_response = client.post(
+                "/admin",
+                data={
+                    "action": "delete_jukebox_playlist",
+                    "playlist_id": first_playlist["id"],
+                },
+            )
+
+        page_body = page_response.get_data(as_text=True)
+        playlist_ids = [playlist["id"] for playlist in main.jukebox_playlists]
+        self.assertEqual(200, page_response.status_code)
+        self.assertEqual(200, delete_response.status_code)
+        self.assertIn('value="delete_jukebox_playlist"', page_body)
+        self.assertNotIn(first_playlist["id"], playlist_ids)
+        self.assertEqual(second_playlist["id"], main.jukebox_active_playlist_id)
+        self.assertEqual("Dance Floor", main.active_jukebox_playlist()["name"])
+        self.assertEqual(["Thriller"], [track["title"] for track in main.jukebox_playlist])
+        self.assertEqual(["Thriller"], [item["title"] for item in main.jukebox_queue])
+
     def test_approved_requests_apply_only_to_active_jukebox_playlist(self):
         main.jukebox_settings["enabled"] = True
         inactive_track = main.normalize_jukebox_track(

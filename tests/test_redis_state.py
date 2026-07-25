@@ -3381,6 +3381,72 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("Thriller", [item["title"] for item in main.jukebox_queue])
         self.assertNotIn("Thriller", final_body)
 
+    def test_admin_can_remove_jukebox_song_from_stale_browser_row(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_playlist = [track]
+        main.regenerate_jukebox_queue()
+        stale_queue_id = "stale-browser-row"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "remove_jukebox_queue_item",
+                    "queue_item_id": stale_queue_id,
+                    "playlist_track_id": track["id"],
+                    "source": "playlist",
+                    "apple_music_id": track["apple_music_id"],
+                    "title": track["title"],
+                    "artist": track["artist"],
+                },
+            )
+            page_response = client.get("/admin")
+
+        body = page_response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual([], main.jukebox_playlist)
+        self.assertEqual([], main.queued_jukebox_items())
+        self.assertNotIn("Monster Mash", body)
+
+    def test_admin_can_reject_request_from_stale_browser_row(self):
+        main.jukebox_settings["enabled"] = True
+        request_item = main.normalize_jukebox_request(
+            {
+                "apple_music_id": "request-song",
+                "title": "Requested Song",
+                "artist": "Guest Artist",
+                "requester_user_id": "user-1",
+                "requester_name": "Jamie",
+                "status": "pending",
+            }
+        )
+        main.jukebox_requests = [request_item]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "reject_jukebox_request",
+                    "request_id": "stale-browser-request",
+                    "apple_music_id": request_item["apple_music_id"],
+                    "title": request_item["title"],
+                    "artist": request_item["artist"],
+                },
+            )
+            page_response = client.get("/admin")
+
+        body = page_response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual([], main.jukebox_requests)
+        self.assertNotIn("Requested Song", body)
+
     def test_display_data_includes_jukebox_state(self):
         main.jukebox_settings["enabled"] = True
         self.save_current_state()

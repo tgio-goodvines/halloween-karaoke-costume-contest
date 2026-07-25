@@ -469,6 +469,12 @@
               <form method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="queue_item_id" value="{{ item.id }}">
+                <input type="hidden" name="playlist_track_id" value="{{ item.playlist_track_id }}">
+                <input type="hidden" name="request_id" value="{{ item.request_id }}">
+                <input type="hidden" name="source" value="{{ item.source }}">
+                <input type="hidden" name="apple_music_id" value="{{ item.apple_music_id }}">
+                <input type="hidden" name="title" value="{{ item.title }}">
+                <input type="hidden" name="artist" value="{{ item.artist }}">
                 <input type="hidden" name="action" value="remove_jukebox_queue_item">
                 <button type="submit" class="button button--danger">Remove</button>
               </form>
@@ -509,6 +515,9 @@
               <form method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="request_id" value="{{ request_item.id }}">
+                <input type="hidden" name="apple_music_id" value="{{ request_item.apple_music_id }}">
+                <input type="hidden" name="title" value="{{ request_item.title }}">
+                <input type="hidden" name="artist" value="{{ request_item.artist }}">
                 <input type="hidden" name="action" value="reject_jukebox_request">
                 <button type="submit" class="button button--outline">Reject</button>
               </form>

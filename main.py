@@ -2455,7 +2455,7 @@ def remove_matching_jukebox_requests(removed_item: dict[str, object], request_id
         if not (
             (requested_id and str(request_item.get("id", "") or "") == requested_id)
             or (
-                str(removed_item.get("source", "") or "") == "request"
+                str(removed_item.get("source", "") or "") in {"", "request"}
                 and jukebox_track_identity_matches(request_item, removed_item)
             )
         )
@@ -5556,35 +5556,52 @@ def admin_portal():
         elif action in {"move_jukebox_queue_item_up", "move_jukebox_queue_item_down", "remove_jukebox_queue_item"}:
             queue_item_id = request.form.get("queue_item_id", "").strip()
             queue_index = find_jukebox_queue_index(queue_item_id)
-            if queue_index is None:
+            if queue_index is None and action != "remove_jukebox_queue_item":
                 errors.append("Jukebox playlist song could not be found.")
             elif action == "remove_jukebox_queue_item":
-                removed_item = copy.deepcopy(jukebox_queue[queue_index])
-                request_id = str(removed_item.get("request_id", "") or "")
-                source = str(removed_item.get("source", "") or "playlist")
-                was_now_playing = str(jukebox_now_playing.get("id", "") or "") == queue_item_id
-                removed_playlist_count = 0
-                removed_request_count = 0
-                remove_jukebox_queue_rows_for_item(removed_item, queue_item_id)
-                if source == "playlist":
-                    removed_playlist_count = remove_matching_active_playlist_tracks(removed_item)
-                if request_id:
-                    removed_request_count = remove_matching_jukebox_requests(removed_item, request_id)
-                if was_now_playing:
-                    jukebox_now_playing = {}
-                if source == "playlist" and removed_playlist_count:
-                    regenerate_jukebox_queue()
-                if not queued_jukebox_items():
-                    jukebox_now_playing = {}
-                    if was_now_playing:
-                        jukebox_playback_control = issue_jukebox_dj_command("stop")
-                if source == "request" and not removed_request_count:
-                    removed_request_count = remove_matching_jukebox_requests(removed_item)
-                if removed_playlist_count or removed_request_count or source not in {"playlist", "request"}:
-                    messages.append(f"Removed {removed_item.get('title')} from the active playlist.")
-                    should_broadcast = True
+                removed_item = (
+                    copy.deepcopy(jukebox_queue[queue_index])
+                    if queue_index is not None
+                    else normalize_jukebox_queue_item(
+                        {
+                            "id": queue_item_id,
+                            "source": request.form.get("source", "playlist"),
+                            "playlist_track_id": request.form.get("playlist_track_id", ""),
+                            "request_id": request.form.get("request_id", ""),
+                            "apple_music_id": request.form.get("apple_music_id", ""),
+                            "title": request.form.get("title", ""),
+                            "artist": request.form.get("artist", ""),
+                        }
+                    )
+                )
+                if not removed_item:
+                    errors.append("Jukebox playlist song could not be found.")
                 else:
-                    errors.append("That jukebox song could not be removed from the saved playlist.")
+                    request_id = str(removed_item.get("request_id", "") or "")
+                    source = str(removed_item.get("source", "") or "playlist")
+                    was_now_playing = str(jukebox_now_playing.get("id", "") or "") == queue_item_id
+                    removed_playlist_count = 0
+                    removed_request_count = 0
+                    removed_queue_count = remove_jukebox_queue_rows_for_item(removed_item, queue_item_id)
+                    if source == "playlist":
+                        removed_playlist_count = remove_matching_active_playlist_tracks(removed_item)
+                    if request_id:
+                        removed_request_count = remove_matching_jukebox_requests(removed_item, request_id)
+                    if was_now_playing:
+                        jukebox_now_playing = {}
+                    if source == "playlist" and removed_playlist_count:
+                        regenerate_jukebox_queue()
+                    if not queued_jukebox_items():
+                        jukebox_now_playing = {}
+                        if was_now_playing:
+                            jukebox_playback_control = issue_jukebox_dj_command("stop")
+                    if source == "request" and not removed_request_count:
+                        removed_request_count = remove_matching_jukebox_requests(removed_item)
+                    if removed_playlist_count or removed_request_count or removed_queue_count or source not in {"playlist", "request"}:
+                        messages.append(f"Removed {removed_item.get('title')} from the active playlist.")
+                        should_broadcast = True
+                    else:
+                        errors.append("That jukebox song could not be removed from the saved playlist.")
             else:
                 active_indices = active_jukebox_queue_indices()
                 active_position = active_indices.index(queue_index) if queue_index in active_indices else None
@@ -5692,6 +5709,16 @@ def admin_portal():
         elif action in {"approve_jukebox_request", "reject_jukebox_request", "skip_jukebox_request"}:
             request_id = request.form.get("request_id", "").strip()
             request_item = find_jukebox_request(request_id)
+            if not request_item and action == "reject_jukebox_request":
+                request_item = normalize_jukebox_request(
+                    {
+                        "id": request_id,
+                        "source": "request",
+                        "apple_music_id": request.form.get("apple_music_id", ""),
+                        "title": request.form.get("title", ""),
+                        "artist": request.form.get("artist", ""),
+                    }
+                )
             if not request_item:
                 errors.append("Jukebox request could not be found.")
             elif action == "approve_jukebox_request":

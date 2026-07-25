@@ -512,15 +512,18 @@
       throw new Error('No queued Apple Music song is ready.');
     }
     if (typeof activeMusic.setQueue === 'function') {
+      const songId = String(queueItem.apple_music_id || '');
       try {
         await withTimeout(
-          () => activeMusic.setQueue({ song: queueItem.apple_music_id }),
-          'Apple Music did not accept the queued song.'
+          () => activeMusic.setQueue({ song: songId, startPlaying: true }),
+          'Apple Music did not accept the queued song.',
+          45000
         );
       } catch (error) {
         await withTimeout(
-          () => activeMusic.setQueue({ songs: [queueItem.apple_music_id] }),
-          'Apple Music did not accept the queued song.'
+          () => activeMusic.setQueue({ songs: [songId], startPlaying: true }),
+          'Apple Music did not accept the queued song.',
+          45000
         );
       }
     }

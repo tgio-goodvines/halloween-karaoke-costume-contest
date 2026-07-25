@@ -8,6 +8,8 @@
   let hasReceivedInitialUpdate = false;
   let lastScrollAt = 0;
   let deferredRefreshTimer = null;
+  let panelRequestSequence = 0;
+  let latestAppliedPanelRequest = 0;
 
   const getPanel = () => document.querySelector('[data-admin-panel]');
 
@@ -128,7 +130,10 @@
     initAjaxForms();
   };
 
-  const replaceAdminPanel = (html, savedScrollY, activeTab, openSummaries) => {
+  const replaceAdminPanel = (html, savedScrollY, activeTab, openSummaries, requestSequence = 0) => {
+    if (requestSequence && requestSequence < latestAppliedPanelRequest) {
+      return;
+    }
     const parser = new DOMParser();
     const nextDocument = parser.parseFromString(html, 'text/html');
     const nextPanel = nextDocument.querySelector('[data-admin-panel]');
@@ -136,6 +141,9 @@
     if (!nextPanel || !currentPanel) {
       window.location.reload();
       return;
+    }
+    if (requestSequence) {
+      latestAppliedPanelRequest = requestSequence;
     }
     currentPanel.replaceWith(nextPanel);
     setActiveTab(activeTab, false);
@@ -159,6 +167,7 @@
     const savedScrollY = window.scrollY;
     const activeTab = window.localStorage.getItem(tabStorageKey) || defaultTab;
     const openSummaries = openDetailsSnapshot();
+    const requestSequence = ++panelRequestSequence;
     panel.classList.add('is-refreshing');
     try {
       const response = await fetch('/admin', {
@@ -168,7 +177,7 @@
       if (!response.ok) {
         throw new Error('Admin refresh failed.');
       }
-      replaceAdminPanel(await response.text(), savedScrollY, activeTab, openSummaries);
+      replaceAdminPanel(await response.text(), savedScrollY, activeTab, openSummaries, requestSequence);
     } catch (error) {
       panel.classList.remove('is-refreshing');
     } finally {
@@ -227,6 +236,7 @@
         const savedScrollY = window.scrollY;
         const activeTab = window.localStorage.getItem(tabStorageKey) || defaultTab;
         const openSummaries = openDetailsSnapshot();
+        const requestSequence = ++panelRequestSequence;
         let formData;
         try {
           formData = submitter ? new FormData(form, submitter) : new FormData(form);
@@ -250,7 +260,7 @@
           if (!response.ok) {
             throw new Error('Admin action failed.');
           }
-          replaceAdminPanel(await response.text(), savedScrollY, activeTab, openSummaries);
+          replaceAdminPanel(await response.text(), savedScrollY, activeTab, openSummaries, requestSequence);
         } catch (error) {
           window.location.reload();
         }

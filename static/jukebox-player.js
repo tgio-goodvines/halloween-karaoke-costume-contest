@@ -312,7 +312,7 @@
         (music.isPlaying === true || (music.player && music.player.isPlaying === true))
     );
 
-  const waitForPlaybackStart = (timeoutMs = 25000) =>
+  const waitForPlaybackStart = (timeoutMs = 45000) =>
     new Promise((resolve, reject) => {
       const startedAt = Date.now();
       const check = () => {
@@ -331,24 +331,21 @@
 
   const triggerMusicPlay = async () => {
     if (music && typeof music.play === 'function') {
-      await withTimeout(
-        () => music.play(),
-        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
-      );
+      await music.play();
     } else if (music && music.player && typeof music.player.play === 'function') {
-      await withTimeout(
-        () => music.player.play(),
-        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
-      );
+      await music.player.play();
     } else {
       throw new Error('Apple Music playback is not available in this display browser.');
     }
   };
 
-  const confirmPlaybackStarted = (commandId, queueItem) => {
+  const confirmPlaybackStarted = (commandId, queueItem, playPromise) => {
     const expectedItemId = queueItem && queueItem.id ? queueItem.id : '';
     setStatus(`Apple Music accepted ${queueItem && queueItem.title ? queueItem.title : 'the selected song'} and is starting playback...`);
-    waitForPlaybackStart()
+    Promise.race([
+      waitForPlaybackStart(),
+      Promise.resolve(playPromise).then(() => waitForPlaybackStart()),
+    ])
       .then(async () => {
         if (expectedItemId && (!currentQueueItem || currentQueueItem.id !== expectedItemId)) {
           return;
@@ -540,8 +537,8 @@
     currentQueueItem = nextItem;
     lastEndedItemId = '';
     setStatus(`Starting ${nextItem.title || 'the selected song'} through Apple Music...`);
-    await triggerMusicPlay();
-    confirmPlaybackStarted(commandId, currentQueueItem);
+    const playPromise = triggerMusicPlay();
+    confirmPlaybackStarted(commandId, currentQueueItem, playPromise);
   };
 
   const pausePlayback = async (commandId, eventName) => {

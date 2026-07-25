@@ -64,6 +64,9 @@
     }
   };
 
+  const isPlaybackStartCommand = (control) =>
+    control && (control.command === 'play' || control.command === 'restart_playlist');
+
   const syncAuthorizationState = () => {
     if (music && music.isAuthorized === true) {
       musicAuthorized = true;
@@ -86,14 +89,14 @@
     if (!authPrompt) {
       return;
     }
-    setText(authTitle, control && (control.command === 'play' || control.command === 'restart_playlist') ? 'Sign In To Start Jukebox' : 'Authorize Apple Music Display');
+    setText(authTitle, isPlaybackStartCommand(control) ? 'Sign In To Start Jukebox' : 'Authorize Apple Music Display');
     setText(
       authMessage,
       message ||
         'Use this live-display browser to sign in with the host Apple Music subscriber account. If your phone shows an Apple verification code, enter it in the Apple sign-in window on this display.'
     );
     if (authActionButton) {
-      authActionButton.textContent = control && (control.command === 'play' || control.command === 'restart_playlist') ? 'Sign In And Play' : 'Authorize Apple Music';
+      authActionButton.textContent = isPlaybackStartCommand(control) ? 'Sign In And Play' : 'Authorize Apple Music';
       authActionButton.disabled = false;
     }
     authPrompt.hidden = false;
@@ -109,7 +112,7 @@
   const setAuthPromptError = (message) => {
     setText(authMessage, message || 'Apple Music sign-in did not finish. Try again from this display.');
     if (authActionButton) {
-      authActionButton.textContent = pendingAuthCommand && (pendingAuthCommand.command === 'play' || pendingAuthCommand.command === 'restart_playlist') ? 'Try Sign In And Play Again' : 'Try Apple Music Authorization Again';
+      authActionButton.textContent = isPlaybackStartCommand(pendingAuthCommand) ? 'Try Sign In And Play Again' : 'Try Apple Music Authorization Again';
       authActionButton.disabled = false;
     }
   };
@@ -121,7 +124,7 @@
         'Apple Music is ready for authorization on this display. Press the button here, complete Apple sign-in, then return to admin controls.'
     );
     if (authActionButton) {
-      authActionButton.textContent = pendingAuthCommand && (pendingAuthCommand.command === 'play' || pendingAuthCommand.command === 'restart_playlist') ? 'Sign In And Play' : 'Authorize Apple Music';
+      authActionButton.textContent = isPlaybackStartCommand(pendingAuthCommand) ? 'Sign In And Play' : 'Authorize Apple Music';
       authActionButton.disabled = false;
     }
   };
@@ -419,8 +422,15 @@
     try {
       await configureMusic({ authorize: false });
       if (syncAuthorizationState()) {
+        if (control && control.command === 'connect') {
+          setAuthPromptReady('Apple Music looks authorized on this display. Press Confirm Connection here to keep this display as the playback surface.');
+          if (authActionButton) {
+            authActionButton.textContent = 'Confirm Connection';
+          }
+          return;
+        }
         setAuthPromptBusy('Apple Music is already authorized on this display. Syncing admin controls...', 'Connected');
-        if (control && (control.command === 'play' || control.command === 'restart_playlist')) {
+        if (isPlaybackStartCommand(control)) {
           await startPlayback(control.id, control.queue_item_id);
         } else if (control && control.id) {
           await postPlaybackEvent('sync', currentQueueItem, control.id);
@@ -433,13 +443,6 @@
       const authMessageText = error.message || 'Apple Music is not ready in this display browser yet.';
       setStatus(authMessageText);
       setAuthPromptError(authMessageText);
-      if (control && control.id) {
-        try {
-          await postPlaybackEvent('command_error', currentQueueItem, control.id, authMessageText);
-        } catch (ackError) {
-          setAuthPromptError(ackError.message || authMessageText);
-        }
-      }
     }
   };
 
@@ -582,7 +585,7 @@
       if (control.command === 'connect') {
         await configureMusic();
         await postPlaybackEvent('sync', currentQueueItem, control.id);
-      } else if (control.command === 'play' || control.command === 'restart_playlist') {
+      } else if (isPlaybackStartCommand(control)) {
         await configureMusic();
         await startPlayback(control.id, control.queue_item_id);
       }

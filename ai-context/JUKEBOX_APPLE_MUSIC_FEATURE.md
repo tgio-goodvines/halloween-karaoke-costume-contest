@@ -125,6 +125,13 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   `connect` command. The newly opened paired display tab should render the
   Apple Music authorization modal without requiring the host to return to admin
   and press Connect separately.
+- 2026-07-25: Fixed the paired-display authorization prompt disappearing after
+  a split-second. The live display may probe MusicKit on load, but it no longer
+  acknowledges or hides the `connect` authorization prompt from a background
+  check. If MusicKit reports an existing authorization, the prompt stays open
+  with a Confirm Connection button so the host keeps a visible same-tab action.
+  Probe failures also leave the prompt open and retryable instead of turning the
+  command into an immediate admin error.
 
 ## Design Notes
 

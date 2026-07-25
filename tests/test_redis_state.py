@@ -1544,8 +1544,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Casey", body)
         self.assertIn("casey@example.com", body)
         self.assertIn("Vegetarian", body)
-        self.assertIn("Pair Display", body)
-        self.assertIn("Procedure: Pair the display", body)
+        self.assertIn("Pair & Authorize Display", body)
+        self.assertIn("Procedure: Pair and authorize the display", body)
         self.assertNotIn("/live-display?host_controls=1", body)
 
     def test_admin_jukebox_renders_dj_controls_before_settings_and_search(self):
@@ -1560,7 +1560,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertLess(body.index("DJ Controls"), body.index("Jukebox Settings"))
         self.assertLess(body.index("DJ Controls"), body.index("Add Song To Active Playlist"))
-        self.assertIn("Pair Display", body)
+        self.assertIn("Pair & Authorize Display", body)
         self.assertIn("Active Playlist", body)
         self.assertIn("Reset Playlist", body)
         self.assertIn("Restart Playlist", body)
@@ -3226,6 +3226,8 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(302, pair_response.status_code)
         self.assertIn("display_token=", pair_response.headers["Location"])
+        self.assertEqual("connect", main.jukebox_playback_control["command"])
+        self.assertEqual("pending", main.jukebox_playback_control["status"])
 
         with main.app.test_client() as display_client:
             paired_response = display_client.get(pair_response.headers["Location"], follow_redirects=False)
@@ -3239,6 +3241,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("test-token", token_response.get_json()["developer_token"])
         self.assertEqual(200, state_response.status_code)
         self.assertTrue(state_response.get_json()["display_authorized"])
+        self.assertEqual("connect", state_response.get_json()["playback_control"]["command"])
         self.assertEqual(302, admin_response.status_code)
         self.assertIn("/admin/login", admin_response.headers["Location"])
 

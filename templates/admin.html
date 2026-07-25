@@ -199,7 +199,7 @@
     <h3>Apple Music Jukebox</h3>
     <p>Build the party playlist, approve attendee requests, and command the live display that owns Apple Music playback.</p>
     <div class="contest-status">
-      Procedure: Pair the display, complete Apple Music authorization on the live display browser, add songs to the active playlist, approve requests into that playlist, then use DJ controls here.
+      Procedure: Pair and authorize the display, complete Apple Music sign-in on the live display browser, add songs to the active playlist, approve requests into that playlist, then use DJ controls here.
     </div>
 
     <div class="access-settings">
@@ -218,11 +218,11 @@
             <p class="contest-status contest-status--inactive">{{ jukebox_playback_control.error }}</p>
           {% endif %}
         </div>
-        <p class="form-helper">Pair Display opens a playback-only live-display tab. Complete Apple Music authorization from that tab before pressing Play.</p>
+        <p class="form-helper">Pair & Authorize Display opens a playback-only live-display tab and requests Apple Music authorization there. Complete Apple sign-in on that tab before pressing Play.</p>
         <div class="contest-actions">
           <form method="post" target="_blank" data-admin-native-form>
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" name="action" value="pair_live_display" class="button button--primary">Pair Display</button>
+            <button type="submit" name="action" value="pair_live_display" class="button button--primary">Pair & Authorize Display</button>
           </form>
           <form method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

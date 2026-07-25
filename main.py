@@ -5131,6 +5131,8 @@ def admin_portal():
 
         elif action == "pair_live_display":
             display_token = create_display_pairing_token()
+            jukebox_playback_control = issue_jukebox_dj_command("connect")
+            broadcast_display_update()
             return redirect(url_for("live_display", display_token=display_token))
 
         elif action == "update_jukebox_settings":

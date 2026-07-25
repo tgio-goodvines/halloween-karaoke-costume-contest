@@ -106,8 +106,9 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   authorization before showing the modal, displays progress while Apple sign-in
   opens, times out visibly, and posts `sync` or `command_error` back to admin.
 - 2026-07-25: Implemented the final paired-display Apple Music workflow. Admin
-  `Pair Display` creates a short-lived, single-use display token and opens a
-  playback-only `/live-display` session; paired displays can fetch
+  `Pair & Authorize Display` creates a short-lived, single-use display token,
+  opens a playback-only `/live-display` session, and issues the display
+  `connect` command; paired displays can fetch
   `/api/jukebox-state`, `/api/apple-music-token`, and post
   `/api/jukebox/playback-event` without receiving admin portal access. The
   admin Jukebox tab documents the procedure in-app: pair display, authorize
@@ -119,6 +120,11 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   realtime, approved requests are inserted into it, Reset rebuilds the queue
   without deleting playlist songs, and Restart resets playback state and sends
   a `restart_playlist` command to the paired display.
+- 2026-07-25: Corrected paired-display UX so Pair & Authorize Display now both
+  creates the playback-only display token and immediately issues a pending
+  `connect` command. The newly opened paired display tab should render the
+  Apple Music authorization modal without requiring the host to return to admin
+  and press Connect separately.
 
 ## Design Notes
 
@@ -136,9 +142,10 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   session can fetch the MusicKit developer token. Attendees use playback
   indirectly by submitting app-owned requests for host approval.
 - Browser audio autoplay still requires a user gesture in the playback tab.
-  The host should press `Pair Display` from `/admin`, use the new paired
-  display tab on the TV/cast browser, press `Connect Apple Music` or `Play`
-  from admin, then complete the Apple Music prompt on the live display itself.
+  The host should press `Pair & Authorize Display` from `/admin`, use the new
+  paired display tab on the TV/cast browser, then complete the Apple Music
+  prompt on the live display itself. After that, admin DJ controls can play,
+  pause, skip, reset, and restart the active playlist.
 - Chromecast audio should work when casting the Chrome tab containing `/live-display`; casting a full screen can keep audio on the computer on some platforms.
 - YouTube remains unsuitable for audio-only playback because YouTube API policies do not allow separating or hiding the video/audio components.
 - Apple Music catalog search and MusicKit playback require

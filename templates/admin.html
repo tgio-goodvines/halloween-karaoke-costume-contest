@@ -219,6 +219,26 @@
           {% else %}
             <p class="contest-status contest-status--inactive" data-jukebox-command-error hidden></p>
           {% endif %}
+          <p class="contest-status {% if jukebox_developer_token_configured %}contest-status--active{% else %}contest-status--inactive{% endif %}">
+            Token: {% if jukebox_developer_token_configured %}configured{% else %}missing{% endif %}
+          </p>
+          <p class="contest-status {% if jukebox_display_status.paired %}contest-status--active{% else %}contest-status--warning{% endif %}">
+            Display: {% if jukebox_display_status.paired %}paired{% else %}waiting for paired tab{% endif %}
+          </p>
+          <p class="contest-status {% if jukebox_display_status.musickit_loaded %}contest-status--active{% else %}contest-status--warning{% endif %}">
+            MusicKit: {% if jukebox_display_status.musickit_loaded %}loaded{% else %}not confirmed{% endif %}
+          </p>
+          <p class="contest-status {% if jukebox_display_status.apple_authorized %}contest-status--active{% else %}contest-status--warning{% endif %}">
+            Apple Account: {% if jukebox_display_status.apple_authorized %}authorized{% else %}authorization needed{% endif %}
+          </p>
+          <p class="contest-status {% if jukebox_display_status.playback_ready %}contest-status--active{% else %}contest-status--warning{% endif %}">
+            Playback: {% if jukebox_display_status.playback_ready %}ready{% else %}not ready{% endif %}
+          </p>
+          {% if jukebox_display_status.last_error %}
+            <p class="contest-status contest-status--inactive">{{ jukebox_display_status.last_error }}</p>
+          {% elif jukebox_display_status.message %}
+            <p class="contest-status">{{ jukebox_display_status.message }}</p>
+          {% endif %}
         </div>
         <p class="form-helper">Pair & Authorize Display opens a playback-only live-display tab and requests Apple Music authorization there. Complete Apple sign-in on that tab before pressing Play.</p>
         <div class="contest-actions">
@@ -229,15 +249,15 @@
           <form method="post" data-jukebox-dj-form data-jukebox-dj-endpoint="{{ url_for('jukebox_dj_command') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="jukebox_dj_command">
-            <button type="submit" name="jukebox_command" value="connect" class="button button--outline">Connect Apple Music</button>
-            <button type="submit" name="jukebox_command" value="play" class="button button--primary">Play</button>
-            <button type="submit" name="jukebox_command" value="pause" class="button button--outline">Pause</button>
-            <button type="submit" name="jukebox_command" value="stop" class="button button--outline">Stop</button>
-            <button type="submit" name="jukebox_command" value="skip" class="button button--danger">Skip</button>
+            <button type="submit" name="jukebox_command" value="connect" class="button button--outline" {% if not jukebox_developer_token_configured %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Connect Apple Music</button>
+            <button type="submit" name="jukebox_command" value="play" class="button button--primary" {% if not jukebox_playback_ready %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Play</button>
+            <button type="submit" name="jukebox_command" value="pause" class="button button--outline" {% if not jukebox_transport_ready %}disabled title="Start playback before using transport controls."{% endif %}>Pause</button>
+            <button type="submit" name="jukebox_command" value="stop" class="button button--outline" {% if not jukebox_transport_ready %}disabled title="Start playback before using transport controls."{% endif %}>Stop</button>
+            <button type="submit" name="jukebox_command" value="skip" class="button button--danger" {% if not jukebox_transport_ready %}disabled title="Start playback before using transport controls."{% endif %}>Skip</button>
           </form>
           <form method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" name="action" value="restart_jukebox_playlist" class="button button--primary">Restart Playlist</button>
+            <button type="submit" name="action" value="restart_jukebox_playlist" class="button button--primary" {% if not jukebox_playback_ready %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Restart Playlist</button>
             <button type="submit" name="action" value="reset_jukebox_playlist" class="button button--outline">Reset Playlist</button>
           </form>
         </div>
@@ -454,7 +474,7 @@
                 <input type="hidden" name="action" value="jukebox_dj_command">
                 <input type="hidden" name="jukebox_command" value="play">
                 <input type="hidden" name="queue_item_id" value="{{ item.id }}">
-                <button type="submit" class="button button--primary">Play Now</button>
+                <button type="submit" class="button button--primary" {% if not jukebox_playback_ready %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Play Now</button>
               </form>
               <form method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -312,6 +312,45 @@
         (music.isPlaying === true || (music.player && music.player.isPlaying === true))
     );
 
+  const postDisplayStatus = async (updates = {}) => {
+    const formData = new FormData();
+    const stage = updates.stage || 'display_loaded';
+    formData.append('csrf_token', csrfToken);
+    formData.append('stage', stage);
+    formData.append('musickit_loaded', updates.musickitLoaded ? 'yes' : 'no');
+    formData.append('apple_authorized', updates.appleAuthorized ? 'yes' : 'no');
+    formData.append('playback_ready', updates.playbackReady ? 'yes' : 'no');
+    formData.append('playing', updates.playing ? 'yes' : 'no');
+    formData.append('message', updates.message || '');
+    formData.append('error', updates.error || '');
+    try {
+      const response = await fetch('/api/jukebox/display-status', {
+        method: 'POST',
+        body: formData,
+        headers: { Accept: 'application/json' },
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload && payload.jukebox) {
+          state = payload.jukebox;
+        }
+      }
+    } catch (error) {
+      // Display status is advisory; playback commands still handle their own errors.
+    }
+  };
+
+  const reportCurrentDisplayStatus = (stage, message, errorMessage = '') =>
+    postDisplayStatus({
+      stage,
+      musickitLoaded: Boolean(music),
+      appleAuthorized: syncAuthorizationState(),
+      playbackReady: Boolean(music && musicAuthorized),
+      playing: isMusicPlaying(),
+      message,
+      error: errorMessage,
+    });
+
   const waitForPlaybackStart = (timeoutMs = 45000) =>
     new Promise((resolve, reject) => {
       const startedAt = Date.now();
@@ -351,9 +390,11 @@
           return;
         }
         await postPlaybackEvent('started', queueItem, commandId);
+        await reportCurrentDisplayStatus('playing', 'Apple Music playback is active on the live display.');
         setStatus('Jukebox playing from the host Apple Music account. Cast this Chrome tab for TV audio.');
       })
       .catch(async (error) => {
+        await reportCurrentDisplayStatus('error', 'Apple Music playback did not start.', error.message || 'Apple Music playback did not start.');
         try {
           await fetchState();
           const control = state && state.playback_control ? state.playback_control : null;
@@ -423,6 +464,7 @@
       syncAuthorizationState();
       if (shouldAuthorize && !musicAuthorized && typeof music.authorize === 'function') {
         setAuthPromptBusy('Opening Apple Music sign-in on this display...', 'Waiting For Apple...');
+        await reportCurrentDisplayStatus('authorizing', 'Opening Apple Music sign-in on this display...');
         await withTimeout(
           () => music.authorize(),
           'Apple Music authorization did not finish. Allow pop-ups for this site, complete Apple sign-in on this display, then try again.',
@@ -433,8 +475,13 @@
           throw new Error('Apple Music sign-in did not complete. Enter the Apple verification code in the sign-in window on this display, then try again.');
         }
         musicAuthorized = true;
+        await reportCurrentDisplayStatus('playback_ready', 'Apple Music is authorized and ready for admin playback controls.');
       } else if (shouldAuthorize && !musicAuthorized) {
+        await reportCurrentDisplayStatus('authorization_needed', 'MusicKit loaded. Apple Music authorization is needed.');
         throw new Error('Apple Music authorization is not available in this display browser.');
+      }
+      if (musicAuthorized) {
+        await reportCurrentDisplayStatus('playback_ready', 'Apple Music is authorized and ready for admin playback controls.');
       }
       return music;
     }
@@ -443,6 +490,8 @@
     if (!response.ok) {
       throw new Error(payload.error || 'Apple Music is not configured.');
     }
+    await reportCurrentDisplayStatus('token_ready', 'Apple Music token is configured. Loading MusicKit...');
+    await reportCurrentDisplayStatus('musickit_loading', 'Loading Apple MusicKit on the live display...');
     const MusicKit = await waitForMusicKit();
     music = await MusicKit.configure({
       developerToken: payload.developer_token,
@@ -453,8 +502,13 @@
       storefrontId: payload.storefront || 'us',
     });
     syncAuthorizationState();
+    await reportCurrentDisplayStatus(
+      musicAuthorized ? 'authorized' : 'authorization_needed',
+      musicAuthorized ? 'Apple Music is already authorized on this display.' : 'MusicKit loaded. Apple Music authorization is needed.'
+    );
     if (shouldAuthorize && music && typeof music.authorize === 'function') {
       setAuthPromptBusy('Opening Apple Music sign-in on this display...', 'Waiting For Apple...');
+      await reportCurrentDisplayStatus('authorizing', 'Opening Apple Music sign-in on this display...');
       await withTimeout(
         () => music.authorize(),
         'Apple Music authorization did not finish. Allow pop-ups for this site, complete Apple sign-in on this display, then try again.',
@@ -465,6 +519,7 @@
         throw new Error('Apple Music sign-in did not complete. Enter the Apple verification code in the sign-in window on this display, then try again.');
       }
       musicAuthorized = true;
+      await reportCurrentDisplayStatus('playback_ready', 'Apple Music is authorized and ready for admin playback controls.');
     } else if (shouldAuthorize && !musicAuthorized) {
       throw new Error('Apple Music authorization is not available in this display browser.');
     }
@@ -503,6 +558,7 @@
       const authMessageText = error.message || 'Apple Music is not ready in this display browser yet.';
       setStatus(authMessageText);
       setAuthPromptError(authMessageText);
+      await reportCurrentDisplayStatus('error', authMessageText, authMessageText);
     }
   };
 
@@ -553,6 +609,10 @@
       throw new Error('Apple Music is not connected on this display yet.');
     }
     await postPlaybackEvent(eventName || 'paused', currentQueueItem, commandId);
+    await reportCurrentDisplayStatus(
+      eventName === 'stopped' ? 'stopped' : 'paused',
+      eventName === 'stopped' ? 'Jukebox stopped from admin.' : 'Jukebox paused from admin.'
+    );
     setStatus(eventName === 'stopped' ? 'Jukebox stopped from admin.' : 'Jukebox paused from admin.');
   };
 
@@ -624,6 +684,7 @@
     } catch (error) {
       const message = error.message || 'Unable to complete DJ command on the live display.';
       setStatus(message);
+      await reportCurrentDisplayStatus('error', message, message);
       try {
         await postPlaybackEvent('command_error', currentQueueItem, control.id, message);
       } catch (ackError) {
@@ -653,6 +714,7 @@
       const message = error.message || 'Apple Music sign-in failed.';
       setStatus(message);
       setAuthPromptError(message);
+      await reportCurrentDisplayStatus('error', message, message);
       if (control && control.id) {
         try {
           await postPlaybackEvent('command_error', currentQueueItem, control.id, message);
@@ -708,6 +770,7 @@
 
   render();
   watchForEnded();
+  reportCurrentDisplayStatus('display_loaded', 'Live display is open. Waiting for Apple Music authorization.');
   refreshState();
   window.addEventListener('halloween:display-update', () => {
     refreshState();

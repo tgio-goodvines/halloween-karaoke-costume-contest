@@ -195,6 +195,7 @@ class RedisStateTests(unittest.TestCase):
         main.jukebox_queue = []
         main.jukebox_now_playing = {}
         main.jukebox_playback_control = main.copy.deepcopy(main.DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
+        main.jukebox_display_status = main.copy.deepcopy(main.DEFAULT_JUKEBOX_DISPLAY_STATUS)
         main.display_pairing_tokens = {}
         main.display_update_version = 0
         main.contest_state.clear()
@@ -3147,6 +3148,16 @@ class RedisStateTests(unittest.TestCase):
 
     def test_jukebox_state_round_trip_preserves_dj_control(self):
         main.jukebox_playback_control = main.issue_jukebox_dj_command("play")
+        main.jukebox_display_status = main.normalize_jukebox_display_status(
+            {
+                "paired": True,
+                "musickit_loaded": True,
+                "apple_authorized": True,
+                "playback_ready": True,
+                "stage": "playback_ready",
+                "message": "Ready",
+            }
+        )
         self.save_current_state()
         self.reset_state()
 
@@ -3154,6 +3165,8 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual("play", main.jukebox_playback_control["command"])
         self.assertEqual("pending", main.jukebox_playback_control["status"])
+        self.assertTrue(main.jukebox_display_status["paired"])
+        self.assertTrue(main.jukebox_display_status["playback_ready"])
 
     def test_jukebox_request_page_limits_active_requests(self):
         account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
@@ -3697,6 +3710,70 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("playing", main.jukebox_queue[0]["status"])
         self.assertEqual("acknowledged", main.jukebox_playback_control["status"])
         self.assertEqual(302, admin_response.status_code)
+
+    def test_paired_display_reports_jukebox_readiness_for_admin_controls(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_queue = [main.create_jukebox_queue_item(track)]
+        raw_token = main.create_display_pairing_token()
+        self.save_current_state()
+
+        with main.app.test_client() as display_client:
+            display_client.get(f"/live-display?display_token={raw_token}", follow_redirects=False)
+            status_response = display_client.post(
+                "/api/jukebox/display-status",
+                data={
+                    "stage": "playback_ready",
+                    "musickit_loaded": "yes",
+                    "apple_authorized": "yes",
+                    "playback_ready": "yes",
+                    "playing": "no",
+                    "message": "Apple Music is ready.",
+                },
+            )
+
+        self.assertEqual(200, status_response.status_code)
+        payload = status_response.get_json()
+        self.assertTrue(payload["display_status"]["paired"])
+        self.assertTrue(payload["display_status"]["musickit_loaded"])
+        self.assertTrue(payload["display_status"]["apple_authorized"])
+        self.assertTrue(payload["display_status"]["playback_ready"])
+        state = self.redis_state()
+        self.assertTrue(state["jukebox_display_status"]["playback_ready"])
+
+    def test_admin_jukebox_play_buttons_wait_for_display_readiness(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_queue = [main.create_jukebox_queue_item(track)]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            blocked_response = client.get("/admin")
+
+            main.jukebox_display_status = main.normalize_jukebox_display_status(
+                {
+                    "paired": True,
+                    "musickit_loaded": True,
+                    "apple_authorized": True,
+                    "playback_ready": True,
+                    "stage": "playback_ready",
+                    "message": "Apple Music is ready.",
+                }
+            )
+            self.save_current_state()
+            ready_response = client.get("/admin")
+
+        blocked_body = blocked_response.get_data(as_text=True)
+        ready_body = ready_response.get_data(as_text=True)
+        self.assertIn("Playback: not ready", blocked_body)
+        self.assertIn('name="jukebox_command" value="play" class="button button--primary" disabled', blocked_body)
+        self.assertIn("Playback: ready", ready_body)
+        self.assertIn('name="jukebox_command" value="play" class="button button--primary" >Play', ready_body)
 
     def test_admin_reset_playlist_rebuilds_queue_without_deleting_playlist(self):
         main.jukebox_settings["enabled"] = True

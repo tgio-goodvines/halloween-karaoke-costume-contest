@@ -3267,6 +3267,12 @@ class RedisStateTests(unittest.TestCase):
         )
         main.jukebox_playlist = [playlist_track]
         main.jukebox_requests = [approved_request, rejected_request]
+        main.jukebox_queue = [
+            {
+                **main.create_jukebox_queue_item(rejected_request, source="request", request_item=rejected_request),
+                "request_id": rejected_request["id"],
+            }
+        ]
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -3299,6 +3305,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("Rejected and kept in request history", body)
         self.assertNotIn("No Song", body)
         self.assertNotIn(rejected_request["id"], [item["id"] for item in main.jukebox_requests])
+        self.assertNotIn(rejected_request["id"], [item.get("request_id") for item in main.jukebox_queue])
 
     def test_admin_can_reorder_and_remove_active_playlist_queue_rows(self):
         main.jukebox_settings["enabled"] = True
@@ -3322,7 +3329,10 @@ class RedisStateTests(unittest.TestCase):
         main.jukebox_requests = [request_item]
         main.jukebox_queue = [
             main.create_jukebox_queue_item(first_track),
-            main.create_jukebox_queue_item(second_track),
+            {
+                **main.create_jukebox_queue_item(second_track),
+                "playlist_track_id": "",
+            },
             main.create_jukebox_queue_item(request_item, source="request", request_item=request_item),
         ]
         second_queue_id = main.jukebox_queue[1]["id"]
@@ -3346,16 +3356,30 @@ class RedisStateTests(unittest.TestCase):
                 },
             )
             page_response = client.get("/admin")
+            queue_after_request_remove = [item["title"] for item in main.jukebox_queue]
+            remove_curated_response = client.post(
+                "/admin",
+                data={
+                    "action": "remove_jukebox_queue_item",
+                    "queue_item_id": second_queue_id,
+                },
+            )
+            final_page_response = client.get("/admin")
 
         body = page_response.get_data(as_text=True)
+        final_body = final_page_response.get_data(as_text=True)
         self.assertEqual(200, move_response.status_code)
         self.assertEqual(200, remove_response.status_code)
-        self.assertEqual(["Thriller", "Monster Mash"], [item["title"] for item in main.jukebox_queue])
+        self.assertEqual(["Thriller", "Monster Mash"], queue_after_request_remove)
         self.assertFalse(main.jukebox_requests)
         self.assertIn("Move Up", body)
         self.assertIn("Move Down", body)
         self.assertIn("Remove", body)
         self.assertNotIn("Requested Song", body)
+        self.assertEqual(200, remove_curated_response.status_code)
+        self.assertEqual(["Monster Mash"], [track["title"] for track in main.jukebox_playlist])
+        self.assertNotIn("Thriller", [item["title"] for item in main.jukebox_queue])
+        self.assertNotIn("Thriller", final_body)
 
     def test_display_data_includes_jukebox_state(self):
         main.jukebox_settings["enabled"] = True

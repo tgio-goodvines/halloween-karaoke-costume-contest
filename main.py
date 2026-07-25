@@ -2393,6 +2393,76 @@ def find_jukebox_queue_index(queue_item_id: str) -> int | None:
     return next((index for index, item in enumerate(jukebox_queue) if str(item.get("id", "")) == queue_item_id), None)
 
 
+def jukebox_track_identity_matches(left: dict[str, object], right: dict[str, object]) -> bool:
+    left_apple_id = str(left.get("apple_music_id", "") or "")
+    right_apple_id = str(right.get("apple_music_id", "") or "")
+    if left_apple_id and right_apple_id:
+        return left_apple_id == right_apple_id
+    return (
+        str(left.get("title", "") or "").strip().casefold(),
+        str(left.get("artist", "") or "").strip().casefold(),
+    ) == (
+        str(right.get("title", "") or "").strip().casefold(),
+        str(right.get("artist", "") or "").strip().casefold(),
+    )
+
+
+def remove_jukebox_queue_rows_for_item(removed_item: dict[str, object], queue_item_id: str = "") -> int:
+    global jukebox_queue
+    playlist_track_id = str(removed_item.get("playlist_track_id", "") or "")
+    request_id = str(removed_item.get("request_id", "") or "")
+    original_count = len(jukebox_queue)
+    jukebox_queue = [
+        queue_item
+        for queue_item in jukebox_queue
+        if not (
+            (queue_item_id and str(queue_item.get("id", "") or "") == queue_item_id)
+            or (playlist_track_id and str(queue_item.get("playlist_track_id", "") or "") == playlist_track_id)
+            or (request_id and str(queue_item.get("request_id", "") or "") == request_id)
+            or (
+                not playlist_track_id
+                and not request_id
+                and jukebox_track_identity_matches(queue_item, removed_item)
+            )
+        )
+    ]
+    return original_count - len(jukebox_queue)
+
+
+def remove_matching_active_playlist_tracks(removed_item: dict[str, object]) -> int:
+    playlist_track_id = str(removed_item.get("playlist_track_id", "") or "")
+    original_tracks = list(jukebox_playlist)
+    updated_tracks = [
+        track
+        for track in original_tracks
+        if not (
+            (playlist_track_id and str(track.get("id", "") or "") == playlist_track_id)
+            or (not playlist_track_id and jukebox_track_identity_matches(track, removed_item))
+        )
+    ]
+    if len(updated_tracks) != len(original_tracks):
+        set_active_jukebox_playlist_tracks(updated_tracks)
+    return len(original_tracks) - len(updated_tracks)
+
+
+def remove_matching_jukebox_requests(removed_item: dict[str, object], request_id: str = "") -> int:
+    global jukebox_requests
+    requested_id = str(request_id or removed_item.get("request_id", "") or "")
+    original_count = len(jukebox_requests)
+    jukebox_requests = [
+        request_item
+        for request_item in jukebox_requests
+        if not (
+            (requested_id and str(request_item.get("id", "") or "") == requested_id)
+            or (
+                str(removed_item.get("source", "") or "") == "request"
+                and jukebox_track_identity_matches(request_item, removed_item)
+            )
+        )
+    ]
+    return original_count - len(jukebox_requests)
+
+
 def active_jukebox_queue_indices() -> list[int]:
     return [
         index
@@ -5486,21 +5556,27 @@ def admin_portal():
             if queue_index is None:
                 errors.append("Jukebox playlist song could not be found.")
             elif action == "remove_jukebox_queue_item":
-                removed_item = jukebox_queue.pop(queue_index)
-                playlist_track_id = str(removed_item.get("playlist_track_id", "") or "")
+                removed_item = copy.deepcopy(jukebox_queue[queue_index])
                 request_id = str(removed_item.get("request_id", "") or "")
-                if playlist_track_id:
-                    set_active_jukebox_playlist_tracks([
-                        track for track in jukebox_playlist if str(track.get("id", "")) != playlist_track_id
-                    ])
+                source = str(removed_item.get("source", "") or "playlist")
+                removed_playlist_count = 0
+                removed_request_count = 0
+                remove_jukebox_queue_rows_for_item(removed_item, queue_item_id)
+                if source == "playlist":
+                    removed_playlist_count = remove_matching_active_playlist_tracks(removed_item)
                 if request_id:
-                    jukebox_requests = [
-                        request_item for request_item in jukebox_requests if str(request_item.get("id", "")) != request_id
-                    ]
+                    removed_request_count = remove_matching_jukebox_requests(removed_item, request_id)
                 if str(jukebox_now_playing.get("id", "") or "") == queue_item_id:
                     jukebox_now_playing = {}
-                messages.append(f"Removed {removed_item.get('title')} from the active playlist.")
-                should_broadcast = True
+                if source == "playlist" and removed_playlist_count:
+                    regenerate_jukebox_queue()
+                if source == "request" and not removed_request_count:
+                    removed_request_count = remove_matching_jukebox_requests(removed_item)
+                if removed_playlist_count or removed_request_count or source not in {"playlist", "request"}:
+                    messages.append(f"Removed {removed_item.get('title')} from the active playlist.")
+                    should_broadcast = True
+                else:
+                    errors.append("That jukebox song could not be removed from the saved playlist.")
             else:
                 active_indices = active_jukebox_queue_indices()
                 active_position = active_indices.index(queue_index) if queue_index in active_indices else None
@@ -5617,12 +5693,15 @@ def admin_portal():
                 messages.append(f"Approved request and added it into the active playlist queue: {request_item.get('title')}.")
                 should_broadcast = True
             elif action == "reject_jukebox_request":
-                jukebox_requests = [
-                    item for item in jukebox_requests if str(item.get("id", "")) != request_id
-                ]
-                jukebox_queue = [
-                    item for item in jukebox_queue if str(item.get("request_id", "")) != request_id
-                ]
+                removed_item = copy.deepcopy(request_item)
+                remove_matching_jukebox_requests(removed_item, request_id)
+                remove_jukebox_queue_rows_for_item(
+                    {
+                        **removed_item,
+                        "source": "request",
+                        "request_id": request_id,
+                    },
+                )
                 messages.append(f"Rejected jukebox request: {request_item.get('title')}.")
                 should_broadcast = True
             elif action == "skip_jukebox_request":

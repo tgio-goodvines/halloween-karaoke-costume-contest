@@ -311,6 +311,7 @@ DEFAULT_JUKEBOX_SETTINGS: dict[str, object] = {
 DEFAULT_JUKEBOX_PLAYBACK_CONTROL: dict[str, object] = {
     "id": "",
     "command": "",
+    "queue_item_id": "",
     "status": "idle",
     "issued_at": "",
     "acknowledged_at": "",
@@ -2134,6 +2135,7 @@ def normalize_jukebox_playback_control(data: object) -> dict[str, object]:
     status = str(control.get("status", "idle") or "idle").strip()
     control["status"] = status if status in JUKEBOX_CONTROL_STATUSES else "idle"
     control["id"] = str(control.get("id", "") or "")[:80]
+    control["queue_item_id"] = str(control.get("queue_item_id", "") or "")[:80]
     control["issued_at"] = str(control.get("issued_at", "") or "")
     control["acknowledged_at"] = str(control.get("acknowledged_at", "") or "")
     control["error"] = str(control.get("error", "") or "").strip()[:240]
@@ -2142,13 +2144,15 @@ def normalize_jukebox_playback_control(data: object) -> dict[str, object]:
     return control
 
 
-def issue_jukebox_dj_command(command: str) -> dict[str, object]:
+def issue_jukebox_dj_command(command: str, queue_item_id: str = "") -> dict[str, object]:
     normalized_command = str(command or "").strip()
     if normalized_command not in JUKEBOX_DJ_COMMANDS:
         raise ValueError("Choose a valid jukebox DJ command.")
+    normalized_queue_item_id = str(queue_item_id or "").strip()
     return {
         "id": uuid4().hex,
         "command": normalized_command,
+        "queue_item_id": normalized_queue_item_id if normalized_command == "play" else "",
         "status": "pending",
         "issued_at": _utc_now_iso(),
         "acknowledged_at": "",
@@ -2280,7 +2284,7 @@ def regenerate_jukebox_queue() -> None:
 
 
 def jukebox_state_payload() -> dict[str, object]:
-    upcoming = queued_jukebox_items()[:8]
+    upcoming = queued_jukebox_items()[:20]
     return {
         "settings": copy.deepcopy(jukebox_settings),
         "enabled": bool(jukebox_settings.get("enabled")),
@@ -3916,6 +3920,7 @@ def party_dashboard():
         drink_orders=user_orders[:5] if party_day else [],
         ready_drink_orders=ready_orders,
         bartender_tip_settings=bartender_tip_settings,
+        jukebox_settings=jukebox_settings,
         party_day_has_arrived=party_day,
         show_admin_link=False,
     )
@@ -5025,20 +5030,35 @@ def admin_portal():
 
         elif action == "jukebox_dj_command":
             requested_command = request.form.get("jukebox_command", "").strip()
+            queue_item_id = request.form.get("queue_item_id", "").strip()
+            if queue_item_id:
+                queue_item = find_jukebox_queue_item(queue_item_id)
+                if requested_command != "play":
+                    errors.append("Specific queue songs can only be targeted with Play.")
+                elif not queue_item or str(queue_item.get("status", "")) not in {"queued", "playing"}:
+                    errors.append("Choose a queued jukebox song to play.")
+            if errors:
+                queue_item_id = ""
             try:
-                jukebox_playback_control = issue_jukebox_dj_command(requested_command)
+                if not errors:
+                    jukebox_playback_control = issue_jukebox_dj_command(requested_command, queue_item_id)
             except ValueError as exc:
                 errors.append(str(exc))
             else:
-                label = {
-                    "connect": "Connect Apple Music",
-                    "play": "Play",
-                    "pause": "Pause",
-                    "stop": "Stop",
-                    "skip": "Skip",
-                }.get(requested_command, requested_command.title())
-                messages.append(f"Sent DJ command to the live display: {label}.")
-                should_broadcast = True
+                if not errors:
+                    label = {
+                        "connect": "Connect Apple Music",
+                        "play": "Play",
+                        "pause": "Pause",
+                        "stop": "Stop",
+                        "skip": "Skip",
+                    }.get(requested_command, requested_command.title())
+                    if queue_item_id:
+                        targeted_item = find_jukebox_queue_item(queue_item_id)
+                        if targeted_item:
+                            label = f"Play {targeted_item.get('title')}"
+                    messages.append(f"Sent DJ command to the live display: {label}.")
+                    should_broadcast = True
 
         elif action in {"remove_jukebox_track", "move_jukebox_track_up", "move_jukebox_track_down"}:
             track_id = request.form.get("track_id", "").strip()
@@ -5085,7 +5105,7 @@ def admin_portal():
                 request_item["status"] = "approved"
                 request_item["decided_at"] = _utc_now_iso()
                 regenerate_jukebox_queue()
-                messages.append(f"Approved jukebox request: {request_item.get('title')}.")
+                messages.append(f"Approved jukebox request and regenerated the queue: {request_item.get('title')}.")
                 should_broadcast = True
             elif action == "reject_jukebox_request":
                 request_item["status"] = "rejected"
@@ -5818,6 +5838,12 @@ def admin_portal():
     current_karaoke_signup = (
         karaoke_signups[current_karaoke_index] if current_karaoke_index is not None else None
     )
+    current_jukebox_queue = queued_jukebox_items()
+    jukebox_request_queue_positions = {
+        str(item.get("request_id", "")): index
+        for index, item in enumerate(current_jukebox_queue, start=1)
+        if str(item.get("request_id", ""))
+    }
 
     return render_template(
         "admin.html",
@@ -5874,7 +5900,8 @@ def admin_portal():
             key=lambda request_item: str(request_item.get("submitted_at", "")),
             reverse=True,
         ),
-        jukebox_queue=queued_jukebox_items(),
+        jukebox_queue=current_jukebox_queue,
+        jukebox_request_queue_positions=jukebox_request_queue_positions,
         jukebox_now_playing=jukebox_now_playing,
         jukebox_playback_control=normalize_jukebox_playback_control(jukebox_playback_control),
         jukebox_developer_token_configured=jukebox_developer_token_configured(),

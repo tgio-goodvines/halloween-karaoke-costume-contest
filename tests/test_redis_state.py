@@ -611,6 +611,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn('href="/party/menu"', dashboard_body)
         self.assertIn('href="/party/costumes"', dashboard_body)
         self.assertIn('href="/party/karaoke"', dashboard_body)
+        self.assertIn("Stay in the mix", dashboard_body)
+        self.assertIn("Menu + Bar", dashboard_body)
+        self.assertIn("Karaoke", dashboard_body)
         self.assertNotIn("Start Voting", dashboard_body)
         self.assertEqual(302, voting_response.status_code)
         self.assertEqual("/party", voting_response.headers["Location"])
@@ -1540,6 +1543,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Casey", body)
         self.assertIn("casey@example.com", body)
         self.assertIn("Vegetarian", body)
+        self.assertIn("Sign In To Apple Music", body)
+        self.assertIn("/live-display?host_controls=1", body)
 
     def test_admin_can_add_update_and_delete_rsvps(self):
         self.save_current_state()
@@ -3046,6 +3051,65 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, admin_response.status_code)
         self.assertEqual(2, len(admin_response.get_json()["requests"]))
 
+    def test_admin_jukebox_request_decisions_keep_visible_queue_context(self):
+        main.jukebox_settings["enabled"] = True
+        playlist_track = main.normalize_jukebox_track(
+            {"apple_music_id": "base-song", "title": "Base Song", "artist": "Host"}
+        )
+        approved_request = main.normalize_jukebox_request(
+            {
+                "apple_music_id": "request-song",
+                "title": "Requested Song",
+                "artist": "Guest Artist",
+                "requester_user_id": "user-1",
+                "requester_name": "Jamie",
+                "status": "pending",
+            }
+        )
+        rejected_request = main.normalize_jukebox_request(
+            {
+                "apple_music_id": "no-song",
+                "title": "No Song",
+                "artist": "Guest Artist",
+                "requester_user_id": "user-2",
+                "requester_name": "Casey",
+                "status": "pending",
+            }
+        )
+        main.jukebox_playlist = [playlist_track]
+        main.jukebox_requests = [approved_request, rejected_request]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            approve_response = client.post(
+                "/admin",
+                data={
+                    "action": "approve_jukebox_request",
+                    "request_id": approved_request["id"],
+                },
+            )
+            reject_response = client.post(
+                "/admin",
+                data={
+                    "action": "reject_jukebox_request",
+                    "request_id": rejected_request["id"],
+                },
+            )
+            page_response = client.get("/admin")
+
+        body = page_response.get_data(as_text=True)
+        queued_request_items = [
+            item for item in main.jukebox_queue if item.get("request_id") == approved_request["id"]
+        ]
+        self.assertEqual(200, approve_response.status_code)
+        self.assertEqual(200, reject_response.status_code)
+        self.assertEqual(1, len(queued_request_items))
+        self.assertIn("Queued #", body)
+        self.assertIn("Guest request from Jamie", body)
+        self.assertIn("Rejected and kept in request history", body)
+        self.assertIn("No Song", body)
+
     def test_display_data_includes_jukebox_state(self):
         main.jukebox_settings["enabled"] = True
         self.save_current_state()
@@ -3080,6 +3144,36 @@ class RedisStateTests(unittest.TestCase):
         payload = display_response.get_json()
         self.assertEqual("play", payload["jukebox"]["playback_control"]["command"])
         self.assertEqual("pending", payload["jukebox"]["playback_control"]["status"])
+
+    def test_admin_can_send_targeted_jukebox_play_command(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_queue = [main.create_jukebox_queue_item(track)]
+        queue_item_id = main.jukebox_queue[0]["id"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            page_response = client.get("/admin")
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "jukebox_dj_command",
+                    "jukebox_command": "play",
+                    "queue_item_id": queue_item_id,
+                },
+            )
+            state_response = client.get("/api/jukebox-state")
+
+        body = page_response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Play Now", body)
+        self.assertEqual("play", main.jukebox_playback_control["command"])
+        self.assertEqual(queue_item_id, main.jukebox_playback_control["queue_item_id"])
+        payload = state_response.get_json()
+        self.assertEqual(queue_item_id, payload["playback_control"]["queue_item_id"])
 
     def test_jukebox_playback_event_acknowledges_admin_command(self):
         main.jukebox_settings["enabled"] = True

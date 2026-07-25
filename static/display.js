@@ -1618,6 +1618,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       eventSource.onmessage = () => {
         fetchLatestEntries();
+        window.dispatchEvent(new CustomEvent('halloween:display-update'));
       };
 
       eventSource.onopen = () => {

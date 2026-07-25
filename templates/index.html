@@ -55,6 +55,42 @@
   </div>
 </section>
 
+{% if party_day_has_arrived %}
+  <section class="feature-engagement">
+    <div class="feature-engagement__intro">
+      <p class="order-card__status">Party Tools</p>
+      <h2>Stay in the mix</h2>
+      <p>Order from the bar, send a song to the jukebox, join the costume lineup, and get your karaoke moment ready from one place.</p>
+    </div>
+    <div class="feature-engagement__grid">
+      <a href="{{ url_for('party_menu') }}">
+        <strong>Menu + Bar</strong>
+        <span>Order drinks and check your ready status.</span>
+      </a>
+      {% if jukebox_settings.enabled and jukebox_settings.requests_enabled %}
+        <a href="{{ url_for('party_jukebox') }}">
+          <strong>Jukebox</strong>
+          <span>Request Apple Music songs for the room.</span>
+        </a>
+      {% endif %}
+      <a href="{{ url_for('party_costumes') }}">
+        <strong>Costume</strong>
+        <span>Enter the contest or review the lineup.</span>
+      </a>
+      <a href="{{ url_for('party_karaoke') }}">
+        <strong>Karaoke</strong>
+        <span>Pick a song and get in the queue.</span>
+      </a>
+      {% if costume_contest_state.voting_visible %}
+        <a href="{{ url_for('party_costume_voting') }}">
+          <strong>Vote</strong>
+          <span>Score every costume before voting closes.</span>
+        </a>
+      {% endif %}
+    </div>
+  </section>
+{% endif %}
+
 {% if party_day_has_arrived and drink_orders %}
   <section class="submitted-list">
     <h3>Your Recent Drink Orders</h3>

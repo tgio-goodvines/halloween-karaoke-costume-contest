@@ -232,7 +232,13 @@ the same scroll-performance policy to guest-facing surfaces: no fixed scanline
 overlay, no repeated card backdrop blur, lighter shadows, and
 `content-visibility: auto` on long card/section lists. Attendee card images use
 native lazy loading and async decoding where practical so menu/order/request
-artwork does not compete with scrolling.
+artwork does not compete with scrolling. On narrow screens, nested cards flatten
+into separated rows inside the outer panel so borders and padding do not keep
+squeezing already-small content columns.
+
+The party-day attendee dashboard includes a `feature-engagement` card that
+promotes the active guest tools: menu/bar orders, jukebox requests when open,
+costume signup, karaoke signup, and voting when the contest vote is visible.
 
 `static/jukebox-status.js` polls `/api/jukebox-state` on `/party/jukebox` so
 attendees see now-playing, request availability, pending count, and their own

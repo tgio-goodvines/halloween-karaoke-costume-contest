@@ -22,6 +22,7 @@
   let musicKitLoadPromise = null;
   let pendingAuthCommand = null;
   let playbackPollId = null;
+  let refreshStatePromise = null;
 
   const body = document.body;
   const csrfToken = body ? body.dataset.csrfToken || '' : '';
@@ -113,6 +114,14 @@
     return queue.filter((item) => item && item.status !== 'played' && item.status !== 'skipped');
   };
 
+  const findQueueItem = (queueItemId) => {
+    const targetId = String(queueItemId || '');
+    if (!targetId) {
+      return null;
+    }
+    return visibleQueue().find((item) => String(item.id || '') === targetId) || null;
+  };
+
   const syncCurrentQueueItem = () => {
     if (state && state.now_playing && state.now_playing.id) {
       currentQueueItem = state.now_playing;
@@ -175,7 +184,7 @@
       return;
     }
 
-    const nowPlaying = state.now_playing && state.now_playing.title ? state.now_playing : visibleQueue()[0];
+    const nowPlaying = state.now_playing && state.now_playing.title ? state.now_playing : null;
     if (nowPlaying) {
       setText(title, nowPlaying.title || 'Queued song');
       setText(artist, nowPlaying.artist || '');
@@ -210,20 +219,7 @@
     setText(stateLabel, musicAuthorized ? 'Connected' : music ? 'Sign In Needed' : 'Ready');
     if (queueList) {
       queueList.innerHTML = '';
-      visibleQueue()
-        .slice(0, 6)
-        .forEach((item) => {
-          const li = document.createElement('li');
-          const strong = document.createElement('strong');
-          const span = document.createElement('span');
-          strong.textContent = item.title || 'Queued song';
-          span.textContent = [item.artist, item.requester_name ? `for ${item.requester_name}` : '']
-            .filter(Boolean)
-            .join(' · ');
-          li.appendChild(strong);
-          li.appendChild(span);
-          queueList.appendChild(li);
-        });
+      queueList.hidden = true;
     }
     fitJukeboxCard();
   };
@@ -248,18 +244,37 @@
     render();
   };
 
-  const refreshState = async () => {
-    try {
-      const response = await fetch('/api/jukebox-state', { headers: { Accept: 'application/json' } });
-      const payload = await response.json();
-      if (response.ok) {
-        state = payload;
-        syncCurrentQueueItem();
-        render();
+  const fetchState = async () => {
+    const response = await fetch('/api/jukebox-state', {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Unable to refresh jukebox state.');
+    }
+    state = payload;
+    syncCurrentQueueItem();
+    render();
+  };
+
+  const refreshState = async (options = {}) => {
+    const shouldHandleCommand = options.handleCommand !== false;
+    if (refreshStatePromise) {
+      return refreshStatePromise;
+    }
+    refreshStatePromise = (async () => {
+      await fetchState();
+      if (shouldHandleCommand) {
         await handleDjCommand();
       }
+    })();
+    try {
+      await refreshStatePromise;
     } catch (error) {
       setStatus('Jukebox state refresh failed.');
+    } finally {
+      refreshStatePromise = null;
     }
   };
 
@@ -372,29 +387,27 @@
 
   const setMusicQueue = async (queueItem) => {
     const activeMusic = await configureMusic();
-    const upcoming = visibleQueue();
-    const ids = upcoming.map((item) => item.apple_music_id).filter(Boolean);
     if (!queueItem || !queueItem.apple_music_id) {
       throw new Error('No queued Apple Music song is ready.');
     }
     if (typeof activeMusic.setQueue === 'function') {
       try {
         await withTimeout(
-          () => activeMusic.setQueue({ songs: ids.length ? ids : [queueItem.apple_music_id] }),
-          'Apple Music did not accept the jukebox queue.'
+          () => activeMusic.setQueue({ song: queueItem.apple_music_id }),
+          'Apple Music did not accept the queued song.'
         );
       } catch (error) {
         await withTimeout(
-          () => activeMusic.setQueue({ song: queueItem.apple_music_id }),
+          () => activeMusic.setQueue({ songs: [queueItem.apple_music_id] }),
           'Apple Music did not accept the queued song.'
         );
       }
     }
   };
 
-  const startPlayback = async (commandId) => {
-    await refreshState();
-    const nextItem = visibleQueue()[0];
+  const startPlayback = async (commandId, queueItemId) => {
+    await fetchState();
+    const nextItem = findQueueItem(queueItemId) || visibleQueue()[0];
     if (!nextItem) {
       setStatus('Queue is empty. Add songs or configure an autoplay seed.');
       return;
@@ -465,7 +478,7 @@
           showAuthPrompt(control, 'Admin pressed Play. Sign in with Apple Music on this display to start the jukebox audio.');
           return;
         }
-        await startPlayback(control.id);
+        await startPlayback(control.id, control.queue_item_id);
       } else if (control.command === 'pause') {
         await pausePlayback(control.id, 'paused');
       } else if (control.command === 'stop') {
@@ -499,7 +512,7 @@
         await postPlaybackEvent('sync', currentQueueItem, control.id);
       } else if (control.command === 'play') {
         await configureMusic();
-        await startPlayback(control.id);
+        await startPlayback(control.id, control.queue_item_id);
       }
       hideAuthPrompt();
     } catch (error) {
@@ -588,5 +601,9 @@
 
   render();
   watchForEnded();
+  refreshState();
+  window.addEventListener('halloween:display-update', () => {
+    refreshState();
+  });
   window.setInterval(refreshState, 3000);
 })();

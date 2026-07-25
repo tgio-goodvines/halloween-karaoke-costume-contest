@@ -338,8 +338,16 @@
             <p class="contest-status contest-status--inactive">{{ jukebox_playback_control.error }}</p>
           {% endif %}
         </div>
-        <p class="form-helper">Open the admin-authorized live display first. These controls send playback commands to that display; attendees still only see song information and the queue.</p>
+        <p class="form-helper">Sign in once on the host-controls live display tab, then use these controls from admin during the party.</p>
         <div class="contest-actions">
+          <a
+            href="{{ url_for('live_display', host_controls='1') }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="button button--primary"
+          >
+            Sign In To Apple Music
+          </a>
           <button type="submit" name="jukebox_command" value="connect" class="button button--outline">Connect</button>
           <button type="submit" name="jukebox_command" value="play" class="button button--primary">Play</button>
           <button type="submit" name="jukebox_command" value="pause" class="button button--outline">Pause</button>
@@ -394,6 +402,13 @@
               <span class="admin-entry__summary-text">
                 <strong>{{ request_item.title }}</strong>
                 <span>{{ request_item.artist }} · requested by {{ request_item.requester_name or 'Guest' }}</span>
+                {% if jukebox_request_queue_positions.get(request_item.id) %}
+                  <span>Queued #{{ jukebox_request_queue_positions.get(request_item.id) }}</span>
+                {% elif request_item.status == 'rejected' %}
+                  <span>Rejected and kept in request history</span>
+                {% elif request_item.status == 'pending' %}
+                  <span>Waiting for host approval</span>
+                {% endif %}
                 {% if request_item.note %}<span>{{ request_item.note }}</span>{% endif %}
               </span>
             </div>
@@ -413,11 +428,33 @@
 
     <h4>Upcoming Queue</h4>
     {% if jukebox_queue %}
-      <ol class="admin-inline-list">
+      <div class="admin-entry-list">
         {% for item in jukebox_queue[:12] %}
-          <li>{{ item.title }}{% if item.artist %} by {{ item.artist }}{% endif %}{% if item.requester_name %} for {{ item.requester_name }}{% endif %}</li>
+          <article class="admin-entry admin-entry--static">
+            <div class="admin-entry__summary">
+              <span class="admin-entry__rank">#{{ loop.index }}</span>
+              <span class="admin-entry__summary-text">
+                <strong>{{ item.title }}</strong>
+                <span>
+                  {% if item.source == 'request' %}
+                    Guest request{% if item.requester_name %} from {{ item.requester_name }}{% endif %}
+                  {% else %}
+                    Curated playlist
+                  {% endif %}
+                  {% if item.artist %} · {{ item.artist }}{% endif %}
+                </span>
+              </span>
+            </div>
+            <form method="post" class="admin-entry__actions">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="jukebox_dj_command">
+              <input type="hidden" name="jukebox_command" value="play">
+              <input type="hidden" name="queue_item_id" value="{{ item.id }}">
+              <button type="submit" class="button button--primary">Play Now</button>
+            </form>
+          </article>
         {% endfor %}
-      </ol>
+      </div>
     {% else %}
       <p class="admin-empty">Queue is empty.</p>
     {% endif %}

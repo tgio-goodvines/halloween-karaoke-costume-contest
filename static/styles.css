@@ -3850,6 +3850,58 @@ textarea,
   padding-left: 1.25rem;
 }
 
+.feature-engagement {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.15rem, 3vw, 1.65rem);
+}
+
+.feature-engagement__intro {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.feature-engagement__intro h2,
+.feature-engagement__intro p {
+  margin: 0;
+}
+
+.feature-engagement__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.feature-engagement__grid a {
+  display: grid;
+  gap: 0.35rem;
+  min-height: 112px;
+  padding: 0.95rem;
+  border: 1px solid rgba(255, 49, 49, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-decoration: none;
+}
+
+.feature-engagement__grid a:hover,
+.feature-engagement__grid a:focus-visible {
+  border-color: rgba(255, 49, 49, 0.62);
+  box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.12);
+  outline: none;
+}
+
+.feature-engagement__grid strong {
+  color: #fff;
+  font-family: "Outfit", "Figtree", system-ui, sans-serif;
+  font-size: 1.04rem;
+}
+
+.feature-engagement__grid span {
+  color: var(--zinc-mid, #a1a1aa);
+  overflow-wrap: anywhere;
+}
+
 .admin-page::before,
 .admin-page::after,
 .attendee-page::before,
@@ -3865,6 +3917,7 @@ textarea,
   .signup-callout,
   .slides,
   .form-section,
+  .feature-engagement,
   .portal-card,
   .rsvp-landing,
   .rsvp-card,
@@ -3897,6 +3950,7 @@ textarea,
   .signup-callout,
   .slides,
   .form-section,
+  .feature-engagement,
   .portal-card,
   .rsvp-landing,
   .rsvp-card,
@@ -3923,6 +3977,7 @@ textarea,
   .signup-callout,
   .slides,
   .form-section,
+  .feature-engagement,
   .portal-card,
   .rsvp-landing,
   .rsvp-card,
@@ -3948,6 +4003,70 @@ textarea,
 }
 
 @media (max-width: 600px) {
+  :is(.attendee-page, .admin-page)
+    :is(
+      .submitted-list,
+      .form-section,
+      .portal-card,
+      .rsvp-landing,
+      .admin-section,
+      .slides,
+      .signup-summary > div,
+      .feature-engagement
+    )
+    :is(
+      .menu-card,
+      .order-card,
+      .request-card,
+      .bartender-card,
+      .admin-entry,
+      .rsvp-update-card,
+      .voting-card,
+      .feature-engagement__grid a,
+      .rsvp-details article
+    ) {
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding-inline: 0;
+  }
+
+  :is(.attendee-page, .admin-page)
+    :is(
+      .submitted-list,
+      .form-section,
+      .portal-card,
+      .rsvp-landing,
+      .admin-section,
+      .slides,
+      .signup-summary > div,
+      .feature-engagement
+    )
+    :is(
+      .menu-card:first-child,
+      .order-card:first-child,
+      .request-card:first-child,
+      .bartender-card:first-child,
+      .admin-entry:first-child,
+      .rsvp-update-card:first-child,
+      .voting-card:first-child,
+      .feature-engagement__grid a:first-child,
+      .rsvp-details article:first-child
+    ) {
+    border-top-width: 0;
+    padding-top: 0;
+  }
+
+  .attendee-page :is(.menu-card__body, .order-card__body, .request-card div),
+  .admin-page .admin-entry__summary {
+    padding-inline: 0;
+  }
+
+  .feature-engagement__grid a {
+    min-height: auto;
+  }
+
   .song-search__controls,
   .song-search-result,
   .request-card {

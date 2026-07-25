@@ -206,16 +206,18 @@
       <div class="access-settings__form">
         <h4>DJ Controls</h4>
         <div class="party-code-status">
-          <p class="contest-status {% if jukebox_playback_control.status == 'error' %}contest-status--inactive{% elif jukebox_playback_control.status == 'pending' %}contest-status--warning{% else %}contest-status--active{% endif %}">
+          <p class="contest-status {% if jukebox_playback_control.status == 'error' %}contest-status--inactive{% elif jukebox_playback_control.status == 'pending' %}contest-status--warning{% else %}contest-status--active{% endif %}" data-jukebox-command-status>
             Last command: {{ jukebox_playback_control.command or 'none' }} · {{ jukebox_playback_control.status }}
           </p>
           {% if jukebox_now_playing.title %}
-            <p class="contest-status">Now playing: {{ jukebox_now_playing.title }}{% if jukebox_now_playing.artist %} by {{ jukebox_now_playing.artist }}{% endif %}</p>
+            <p class="contest-status" data-jukebox-now-playing>Now playing: {{ jukebox_now_playing.title }}{% if jukebox_now_playing.artist %} by {{ jukebox_now_playing.artist }}{% endif %}</p>
           {% else %}
-            <p class="contest-status">No song is marked as playing yet.</p>
+            <p class="contest-status" data-jukebox-now-playing>No song is marked as playing yet.</p>
           {% endif %}
           {% if jukebox_playback_control.error %}
-            <p class="contest-status contest-status--inactive">{{ jukebox_playback_control.error }}</p>
+            <p class="contest-status contest-status--inactive" data-jukebox-command-error>{{ jukebox_playback_control.error }}</p>
+          {% else %}
+            <p class="contest-status contest-status--inactive" data-jukebox-command-error hidden></p>
           {% endif %}
         </div>
         <p class="form-helper">Pair & Authorize Display opens a playback-only live-display tab and requests Apple Music authorization there. Complete Apple sign-in on that tab before pressing Play.</p>
@@ -224,7 +226,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" name="action" value="pair_live_display" class="button button--primary">Pair & Authorize Display</button>
           </form>
-          <form method="post">
+          <form method="post" data-jukebox-dj-form data-jukebox-dj-endpoint="{{ url_for('jukebox_dj_command') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="jukebox_dj_command">
             <button type="submit" name="jukebox_command" value="connect" class="button button--outline">Connect Apple Music</button>
@@ -1356,5 +1358,5 @@
 
 {% block scripts %}
   <script src="{{ url_for('static', filename='jukebox-search.js') }}"></script>
-  <script src="{{ url_for('static', filename='admin.js', v='20260725-display-pairing') }}"></script>
+  <script src="{{ url_for('static', filename='admin.js', v='20260725-dj-command-api') }}"></script>
 {% endblock %}

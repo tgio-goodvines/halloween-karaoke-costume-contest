@@ -75,11 +75,44 @@
       .filter(Boolean)
   );
 
+  const setJukeboxCommandStatus = (command, status, errorMessage) => {
+    const statusElement = document.querySelector('[data-jukebox-command-status]');
+    if (statusElement) {
+      statusElement.textContent = `Last command: ${command || 'none'} · ${status || 'pending'}`;
+      statusElement.classList.toggle('contest-status--inactive', status === 'error');
+      statusElement.classList.toggle('contest-status--warning', status === 'pending');
+      statusElement.classList.toggle('contest-status--active', Boolean(status) && status !== 'error' && status !== 'pending');
+    }
+    const errorElement = document.querySelector('[data-jukebox-command-error]');
+    if (errorElement) {
+      errorElement.textContent = errorMessage || '';
+      errorElement.hidden = !errorMessage;
+    }
+  };
+
+  const updateJukeboxStatusFromPayload = (payload) => {
+    const jukebox = payload && payload.jukebox ? payload.jukebox : payload;
+    const control = jukebox && jukebox.playback_control ? jukebox.playback_control : null;
+    if (control) {
+      setJukeboxCommandStatus(control.command, control.status, control.error);
+    }
+    const nowPlaying = jukebox && jukebox.now_playing ? jukebox.now_playing : null;
+    const nowPlayingElement = document.querySelector('[data-jukebox-now-playing]');
+    if (nowPlayingElement) {
+      if (nowPlaying && nowPlaying.title) {
+        nowPlayingElement.textContent = `Now playing: ${nowPlaying.title}${nowPlaying.artist ? ` by ${nowPlaying.artist}` : ''}`;
+      } else {
+        nowPlayingElement.textContent = 'No song is marked as playing yet.';
+      }
+    }
+  };
+
   const reinitializeDynamicControls = () => {
     initTabs();
     if (window.HalloweenJukeboxSearch && typeof window.HalloweenJukeboxSearch.init === 'function') {
       window.HalloweenJukeboxSearch.init();
     }
+    initJukeboxDjForms();
     initAjaxForms();
   };
 
@@ -161,6 +194,9 @@
       if (form.dataset.adminNativeForm !== undefined) {
         return;
       }
+      if (form.dataset.jukeboxDjForm !== undefined) {
+        return;
+      }
       if (form.dataset.adminAjaxBound === 'yes') {
         return;
       }
@@ -195,6 +231,60 @@
           replaceAdminPanel(await response.text(), savedScrollY, activeTab, openSummaries);
         } catch (error) {
           window.location.reload();
+        }
+      });
+    });
+  };
+
+  const initJukeboxDjForms = () => {
+    const panel = getPanel();
+    if (!panel) {
+      return;
+    }
+    panel.querySelectorAll('form[data-jukebox-dj-form]').forEach((form) => {
+      if (form.dataset.jukeboxDjBound === 'yes') {
+        return;
+      }
+      form.dataset.jukeboxDjBound = 'yes';
+      form.addEventListener('submit', async (event) => {
+        if (event.defaultPrevented) {
+          return;
+        }
+        event.preventDefault();
+        const submitter = event.submitter;
+        const command = submitter && submitter.name === 'jukebox_command' ? submitter.value : '';
+        const endpoint = form.dataset.jukeboxDjEndpoint || '/api/jukebox/dj-command';
+        const formData = new FormData(form);
+        formData.delete('action');
+        if (submitter && submitter.name) {
+          formData.set(submitter.name, submitter.value);
+        }
+        setJukeboxCommandStatus(command, 'pending', '');
+        if (submitter) {
+          submitter.disabled = true;
+        }
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData,
+            headers: { Accept: 'application/json', 'X-Requested-With': 'fetch' },
+            cache: 'no-store',
+          });
+          const responseType = response.headers.get('content-type') || '';
+          const payload = responseType.includes('application/json')
+            ? await response.json()
+            : { error: await response.text() };
+          if (!response.ok) {
+            throw new Error(payload.error || 'Unable to send DJ command.');
+          }
+          updateJukeboxStatusFromPayload(payload);
+          refreshAdminPanel();
+        } catch (error) {
+          setJukeboxCommandStatus(command, 'error', error.message || 'Unable to send DJ command.');
+        } finally {
+          if (submitter) {
+            submitter.disabled = false;
+          }
         }
       });
     });

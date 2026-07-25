@@ -481,6 +481,8 @@ STATE_MUTATION_ENDPOINTS = {
     "party_karaoke",
     "party_jukebox",
     "party_costume_voting",
+    "jukebox_playback_event",
+    "jukebox_dj_command",
 }
 STATE_REFRESH_ENDPOINTS = {
     "rsvp",
@@ -2213,6 +2215,21 @@ def issue_jukebox_dj_command(command: str, queue_item_id: str = "") -> dict[str,
         "acknowledged_at": "",
         "error": "",
     }
+
+
+def request_jukebox_dj_command(command: str, queue_item_id: str = "") -> tuple[dict[str, object] | None, str | None]:
+    requested_command = str(command or "").strip()
+    requested_queue_item_id = str(queue_item_id or "").strip()
+    if requested_queue_item_id:
+        queue_item = find_jukebox_queue_item(requested_queue_item_id)
+        if requested_command != "play":
+            return None, "Specific queue songs can only be targeted with Play."
+        if not queue_item or str(queue_item.get("status", "")) not in {"queued", "playing"}:
+            return None, "Choose a queued jukebox song to play."
+    try:
+        return issue_jukebox_dj_command(requested_command, requested_queue_item_id), None
+    except ValueError as exc:
+        return None, str(exc)
 
 
 def acknowledge_jukebox_dj_command(command_id: str, error: str = "") -> None:
@@ -4733,6 +4750,30 @@ def jukebox_playback_event():
     return jsonify(jukebox_state_payload())
 
 
+@app.route("/api/jukebox/dj-command", methods=["POST"])
+def jukebox_dj_command():
+    if not session_has_role("admin"):
+        return jsonify({"error": "Admin access is required."}), 401
+
+    global jukebox_playback_control
+    command, error = request_jukebox_dj_command(
+        request.form.get("jukebox_command", ""),
+        request.form.get("queue_item_id", ""),
+    )
+    if error:
+        return jsonify({"error": error}), 400
+
+    jukebox_playback_control = command or copy.deepcopy(DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
+    broadcast_display_update()
+    return jsonify(
+        {
+            "message": f"Sent DJ command to the live display: {jukebox_playback_control.get('command', '')}.",
+            "jukebox": jukebox_state_payload(),
+            "display_update_version": display_update_version,
+        }
+    )
+
+
 @app.route("/party/logout", methods=["POST"])
 @app.route("/admin/logout", methods=["POST"])
 @app.route("/logout", methods=["POST"])
@@ -5177,35 +5218,25 @@ def admin_portal():
         elif action == "jukebox_dj_command":
             requested_command = request.form.get("jukebox_command", "").strip()
             queue_item_id = request.form.get("queue_item_id", "").strip()
-            if queue_item_id:
-                queue_item = find_jukebox_queue_item(queue_item_id)
-                if requested_command != "play":
-                    errors.append("Specific queue songs can only be targeted with Play.")
-                elif not queue_item or str(queue_item.get("status", "")) not in {"queued", "playing"}:
-                    errors.append("Choose a queued jukebox song to play.")
-            if errors:
-                queue_item_id = ""
-            try:
-                if not errors:
-                    jukebox_playback_control = issue_jukebox_dj_command(requested_command, queue_item_id)
-            except ValueError as exc:
-                errors.append(str(exc))
+            command, command_error = request_jukebox_dj_command(requested_command, queue_item_id)
+            if command_error:
+                errors.append(command_error)
             else:
-                if not errors:
-                    label = {
-                        "connect": "Connect Apple Music",
-                        "play": "Play",
-                        "pause": "Pause",
-                        "stop": "Stop",
-                        "skip": "Skip",
-                        "restart_playlist": "Restart Playlist",
-                    }.get(requested_command, requested_command.title())
-                    if queue_item_id:
-                        targeted_item = find_jukebox_queue_item(queue_item_id)
-                        if targeted_item:
-                            label = f"Play {targeted_item.get('title')}"
-                    messages.append(f"Sent DJ command to the live display: {label}.")
-                    should_broadcast = True
+                jukebox_playback_control = command or copy.deepcopy(DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
+                label = {
+                    "connect": "Connect Apple Music",
+                    "play": "Play",
+                    "pause": "Pause",
+                    "stop": "Stop",
+                    "skip": "Skip",
+                    "restart_playlist": "Restart Playlist",
+                }.get(requested_command, requested_command.title())
+                if queue_item_id:
+                    targeted_item = find_jukebox_queue_item(queue_item_id)
+                    if targeted_item:
+                        label = f"Play {targeted_item.get('title')}"
+                messages.append(f"Sent DJ command to the live display: {label}.")
+                should_broadcast = True
 
         elif action in {"remove_jukebox_track", "move_jukebox_track_up", "move_jukebox_track_down"}:
             track_id = request.form.get("track_id", "").strip()

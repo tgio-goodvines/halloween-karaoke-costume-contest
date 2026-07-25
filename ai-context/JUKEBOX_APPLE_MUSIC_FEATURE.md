@@ -132,6 +132,15 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   with a Confirm Connection button so the host keeps a visible same-tab action.
   Probe failures also leave the prompt open and retryable instead of turning the
   command into an immediate admin error.
+- 2026-07-25: Fixed DJ commands not updating reliably after display
+  authorization. Admin DJ controls now post to `/api/jukebox/dj-command` for
+  immediate JSON feedback and then refresh the admin panel, while the normal
+  `/admin` form path remains as a fallback. Both DJ command issuance and
+  display playback acknowledgments are registered as Redis state mutations so
+  pending/acknowledged/error command state persists consistently in production.
+  The live display no longer posts `started` before MusicKit reports playback;
+  it waits for `isPlaying` and reports a visible command error if Apple Music
+  accepts the queue but does not actually start audio.
 
 ## Design Notes
 

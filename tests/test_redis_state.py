@@ -3182,6 +3182,25 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("play", payload["jukebox"]["playback_control"]["command"])
         self.assertEqual("pending", payload["jukebox"]["playback_control"]["status"])
 
+    def test_admin_can_send_jukebox_dj_command_through_api(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/api/jukebox/dj-command",
+                data={"jukebox_command": "play"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        payload = response.get_json()
+        self.assertEqual("play", payload["jukebox"]["playback_control"]["command"])
+        self.assertEqual("pending", payload["jukebox"]["playback_control"]["status"])
+        state = self.redis_state()
+        self.assertEqual("play", state["jukebox_playback_control"]["command"])
+        self.assertEqual("pending", state["jukebox_playback_control"]["status"])
+
     def test_admin_can_send_targeted_jukebox_play_command(self):
         main.jukebox_settings["enabled"] = True
         track = main.normalize_jukebox_track(
@@ -3386,6 +3405,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("playing", main.jukebox_queue[0]["status"])
         self.assertEqual("acknowledged", main.jukebox_playback_control["status"])
         self.assertEqual("playing", main.jukebox_now_playing["playback_state"])
+        state = self.redis_state()
+        self.assertEqual("playing", state["jukebox_queue"][0]["status"])
+        self.assertEqual("acknowledged", state["jukebox_playback_control"]["status"])
 
     def test_jukebox_playback_event_started_uses_next_song_when_id_missing(self):
         main.jukebox_settings["enabled"] = True

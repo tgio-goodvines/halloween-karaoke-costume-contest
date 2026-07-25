@@ -306,6 +306,46 @@
       }),
     ]);
 
+  const isMusicPlaying = () =>
+    Boolean(
+      music &&
+        (music.isPlaying === true || (music.player && music.player.isPlaying === true))
+    );
+
+  const waitForPlaybackStart = (timeoutMs = 5000) =>
+    new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const check = () => {
+        if (isMusicPlaying()) {
+          resolve();
+          return;
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          reject(new Error('Apple Music did not report active playback. Click the live display once, confirm the Apple Music account has an active subscription, then press Play again.'));
+          return;
+        }
+        window.setTimeout(check, 200);
+      };
+      check();
+    });
+
+  const playMusic = async () => {
+    if (music && typeof music.play === 'function') {
+      await withTimeout(
+        () => music.play(),
+        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
+      );
+    } else if (music && music.player && typeof music.player.play === 'function') {
+      await withTimeout(
+        () => music.player.play(),
+        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
+      );
+    } else {
+      throw new Error('Apple Music playback is not available in this display browser.');
+    }
+    await waitForPlaybackStart();
+  };
+
   const waitForMusicKit = () => {
     if (window.MusicKit && typeof window.MusicKit.configure === 'function') {
       return Promise.resolve(window.MusicKit);
@@ -476,18 +516,9 @@
     await setMusicQueue(nextItem);
     currentQueueItem = nextItem;
     lastEndedItemId = '';
+    setStatus(`Starting ${nextItem.title || 'the selected song'} through Apple Music...`);
+    await playMusic();
     await postPlaybackEvent('started', currentQueueItem, commandId);
-    if (music && typeof music.play === 'function') {
-      await withTimeout(
-        () => music.play(),
-        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
-      );
-    } else if (music && music.player && typeof music.player.play === 'function') {
-      await withTimeout(
-        () => music.player.play(),
-        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
-      );
-    }
     setStatus('Jukebox playing from the host Apple Music account. Cast this Chrome tab for TV audio.');
   };
 
@@ -504,7 +535,13 @@
   };
 
   const skipPlayback = async (commandId) => {
-    if (music && music.player && typeof music.player.skipToNextItem === 'function') {
+    if (music && typeof music.skipToNextItem === 'function') {
+      try {
+        await music.skipToNextItem();
+      } catch (error) {
+        setStatus('Apple Music skip was blocked; syncing app queue.');
+      }
+    } else if (music && music.player && typeof music.player.skipToNextItem === 'function') {
       try {
         await music.player.skipToNextItem();
       } catch (error) {
@@ -609,12 +646,12 @@
       window.clearInterval(playbackPollId);
     }
     playbackPollId = window.setInterval(async () => {
-      if (!music || !music.player || !currentQueueItem || lastEndedItemId === currentQueueItem.id) {
+      if (!music || !currentQueueItem || lastEndedItemId === currentQueueItem.id) {
         return;
       }
-      const duration = Number(music.player.currentPlaybackDuration || 0);
-      const remaining = Number(music.player.currentPlaybackTimeRemaining || 0);
-      const playing = Boolean(music.player.isPlaying);
+      const duration = Number(music.currentPlaybackDuration || (music.player && music.player.currentPlaybackDuration) || 0);
+      const remaining = Number(music.currentPlaybackTimeRemaining || (music.player && music.player.currentPlaybackTimeRemaining) || 0);
+      const playing = isMusicPlaying();
       if (duration > 0 && remaining <= 1 && !playing) {
         lastEndedItemId = currentQueueItem.id;
         try {

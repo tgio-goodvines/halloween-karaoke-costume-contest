@@ -8,6 +8,8 @@
   let hasReceivedInitialUpdate = false;
   let lastScrollAt = 0;
   let deferredRefreshTimer = null;
+  let appleMusicKitLoadPromise = null;
+  let appleMusic = null;
 
   const getPanel = () => document.querySelector('[data-admin-panel]');
 
@@ -80,7 +82,139 @@
     if (window.HalloweenJukeboxSearch && typeof window.HalloweenJukeboxSearch.init === 'function') {
       window.HalloweenJukeboxSearch.init();
     }
+    initAppleMusicSignIn();
     initAjaxForms();
+  };
+
+  const loadAppleMusicKit = () => {
+    if (window.MusicKit && typeof window.MusicKit.configure === 'function') {
+      return Promise.resolve(window.MusicKit);
+    }
+    if (appleMusicKitLoadPromise) {
+      return appleMusicKitLoadPromise;
+    }
+
+    appleMusicKitLoadPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector('script[src*="js-cdn.music.apple.com/musickit"]');
+      let settled = false;
+
+      const complete = () => {
+        if (settled) {
+          return;
+        }
+        if (window.MusicKit && typeof window.MusicKit.configure === 'function') {
+          settled = true;
+          resolve(window.MusicKit);
+        }
+      };
+
+      const fail = () => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Apple MusicKit did not load. Check browser content blocking, then try again.'));
+        }
+      };
+
+      if (existingScript) {
+        existingScript.addEventListener('load', complete, { once: true });
+        existingScript.addEventListener('error', fail, { once: true });
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js';
+        script.addEventListener('load', complete, { once: true });
+        script.addEventListener('error', fail, { once: true });
+        document.head.appendChild(script);
+      }
+
+      window.setTimeout(() => {
+        complete();
+        if (!settled) {
+          fail();
+        }
+      }, 8000);
+    });
+
+    return appleMusicKitLoadPromise;
+  };
+
+  const setAppleMusicStatus = (message, isError) => {
+    const status = document.querySelector('[data-apple-music-signin-status]');
+    if (!status) {
+      return;
+    }
+    status.textContent = message || '';
+    status.classList.toggle('form-helper--error', Boolean(isError));
+  };
+
+  const authorizeAppleMusicFromAdmin = async () => {
+    if (appleMusic && appleMusic.isAuthorized === true) {
+      return appleMusic;
+    }
+    const response = await fetch('/api/apple-music-token', {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Apple Music is not configured.');
+    }
+    const MusicKit = await loadAppleMusicKit();
+    appleMusic = appleMusic || await MusicKit.configure({
+      developerToken: payload.developer_token,
+      app: {
+        name: 'Halloween Party Jukebox',
+        build: '1.0.0',
+      },
+      storefrontId: payload.storefront || 'us',
+    });
+    if (appleMusic.isAuthorized !== true && typeof appleMusic.authorize === 'function') {
+      await appleMusic.authorize();
+    }
+    if (appleMusic.isAuthorized !== true) {
+      throw new Error('Apple Music sign-in did not complete. Enter the Apple verification code if prompted, then try again.');
+    }
+    return appleMusic;
+  };
+
+  const sendAppleMusicConnectCommand = async (csrfToken) => {
+    const formData = new FormData();
+    formData.append('csrf_token', csrfToken || '');
+    formData.append('action', 'jukebox_dj_command');
+    formData.append('jukebox_command', 'connect');
+    const savedScrollY = window.scrollY;
+    const activeTab = window.localStorage.getItem(tabStorageKey) || defaultTab;
+    const openSummaries = openDetailsSnapshot();
+    const response = await fetch('/admin', {
+      method: 'POST',
+      body: formData,
+      headers: { Accept: 'text/html', 'X-Requested-With': 'fetch' },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error('Apple Music connected, but the live display command could not be sent.');
+    }
+    replaceAdminPanel(await response.text(), savedScrollY, activeTab, openSummaries);
+  };
+
+  const initAppleMusicSignIn = () => {
+    const button = document.querySelector('[data-apple-music-signin]');
+    if (!button || button.dataset.appleMusicBound === 'yes') {
+      return;
+    }
+    button.dataset.appleMusicBound = 'yes';
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      setAppleMusicStatus('Opening Apple Music sign-in from admin...', false);
+      try {
+        await authorizeAppleMusicFromAdmin();
+        setAppleMusicStatus('Apple Music is signed in. Syncing the live display playback tab...', false);
+        await sendAppleMusicConnectCommand(button.dataset.csrfToken || '');
+      } catch (error) {
+        setAppleMusicStatus(error.message || 'Apple Music sign-in failed.', true);
+      } finally {
+        button.disabled = false;
+      }
+    });
   };
 
   const replaceAdminPanel = (html, savedScrollY, activeTab, openSummaries) => {

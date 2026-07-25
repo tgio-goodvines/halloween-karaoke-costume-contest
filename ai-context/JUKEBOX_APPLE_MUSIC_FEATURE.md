@@ -112,10 +112,11 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   the MusicKit token endpoint. The host/admin authorizes Apple Music on the
   live-display browser, and attendees use that playback session indirectly by
   submitting app-owned requests.
-- Browser audio autoplay still requires a user gesture; the host should open
-  the admin Sign In To Apple Music action once so the host-controls live display
-  tab can authorize the Apple Music subscriber session, then use `/admin` DJ
-  controls during the party.
+- Browser audio autoplay still requires a user gesture; the host should use the
+  admin Sign In To Apple Music action once with the host Apple Music subscriber
+  account. The live display still owns playback audio, and the admin sign-in
+  action sends a Connect command so the display tab can sync the MusicKit
+  session before hosts use `/admin` DJ controls during the party.
 - Chromecast audio should work when casting the Chrome tab containing `/live-display`; casting a full screen can keep audio on the computer on some platforms.
 - YouTube remains unsuitable for audio-only playback because YouTube API policies do not allow separating or hiding the video/audio components.
 - Apple Music catalog search and MusicKit playback require

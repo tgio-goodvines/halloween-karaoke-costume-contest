@@ -2779,6 +2779,10 @@ li,
   line-height: 1.55;
 }
 
+.form-helper--error {
+  color: var(--primary);
+}
+
 .rsvp-landing {
   gap: clamp(1rem, 2.8vw, 1.75rem);
 }

@@ -1544,7 +1544,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("casey@example.com", body)
         self.assertIn("Vegetarian", body)
         self.assertIn("Sign In To Apple Music", body)
-        self.assertIn("/live-display?host_controls=1", body)
+        self.assertIn("data-apple-music-signin", body)
+        self.assertNotIn("/live-display?host_controls=1", body)
 
     def test_live_display_does_not_render_host_transport_buttons(self):
         main.jukebox_settings["enabled"] = True

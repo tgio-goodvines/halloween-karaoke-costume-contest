@@ -338,16 +338,17 @@
             <p class="contest-status contest-status--inactive">{{ jukebox_playback_control.error }}</p>
           {% endif %}
         </div>
-        <p class="form-helper">Sign in once on the host-controls live display tab, then use these controls from admin during the party.</p>
+        <p class="form-helper">Sign in once from admin with the host Apple Music subscriber account. The live display still owns playback audio, and admin controls command it during the party.</p>
+        <p class="form-helper" data-apple-music-signin-status></p>
         <div class="contest-actions">
-          <a
-            href="{{ url_for('live_display', host_controls='1') }}"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
             class="button button--primary"
+            data-apple-music-signin
+            data-csrf-token="{{ csrf_token() }}"
           >
             Sign In To Apple Music
-          </a>
+          </button>
           <button type="submit" name="jukebox_command" value="connect" class="button button--outline">Connect</button>
           <button type="submit" name="jukebox_command" value="play" class="button button--primary">Play</button>
           <button type="submit" name="jukebox_command" value="pause" class="button button--outline">Pause</button>

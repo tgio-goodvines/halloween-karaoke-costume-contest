@@ -3395,7 +3395,40 @@ class RedisStateTests(unittest.TestCase):
         payload = response.get_json()
         self.assertIn("jukebox", payload)
         self.assertTrue(payload["jukebox"]["enabled"])
+        self.assertFalse(payload["jukebox"]["display_active"])
         self.assertIn("playback_control", payload["jukebox"])
+
+    def test_removing_last_playing_jukebox_song_takes_display_down(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_playlist = [track]
+        queue_item = main.create_jukebox_queue_item(track)
+        queue_item["status"] = "playing"
+        main.jukebox_queue = [queue_item]
+        main.jukebox_now_playing = {**queue_item, "playback_state": "playing"}
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin",
+                data={
+                    "action": "remove_jukebox_queue_item",
+                    "queue_item_id": queue_item["id"],
+                },
+            )
+            display_response = client.get("/api/display-data")
+
+        payload = display_response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual([], main.jukebox_playlist)
+        self.assertEqual([], main.queued_jukebox_items())
+        self.assertEqual({}, main.jukebox_now_playing)
+        self.assertEqual("stop", main.jukebox_playback_control["command"])
+        self.assertFalse(payload["jukebox"]["display_active"])
+        self.assertFalse(payload["layout"]["left_rail_enabled"])
 
     def test_admin_can_send_jukebox_dj_command_to_live_display(self):
         main.jukebox_settings["enabled"] = True
@@ -3772,8 +3805,13 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(payload["layout"]["left_rail_enabled"])
         self.assertFalse(payload["layout"]["right_rail_enabled"])
 
-    def test_display_layout_dashboard_when_jukebox_is_enabled(self):
+    def test_display_layout_dashboard_when_jukebox_has_playable_music(self):
         main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_playlist = [track]
+        main.regenerate_jukebox_queue()
         self.save_current_state()
 
         with main.app.test_client() as client:

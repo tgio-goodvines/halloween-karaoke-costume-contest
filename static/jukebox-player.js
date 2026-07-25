@@ -195,7 +195,7 @@
   };
 
   const render = () => {
-    const enabled = Boolean(state && state.enabled);
+    const enabled = Boolean(state && state.display_active);
     root.hidden = !enabled;
     if (body) {
       body.classList.toggle('display-mode--jukebox', enabled);

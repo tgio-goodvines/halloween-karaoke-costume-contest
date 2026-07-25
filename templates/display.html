@@ -37,7 +37,7 @@
 
       <main class="display-main" data-display-main>
         <aside class="display-dashboard__rail display-dashboard__rail--left" data-left-rail{% if not display_layout or not display_layout.left_rail_enabled %} hidden{% endif %}>
-        <section class="jukebox-display" data-jukebox-display{% if not jukebox or not jukebox.enabled %} hidden{% endif %}>
+        <section class="jukebox-display" data-jukebox-display{% if not jukebox or not jukebox.display_active %} hidden{% endif %}>
           <div class="jukebox-display__player">
             <p class="display-category">Apple Music Jukebox</p>
             <div class="jukebox-display__art-wrap">

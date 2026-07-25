@@ -154,6 +154,11 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   deletes request songs from the request store so removed songs do not return on
   the next refresh. Rejected requests are removed immediately instead of staying
   visible as rejected history.
+- 2026-07-25: Last-song removal now takes the live-display jukebox down. The
+  jukebox feature can remain enabled for admin/attendee management, but the
+  live display only shows the jukebox rail when there is a now-playing or queued
+  song. Removing the currently playing final song clears now-playing state and
+  sends a stop command to the paired MusicKit display.
 - 2026-07-25: Added multiple admin-buildable jukebox playlists. Existing
   `jukebox_playlist` data migrates into a default Main Party Playlist, while
   new state stores `jukebox_playlists` plus `jukebox_active_playlist_id`.

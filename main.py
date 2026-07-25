@@ -2584,9 +2584,12 @@ def jukebox_state_payload() -> dict[str, object]:
     upcoming = queued_jukebox_items()[:20]
     active_playlist = active_jukebox_playlist() or {}
     active_queue_duration = active_jukebox_queue_duration_ms()
+    now_playing = copy.deepcopy(jukebox_now_playing)
+    display_active = bool(jukebox_settings.get("enabled")) and bool(upcoming or now_playing)
     return {
         "settings": copy.deepcopy(jukebox_settings),
         "enabled": bool(jukebox_settings.get("enabled")),
+        "display_active": display_active,
         "provider": str(jukebox_settings.get("provider", "apple_music")),
         "developer_token_configured": jukebox_developer_token_configured(),
         "storefront": str(app.config.get("APPLE_MUSIC_STOREFRONT", "us") or "us"),
@@ -2600,7 +2603,7 @@ def jukebox_state_payload() -> dict[str, object]:
         "request_count": len(jukebox_requests),
         "pending_request_count": sum(1 for item in jukebox_requests if item.get("status") == "pending"),
         "queue": upcoming,
-        "now_playing": copy.deepcopy(jukebox_now_playing),
+        "now_playing": now_playing,
         "playback_control": normalize_jukebox_playback_control(jukebox_playback_control),
         "display_authorized": session_has_display_authorization() if has_request_context() else False,
     }
@@ -3981,7 +3984,7 @@ def live_display_layout_payload(
     ready_drink_count = int(counts.get("ready_drinks", 0) or 0)
     costume_count = int(counts.get("costumes", 0) or 0)
     karaoke_count = int(counts.get("karaoke", 0) or 0)
-    jukebox_enabled = bool(jukebox_payload.get("enabled")) if isinstance(jukebox_payload, dict) else False
+    jukebox_enabled = bool(jukebox_payload.get("display_active")) if isinstance(jukebox_payload, dict) else False
     has_activity = any((active_order_count, ready_drink_count, costume_count, karaoke_count))
     mode = "dashboard" if jukebox_enabled or has_activity else "idle"
 
@@ -5559,6 +5562,7 @@ def admin_portal():
                 removed_item = copy.deepcopy(jukebox_queue[queue_index])
                 request_id = str(removed_item.get("request_id", "") or "")
                 source = str(removed_item.get("source", "") or "playlist")
+                was_now_playing = str(jukebox_now_playing.get("id", "") or "") == queue_item_id
                 removed_playlist_count = 0
                 removed_request_count = 0
                 remove_jukebox_queue_rows_for_item(removed_item, queue_item_id)
@@ -5566,10 +5570,14 @@ def admin_portal():
                     removed_playlist_count = remove_matching_active_playlist_tracks(removed_item)
                 if request_id:
                     removed_request_count = remove_matching_jukebox_requests(removed_item, request_id)
-                if str(jukebox_now_playing.get("id", "") or "") == queue_item_id:
+                if was_now_playing:
                     jukebox_now_playing = {}
                 if source == "playlist" and removed_playlist_count:
                     regenerate_jukebox_queue()
+                if not queued_jukebox_items():
+                    jukebox_now_playing = {}
+                    if was_now_playing:
+                        jukebox_playback_control = issue_jukebox_dj_command("stop")
                 if source == "request" and not removed_request_count:
                     removed_request_count = remove_matching_jukebox_requests(removed_item)
                 if removed_playlist_count or removed_request_count or source not in {"playlist", "request"}:

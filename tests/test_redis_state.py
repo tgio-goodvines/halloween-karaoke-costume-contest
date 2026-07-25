@@ -1550,6 +1550,11 @@ class RedisStateTests(unittest.TestCase):
 
     def test_admin_jukebox_renders_dj_controls_before_settings_and_search(self):
         main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_playlist = [track]
+        main.regenerate_jukebox_queue()
         self.save_current_state()
 
         with main.app.test_client() as client:
@@ -1562,6 +1567,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertLess(body.index("DJ Controls"), body.index("Add Song To Active Playlist"))
         self.assertIn("Pair & Authorize Display", body)
         self.assertIn("Active Playlist", body)
+        self.assertIn("Play Now", body)
+        self.assertNotIn("Upcoming Active Playlist", body)
         self.assertIn("Reset Playlist", body)
         self.assertIn("Restart Playlist", body)
         self.assertNotIn("Regenerate Queue", body)
@@ -3226,6 +3233,7 @@ class RedisStateTests(unittest.TestCase):
         body = page_response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
         self.assertIn("Play Now", body)
+        self.assertNotIn("Upcoming Active Playlist", body)
         self.assertEqual("play", main.jukebox_playback_control["command"])
         self.assertEqual(queue_item_id, main.jukebox_playback_control["queue_item_id"])
         payload = state_response.get_json()

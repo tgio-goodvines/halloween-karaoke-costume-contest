@@ -139,8 +139,15 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   display playback acknowledgments are registered as Redis state mutations so
   pending/acknowledged/error command state persists consistently in production.
   The live display no longer posts `started` before MusicKit reports playback;
-  it waits for `isPlaying` and reports a visible command error if Apple Music
-  accepts the queue but does not actually start audio.
+  it lets Apple Music enter a starting state, then acknowledges when `isPlaying`
+  arrives or reports a visible command error only after the delayed startup
+  window expires.
+- 2026-07-25: Consolidated the admin jukebox list. The old split between
+  curated Active Playlist and Upcoming Active Playlist was removed. Admin now
+  shows one playable Active Playlist built from the actual app queue; every row
+  has Play Now, curated rows keep Move/Remove controls, and approved request
+  rows can be skipped. Queue items store `playlist_track_id` for curated songs
+  so regenerated queue rows can still map back to playlist management actions.
 
 ## Design Notes
 

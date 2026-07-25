@@ -312,7 +312,7 @@
         (music.isPlaying === true || (music.player && music.player.isPlaying === true))
     );
 
-  const waitForPlaybackStart = (timeoutMs = 5000) =>
+  const waitForPlaybackStart = (timeoutMs = 25000) =>
     new Promise((resolve, reject) => {
       const startedAt = Date.now();
       const check = () => {
@@ -329,7 +329,7 @@
       check();
     });
 
-  const playMusic = async () => {
+  const triggerMusicPlay = async () => {
     if (music && typeof music.play === 'function') {
       await withTimeout(
         () => music.play(),
@@ -343,7 +343,30 @@
     } else {
       throw new Error('Apple Music playback is not available in this display browser.');
     }
-    await waitForPlaybackStart();
+  };
+
+  const confirmPlaybackStarted = (commandId, queueItem) => {
+    const expectedItemId = queueItem && queueItem.id ? queueItem.id : '';
+    setStatus(`Apple Music accepted ${queueItem && queueItem.title ? queueItem.title : 'the selected song'} and is starting playback...`);
+    waitForPlaybackStart()
+      .then(async () => {
+        if (expectedItemId && (!currentQueueItem || currentQueueItem.id !== expectedItemId)) {
+          return;
+        }
+        await postPlaybackEvent('started', queueItem, commandId);
+        setStatus('Jukebox playing from the host Apple Music account. Cast this Chrome tab for TV audio.');
+      })
+      .catch(async (error) => {
+        try {
+          await fetchState();
+          const control = state && state.playback_control ? state.playback_control : null;
+          if (control && control.id === commandId && control.status === 'pending') {
+            await postPlaybackEvent('command_error', queueItem, commandId, error.message || 'Apple Music playback did not start.');
+          }
+        } catch (ackError) {
+          setStatus(ackError.message || error.message || 'Apple Music playback did not start.');
+        }
+      });
   };
 
   const waitForMusicKit = () => {
@@ -517,9 +540,8 @@
     currentQueueItem = nextItem;
     lastEndedItemId = '';
     setStatus(`Starting ${nextItem.title || 'the selected song'} through Apple Music...`);
-    await playMusic();
-    await postPlaybackEvent('started', currentQueueItem, commandId);
-    setStatus('Jukebox playing from the host Apple Music account. Cast this Chrome tab for TV audio.');
+    await triggerMusicPlay();
+    confirmPlaybackStarted(commandId, currentQueueItem);
   };
 
   const pausePlayback = async (commandId, eventName) => {

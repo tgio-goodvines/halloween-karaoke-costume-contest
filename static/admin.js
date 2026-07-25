@@ -252,13 +252,13 @@
         }
         event.preventDefault();
         const submitter = event.submitter;
-        const command = submitter && submitter.name === 'jukebox_command' ? submitter.value : '';
         const endpoint = form.dataset.jukeboxDjEndpoint || '/api/jukebox/dj-command';
         const formData = new FormData(form);
         formData.delete('action');
         if (submitter && submitter.name) {
           formData.set(submitter.name, submitter.value);
         }
+        const command = String(formData.get('jukebox_command') || '');
         setJukeboxCommandStatus(command, 'pending', '');
         if (submitter) {
           submitter.disabled = true;

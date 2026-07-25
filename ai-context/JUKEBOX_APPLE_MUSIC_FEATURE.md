@@ -69,6 +69,13 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   gesture arm path on the live display, MusicKit load detection, and timeouts
   around authorize/setQueue/play so admin sees an explicit error instead of a
   silent pending command.
+- 2026-07-25: Tightened MusicKit authorization state after field testing.
+  MusicKit being configured is not the same as Apple Music being authorized:
+  `music.isAuthorized` must be true before admin Connect/Play can proceed.
+  The live display now keeps showing the in-app host sign-in prompt until real
+  authorization completes, and its message clarifies that Apple verification
+  codes received on a phone must be entered in the Apple sign-in window on the
+  display browser.
 
 ## Design Notes
 

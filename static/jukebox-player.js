@@ -66,6 +66,13 @@
     }
   };
 
+  const syncAuthorizationState = () => {
+    if (music && music.isAuthorized === true) {
+      musicAuthorized = true;
+    }
+    return musicAuthorized;
+  };
+
   const showAuthPrompt = (control, message) => {
     pendingAuthCommand = control || null;
     if (!authPrompt) {
@@ -75,7 +82,7 @@
     setText(
       authMessage,
       message ||
-        'Sign in with the host Apple Music subscriber account in this browser. Attendees can keep sending requests from their phones.'
+        'Sign in with the host Apple Music subscriber account in this browser. If your phone shows an Apple verification code, enter it in the Apple sign-in window on this display.'
     );
     if (authActionButton) {
       authActionButton.textContent = control && control.command === 'play' ? 'Sign In And Play' : 'Sign In With Apple Music';
@@ -199,7 +206,8 @@
       setText(requester, '');
     }
 
-    setText(stateLabel, music ? 'Connected' : 'Ready');
+    syncAuthorizationState();
+    setText(stateLabel, musicAuthorized ? 'Connected' : music ? 'Sign In Needed' : 'Ready');
     if (queueList) {
       queueList.innerHTML = '';
       visibleQueue()
@@ -322,6 +330,9 @@
           () => music.authorize(),
           'Apple Music authorization did not finish. Use the sign-in prompt on this display, allow Apple Music, then press Play again.'
         );
+        if (music.isAuthorized !== true) {
+          throw new Error('Apple Music sign-in did not complete. Enter the Apple verification code in the sign-in window on this display, then try again.');
+        }
         musicAuthorized = true;
       }
       return music;
@@ -340,11 +351,15 @@
       },
       storefrontId: payload.storefront || 'us',
     });
+    syncAuthorizationState();
     if (shouldAuthorize && music && typeof music.authorize === 'function') {
       await withTimeout(
         () => music.authorize(),
         'Apple Music authorization did not finish. Click the live display once, allow Apple Music sign-in, then press Play again.'
       );
+      if (music.isAuthorized !== true) {
+        throw new Error('Apple Music sign-in did not complete. Enter the Apple verification code in the sign-in window on this display, then try again.');
+      }
       musicAuthorized = true;
     }
     if (shouldAuthorize) {
@@ -439,14 +454,14 @@
     lastDjCommandId = control.id;
     try {
       if (control.command === 'connect') {
-        if (!music) {
+        if (!musicAuthorized) {
           showAuthPrompt(control, 'Admin requested Apple Music sign-in. Use the host Apple Music subscriber account on this display.');
           return;
         }
         await configureMusic();
         await postPlaybackEvent('sync', currentQueueItem, control.id);
       } else if (control.command === 'play') {
-        if (!music) {
+        if (!musicAuthorized) {
           showAuthPrompt(control, 'Admin pressed Play. Sign in with Apple Music on this display to start the jukebox audio.');
           return;
         }

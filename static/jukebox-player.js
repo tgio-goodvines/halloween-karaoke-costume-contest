@@ -23,6 +23,7 @@
   const csrfToken = body ? body.dataset.csrfToken || '' : '';
   const art = root.querySelector('[data-jukebox-art]');
   const artPlaceholder = root.querySelector('[data-jukebox-art-placeholder]');
+  const player = root.querySelector('.jukebox-display__player');
   const title = root.querySelector('[data-jukebox-title]');
   const artist = root.querySelector('[data-jukebox-artist]');
   const requester = root.querySelector('[data-jukebox-requester]');
@@ -32,6 +33,17 @@
   const connectButton = root.querySelector('[data-jukebox-connect]');
   const startButton = root.querySelector('[data-jukebox-start]');
   const skipButton = root.querySelector('[data-jukebox-skip]');
+  const fitClasses = [
+    'jukebox-display--compact',
+    'jukebox-display--micro',
+    'jukebox-display--ultra',
+    'jukebox-display--minimal',
+    'jukebox-display--no-art',
+    'jukebox-display--queue-3',
+    'jukebox-display--queue-2',
+    'jukebox-display--queue-1',
+    'jukebox-display--queue-0',
+  ];
 
   const setStatus = (message) => {
     if (status) {
@@ -48,6 +60,48 @@
   const visibleQueue = () => {
     const queue = Array.isArray(state.queue) ? state.queue : [];
     return queue.filter((item) => item && item.status !== 'played' && item.status !== 'skipped');
+  };
+
+  const setFitClasses = (classes) => {
+    root.classList.remove(...fitClasses);
+    classes.forEach((className) => root.classList.add(className));
+  };
+
+  const playerOverflows = () => {
+    if (!player) {
+      return false;
+    }
+    return player.scrollHeight > player.clientHeight + 1 || player.scrollWidth > player.clientWidth + 1;
+  };
+
+  const fitJukeboxCard = () => {
+    if (!player || root.hidden) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const modes = [
+        [],
+        ['jukebox-display--queue-3'],
+        ['jukebox-display--compact', 'jukebox-display--queue-3'],
+        ['jukebox-display--compact', 'jukebox-display--queue-2'],
+        ['jukebox-display--micro', 'jukebox-display--queue-2'],
+        ['jukebox-display--micro', 'jukebox-display--no-art', 'jukebox-display--queue-2'],
+        ['jukebox-display--micro', 'jukebox-display--no-art', 'jukebox-display--queue-1'],
+        ['jukebox-display--ultra', 'jukebox-display--no-art', 'jukebox-display--queue-1'],
+        ['jukebox-display--ultra', 'jukebox-display--no-art', 'jukebox-display--queue-0'],
+        ['jukebox-display--minimal', 'jukebox-display--no-art', 'jukebox-display--queue-0'],
+      ];
+
+      for (const mode of modes) {
+        setFitClasses(mode);
+        if (!playerOverflows()) {
+          return;
+        }
+      }
+
+      setFitClasses(modes[modes.length - 1]);
+    });
   };
 
   const render = () => {
@@ -109,6 +163,7 @@
           queueList.appendChild(li);
         });
     }
+    fitJukeboxCard();
   };
 
   const postPlaybackEvent = async (event, item) => {

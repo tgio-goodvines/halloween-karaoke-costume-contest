@@ -246,15 +246,28 @@ app state.
 - Karaoke stage override includes now-singing data, optional up-next data,
   optional YouTube watch URL, and optional maximized embedded-video mode while
   preserving the party title/header.
-- Live display has a jukebox split mode when enabled: Apple Music album art and
-  host Connect/Start/Skip controls appear beside the rotating party cards, with
-  an up-next queue rail. Playback syncs back through
-  `/api/jukebox/playback-event`.
+- Live display has explicit idle and dashboard layouts. Idle mode is used when
+  jukebox is disabled and there is no drink, costume, or karaoke activity; it
+  keeps one large rotating focus card and scales short cards up with spotlight
+  and mega sizing. Dashboard mode appears when jukebox or activity exists and
+  splits the display into a left jukebox rail, center rotating focus card, and
+  right activity rail.
+- In dashboard mode, the left jukebox rail shows Apple Music album art,
+  now-playing/requester text, and a capped up-next list inside one unified
+  display card. Host Connect/Start/Skip controls are hidden on the normal live
+  display and only appear in the setup view at `/live-display?host_controls=1`.
+  Playback syncs back through `/api/jukebox/playback-event`.
+- In dashboard mode, the right activity rail rotates independently between
+  active bartender orders, recently ready drinks, costume lineup previews, and
+  karaoke lineup previews. Empty rail sections are skipped.
 - MusicKit playback requires host Apple Music authorization in the live-display
   browser and a configured `HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN`. Browser
   audio still needs a user gesture before playback; Chromecast should cast the
   Chrome tab to send display audio to the TV.
 - Display client can cache-bust `display.css` once when an override becomes active.
+- The live display is a no-scroll viewport canvas: body/wrapper/main regions use
+  fixed viewport bounds and internal region sizing so normal desktop and narrow
+  display viewports do not create page scrolling.
 
 ## Styling And UX Features
 

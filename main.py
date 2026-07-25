@@ -3479,6 +3479,102 @@ def build_rotation_entries() -> List[dict[str, object]]:
     return rotation_entries
 
 
+def display_drink_order_summary(order: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": str(order.get("id", "") or ""),
+        "guest": str(order.get("username", "") or "Guest"),
+        "drink": str(order.get("item_name", "") or "Drink"),
+        "status": str(order.get("status", "") or "received"),
+        "status_label": drink_order_status_label(order.get("status")),
+        "image_url": str(order.get("item_image_url", "") or ""),
+        "estimated_ready_at": str(order.get("estimated_ready_at", "") or ""),
+        "completed_at": str(order.get("completed_at", "") or ""),
+        "drink_type": normalize_drink_type(order.get("drink_type")),
+    }
+
+
+def display_ready_drink_orders(limit: int = 6) -> list[dict[str, object]]:
+    visible_orders = [
+        order
+        for order in drink_orders
+        if ready_order_is_visible_on_dashboard(order)
+    ]
+    visible_orders.sort(key=lambda order: str(order.get("completed_at", "") or ""), reverse=True)
+    return [display_drink_order_summary(order) for order in visible_orders[:limit]]
+
+
+def live_display_activity_payload() -> dict[str, object]:
+    active_orders = sorted(
+        active_drink_orders(),
+        key=lambda order: (
+            drink_order_priority_bucket(order),
+            str(order.get("created_at", "") or ""),
+        ),
+    )
+    ready_orders = display_ready_drink_orders(limit=6)
+    costume_preview = [
+        {
+            "id": signup.id,
+            "name": signup.name,
+            "costume": signup.costume,
+        }
+        for signup in costume_signups[:6]
+    ]
+    karaoke_preview = [
+        {
+            "id": signup.id,
+            "name": signup.name,
+            "song_title": signup.song_title,
+            "artist": signup.artist,
+        }
+        for signup in karaoke_signups[:6]
+    ]
+
+    return {
+        "drink_orders": [display_drink_order_summary(order) for order in active_orders[:6]],
+        "ready_drinks": ready_orders,
+        "costumes": costume_preview,
+        "karaoke": karaoke_preview,
+        "counts": {
+            "active_drink_orders": len(active_orders),
+            "ready_drinks": len(ready_orders),
+            "costumes": len(costume_signups),
+            "karaoke": len(karaoke_signups),
+            "pending_jukebox_requests": sum(
+                1 for request_item in jukebox_requests if request_item.get("status") == "pending"
+            ),
+        },
+    }
+
+
+def live_display_layout_payload(
+    activity: dict[str, object] | None = None,
+    jukebox: dict[str, object] | None = None,
+) -> dict[str, object]:
+    activity_payload = activity or live_display_activity_payload()
+    jukebox_payload = jukebox or jukebox_state_payload()
+    counts = activity_payload.get("counts", {}) if isinstance(activity_payload, dict) else {}
+    active_order_count = int(counts.get("active_drink_orders", 0) or 0)
+    ready_drink_count = int(counts.get("ready_drinks", 0) or 0)
+    costume_count = int(counts.get("costumes", 0) or 0)
+    karaoke_count = int(counts.get("karaoke", 0) or 0)
+    jukebox_enabled = bool(jukebox_payload.get("enabled")) if isinstance(jukebox_payload, dict) else False
+    has_activity = any((active_order_count, ready_drink_count, costume_count, karaoke_count))
+    mode = "dashboard" if jukebox_enabled or has_activity else "idle"
+
+    return {
+        "mode": mode,
+        "left_rail_enabled": jukebox_enabled,
+        "right_rail_enabled": bool(has_activity),
+        "reasons": {
+            "jukebox": jukebox_enabled,
+            "bartender": bool(active_order_count or ready_drink_count),
+            "costumes": bool(costume_count),
+            "karaoke": bool(karaoke_count),
+        },
+    }
+
+
 @app.route("/")
 def index():
     return redirect(url_for(landing_page_endpoint()))
@@ -3494,6 +3590,9 @@ def health():
 def live_display():
     cleanup_expired_display_notices()
     rotation_entries = build_rotation_entries()
+    jukebox_payload = jukebox_state_payload()
+    activity_payload = live_display_activity_payload()
+    layout_payload = live_display_layout_payload(activity_payload, jukebox_payload)
 
     return render_template(
         "display.html",
@@ -3502,7 +3601,9 @@ def live_display():
         karaoke_count=len(karaoke_signups),
         override=live_display_event_override,
         notice_override=live_display_notice_override,
-        jukebox=jukebox_state_payload(),
+        jukebox=jukebox_payload,
+        display_layout=layout_payload,
+        display_activity=activity_payload,
     )
 
 
@@ -3538,6 +3639,9 @@ def display_updates():
 def display_data():
     cleanup_expired_display_notices()
     rotation_entries = build_rotation_entries()
+    jukebox_payload = jukebox_state_payload()
+    activity_payload = live_display_activity_payload()
+    layout_payload = live_display_layout_payload(activity_payload, jukebox_payload)
 
     return jsonify(
         {
@@ -3547,7 +3651,9 @@ def display_data():
             "override": live_display_event_override,
             "event_override": live_display_event_override,
             "notice_override": live_display_notice_override,
-            "jukebox": jukebox_state_payload(),
+            "jukebox": jukebox_payload,
+            "layout": layout_payload,
+            "activity": activity_payload,
             "display_update_version": display_update_version,
         }
     )

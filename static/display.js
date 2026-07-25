@@ -2,8 +2,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const dataElement = document.getElementById('entries-data');
   const overrideElement = document.getElementById('override-data');
   const noticeOverrideElement = document.getElementById('notice-override-data');
+  const layoutElement = document.getElementById('layout-data');
+  const activityElement = document.getElementById('activity-data');
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
+  const leftRail = document.querySelector('[data-left-rail]');
+  const activityRail = document.querySelector('[data-activity-rail]');
+  const activityPanels = activityRail
+    ? Array.from(activityRail.querySelectorAll('[data-activity-panel]'))
+    : [];
+  const activityDrinkElement = activityRail ? activityRail.querySelector('[data-activity-drinks]') : null;
+  const activityReadyElement = activityRail ? activityRail.querySelector('[data-activity-ready]') : null;
+  const activityCostumeElement = activityRail ? activityRail.querySelector('[data-activity-costumes]') : null;
+  const activityKaraokeElement = activityRail ? activityRail.querySelector('[data-activity-karaoke]') : null;
   const overrideContainer = document.querySelector('[data-override-state]');
   const overrideCardElement = overrideContainer
     ? overrideContainer.querySelector('.display-override__card')
@@ -105,34 +116,39 @@ document.addEventListener('DOMContentLoaded', () => {
     entriesSignature = '[]';
   }
 
-  let initialOverrideState = null;
-  if (overrideElement) {
-    try {
-      const parsed = JSON.parse(overrideElement.textContent || 'null');
-      if (parsed && typeof parsed === 'object') {
-        initialOverrideState = parsed;
-      }
-    } catch (error) {
-      console.error('Unable to parse override state', error);
+  const parseJsonElement = (element, fallback) => {
+    if (!element) {
+      return fallback;
     }
+
+    try {
+      return JSON.parse(element.textContent || 'null') ?? fallback;
+    } catch (error) {
+      console.error('Unable to parse display JSON', error);
+      return fallback;
+    }
+  };
+
+  let initialOverrideState = null;
+  const parsedOverrideState = parseJsonElement(overrideElement, null);
+  if (parsedOverrideState && typeof parsedOverrideState === 'object') {
+    initialOverrideState = parsedOverrideState;
   }
 
   let initialNoticeOverrideState = null;
-  if (noticeOverrideElement) {
-    try {
-      const parsed = JSON.parse(noticeOverrideElement.textContent || 'null');
-      if (parsed && typeof parsed === 'object') {
-        initialNoticeOverrideState = parsed;
-      }
-    } catch (error) {
-      console.error('Unable to parse notice override state', error);
-    }
+  const parsedNoticeOverrideState = parseJsonElement(noticeOverrideElement, null);
+  if (parsedNoticeOverrideState && typeof parsedNoticeOverrideState === 'object') {
+    initialNoticeOverrideState = parsedNoticeOverrideState;
   }
 
   let overrideState = null;
   let overrideSignature = 'null';
   let noticeOverrideState = null;
   let noticeOverrideSignature = 'null';
+  let layoutState = parseJsonElement(layoutElement, { mode: 'idle' });
+  let layoutSignature = 'null';
+  let activityState = parseJsonElement(activityElement, {});
+  let activitySignature = 'null';
 
   const defaultContent = card.querySelector('[data-entry-default]');
   const ctaLayout = card.querySelector('[data-cta-layout]');
@@ -180,6 +196,98 @@ document.addEventListener('DOMContentLoaded', () => {
       .length;
   };
 
+  const safeText = (value, fallback = '') => {
+    const text = value == null ? '' : String(value).trim();
+    return text || fallback;
+  };
+
+  const applyLayoutState = () => {
+    const mode = layoutState && layoutState.mode === 'dashboard' ? 'dashboard' : 'idle';
+    const leftRailEnabled = Boolean(layoutState && layoutState.left_rail_enabled);
+    const rightRailEnabled = Boolean(layoutState && layoutState.right_rail_enabled);
+
+    document.body.classList.toggle('display-mode--idle', mode === 'idle');
+    document.body.classList.toggle('display-mode--dashboard', mode === 'dashboard');
+    document.body.classList.toggle('display-mode--jukebox', leftRailEnabled);
+    document.body.classList.toggle('display-mode--activity', rightRailEnabled);
+
+    if (leftRail) {
+      if (leftRailEnabled) {
+        leftRail.removeAttribute('hidden');
+      } else {
+        leftRail.setAttribute('hidden', '');
+      }
+    }
+
+    if (activityRail) {
+      if (rightRailEnabled) {
+        activityRail.removeAttribute('hidden');
+      } else {
+        activityRail.setAttribute('hidden', '');
+      }
+    }
+  };
+
+  const sectionHasItems = (items) => Array.isArray(items) && items.length > 0;
+
+  const clearElement = (element) => {
+    if (element) {
+      element.innerHTML = '';
+    }
+  };
+
+  const appendTextElement = (parent, tagName, className, text) => {
+    const element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    element.textContent = text;
+    parent.appendChild(element);
+    return element;
+  };
+
+  const renderActivityItems = (container, items, emptyText, renderItem) => {
+    if (!container) {
+      return;
+    }
+
+    clearElement(container);
+
+    if (!sectionHasItems(items)) {
+      const empty = document.createElement('p');
+      empty.className = 'activity-rail__empty';
+      empty.textContent = emptyText;
+      container.appendChild(empty);
+      return;
+    }
+
+    items.slice(0, 5).forEach((item, index) => {
+      const article = document.createElement('article');
+      article.className = 'activity-item';
+      renderItem(article, item, index);
+      container.appendChild(article);
+    });
+  };
+
+  const setActivityPanelVisibility = () => {
+    const activityMap = {
+      drinks: activityState.drink_orders,
+      ready: activityState.ready_drinks,
+      costumes: activityState.costumes,
+      karaoke: activityState.karaoke,
+    };
+
+    activityPanels.forEach((panel) => {
+      const key = panel.getAttribute('data-activity-panel');
+      if (sectionHasItems(activityMap[key])) {
+        panel.removeAttribute('hidden');
+      } else {
+        panel.setAttribute('hidden', '');
+        panel.classList.remove('is-active');
+      }
+    });
+  };
+
   let karaokeCountdownTimerId = null;
   let karaokeCountdownTarget = null;
   let karaokeRotatorPanels = [];
@@ -187,6 +295,123 @@ document.addEventListener('DOMContentLoaded', () => {
   let karaokeRotatorTimerId = null;
   let karaokeRotatorResizeHandler = null;
   const KARAOKE_ROTATOR_INTERVAL = 8000;
+  let activityPanelIndex = 0;
+  let activityRotatorTimerId = null;
+  const ACTIVITY_ROTATOR_INTERVAL = 10000;
+
+  const visibleActivityPanels = () =>
+    activityPanels.filter((panel) => !panel.hasAttribute('hidden'));
+
+  const applyActivityPanelIndex = () => {
+    const panels = visibleActivityPanels();
+    if (!panels.length) {
+      return;
+    }
+
+    if (activityPanelIndex >= panels.length) {
+      activityPanelIndex = 0;
+    }
+
+    activityPanels.forEach((panel) => {
+      panel.classList.remove('is-active');
+    });
+    panels[activityPanelIndex].classList.add('is-active');
+  };
+
+  const stopActivityRotator = () => {
+    if (activityRotatorTimerId) {
+      window.clearInterval(activityRotatorTimerId);
+      activityRotatorTimerId = null;
+    }
+  };
+
+  const startActivityRotator = ({ resetIndex = false } = {}) => {
+    stopActivityRotator();
+    setActivityPanelVisibility();
+
+    const panels = visibleActivityPanels();
+    if (resetIndex || activityPanelIndex >= panels.length) {
+      activityPanelIndex = 0;
+    }
+    applyActivityPanelIndex();
+
+    if (panels.length <= 1) {
+      return;
+    }
+
+    activityRotatorTimerId = window.setInterval(() => {
+      const currentPanels = visibleActivityPanels();
+      if (!currentPanels.length) {
+        stopActivityRotator();
+        return;
+      }
+      activityPanelIndex = (activityPanelIndex + 1) % currentPanels.length;
+      applyActivityPanelIndex();
+    }, ACTIVITY_ROTATOR_INTERVAL);
+  };
+
+  const renderActivityRail = ({ resetIndex = false } = {}) => {
+    renderActivityItems(
+      activityDrinkElement,
+      activityState.drink_orders,
+      'No active bar orders.',
+      (article, order) => {
+        appendTextElement(article, 'span', 'activity-item__label', safeText(order.status_label, 'Order received'));
+        appendTextElement(article, 'strong', '', safeText(order.drink, 'Drink'));
+        appendTextElement(article, 'span', '', safeText(order.guest, 'Guest'));
+      }
+    );
+
+    renderActivityItems(
+      activityReadyElement,
+      activityState.ready_drinks,
+      'No drinks ready right now.',
+      (article, order) => {
+        article.classList.add('activity-item--ready');
+        const imageUrl = safeText(order.image_url);
+        if (imageUrl) {
+          const image = document.createElement('img');
+          image.className = 'activity-item__image';
+          image.src = imageUrl;
+          image.alt = '';
+          article.appendChild(image);
+        }
+        appendTextElement(article, 'span', 'activity-item__label', 'Ready now');
+        appendTextElement(article, 'strong', '', safeText(order.drink, 'Drink'));
+        appendTextElement(article, 'span', '', safeText(order.guest, 'Guest'));
+      }
+    );
+
+    renderActivityItems(
+      activityCostumeElement,
+      activityState.costumes,
+      'Costume lineup is open.',
+      (article, entry) => {
+        appendTextElement(article, 'span', 'activity-item__label', 'Contestant');
+        appendTextElement(article, 'strong', '', safeText(entry.name, 'Guest'));
+        appendTextElement(article, 'span', '', safeText(entry.costume, 'Costume coming soon'));
+      }
+    );
+
+    renderActivityItems(
+      activityKaraokeElement,
+      activityState.karaoke,
+      'Karaoke lineup is open.',
+      (article, entry, index) => {
+        appendTextElement(article, 'span', 'activity-item__label', `Singer #${index + 1}`);
+        appendTextElement(article, 'strong', '', safeText(entry.name, 'Singer'));
+        const artist = safeText(entry.artist);
+        const song = safeText(entry.song_title, 'Song coming soon');
+        appendTextElement(article, 'span', '', artist ? `${song} · ${artist}` : song);
+      }
+    );
+
+    if (layoutState && layoutState.right_rail_enabled) {
+      startActivityRotator({ resetIndex });
+    } else {
+      stopActivityRotator();
+    }
+  };
 
   const refreshDisplayStylesheet = () => {
     if (hasRefreshedDisplayStylesheet) {
@@ -956,14 +1181,25 @@ document.addEventListener('DOMContentLoaded', () => {
       'display-card--costume',
       'display-card--winner',
       'display-card--long',
-      'display-card--dense'
+      'display-card--dense',
+      'display-card--spotlight',
+      'display-card--mega'
     );
 
     const entryTextLength = getEntryTextLength(entry);
-    if (entryTextLength > 150) {
+    const isIdleLayout = layoutState && layoutState.mode !== 'dashboard';
+    if (isIdleLayout && entry.cta && entryTextLength < 230) {
+      card.classList.add('display-card--mega');
+    } else if (isIdleLayout && !hasScoreboard && entryTextLength < 150) {
+      card.classList.add('display-card--spotlight');
+    } else if (entryTextLength > 150) {
       card.classList.add('display-card--dense');
     } else if (entryTextLength > 95) {
       card.classList.add('display-card--long');
+    } else if (entry.cta && entryTextLength < 180) {
+      card.classList.add('display-card--mega');
+    } else if (!hasScoreboard && entryTextLength < 82) {
+      card.classList.add('display-card--spotlight');
     }
 
     if (hasScoreboard) {
@@ -1257,6 +1493,44 @@ document.addEventListener('DOMContentLoaded', () => {
     updateNoticeOverrideDisplay();
   };
 
+  const setLayoutState = (state, { force = false } = {}) => {
+    let signature = 'null';
+    try {
+      signature = JSON.stringify(state ?? null);
+    } catch (error) {
+      signature = 'null';
+    }
+
+    if (!force && signature === layoutSignature) {
+      return;
+    }
+
+    layoutSignature = signature;
+    layoutState = state && typeof state === 'object' ? state : { mode: 'idle' };
+    applyLayoutState();
+    renderActivityRail({ resetIndex: true });
+    renderEntries({ resetIndex: false });
+  };
+
+  const setActivityState = (state, { force = false } = {}) => {
+    let signature = 'null';
+    try {
+      signature = JSON.stringify(state ?? null);
+    } catch (error) {
+      signature = 'null';
+    }
+
+    if (!force && signature === activitySignature) {
+      return;
+    }
+
+    activitySignature = signature;
+    activityState = state && typeof state === 'object' ? state : {};
+    renderActivityRail({ resetIndex: true });
+  };
+
+  setLayoutState(layoutState, { force: true });
+  setActivityState(activityState, { force: true });
   setOverrideState(initialOverrideState ?? null, { force: true });
   setNoticeOverrideState(initialNoticeOverrideState ?? null, { force: true });
 
@@ -1288,9 +1562,13 @@ document.addEventListener('DOMContentLoaded', () => {
         override: newOverride,
         event_override: newEventOverride,
         notice_override: newNoticeOverride,
+        layout: newLayout,
+        activity: newActivity,
       } = payload;
 
       updateCounts(costumeCount, karaokeCount);
+      setLayoutState(newLayout || { mode: 'idle' });
+      setActivityState(newActivity || {});
       setOverrideState(newEventOverride || newOverride || null);
       setNoticeOverrideState(newNoticeOverride || null);
 

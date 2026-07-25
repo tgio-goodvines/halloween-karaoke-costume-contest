@@ -3009,6 +3009,92 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("jukebox", payload)
         self.assertTrue(payload["jukebox"]["enabled"])
 
+    def test_display_layout_is_idle_without_party_activity(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/api/display-data")
+
+        self.assertEqual(200, response.status_code)
+        payload = response.get_json()
+        self.assertEqual("idle", payload["layout"]["mode"])
+        self.assertFalse(payload["layout"]["left_rail_enabled"])
+        self.assertFalse(payload["layout"]["right_rail_enabled"])
+
+    def test_display_layout_dashboard_when_jukebox_is_enabled(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/api/display-data")
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("dashboard", payload["layout"]["mode"])
+        self.assertTrue(payload["layout"]["left_rail_enabled"])
+        self.assertFalse(payload["layout"]["right_rail_enabled"])
+        self.assertTrue(payload["layout"]["reasons"]["jukebox"])
+
+    def test_display_layout_dashboard_when_activity_exists(self):
+        main.costume_signups = [main.CostumeSignup("Ada", "Vampire", "", "costume-1")]
+        main.karaoke_signups = [
+            main.KaraokeSignup("Grace", "Thriller", "Michael Jackson", "", "karaoke-1")
+        ]
+        main.drink_orders = [
+            main.normalize_drink_order(
+                {
+                    "id": "order-1",
+                    "username": "Jamie",
+                    "item_name": "Witch's Brew",
+                    "status": "received",
+                    "created_at": "2026-10-31T19:00:00Z",
+                }
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/api/display-data")
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("dashboard", payload["layout"]["mode"])
+        self.assertFalse(payload["layout"]["left_rail_enabled"])
+        self.assertTrue(payload["layout"]["right_rail_enabled"])
+        self.assertEqual(1, payload["activity"]["counts"]["active_drink_orders"])
+        self.assertEqual("Witch's Brew", payload["activity"]["drink_orders"][0]["drink"])
+        self.assertEqual("Ada", payload["activity"]["costumes"][0]["name"])
+        self.assertEqual("Thriller", payload["activity"]["karaoke"][0]["song_title"])
+
+    def test_display_activity_includes_recent_ready_drinks(self):
+        main.drink_orders = [
+            main.normalize_drink_order(
+                {
+                    "id": "order-1",
+                    "username": "Jamie",
+                    "item_name": "Cider",
+                    "status": "complete",
+                    "completed_at": main._utc_now_iso(),
+                    "item_image_url": "https://example.test/cider.jpg",
+                }
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/api/display-data")
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("dashboard", payload["layout"]["mode"])
+        self.assertEqual(1, payload["activity"]["counts"]["ready_drinks"])
+        self.assertEqual("Cider", payload["activity"]["ready_drinks"][0]["drink"])
+        self.assertEqual("https://example.test/cider.jpg", payload["activity"]["ready_drinks"][0]["image_url"])
+
     def test_attendee_search_uses_app_config_while_music_token_stays_admin_only(self):
         account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
         main.event_experience_mode = "party_day"

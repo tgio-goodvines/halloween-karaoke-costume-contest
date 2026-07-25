@@ -6,7 +6,9 @@
   to `/rsvp`.
 - `GET /health` -> JSON health API for service and Redis readiness; returns
   `503` in production if Redis cannot be reached.
-- `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, override state, and jukebox state; requires an `admin` role session.
+- `GET /live-display` -> renders `templates/display.html` with rotation
+  entries, counts, override state, jukebox state, display layout mode, and
+  activity rail state; requires an `admin` role session.
 - `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`; requires an `admin` role session.
 - `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
 - `GET|POST /rsvp` -> public RSVP landing page; shows party details, an
@@ -163,6 +165,13 @@ That function increments `display_update_version` and notifies `display_update_c
 
 `static/display.js` also polls `/api/display-data` every 30 seconds as a fallback.
 
+`/api/display-data` also includes:
+
+- `layout`: `idle` or `dashboard`, plus booleans for left jukebox rail and
+  right activity rail visibility.
+- `activity`: compact lists/counts for active bartender orders, ready drinks,
+  costume lineup previews, and karaoke lineup previews.
+
 ## Rotation Entry Model
 
 `build_rotation_entries()` returns a list of dictionaries. Display entries can contain:
@@ -213,6 +222,8 @@ locked winner.
 - `#override-data`
 - `#notice-override-data`
 - `#jukebox-data`
+- `#layout-data`
+- `#activity-data`
 
 `static/display.js` then owns:
 
@@ -221,6 +232,11 @@ locked winner.
 - Applying display entries to the card DOM.
 - Switching between default, CTA, and scoreboard layouts.
 - Applying costume/winner styling classes.
+- Switching the page between idle full-card mode and dashboard mode.
+- Rendering and independently rotating the dashboard right rail across active
+  bar orders, ready drinks, costume previews, and karaoke previews.
+- Applying long/dense/spotlight/mega sizing classes so sparse idle cards scale
+  up and crowded dashboard cards still fit.
 - Rotating cards every 8 seconds.
 - Fetching latest display data.
 - Connecting and reconnecting to SSE updates.
@@ -234,8 +250,8 @@ locked winner.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.
 
-`static/jukebox-player.js` owns Apple Music/MusicKit playback on the live
-display:
+`static/jukebox-player.js` owns Apple Music/MusicKit playback in the dashboard
+left rail on the live display:
 
 - Fetches the admin-only developer token from `/api/apple-music-token`.
 - Requires a host click to authorize/connect Apple Music and start playback.

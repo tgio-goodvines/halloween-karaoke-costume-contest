@@ -38,6 +38,23 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   search/request Apple Music tracks through the Halloween app, but only the
   admin/live-display browser can fetch the MusicKit token and authorize the
   host Apple Music playback session.
+- 2026-07-25: Reorganized the live display around explicit idle/dashboard
+  modes. When jukebox is enabled, Apple Music playback now lives in a dedicated
+  left rail with now-playing and capped queue details, while the center keeps
+  rotating party cards and the right rail rotates drink/costume/karaoke
+  activity. Idle mode preserves the single large rotating card and scales short
+  cards up with spotlight/mega sizing.
+- 2026-07-25: Merged the left rail's now-playing and up-next areas into one
+  unified jukebox display card so album/song/request/queue information does not
+  cut each other off. Normal `/live-display` hides Apple Music host controls and
+  status copy from attendees; `/live-display?host_controls=1` keeps a setup view
+  for host authorization/start/skip. Live display CSS now locks the page to the
+  viewport with no document scrolling.
+- 2026-07-25: Added client-side jukebox card fitting in
+  `static/jukebox-player.js`. After each render, the card measures its own
+  scroll/client dimensions and progressively applies compact, micro, no-art,
+  fewer-queue-row, and minimal modes so long song/artist/request content fits
+  the assigned viewport region without clipping.
 
 ## Design Notes
 

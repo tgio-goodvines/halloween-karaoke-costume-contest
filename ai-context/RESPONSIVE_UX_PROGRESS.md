@@ -74,3 +74,28 @@ in normal browser windows and on mobile phone browsers.
 - Verified admin add/edit disclosure rows remain collapsed by default on mobile.
 - Corrected the redesigned mobile card group so phone-width panels retain the
   square lab-panel shape instead of reverting to rounded cards.
+
+## 2026 Live Display Dashboard Reorganization
+
+- Added explicit live-display idle/dashboard modes.
+- Idle mode preserves the original full-focus rotating card experience when no
+  jukebox, bartender, costume, or karaoke activity exists.
+- Idle cards now use spotlight/mega sizing for short or CTA content so they do
+  not look sparse in the enlarged focus area.
+- Dashboard mode appears when jukebox or live party activity exists and splits
+  the display into a left jukebox rail, center rotating focus card, and right
+  activity rail.
+- The right activity rail rotates independently between active bar orders, ready
+  drinks, costume lineup, and karaoke lineup; empty sections are skipped.
+- Verified in the in-app browser at a narrow viewport that dashboard mode
+  collapses into a stacked layout without hidden rails overlapping.
+- Verified with headless local Chrome at 1440x900 that jukebox, focus, and
+  activity regions render as three separated columns within the viewport.
+- Updated stacking behavior so dashboard regions stack only for portrait
+  viewports. Landscape viewports, including the 812x708 in-app-browser-sized
+  viewport, keep left/focus/right columns with proportional widths and no page
+  scrolling.
+- Added dynamic fitting inside the Apple Music jukebox card itself. The
+  now-playing/queue card measures after render and progressively compacts
+  artwork, text scale, queue rows, and low-priority metadata so even long song
+  titles avoid clipping inside the fixed viewport canvas.

@@ -15,9 +15,12 @@
 
   let state = parseJson(initialDataElement, {});
   let music = null;
+  let musicAuthorized = false;
   let currentQueueItem = null;
   let lastEndedItemId = '';
   let lastDjCommandId = '';
+  let musicKitLoadPromise = null;
+  let pendingAuthCommand = null;
   let playbackPollId = null;
 
   const body = document.body;
@@ -34,6 +37,11 @@
   const connectButton = root.querySelector('[data-jukebox-connect]');
   const startButton = root.querySelector('[data-jukebox-start]');
   const skipButton = root.querySelector('[data-jukebox-skip]');
+  const authPrompt = document.querySelector('[data-jukebox-auth]');
+  const authTitle = document.querySelector('[data-jukebox-auth-title]');
+  const authMessage = document.querySelector('[data-jukebox-auth-message]');
+  const authActionButton = document.querySelector('[data-jukebox-auth-action]');
+  const authDismissButton = document.querySelector('[data-jukebox-auth-dismiss]');
   const fitClasses = [
     'jukebox-display--compact',
     'jukebox-display--micro',
@@ -55,6 +63,41 @@
   const setText = (element, value) => {
     if (element) {
       element.textContent = value || '';
+    }
+  };
+
+  const showAuthPrompt = (control, message) => {
+    pendingAuthCommand = control || null;
+    if (!authPrompt) {
+      return;
+    }
+    setText(authTitle, control && control.command === 'play' ? 'Sign In To Start Jukebox' : 'Connect Apple Music');
+    setText(
+      authMessage,
+      message ||
+        'Sign in with the host Apple Music subscriber account in this browser. Attendees can keep sending requests from their phones.'
+    );
+    if (authActionButton) {
+      authActionButton.textContent = control && control.command === 'play' ? 'Sign In And Play' : 'Sign In With Apple Music';
+      authActionButton.disabled = false;
+    }
+    authPrompt.hidden = false;
+    configureMusic({ authorize: false }).catch((error) => {
+      setAuthPromptError(error.message || 'Apple Music is not ready in this browser yet.');
+    });
+  };
+
+  const hideAuthPrompt = () => {
+    pendingAuthCommand = null;
+    if (authPrompt) {
+      authPrompt.hidden = true;
+    }
+  };
+
+  const setAuthPromptError = (message) => {
+    setText(authMessage, message || 'Apple Music sign-in did not finish. Try again from this display.');
+    if (authActionButton) {
+      authActionButton.disabled = false;
     }
   };
 
@@ -212,8 +255,75 @@
     }
   };
 
-  const configureMusic = async () => {
+  const withTimeout = (operation, message, timeoutMs = 10000) =>
+    Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((resolve, reject) => {
+        window.setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+
+  const waitForMusicKit = () => {
+    if (window.MusicKit && typeof window.MusicKit.configure === 'function') {
+      return Promise.resolve(window.MusicKit);
+    }
+    if (musicKitLoadPromise) {
+      return musicKitLoadPromise;
+    }
+
+    musicKitLoadPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector('script[src*="js-cdn.music.apple.com/musickit"]');
+      let settled = false;
+
+      const complete = () => {
+        if (settled) {
+          return;
+        }
+        if (window.MusicKit && typeof window.MusicKit.configure === 'function') {
+          settled = true;
+          resolve(window.MusicKit);
+        }
+      };
+
+      const fail = () => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Apple MusicKit did not load in this browser. Check network/content blocking, then reload the live display.'));
+        }
+      };
+
+      if (existingScript) {
+        existingScript.addEventListener('load', complete, { once: true });
+        existingScript.addEventListener('error', fail, { once: true });
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://js-cdn.music.apple.com/musickit/v3/musickit.js';
+        script.addEventListener('load', complete, { once: true });
+        script.addEventListener('error', fail, { once: true });
+        document.head.appendChild(script);
+      }
+
+      window.setTimeout(() => {
+        complete();
+        if (!settled) {
+          fail();
+        }
+      }, 8000);
+    });
+
+    return musicKitLoadPromise;
+  };
+
+  const configureMusic = async (options = {}) => {
+    const shouldAuthorize = options.authorize !== false;
     if (music) {
+      if (shouldAuthorize && !musicAuthorized && typeof music.authorize === 'function') {
+        await withTimeout(
+          () => music.authorize(),
+          'Apple Music authorization did not finish. Use the sign-in prompt on this display, allow Apple Music, then press Play again.'
+        );
+        musicAuthorized = true;
+      }
       return music;
     }
     const response = await fetch('/api/apple-music-token', { headers: { Accept: 'application/json' } });
@@ -221,10 +331,8 @@
     if (!response.ok) {
       throw new Error(payload.error || 'Apple Music is not configured.');
     }
-    if (!window.MusicKit || typeof window.MusicKit.configure !== 'function') {
-      throw new Error('MusicKit did not load yet.');
-    }
-    music = await window.MusicKit.configure({
+    const MusicKit = await waitForMusicKit();
+    music = await MusicKit.configure({
       developerToken: payload.developer_token,
       app: {
         name: 'Halloween Party Jukebox',
@@ -232,10 +340,17 @@
       },
       storefrontId: payload.storefront || 'us',
     });
-    if (music && typeof music.authorize === 'function') {
-      await music.authorize();
+    if (shouldAuthorize && music && typeof music.authorize === 'function') {
+      await withTimeout(
+        () => music.authorize(),
+        'Apple Music authorization did not finish. Click the live display once, allow Apple Music sign-in, then press Play again.'
+      );
+      musicAuthorized = true;
     }
-    setStatus('Host Apple Music connected. Guests can keep using party requests.');
+    if (shouldAuthorize) {
+      setStatus('Host Apple Music connected. Guests can keep using party requests.');
+      hideAuthPrompt();
+    }
     render();
     return music;
   };
@@ -249,9 +364,15 @@
     }
     if (typeof activeMusic.setQueue === 'function') {
       try {
-        await activeMusic.setQueue({ songs: ids.length ? ids : [queueItem.apple_music_id] });
+        await withTimeout(
+          () => activeMusic.setQueue({ songs: ids.length ? ids : [queueItem.apple_music_id] }),
+          'Apple Music did not accept the jukebox queue.'
+        );
       } catch (error) {
-        await activeMusic.setQueue({ song: queueItem.apple_music_id });
+        await withTimeout(
+          () => activeMusic.setQueue({ song: queueItem.apple_music_id }),
+          'Apple Music did not accept the queued song.'
+        );
       }
     }
   };
@@ -264,10 +385,16 @@
       return;
     }
     await setMusicQueue(nextItem);
-    if (music && music.player && typeof music.player.play === 'function') {
-      await music.player.play();
-    } else if (music && typeof music.play === 'function') {
-      await music.play();
+    if (music && typeof music.play === 'function') {
+      await withTimeout(
+        () => music.play(),
+        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
+      );
+    } else if (music && music.player && typeof music.player.play === 'function') {
+      await withTimeout(
+        () => music.player.play(),
+        'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
+      );
     }
     currentQueueItem = nextItem;
     lastEndedItemId = '';
@@ -276,10 +403,10 @@
   };
 
   const pausePlayback = async (commandId, eventName) => {
-    if (music && music.player && typeof music.player.pause === 'function') {
-      await music.player.pause();
-    } else if (music && typeof music.pause === 'function') {
-      await music.pause();
+    if (music && typeof music.pause === 'function') {
+      await withTimeout(() => music.pause(), 'Apple Music did not pause.');
+    } else if (music && music.player && typeof music.player.pause === 'function') {
+      await withTimeout(() => music.player.pause(), 'Apple Music did not pause.');
     } else {
       throw new Error('Apple Music is not connected on this display yet.');
     }
@@ -312,9 +439,17 @@
     lastDjCommandId = control.id;
     try {
       if (control.command === 'connect') {
+        if (!music) {
+          showAuthPrompt(control, 'Admin requested Apple Music sign-in. Use the host Apple Music subscriber account on this display.');
+          return;
+        }
         await configureMusic();
         await postPlaybackEvent('sync', currentQueueItem, control.id);
       } else if (control.command === 'play') {
+        if (!music) {
+          showAuthPrompt(control, 'Admin pressed Play. Sign in with Apple Music on this display to start the jukebox audio.');
+          return;
+        }
         await startPlayback(control.id);
       } else if (control.command === 'pause') {
         await pausePlayback(control.id, 'paused');
@@ -330,6 +465,38 @@
         await postPlaybackEvent('command_error', currentQueueItem, control.id, message);
       } catch (ackError) {
         setStatus(ackError.message || message);
+      }
+    }
+  };
+
+  const completeAuthPrompt = async () => {
+    const control = pendingAuthCommand;
+    if (authActionButton) {
+      authActionButton.disabled = true;
+    }
+    try {
+      if (!control) {
+        await configureMusic();
+        return;
+      }
+      if (control.command === 'connect') {
+        await configureMusic();
+        await postPlaybackEvent('sync', currentQueueItem, control.id);
+      } else if (control.command === 'play') {
+        await configureMusic();
+        await startPlayback(control.id);
+      }
+      hideAuthPrompt();
+    } catch (error) {
+      const message = error.message || 'Apple Music sign-in failed.';
+      setStatus(message);
+      setAuthPromptError(message);
+      if (control && control.id) {
+        try {
+          await postPlaybackEvent('command_error', currentQueueItem, control.id, message);
+        } catch (ackError) {
+          setAuthPromptError(ackError.message || message);
+        }
       }
     }
   };
@@ -384,6 +551,22 @@
         await skipPlayback();
       } catch (error) {
         setStatus(error.message || 'Unable to skip song.');
+      }
+    });
+  }
+  if (authActionButton) {
+    authActionButton.addEventListener('click', completeAuthPrompt);
+  }
+  if (authDismissButton) {
+    authDismissButton.addEventListener('click', async () => {
+      const control = pendingAuthCommand;
+      hideAuthPrompt();
+      if (control && control.id) {
+        try {
+          await postPlaybackEvent('command_error', currentQueueItem, control.id, 'Apple Music sign-in was dismissed on the live display.');
+        } catch (error) {
+          setStatus(error.message || 'Unable to dismiss Apple Music sign-in.');
+        }
       }
     });
   }

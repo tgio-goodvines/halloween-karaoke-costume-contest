@@ -3067,6 +3067,49 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("acknowledged", main.jukebox_playback_control["status"])
         self.assertEqual("playing", main.jukebox_now_playing["playback_state"])
 
+    def test_jukebox_playback_event_records_admin_command_error(self):
+        main.jukebox_settings["enabled"] = True
+        main.jukebox_playback_control = main.issue_jukebox_dj_command("connect")
+        command_id = main.jukebox_playback_control["id"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/api/jukebox/playback-event",
+                data={
+                    "event": "command_error",
+                    "command_id": command_id,
+                    "error": "MusicKit did not load.",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("error", main.jukebox_playback_control["status"])
+        self.assertEqual("MusicKit did not load.", main.jukebox_playback_control["error"])
+
+    def test_admin_jukebox_search_works_before_party_day_even_with_regular_role(self):
+        main.event_experience_mode = "pre_party"
+        main.jukebox_settings["enabled"] = True
+        main.apple_music_catalog_search = lambda query: [
+            main.normalize_jukebox_track(
+                {
+                    "apple_music_id": "apple-song-1",
+                    "title": f"{query} Song",
+                    "artist": "Host Account Catalog",
+                }
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            self.login_admin(client)
+            response = client.get("/api/jukebox-search?q=ghost")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("ghost Song", response.get_json()["results"][0]["title"])
+
     def test_display_layout_is_idle_without_party_activity(self):
         self.save_current_state()
 

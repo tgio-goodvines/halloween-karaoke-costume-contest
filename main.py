@@ -4440,7 +4440,7 @@ def bartender_queue_data():
 def youtube_search():
     if not (session_has_role("regular") or session_has_role("admin")):
         return jsonify({"error": "Sign in before searching YouTube."}), 401
-    if session_has_role("regular") and not party_day_has_arrived():
+    if session_has_role("regular") and not session_has_role("admin") and not party_day_has_arrived():
         return jsonify({"error": "Karaoke song search opens on the party date."}), 403
 
     query = request.args.get("q", "").strip()
@@ -4464,7 +4464,7 @@ def youtube_search():
 def jukebox_search():
     if not (session_has_role("regular") or session_has_role("admin")):
         return jsonify({"error": "Sign in to the party app before searching Apple Music."}), 401
-    if session_has_role("regular") and not party_day_has_arrived():
+    if session_has_role("regular") and not session_has_role("admin") and not party_day_has_arrived():
         return jsonify({"error": "Jukebox requests open on the party date."}), 403
 
     query = request.args.get("q", "").strip()
@@ -4505,7 +4505,7 @@ def apple_music_token():
 def jukebox_state_api():
     if not (session_has_role("regular") or session_has_role("admin")):
         return jsonify({"error": "Sign in before viewing jukebox state."}), 401
-    if session_has_role("regular") and not party_day_has_arrived():
+    if session_has_role("regular") and not session_has_role("admin") and not party_day_has_arrived():
         return jsonify({"error": "Jukebox opens on the party date."}), 403
     return jsonify(jukebox_state_payload())
 

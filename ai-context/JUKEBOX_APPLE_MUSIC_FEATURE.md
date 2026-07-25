@@ -61,6 +61,14 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   command through MusicKit, and acknowledges success/error through the existing
   playback event endpoint. Normal attendee-visible `/live-display` remains
   display-only with no Apple Music buttons.
+- 2026-07-25: Local real-song testing with Apple Music credentials confirmed
+  catalog search and app queueing work with real songs such as "Thriller".
+  Playback commands reached the live display, but MusicKit calls could stall
+  without a same-tab display gesture or when the browser/CDN context failed to
+  expose MusicKit. Added cache-busted display scripts, a no-button click/key
+  gesture arm path on the live display, MusicKit load detection, and timeouts
+  around authorize/setQueue/play so admin sees an explicit error instead of a
+  silent pending command.
 
 ## Design Notes
 

@@ -1761,6 +1761,58 @@ body.display-mode {
   display: none !important;
 }
 
+.jukebox-auth[hidden] {
+  display: none !important;
+}
+
+.jukebox-auth {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: rgba(3, 3, 6, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.jukebox-auth__panel {
+  width: min(720px, 100%);
+  padding: clamp(1.4rem, 4vw, 2.6rem);
+  border: 2px solid rgba(255, 49, 49, 0.78);
+  border-radius: 8px;
+  background:
+    var(--display-panel-top),
+    linear-gradient(135deg, rgba(30, 30, 34, 0.98), rgba(7, 7, 10, 0.96));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 0 38px rgba(255, 49, 49, 0.35);
+}
+
+.jukebox-auth__panel h2 {
+  margin: 0.35rem 0 0;
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-size: clamp(2rem, 6vw, 4rem);
+  line-height: 1;
+}
+
+.jukebox-auth__panel p {
+  margin: 0.9rem 0 0;
+  color: rgba(244, 244, 248, 0.82);
+  font-size: clamp(1rem, 2vw, 1.35rem);
+}
+
+.jukebox-auth__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.35rem;
+}
+
+.jukebox-auth__actions .button {
+  min-height: 52px;
+}
+
 .jukebox-display__queue {
   display: grid;
   gap: 0.65rem;

@@ -193,6 +193,7 @@ class RedisStateTests(unittest.TestCase):
         main.jukebox_queue = []
         main.jukebox_now_playing = {}
         main.jukebox_playback_control = main.copy.deepcopy(main.DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
+        main.display_pairing_tokens = {}
         main.display_update_version = 0
         main.contest_state.clear()
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
@@ -1543,8 +1544,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Casey", body)
         self.assertIn("casey@example.com", body)
         self.assertIn("Vegetarian", body)
-        self.assertIn("Authorize Display", body)
-        self.assertIn("data-apple-music-signin", body)
+        self.assertIn("Pair Display", body)
+        self.assertIn("Procedure: Pair the display", body)
         self.assertNotIn("/live-display?host_controls=1", body)
 
     def test_admin_jukebox_renders_dj_controls_before_settings_and_search(self):
@@ -1558,8 +1559,13 @@ class RedisStateTests(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
         self.assertLess(body.index("DJ Controls"), body.index("Jukebox Settings"))
-        self.assertLess(body.index("DJ Controls"), body.index("Add Playlist Song"))
-        self.assertIn("Authorize Display", body)
+        self.assertLess(body.index("DJ Controls"), body.index("Add Song To Active Playlist"))
+        self.assertIn("Pair Display", body)
+        self.assertIn("Active Playlist", body)
+        self.assertIn("Reset Playlist", body)
+        self.assertIn("Restart Playlist", body)
+        self.assertNotIn("Regenerate Queue", body)
+        self.assertNotIn("Clear Queue", body)
 
     def test_live_display_does_not_render_host_transport_buttons(self):
         main.jukebox_settings["enabled"] = True
@@ -1567,7 +1573,7 @@ class RedisStateTests(unittest.TestCase):
 
         with main.app.test_client() as client:
             self.login_admin(client)
-            response = client.get("/live-display?host_controls=1")
+            response = client.get("/live-display")
 
         body = response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
@@ -3206,6 +3212,151 @@ class RedisStateTests(unittest.TestCase):
         payload = state_response.get_json()
         self.assertEqual(queue_item_id, payload["playback_control"]["queue_item_id"])
 
+    def test_admin_pair_display_creates_playback_only_display_session(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as admin_client:
+            self.login_admin(admin_client)
+            pair_response = admin_client.post(
+                "/admin",
+                data={"action": "pair_live_display"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(302, pair_response.status_code)
+        self.assertIn("display_token=", pair_response.headers["Location"])
+
+        with main.app.test_client() as display_client:
+            paired_response = display_client.get(pair_response.headers["Location"], follow_redirects=False)
+            token_response = display_client.get("/api/apple-music-token")
+            state_response = display_client.get("/api/jukebox-state")
+            admin_response = display_client.get("/admin")
+
+        self.assertEqual(302, paired_response.status_code)
+        self.assertEqual("/live-display", paired_response.headers["Location"])
+        self.assertEqual(200, token_response.status_code)
+        self.assertEqual("test-token", token_response.get_json()["developer_token"])
+        self.assertEqual(200, state_response.status_code)
+        self.assertTrue(state_response.get_json()["display_authorized"])
+        self.assertEqual(302, admin_response.status_code)
+        self.assertIn("/admin/login", admin_response.headers["Location"])
+
+    def test_unpaired_display_cannot_fetch_apple_music_token(self):
+        main.jukebox_settings["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            response = client.get("/api/apple-music-token")
+
+        self.assertEqual(401, response.status_code)
+        self.assertIn("Pair the live display", response.get_json()["error"])
+
+    def test_display_pairing_token_is_single_use(self):
+        raw_token = main.create_display_pairing_token()
+        self.save_current_state()
+
+        with main.app.test_client() as first_client:
+            first_response = first_client.get(f"/live-display?display_token={raw_token}", follow_redirects=False)
+            first_token_response = first_client.get("/api/apple-music-token")
+
+        with main.app.test_client() as second_client:
+            second_response = second_client.get(f"/live-display?display_token={raw_token}", follow_redirects=False)
+            second_token_response = second_client.get("/api/apple-music-token")
+
+        self.assertEqual(302, first_response.status_code)
+        self.assertEqual("/live-display", first_response.headers["Location"])
+        self.assertEqual(200, first_token_response.status_code)
+        self.assertEqual(302, second_response.status_code)
+        self.assertIn("/admin/login", second_response.headers["Location"])
+        self.assertEqual(401, second_token_response.status_code)
+
+    def test_paired_display_can_post_playback_events_without_admin_access(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_queue = [main.create_jukebox_queue_item(track)]
+        main.jukebox_playback_control = main.issue_jukebox_dj_command("play")
+        command_id = main.jukebox_playback_control["id"]
+        queue_item_id = main.jukebox_queue[0]["id"]
+        raw_token = main.create_display_pairing_token()
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            client.get(f"/live-display?display_token={raw_token}", follow_redirects=False)
+            response = client.post(
+                "/api/jukebox/playback-event",
+                data={
+                    "event": "started",
+                    "queue_item_id": queue_item_id,
+                    "command_id": command_id,
+                },
+            )
+            admin_response = client.get("/admin")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("playing", main.jukebox_queue[0]["status"])
+        self.assertEqual("acknowledged", main.jukebox_playback_control["status"])
+        self.assertEqual(302, admin_response.status_code)
+
+    def test_admin_reset_playlist_rebuilds_queue_without_deleting_playlist(self):
+        main.jukebox_settings["enabled"] = True
+        playlist_track = main.normalize_jukebox_track(
+            {"apple_music_id": "base-song", "title": "Base Song", "artist": "Host"}
+        )
+        request_item = main.normalize_jukebox_request(
+            {
+                "apple_music_id": "request-song",
+                "title": "Requested Song",
+                "artist": "Guest Artist",
+                "requester_user_id": "user-1",
+                "requester_name": "Jamie",
+                "status": "played",
+                "played_at": "2026-07-25T00:00:00Z",
+            }
+        )
+        main.jukebox_playlist = [playlist_track]
+        main.jukebox_requests = [request_item]
+        main.jukebox_queue = [main.create_jukebox_queue_item(playlist_track)]
+        main.jukebox_queue[0]["status"] = "played"
+        main.jukebox_now_playing = main.copy.deepcopy(main.jukebox_queue[0])
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post("/admin", data={"action": "reset_jukebox_playlist"})
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(["Base Song"], [item["title"] for item in main.jukebox_playlist])
+        self.assertFalse(main.jukebox_now_playing)
+        self.assertTrue(all(item["status"] == "queued" for item in main.jukebox_queue))
+        self.assertIn("Requested Song", [item["title"] for item in main.jukebox_queue])
+
+    def test_admin_restart_playlist_resets_queue_and_issues_restart_command(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_playlist = [track]
+        main.jukebox_queue = [main.create_jukebox_queue_item(track)]
+        main.jukebox_queue[0]["status"] = "played"
+        main.jukebox_now_playing = main.copy.deepcopy(main.jukebox_queue[0])
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post("/admin", data={"action": "restart_jukebox_playlist"})
+            display_response = client.get("/api/display-data")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("restart_playlist", main.jukebox_playback_control["command"])
+        self.assertEqual("pending", main.jukebox_playback_control["status"])
+        self.assertTrue(main.jukebox_playback_control["queue_item_id"])
+        self.assertEqual("queued", main.jukebox_queue[0]["status"])
+        payload = display_response.get_json()
+        self.assertEqual("restart_playlist", payload["jukebox"]["playback_control"]["command"])
+
     def test_jukebox_playback_event_acknowledges_admin_command(self):
         main.jukebox_settings["enabled"] = True
         track = main.normalize_jukebox_track(
@@ -3459,7 +3610,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, search_response.status_code)
         self.assertEqual("ghost Song", search_response.get_json()["results"][0]["title"])
         self.assertEqual(401, token_response.status_code)
-        self.assertIn("Host admin sign-in", token_response.get_json()["error"])
+        self.assertIn("Pair the live display", token_response.get_json()["error"])
         self.assertEqual(200, admin_token_response.status_code)
         self.assertEqual("test-token", admin_token_response.get_json()["developer_token"])
 

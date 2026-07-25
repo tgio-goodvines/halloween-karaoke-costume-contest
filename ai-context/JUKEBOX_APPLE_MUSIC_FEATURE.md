@@ -46,10 +46,10 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
   cards up with spotlight/mega sizing.
 - 2026-07-25: Merged the left rail's now-playing and up-next areas into one
   unified jukebox display card so album/song/request/queue information does not
-  cut each other off. Normal `/live-display` hides Apple Music host controls and
-  status copy from attendees; `/live-display?host_controls=1` keeps a setup view
-  for host authorization/start/skip. Live display CSS now locks the page to the
-  viewport with no document scrolling.
+  cut each other off. `/live-display` hides persistent Apple Music host controls
+  and status copy from attendees; paired displays show only the temporary
+  MusicKit authorization modal when admin requests it. Live display CSS now
+  locks the page to the viewport with no document scrolling.
 - 2026-07-25: Added client-side jukebox card fitting in
   `static/jukebox-player.js`. After each render, the card measures its own
   scroll/client dimensions and progressively applies compact, micro, no-art,
@@ -101,28 +101,44 @@ Add a party jukebox backed by Apple Music/MusicKit on the live display:
 - 2026-07-25: Clarified and hardened the Apple Music DJ authorization UX after
   field testing showed the old admin sign-in flow could create a split
   MusicKit state between `/admin` and `/live-display`. The Jukebox tab now
-  renders DJ Controls at the top. The admin `Authorize Display` button only
-  sends a `connect` command; the live display owns MusicKit authorization and
-  playback. `static/jukebox-player.js` now checks existing display
+  renders DJ Controls at the top. The live display owns MusicKit authorization
+  and playback. `static/jukebox-player.js` now checks existing display
   authorization before showing the modal, displays progress while Apple sign-in
   opens, times out visibly, and posts `sync` or `command_error` back to admin.
+- 2026-07-25: Implemented the final paired-display Apple Music workflow. Admin
+  `Pair Display` creates a short-lived, single-use display token and opens a
+  playback-only `/live-display` session; paired displays can fetch
+  `/api/jukebox-state`, `/api/apple-music-token`, and post
+  `/api/jukebox/playback-event` without receiving admin portal access. The
+  admin Jukebox tab documents the procedure in-app: pair display, authorize
+  Apple Music on the live display browser, add songs to the active playlist,
+  approve requests into that playlist, then use DJ controls. The old visible
+  Regenerate/Clear queue controls were replaced by `Reset Playlist` and
+  `Restart Playlist`. The active playlist is the canonical running music queue
+  source; adding/removing/reordering playlist songs regenerates the queue in
+  realtime, approved requests are inserted into it, Reset rebuilds the queue
+  without deleting playlist songs, and Restart resets playback state and sends
+  a `restart_playlist` command to the paired display.
 
 ## Design Notes
 
 - The Flask/Redis app owns the canonical jukebox state and queue order. MusicKit is treated as the playback surface, not the source of truth.
+- The active playlist is the party's running music queue source. Admin-managed
+  playlist songs plus approved requests generate the app-owned queue that the
+  live-display MusicKit instance plays from.
 - Admin Play Now queue commands intentionally bypass the upcoming list in
   MusicKit so hosts can jump to a specific approved request or playlist item.
 - Keep admin as the only persistent DJ transport surface. Avoid reintroducing
   always-visible playback buttons on `/live-display`; use admin commands plus
   the display-tab authorization prompt when MusicKit/browser policy requires it.
 - Attendee accounts do not authenticate with Apple Music and must never receive
-  the MusicKit token endpoint. The host/admin authorizes Apple Music on the
-  live-display browser, and attendees use that playback session indirectly by
-  submitting app-owned requests.
+  the MusicKit token endpoint. Only an admin session or a paired display
+  session can fetch the MusicKit developer token. Attendees use playback
+  indirectly by submitting app-owned requests for host approval.
 - Browser audio autoplay still requires a user gesture in the playback tab.
-  The host should keep `/live-display` open on the TV/cast browser, press
-  `Authorize Display` from `/admin`, then complete the Apple Music prompt on
-  the live display itself before using `/admin` DJ controls during the party.
+  The host should press `Pair Display` from `/admin`, use the new paired
+  display tab on the TV/cast browser, press `Connect Apple Music` or `Play`
+  from admin, then complete the Apple Music prompt on the live display itself.
 - Chromecast audio should work when casting the Chrome tab containing `/live-display`; casting a full screen can keep audio on the computer on some platforms.
 - YouTube remains unsuitable for audio-only playback because YouTube API policies do not allow separating or hiding the video/audio components.
 - Apple Music catalog search and MusicKit playback require

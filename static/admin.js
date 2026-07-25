@@ -80,57 +80,7 @@
     if (window.HalloweenJukeboxSearch && typeof window.HalloweenJukeboxSearch.init === 'function') {
       window.HalloweenJukeboxSearch.init();
     }
-    initAppleMusicSignIn();
     initAjaxForms();
-  };
-
-  const setAppleMusicStatus = (message, isError) => {
-    const status = document.querySelector('[data-apple-music-signin-status]');
-    if (!status) {
-      return;
-    }
-    status.textContent = message || '';
-    status.classList.toggle('form-helper--error', Boolean(isError));
-  };
-
-  const sendAppleMusicConnectCommand = async (csrfToken) => {
-    const formData = new FormData();
-    formData.append('csrf_token', csrfToken || '');
-    formData.append('action', 'jukebox_dj_command');
-    formData.append('jukebox_command', 'connect');
-    const savedScrollY = window.scrollY;
-    const activeTab = window.localStorage.getItem(tabStorageKey) || defaultTab;
-    const openSummaries = openDetailsSnapshot();
-    const response = await fetch('/admin', {
-      method: 'POST',
-      body: formData,
-      headers: { Accept: 'text/html', 'X-Requested-With': 'fetch' },
-      cache: 'no-store',
-    });
-    if (!response.ok) {
-      throw new Error('Apple Music connected, but the live display command could not be sent.');
-    }
-    replaceAdminPanel(await response.text(), savedScrollY, activeTab, openSummaries);
-  };
-
-  const initAppleMusicSignIn = () => {
-    const button = document.querySelector('[data-apple-music-signin]');
-    if (!button || button.dataset.appleMusicBound === 'yes') {
-      return;
-    }
-    button.dataset.appleMusicBound = 'yes';
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      setAppleMusicStatus('Requesting Apple Music authorization on the live display...', false);
-      try {
-        await sendAppleMusicConnectCommand(button.dataset.csrfToken || '');
-        setAppleMusicStatus('Authorization requested. Use the Apple Music prompt on the live display.', false);
-      } catch (error) {
-        setAppleMusicStatus(error.message || 'Unable to request Apple Music authorization on the live display.', true);
-      } finally {
-        button.disabled = false;
-      }
-    });
   };
 
   const replaceAdminPanel = (html, savedScrollY, activeTab, openSummaries) => {
@@ -208,6 +158,9 @@
       return;
     }
     panel.querySelectorAll('form[method="post"]').forEach((form) => {
+      if (form.dataset.adminNativeForm !== undefined) {
+        return;
+      }
       if (form.dataset.adminAjaxBound === 'yes') {
         return;
       }

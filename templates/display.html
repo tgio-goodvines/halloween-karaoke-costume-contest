@@ -8,9 +8,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='display.css') }}">
   </head>
   {% set layout_mode = display_layout.mode if display_layout else 'idle' %}
-  {% set show_host_controls = request.args.get('host_controls') == '1' %}
   <body
-    class="display-mode display-mode--{{ layout_mode }}{% if display_layout and display_layout.left_rail_enabled %} display-mode--jukebox{% endif %}{% if display_layout and display_layout.right_rail_enabled %} display-mode--activity{% endif %}{% if show_host_controls %} display-mode--host-controls{% endif %}"
+    class="display-mode display-mode--{{ layout_mode }}{% if display_layout and display_layout.left_rail_enabled %} display-mode--jukebox{% endif %}{% if display_layout and display_layout.right_rail_enabled %} display-mode--activity{% endif %}"
     data-display-api="{{ url_for('display_data') }}"
     data-display-updates="{{ url_for('display_updates') }}"
     data-csrf-token="{{ csrf_token() }}"
@@ -331,6 +330,6 @@
     <script id="activity-data" type="application/json">{{ display_activity | tojson }}</script>
     <script src="{{ url_for('static', filename='display.js', v='20260725-dj9') }}"></script>
     <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js"></script>
-    <script src="{{ url_for('static', filename='jukebox-player.js', v='20260725-dj10') }}"></script>
+    <script src="{{ url_for('static', filename='jukebox-player.js', v='20260725-dj11') }}"></script>
   </body>
 </html>

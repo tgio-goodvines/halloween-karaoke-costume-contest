@@ -253,10 +253,11 @@ app state.
   splits the display into a left jukebox rail, center rotating focus card, and
   right activity rail.
 - In dashboard mode, the left jukebox rail shows Apple Music album art,
-  now-playing/requester text, and a capped up-next list inside one unified
-  display card. Host Connect/Start/Skip controls are hidden on the normal live
-  display and only appear in the setup view at `/live-display?host_controls=1`.
-  Playback syncs back through `/api/jukebox/playback-event`.
+  now-playing/requester text, and the active jukebox state inside one unified
+  display card. Persistent playback controls stay on admin; the paired live
+  display only shows a temporary Apple Music authorization modal when admin
+  requests Connect/Play. Playback syncs back through
+  `/api/jukebox/playback-event`.
 - In dashboard mode, the right activity rail rotates independently between
   active bartender orders, recently ready drinks, costume lineup previews, and
   karaoke lineup previews. Empty rail sections are skipped.

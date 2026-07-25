@@ -6,7 +6,7 @@
   <header class="section-heading">
     <p class="eyebrow">Apple Music</p>
     <h2>Jukebox Requests</h2>
-    <p>Send a song into the party mix. The hosts handle Apple Music playback, so guests only need this party account.</p>
+    <p>Send a song to the hosts. Approved requests are added to the active party playlist while the live display handles Apple Music playback.</p>
   </header>
 
   {% if errors %}
@@ -65,7 +65,7 @@
       <input type="hidden" name="duration_ms" data-jukebox-field="duration_ms">
       <input type="hidden" name="explicit" data-jukebox-field="explicit">
 
-      <p class="form-helper" data-jukebox-selected>Choose a song from search before sending it to the hosts.</p>
+      <p class="form-helper" data-jukebox-selected>Choose a song from search before sending it to the host playlist.</p>
       <label for="jukebox_note">Request note</label>
       <input type="text" id="jukebox_note" name="note" maxlength="240" placeholder="Optional dedication or vibe check">
       <button type="submit" class="button button--primary">Request Song</button>

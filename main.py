@@ -327,7 +327,7 @@ JUKEBOX_REQUEST_STATUSES = {
     "skipped",
 }
 JUKEBOX_QUEUE_STATUSES = {"queued", "playing", "played", "skipped"}
-JUKEBOX_DJ_COMMANDS = {"connect", "play", "pause", "stop", "skip"}
+JUKEBOX_DJ_COMMANDS = {"connect", "play", "pause", "stop", "skip", "restart_playlist"}
 JUKEBOX_CONTROL_STATUSES = {"idle", "pending", "acknowledged", "error"}
 JUKEBOX_PROVIDERS = {"apple_music"}
 JUKEBOX_MODES = {"manual_playlist", "autoplay_seed"}
@@ -348,6 +348,7 @@ DRINK_READY_DASHBOARD_SECONDS = 5 * 60
 SPECIALTY_DRINK_INCLUDED_LIMIT = 3
 SPECIALTY_EXTRA_ORDER_HOUR = 23
 DRINK_ORDER_STATUSES = ("received", "in_progress", "complete")
+DISPLAY_PAIRING_TOKEN_TTL_SECONDS = 10 * 60
 MENU_ITEM_CATEGORIES = ("drink", "food")
 DRINK_TYPES = ("standard", "specialty")
 BEVERAGE_TYPES = ("alcoholic", "non_alcoholic")
@@ -463,6 +464,7 @@ jukebox_requests: list[dict[str, object]] = []
 jukebox_queue: list[dict[str, object]] = []
 jukebox_now_playing: dict[str, object] = {}
 jukebox_playback_control: dict[str, object] = copy.deepcopy(DEFAULT_JUKEBOX_PLAYBACK_CONTROL)
+display_pairing_tokens: dict[str, dict[str, str]] = {}
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -778,6 +780,10 @@ def current_user_account() -> dict[str, object] | None:
 
 
 def hash_password_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def hash_display_pairing_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
@@ -2144,6 +2150,55 @@ def normalize_jukebox_playback_control(data: object) -> dict[str, object]:
     return control
 
 
+def cleanup_display_pairing_tokens() -> None:
+    now = datetime.now(timezone.utc)
+    expired_keys = [
+        token_hash
+        for token_hash, token_record in display_pairing_tokens.items()
+        if parse_utc_iso(token_record.get("expires_at")) is None
+        or parse_utc_iso(token_record.get("expires_at")) <= now
+        or str(token_record.get("used_at", "") or "")
+    ]
+    for token_hash in expired_keys:
+        display_pairing_tokens.pop(token_hash, None)
+
+
+def create_display_pairing_token() -> str:
+    cleanup_display_pairing_tokens()
+    raw_token = secrets.token_urlsafe(32)
+    display_pairing_tokens[hash_display_pairing_token(raw_token)] = {
+        "created_at": _utc_now_iso(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=DISPLAY_PAIRING_TOKEN_TTL_SECONDS))
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "used_at": "",
+    }
+    return raw_token
+
+
+def consume_display_pairing_token(raw_token: str) -> bool:
+    cleanup_display_pairing_tokens()
+    token_hash = hash_display_pairing_token(str(raw_token or ""))
+    token_record = display_pairing_tokens.get(token_hash)
+    expires_at = parse_utc_iso(token_record.get("expires_at")) if token_record else None
+    if not token_record or not expires_at or expires_at <= datetime.now(timezone.utc):
+        return False
+    if str(token_record.get("used_at", "") or ""):
+        return False
+    token_record["used_at"] = _utc_now_iso()
+    session["display_authorized"] = True
+    session["display_authorized_at"] = _utc_now_iso()
+    return True
+
+
+def session_has_display_authorization() -> bool:
+    return bool(session.get("display_authorized")) or session_has_role("admin")
+
+
+def session_has_jukebox_playback_access() -> bool:
+    return session_has_role("admin") or bool(session.get("display_authorized"))
+
+
 def issue_jukebox_dj_command(command: str, queue_item_id: str = "") -> dict[str, object]:
     normalized_command = str(command or "").strip()
     if normalized_command not in JUKEBOX_DJ_COMMANDS:
@@ -2152,7 +2207,7 @@ def issue_jukebox_dj_command(command: str, queue_item_id: str = "") -> dict[str,
     return {
         "id": uuid4().hex,
         "command": normalized_command,
-        "queue_item_id": normalized_queue_item_id if normalized_command == "play" else "",
+        "queue_item_id": normalized_queue_item_id if normalized_command in {"play", "restart_playlist"} else "",
         "status": "pending",
         "issued_at": _utc_now_iso(),
         "acknowledged_at": "",
@@ -2283,6 +2338,28 @@ def regenerate_jukebox_queue() -> None:
     jukebox_queue = existing_done + queue_items
 
 
+def reset_jukebox_playlist_queue() -> None:
+    global jukebox_queue, jukebox_now_playing
+    for request_item in jukebox_requests:
+        if str(request_item.get("status", "")) in {"queued", "playing", "played", "skipped"}:
+            request_item["status"] = "approved"
+            request_item["played_at"] = ""
+    jukebox_now_playing = {}
+    jukebox_queue = []
+    regenerate_jukebox_queue()
+
+
+def restart_jukebox_playlist() -> dict[str, object]:
+    global jukebox_playback_control
+    reset_jukebox_playlist_queue()
+    first_item = next_jukebox_queue_item()
+    jukebox_playback_control = issue_jukebox_dj_command(
+        "restart_playlist",
+        str(first_item.get("id", "")) if first_item else "",
+    )
+    return jukebox_playback_control
+
+
 def jukebox_state_payload() -> dict[str, object]:
     upcoming = queued_jukebox_items()[:20]
     return {
@@ -2292,11 +2369,13 @@ def jukebox_state_payload() -> dict[str, object]:
         "developer_token_configured": jukebox_developer_token_configured(),
         "storefront": str(app.config.get("APPLE_MUSIC_STOREFRONT", "us") or "us"),
         "playlist_count": len(jukebox_playlist),
+        "active_playlist_count": len(jukebox_playlist),
         "request_count": len(jukebox_requests),
         "pending_request_count": sum(1 for item in jukebox_requests if item.get("status") == "pending"),
         "queue": upcoming,
         "now_playing": copy.deepcopy(jukebox_now_playing),
         "playback_control": normalize_jukebox_playback_control(jukebox_playback_control),
+        "display_authorized": session_has_display_authorization() if has_request_context() else False,
     }
 
 
@@ -2547,6 +2626,7 @@ def snapshot_state() -> dict[str, object]:
     ensure_submitted_vote_tracking()
     rebuild_legacy_vote_rows_from_ballots()
     cleanup_password_reset_tokens()
+    cleanup_display_pairing_tokens()
 
     return {
         "schema_version": STATE_SCHEMA_VERSION,
@@ -2580,6 +2660,7 @@ def snapshot_state() -> dict[str, object]:
         "jukebox_queue": copy.deepcopy(jukebox_queue),
         "jukebox_now_playing": copy.deepcopy(jukebox_now_playing),
         "jukebox_playback_control": normalize_jukebox_playback_control(jukebox_playback_control),
+        "display_pairing_tokens": copy.deepcopy(display_pairing_tokens),
         "live_display_event_override": copy.deepcopy(live_display_event_override),
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
         "live_display_override": copy.deepcopy(current_display_override()),
@@ -2600,6 +2681,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
     global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email, bartender_tip_settings
     global jukebox_settings, jukebox_playlist, jukebox_requests, jukebox_queue, jukebox_now_playing, jukebox_playback_control
+    global display_pairing_tokens
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -2713,6 +2795,21 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                     jukebox_queue.append(queue_item)
     jukebox_now_playing = normalize_jukebox_now_playing(data.get("jukebox_now_playing", {}))
     jukebox_playback_control = normalize_jukebox_playback_control(data.get("jukebox_playback_control", {}))
+    display_pairing_tokens = {}
+    raw_display_pairing_tokens = data.get("display_pairing_tokens", {})
+    if isinstance(raw_display_pairing_tokens, dict):
+        for token_hash, raw_record in raw_display_pairing_tokens.items():
+            if not isinstance(raw_record, dict) or not re.fullmatch(r"[0-9a-f]{64}", str(token_hash)):
+                continue
+            expires_at = str(raw_record.get("expires_at", "") or "")
+            if not parse_utc_iso(expires_at):
+                continue
+            display_pairing_tokens[str(token_hash)] = {
+                "created_at": str(raw_record.get("created_at", "") or ""),
+                "expires_at": expires_at,
+                "used_at": str(raw_record.get("used_at", "") or ""),
+            }
+    cleanup_display_pairing_tokens()
 
     raw_password_reset_tokens = data.get("password_reset_tokens", {})
     password_reset_tokens = {}
@@ -3132,6 +3229,15 @@ def required_role_for_endpoint(endpoint: str | None) -> str | None:
 
 @app.before_request
 def protect_role_routes():
+    if request.endpoint in DISPLAY_ENDPOINTS:
+        if session_has_display_authorization():
+            return None
+        if request.endpoint == "live_display" and request.args.get("display_token"):
+            return None
+        login_endpoint = ROLE_LOGIN_ENDPOINTS["admin"]
+        next_page = normalize_next_page(request.full_path, url_for(login_endpoint))
+        return redirect(url_for(login_endpoint, next=next_page))
+
     required_role = required_role_for_endpoint(request.endpoint)
     if not required_role:
         return None
@@ -3653,6 +3759,13 @@ def health():
 
 @app.route("/live-display")
 def live_display():
+    display_token = request.args.get("display_token", "").strip()
+    if display_token:
+        if consume_display_pairing_token(display_token):
+            persist_state_if_available()
+            return redirect(url_for("live_display"))
+        return redirect(url_for("admin_login", next=url_for("live_display")))
+
     cleanup_expired_display_notices()
     rotation_entries = build_rotation_entries()
     jukebox_payload = jukebox_state_payload()
@@ -4520,8 +4633,8 @@ def jukebox_search():
 
 @app.route("/api/apple-music-token")
 def apple_music_token():
-    if not session_has_role("admin"):
-        return jsonify({"error": "Host admin sign-in is required for Apple Music playback authorization."}), 401
+    if not session_has_jukebox_playback_access():
+        return jsonify({"error": "Pair the live display from admin before Apple Music playback authorization."}), 401
     token = str(app.config.get("APPLE_MUSIC_DEVELOPER_TOKEN", "") or "").strip()
     if not token:
         return jsonify({"error": "Apple Music developer token is not configured."}), 503
@@ -4535,12 +4648,12 @@ def apple_music_token():
 
 @app.route("/api/jukebox-state")
 def jukebox_state_api():
-    if not (session_has_role("regular") or session_has_role("admin")):
+    if not (session_has_role("regular") or session_has_role("admin") or session_has_display_authorization()):
         return jsonify({"error": "Sign in before viewing jukebox state."}), 401
-    if session_has_role("regular") and not session_has_role("admin") and not party_day_has_arrived():
+    if session_has_role("regular") and not session_has_jukebox_playback_access() and not party_day_has_arrived():
         return jsonify({"error": "Jukebox opens on the party date."}), 403
     payload = jukebox_state_payload()
-    if session_has_role("admin"):
+    if session_has_jukebox_playback_access():
         visible_requests = jukebox_requests
     else:
         user_id = str(session.get("user_id", "") or "")
@@ -4559,8 +4672,8 @@ def jukebox_state_api():
 
 @app.route("/api/jukebox/playback-event", methods=["POST"])
 def jukebox_playback_event():
-    if not session_has_role("admin"):
-        return jsonify({"error": "Admin sign-in is required for jukebox playback."}), 401
+    if not session_has_jukebox_playback_access():
+        return jsonify({"error": "Pair the live display from admin before jukebox playback."}), 401
 
     global jukebox_now_playing
     event_type = request.form.get("event", "").strip()
@@ -5016,6 +5129,10 @@ def admin_portal():
             else:
                 messages.append("YouTube API key runtime override cleared. YouTube search is disabled until a key is configured.")
 
+        elif action == "pair_live_display":
+            display_token = create_display_pairing_token()
+            return redirect(url_for("live_display", display_token=display_token))
+
         elif action == "update_jukebox_settings":
             requested_settings = normalize_jukebox_settings(
                 {
@@ -5052,7 +5169,7 @@ def admin_portal():
                 else:
                     jukebox_playlist.append(track)
                     regenerate_jukebox_queue()
-                    messages.append(f"Added {track['title']} to the jukebox playlist.")
+                    messages.append(f"Added {track['title']} to the active playlist.")
                     should_broadcast = True
 
         elif action == "jukebox_dj_command":
@@ -5079,6 +5196,7 @@ def admin_portal():
                         "pause": "Pause",
                         "stop": "Stop",
                         "skip": "Skip",
+                        "restart_playlist": "Restart Playlist",
                     }.get(requested_command, requested_command.title())
                     if queue_item_id:
                         targeted_item = find_jukebox_queue_item(queue_item_id)
@@ -5098,7 +5216,7 @@ def admin_portal():
             elif action == "remove_jukebox_track":
                 removed_track = jukebox_playlist.pop(track_index)
                 regenerate_jukebox_queue()
-                messages.append(f"Removed {removed_track.get('title')} from the jukebox playlist.")
+                messages.append(f"Removed {removed_track.get('title')} from the active playlist.")
                 should_broadcast = True
             elif action == "move_jukebox_track_up":
                 if track_index == 0:
@@ -5109,7 +5227,7 @@ def admin_portal():
                         jukebox_playlist[track_index - 1],
                     )
                     regenerate_jukebox_queue()
-                    messages.append("Moved jukebox song up.")
+                    messages.append("Moved active playlist song up.")
                     should_broadcast = True
             elif action == "move_jukebox_track_down":
                 if track_index == len(jukebox_playlist) - 1:
@@ -5120,7 +5238,7 @@ def admin_portal():
                         jukebox_playlist[track_index + 1],
                     )
                     regenerate_jukebox_queue()
-                    messages.append("Moved jukebox song down.")
+                    messages.append("Moved active playlist song down.")
                     should_broadcast = True
 
         elif action in {"approve_jukebox_request", "reject_jukebox_request", "skip_jukebox_request"}:
@@ -5132,7 +5250,7 @@ def admin_portal():
                 request_item["status"] = "approved"
                 request_item["decided_at"] = _utc_now_iso()
                 regenerate_jukebox_queue()
-                messages.append(f"Approved jukebox request and regenerated the queue: {request_item.get('title')}.")
+                messages.append(f"Approved request and added it into the active playlist queue: {request_item.get('title')}.")
                 should_broadcast = True
             elif action == "reject_jukebox_request":
                 request_item["status"] = "rejected"
@@ -5150,9 +5268,14 @@ def admin_portal():
                 messages.append(f"Skipped jukebox request: {request_item.get('title')}.")
                 should_broadcast = True
 
-        elif action == "regenerate_jukebox_queue":
-            regenerate_jukebox_queue()
-            messages.append("Jukebox queue regenerated with approved requests randomly inserted.")
+        elif action == "reset_jukebox_playlist":
+            reset_jukebox_playlist_queue()
+            messages.append("Active playlist reset. Songs and approved requests were rebuilt without deleting playlist songs.")
+            should_broadcast = True
+
+        elif action == "restart_jukebox_playlist":
+            restart_jukebox_playlist()
+            messages.append("Active playlist restarted from the beginning and sent to the live display.")
             should_broadcast = True
 
         elif action == "clear_jukebox_queue":

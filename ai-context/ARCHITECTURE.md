@@ -216,6 +216,30 @@ locked winner.
 
 ## Frontend Responsibilities
 
+`templates/admin.html` is organized into tab panels for setup, jukebox, guests,
+stage controls, bar/menu, and lineups. `static/admin.js` owns the tab state and
+soft admin refresh behavior: it submits admin POST forms with `fetch`, swaps the
+returned admin panel fragment in place, preserves the active tab/open
+disclosures/scroll position, and refreshes from display-update SSE events when
+the admin is not actively editing a field. Admin background refreshes ignore the
+initial SSE snapshot and wait until scrolling is idle so the panel is not
+replaced while the operator is moving through the page. The admin body uses
+lighter admin-only CSS overrides to avoid fixed scanline overlays,
+backdrop-blurred repeated cards, and heavy shadows during scroll.
+
+Base-layout attendee pages default to `body.attendee-page`. That shell applies
+the same scroll-performance policy to guest-facing surfaces: no fixed scanline
+overlay, no repeated card backdrop blur, lighter shadows, and
+`content-visibility: auto` on long card/section lists. Attendee card images use
+native lazy loading and async decoding where practical so menu/order/request
+artwork does not compete with scrolling.
+
+`static/jukebox-status.js` polls `/api/jukebox-state` on `/party/jukebox` so
+attendees see now-playing, request availability, pending count, and their own
+request status changes without reloading the page. The jukebox state endpoint
+returns all request statuses to admins, but only the current account's request
+records to regular attendees.
+
 `templates/display.html` renders initial display state and embeds JSON in:
 
 - `#entries-data`

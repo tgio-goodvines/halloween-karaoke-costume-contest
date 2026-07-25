@@ -29,18 +29,20 @@
     </div>
   {% endif %}
 
-  <div class="jukebox-status-grid">
+  <div class="jukebox-status-grid" data-jukebox-live-status>
     <article class="status-card">
       <span class="status-card__label">Now Playing</span>
-      <strong>{{ jukebox.now_playing.title if jukebox.now_playing else 'Waiting for the next song' }}</strong>
+      <strong data-jukebox-now-title>{{ jukebox.now_playing.title if jukebox.now_playing else 'Waiting for the next song' }}</strong>
       {% if jukebox.now_playing and jukebox.now_playing.artist %}
-        <span>{{ jukebox.now_playing.artist }}</span>
+        <span data-jukebox-now-artist>{{ jukebox.now_playing.artist }}</span>
+      {% else %}
+        <span data-jukebox-now-artist></span>
       {% endif %}
     </article>
     <article class="status-card">
       <span class="status-card__label">Requests</span>
-      <strong>{% if jukebox.settings.requests_enabled %}Open{% else %}Paused{% endif %}</strong>
-      <span>{{ jukebox.pending_request_count }} pending</span>
+      <strong data-jukebox-requests-state>{% if jukebox.settings.requests_enabled %}Open{% else %}Paused{% endif %}</strong>
+      <span data-jukebox-pending-count>{{ jukebox.pending_request_count }} pending</span>
     </article>
   </div>
 
@@ -80,14 +82,14 @@
   {% if user_requests %}
     <div class="request-list">
       {% for request_item in user_requests %}
-        <article class="request-card">
+        <article class="request-card" data-jukebox-request-card="{{ request_item.id }}">
           {% if request_item.artwork_url %}
-            <img src="{{ request_item.artwork_url }}" alt="">
+            <img src="{{ request_item.artwork_url }}" alt="" loading="lazy" decoding="async">
           {% endif %}
           <div>
             <strong>{{ request_item.title }}</strong>
             <span>{{ request_item.artist }}</span>
-            <span class="status-pill">{{ request_item.status }}</span>
+            <span class="status-pill" data-jukebox-request-status="{{ request_item.id }}">{{ request_item.status }}</span>
           </div>
         </article>
       {% endfor %}
@@ -100,4 +102,5 @@
 
 {% block scripts %}
   <script src="{{ url_for('static', filename='jukebox-search.js') }}"></script>
+  <script src="{{ url_for('static', filename='jukebox-status.js') }}"></script>
 {% endblock %}

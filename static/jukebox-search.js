@@ -1,9 +1,4 @@
 (function () {
-  const forms = Array.from(document.querySelectorAll('[data-jukebox-search-form]'));
-  if (!forms.length) {
-    return;
-  }
-
   const text = (value) => (value === null || value === undefined ? '' : String(value));
 
   const setStatus = (form, message, isError) => {
@@ -97,19 +92,29 @@
     }
   };
 
-  forms.forEach((form) => {
-    const button = form.querySelector('[data-jukebox-search-button]');
-    const input = form.querySelector('[data-jukebox-search-input]');
-    if (button) {
-      button.addEventListener('click', () => search(form));
-    }
-    if (input) {
-      input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          search(form);
-        }
-      });
-    }
-  });
+  const init = () => {
+    const forms = Array.from(document.querySelectorAll('[data-jukebox-search-form]'));
+    forms.forEach((form) => {
+      if (form.dataset.jukeboxSearchBound === 'yes') {
+        return;
+      }
+      form.dataset.jukeboxSearchBound = 'yes';
+      const button = form.querySelector('[data-jukebox-search-button]');
+      const input = form.querySelector('[data-jukebox-search-input]');
+      if (button) {
+        button.addEventListener('click', () => search(form));
+      }
+      if (input) {
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            search(form);
+          }
+        });
+      }
+    });
+  };
+
+  window.HalloweenJukeboxSearch = { init };
+  document.addEventListener('DOMContentLoaded', init);
 })();

@@ -1,12 +1,22 @@
 {% extends "base.html" %}
 {% set title = "Admin Portal" %}
+{% set body_class = "admin-page" %}
 
 {% block content %}
-<section class="admin-panel">
+<section class="admin-panel" data-admin-panel>
   <header class="admin-panel__header">
     <h2>Admin Controls</h2>
-    <p>Use this dashboard to edit the costume contest and karaoke signups in real time.</p>
+    <p>Use this dashboard to edit the party setup, live display, contests, bar, and jukebox in real time.</p>
   </header>
+
+  <nav class="admin-tabs" aria-label="Admin sections" data-admin-tabs>
+    <button type="button" class="admin-tabs__button" data-admin-tab="setup">Setup</button>
+    <button type="button" class="admin-tabs__button" data-admin-tab="jukebox">Jukebox</button>
+    <button type="button" class="admin-tabs__button" data-admin-tab="guests">Guests</button>
+    <button type="button" class="admin-tabs__button" data-admin-tab="stage">Stage</button>
+    <button type="button" class="admin-tabs__button" data-admin-tab="bar">Bar</button>
+    <button type="button" class="admin-tabs__button" data-admin-tab="lineups">Lineups</button>
+  </nav>
 
   {% if errors %}
     <div class="flash flash--error">
@@ -29,6 +39,7 @@
     </div>
   {% endif %}
 
+  <div class="admin-tab-panel" data-admin-tab-panel="setup">
   <section class="admin-section admin-section--access">
     <h3>Public Access</h3>
     <p>Control what guests see at tnq-halloween.com and manage the party code guests enter when they submit an RSVP.</p>
@@ -181,7 +192,9 @@
       </form>
     </div>
   </section>
+  </div>
 
+  <div class="admin-tab-panel" data-admin-tab-panel="jukebox">
   <section class="admin-section admin-section--jukebox">
     <h3>Apple Music Jukebox</h3>
     <p>Build the party playlist, approve attendee requests, and let the admin-authorized live display drive Apple Music playback for everyone.</p>
@@ -377,7 +390,7 @@
         {% for request_item in jukebox_requests %}
           <article class="admin-entry admin-entry--static">
             <div class="admin-entry__summary">
-              <span class="admin-entry__rank">{{ request_item.status }}</span>
+              <span class="admin-entry__rank" data-jukebox-request-status="{{ request_item.id }}">{{ request_item.status }}</span>
               <span class="admin-entry__summary-text">
                 <strong>{{ request_item.title }}</strong>
                 <span>{{ request_item.artist }} · requested by {{ request_item.requester_name or 'Guest' }}</span>
@@ -409,7 +422,9 @@
       <p class="admin-empty">Queue is empty.</p>
     {% endif %}
   </section>
+  </div>
 
+  <div class="admin-tab-panel" data-admin-tab-panel="guests">
   <section class="admin-section admin-section--rsvps">
     <h3>RSVP List</h3>
     <p>
@@ -596,7 +611,9 @@
       <p class="admin-empty">No RSVP updates have been posted yet.</p>
     {% endif %}
   </section>
+  </div>
 
+  <div class="admin-tab-panel" data-admin-tab-panel="stage">
   <section class="admin-section admin-section--contest">
     <h3>Costume Contest Controls</h3>
     <p>Kick off the contest, monitor live voting, and announce the winner straight from this dashboard.</p>
@@ -794,7 +811,9 @@
       <p class="contest-status">Add karaoke signups to build the performance queue.</p>
     {% endif %}
   </section>
+  </div>
 
+  <div class="admin-tab-panel" data-admin-tab-panel="bar">
   <section class="admin-section admin-section--bar">
     <h3>Bar Operations</h3>
     <p>
@@ -1009,7 +1028,9 @@
       <p class="admin-empty">No food or drink menu items yet.</p>
     {% endif %}
   </section>
+  </div>
 
+  <div class="admin-tab-panel" data-admin-tab-panel="lineups">
   <section class="admin-section admin-section--users">
     <h3>User Accounts</h3>
     <p>Create accounts, edit access, reset passwords, and remove users.</p>
@@ -1291,9 +1312,11 @@
       {% endif %}
     </section>
   </div>
+  </div>
 </section>
 {% endblock %}
 
 {% block scripts %}
   <script src="{{ url_for('static', filename='jukebox-search.js') }}"></script>
+  <script src="{{ url_for('static', filename='admin.js') }}"></script>
 {% endblock %}

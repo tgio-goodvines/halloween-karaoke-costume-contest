@@ -3005,6 +3005,47 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(302, response.status_code)
         self.assertIn("/party", response.headers["Location"])
 
+    def test_jukebox_state_returns_visible_request_statuses(self):
+        jamie = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        casey = self.add_user_account("Casey", "party-password", "user-2", "casey@example.com")
+        main.event_experience_mode = "party_day"
+        main.jukebox_requests = [
+            main.normalize_jukebox_request(
+                {
+                    "apple_music_id": "song-1",
+                    "title": "Monster Mash",
+                    "artist": "Bobby",
+                    "requester_user_id": jamie["id"],
+                    "requester_name": "Jamie",
+                    "status": "approved",
+                }
+            ),
+            main.normalize_jukebox_request(
+                {
+                    "apple_music_id": "song-2",
+                    "title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "requester_user_id": casey["id"],
+                    "requester_name": "Casey",
+                    "status": "pending",
+                }
+            ),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client, user_id=jamie["id"], username="Jamie")
+            regular_response = client.get("/api/jukebox-state")
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            admin_response = client.get("/api/jukebox-state")
+
+        self.assertEqual(200, regular_response.status_code)
+        self.assertEqual(["Monster Mash"], [item["title"] for item in regular_response.get_json()["requests"]])
+        self.assertEqual(200, admin_response.status_code)
+        self.assertEqual(2, len(admin_response.get_json()["requests"]))
+
     def test_display_data_includes_jukebox_state(self):
         main.jukebox_settings["enabled"] = True
         self.save_current_state()
@@ -3066,6 +3107,31 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("playing", main.jukebox_queue[0]["status"])
         self.assertEqual("acknowledged", main.jukebox_playback_control["status"])
         self.assertEqual("playing", main.jukebox_now_playing["playback_state"])
+
+    def test_jukebox_playback_event_started_uses_next_song_when_id_missing(self):
+        main.jukebox_settings["enabled"] = True
+        track = main.normalize_jukebox_track(
+            {"apple_music_id": "song-1", "title": "Monster Mash", "artist": "Bobby"}
+        )
+        main.jukebox_queue = [main.create_jukebox_queue_item(track)]
+        main.jukebox_playback_control = main.issue_jukebox_dj_command("play")
+        command_id = main.jukebox_playback_control["id"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/api/jukebox/playback-event",
+                data={
+                    "event": "started",
+                    "command_id": command_id,
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("playing", main.jukebox_queue[0]["status"])
+        self.assertEqual("acknowledged", main.jukebox_playback_control["status"])
+        self.assertEqual("Monster Mash", main.jukebox_now_playing["title"])
 
     def test_jukebox_playback_event_records_admin_command_error(self):
         main.jukebox_settings["enabled"] = True

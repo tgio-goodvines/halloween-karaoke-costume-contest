@@ -400,6 +400,9 @@
       return;
     }
     await setMusicQueue(nextItem);
+    currentQueueItem = nextItem;
+    lastEndedItemId = '';
+    await postPlaybackEvent('started', currentQueueItem, commandId);
     if (music && typeof music.play === 'function') {
       await withTimeout(
         () => music.play(),
@@ -411,9 +414,6 @@
         'Apple Music playback did not start. Click the live display once, confirm Apple Music is signed in, then press Play again.'
       );
     }
-    currentQueueItem = nextItem;
-    lastEndedItemId = '';
-    await postPlaybackEvent('started', currentQueueItem, commandId);
     setStatus('Jukebox playing from the host Apple Music account. Cast this Chrome tab for TV audio.');
   };
 

@@ -8,7 +8,7 @@
   <p>{{ bartender_tip_settings.note }}</p>
 
   {% if bartender_tip_settings.image_url %}
-    <img src="{{ bartender_tip_settings.image_url }}" alt="Bartender payment QR code" class="tip-page__image">
+    <img src="{{ bartender_tip_settings.image_url }}" alt="Bartender payment QR code" class="tip-page__image" loading="lazy" decoding="async">
   {% else %}
     <p class="admin-empty">No QR code image is configured yet.</p>
   {% endif %}

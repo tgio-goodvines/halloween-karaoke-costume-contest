@@ -6,7 +6,7 @@
     <title>{{ title if title else party_title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
-  <body>
+  <body class="{{ body_class if body_class is defined and body_class else 'attendee-page' }}">
     <header class="site-header">
       <div class="container site-header__inner">
         <span class="site-header__status site-header__status--clearance" aria-hidden="true">

@@ -4507,7 +4507,22 @@ def jukebox_state_api():
         return jsonify({"error": "Sign in before viewing jukebox state."}), 401
     if session_has_role("regular") and not session_has_role("admin") and not party_day_has_arrived():
         return jsonify({"error": "Jukebox opens on the party date."}), 403
-    return jsonify(jukebox_state_payload())
+    payload = jukebox_state_payload()
+    if session_has_role("admin"):
+        visible_requests = jukebox_requests
+    else:
+        user_id = str(session.get("user_id", "") or "")
+        visible_requests = [
+            request_item
+            for request_item in jukebox_requests
+            if str(request_item.get("requester_user_id", "")) == user_id
+        ]
+    payload["requests"] = sorted(
+        copy.deepcopy(visible_requests),
+        key=lambda request_item: str(request_item.get("submitted_at", "")),
+        reverse=True,
+    )
+    return jsonify(payload)
 
 
 @app.route("/api/jukebox/playback-event", methods=["POST"])
@@ -4526,7 +4541,11 @@ def jukebox_playback_event():
     if event_type == "command_error":
         acknowledge_jukebox_dj_command(command_id, command_error or "Live display could not complete the DJ command.")
         broadcast_display_update()
-    elif event_type == "started" and item:
+    elif event_type == "started":
+        if not item:
+            item = next_jukebox_queue_item()
+        if not item:
+            return jsonify({"error": "No queued jukebox song is ready to mark as playing."}), 400
         for queue_item in jukebox_queue:
             if queue_item is not item and queue_item.get("status") == "playing":
                 queue_item["status"] = "played"

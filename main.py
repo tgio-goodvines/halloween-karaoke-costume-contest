@@ -231,7 +231,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 3
+STATE_SCHEMA_VERSION = 4
 
 
 @dataclass
@@ -298,11 +298,13 @@ DJ_COMMAND_ACTIONS = {
     "stop",
     "next",
     "previous",
+    "reset",
 }
 DEFAULT_DJ_STATE: dict[str, object] = {
     "command_revision": 0,
     "current_command": None,
     "last_command": None,
+    "last_reset": None,
     "receiver": {
         "id": "",
         "status": "offline",
@@ -1784,12 +1786,28 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
                 "error": str(raw_command.get("error", "") or "")[:500],
             }
 
+    raw_reset = raw_state.get("last_reset")
+    if isinstance(raw_reset, dict):
+        reset_status = str(raw_reset.get("status", "pending") or "pending")
+        state["last_reset"] = {
+            "id": str(raw_reset.get("id", "") or ""),
+            "revision": max(0, int(raw_reset.get("revision", 0) or 0)),
+            "requested_at": str(raw_reset.get("requested_at", "") or ""),
+            "requested_by": str(raw_reset.get("requested_by", "") or "")[:80],
+            "status": reset_status if reset_status in {"pending", "acknowledged", "failed"} else "pending",
+            "acknowledged_at": str(raw_reset.get("acknowledged_at", "") or ""),
+            "error": str(raw_reset.get("error", "") or "")[:500],
+        }
+
     return state
 
 
 def queue_dj_command(action: str, song_id: str = "", requested_by: str = "Admin") -> dict[str, object] | None:
     if action not in DJ_COMMAND_ACTIONS:
         return None
+
+    if action == "reset":
+        return queue_dj_workflow_reset(requested_by)
 
     queue_order = enabled_dj_song_ids()
     if action in {"play_song", "play_playlist", "shuffle_playlist"} and not queue_order:
@@ -1834,7 +1852,54 @@ def queue_dj_command(action: str, song_id: str = "", requested_by: str = "Admin"
         "error": "",
     }
     dj_state["current_command"] = command
+    dj_state["last_reset"] = None
     return command
+
+
+def queue_dj_workflow_reset(requested_by: str = "Admin") -> dict[str, object]:
+    """Ask the display to stop and return the persisted DJ workflow to standby.
+
+    Playlist records intentionally live outside this transient receiver state.
+    The reset remains pending until the display consumes it, so an offline TV
+    never produces a misleading successful reset in the admin workspace.
+    """
+    revision = int(dj_state.get("command_revision", 0) or 0) + 1
+    requested_at = _utc_now_iso()
+    command = {
+        "id": uuid4().hex,
+        "revision": revision,
+        "action": "reset",
+        "song_id": "",
+        "queue_order": [],
+        "requested_at": requested_at,
+        "requested_by": requested_by,
+        "status": "pending",
+        "acknowledged_at": "",
+        "error": "",
+    }
+    dj_state["command_revision"] = revision
+    dj_state["current_command"] = command
+    dj_state["last_command"] = None
+    dj_state["last_reset"] = {
+        "id": command["id"],
+        "revision": revision,
+        "requested_at": requested_at,
+        "requested_by": requested_by,
+        "status": "pending",
+        "acknowledged_at": "",
+        "error": "",
+    }
+    dj_state["desired"] = copy.deepcopy(DEFAULT_DJ_STATE["desired"])
+    return command
+
+
+def reset_dj_workflow_state(reset_record: dict[str, object]) -> None:
+    """Clear only transient DJ workflow data, retaining the curated playlist."""
+    revision = int(dj_state.get("command_revision", 0) or 0)
+    dj_state.clear()
+    dj_state.update(copy.deepcopy(DEFAULT_DJ_STATE))
+    dj_state["command_revision"] = revision
+    dj_state["last_reset"] = reset_record
 
 
 def record_dj_receiver_state(payload: dict[str, object]) -> None:
@@ -1852,12 +1917,23 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
     except (TypeError, ValueError):
         receiver["playback_position_seconds"] = 0
     receiver["last_seen_at"] = _utc_now_iso()
-    receiver["last_error"] = str(payload.get("error", "") or "")[:500]
+    reported_error = str(payload.get("error", "") or "").strip()[:500]
+    if reported_error:
+        receiver["last_error"] = reported_error
+    elif bool(payload.get("clear_error", False)):
+        receiver["last_error"] = ""
 
     current_command = dj_state.get("current_command")
     acknowledged_id = str(payload.get("acknowledged_command_id", "") or "")
     if isinstance(current_command, dict) and acknowledged_id and acknowledged_id == current_command.get("id"):
         succeeded = bool(payload.get("command_succeeded", False))
+        if current_command.get("action") == "reset":
+            reset_record = copy.deepcopy(dj_state.get("last_reset") or {})
+            reset_record["status"] = "acknowledged" if succeeded else "failed"
+            reset_record["acknowledged_at"] = _utc_now_iso()
+            reset_record["error"] = "" if succeeded else receiver["last_error"] or "The live display could not complete the DJ reset."
+            reset_dj_workflow_state(reset_record)
+            return
         current_command["status"] = "succeeded" if succeeded else "failed"
         current_command["acknowledged_at"] = _utc_now_iso()
         current_command["error"] = "" if succeeded else receiver["last_error"] or "The display could not complete the DJ command."
@@ -1868,17 +1944,36 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
 def dj_command_flow() -> list[dict[str, str]]:
     receiver = dj_state.get("receiver", {})
     current_command = dj_state.get("current_command")
+    last_command = dj_state.get("last_command")
+    last_reset = dj_state.get("last_reset")
     receiver_online = dj_receiver_is_online(receiver if isinstance(receiver, dict) else None)
-    requested_state = "confirmed" if not current_command else "pending"
+    requested_state = "idle"
+    requested_detail = "No command waiting."
     command_error = ""
     if isinstance(current_command, dict):
+        requested_state = "pending"
+        requested_detail = "DJ reset is waiting for the live display." if current_command.get("action") == "reset" else "Command saved in Redis."
         requested_at = parse_utc_iso(current_command.get("requested_at"))
         if requested_at and requested_at < datetime.now(timezone.utc) - timedelta(seconds=DJ_COMMAND_TIMEOUT_SECONDS):
             requested_state = "timed_out"
             command_error = "The live display has not confirmed this command yet."
+    elif isinstance(last_reset, dict):
+        if last_reset.get("status") == "acknowledged":
+            requested_state = "confirmed"
+            requested_detail = "DJ workflow reset was acknowledged by the live display."
+        elif last_reset.get("status") == "failed":
+            requested_state = "failed"
+            requested_detail = str(last_reset.get("error", "") or "The DJ reset did not complete.")
+    elif isinstance(last_command, dict):
+        if last_command.get("status") == "failed":
+            requested_state = "failed"
+            requested_detail = str(last_command.get("error", "") or "The display could not complete the DJ command.")
+        elif last_command.get("status") == "succeeded":
+            requested_state = "confirmed"
+            requested_detail = "The live display confirmed the last DJ command."
 
     return [
-        {"label": "Admin request", "state": requested_state, "detail": "Command saved in Redis." if current_command else "No command waiting."},
+        {"label": "Admin request", "state": requested_state, "detail": requested_detail},
         {"label": "Live display", "state": "connected" if receiver_online else "offline", "detail": "Receiver heartbeat is current." if receiver_online else "Open or refresh the live display on the TV."},
         {"label": "Apple Music", "state": str(receiver.get("authorization_status", "not_configured") or "not_configured"), "detail": str(receiver.get("last_error", "") or "Authorize Apple Music on the display when needed.")},
         {"label": "Audio output", "state": str(receiver.get("playback_status", "stopped") or "stopped"), "detail": command_error or ("DJ audio is enabled." if receiver.get("audio_enabled") else "Use Enable DJ Audio on the live display once.")},
@@ -4207,6 +4302,14 @@ def admin_portal(admin_view: str):
                 dj_playlist[song_index], dj_playlist[target_index] = dj_playlist[target_index], dj_playlist[song_index]
                 messages.append("DJ playlist order updated.")
                 should_broadcast = True
+
+        elif action == "reset_dj_workflow":
+            queue_dj_workflow_reset(requested_by="Admin")
+            if dj_receiver_is_online():
+                messages.append("DJ workflow reset sent to the live display. Waiting for acknowledgement.")
+            else:
+                messages.append("DJ workflow reset saved. It will complete when the live display reconnects.")
+            should_broadcast = True
 
         elif action in {"play_dj_song", "play_dj_playlist", "shuffle_dj_playlist", "pause_dj", "stop_dj", "next_dj", "previous_dj"}:
             action_map = {

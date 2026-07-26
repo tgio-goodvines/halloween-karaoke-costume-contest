@@ -128,7 +128,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 2. The following globals in `main.py` are
+`halloween:state` with schema version 4. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -183,7 +183,8 @@ the process-local cache:
 - `display_update_version`: monotonic counter used by server-sent events.
 - `dj_playlist`: ordered Apple Music songs managed by admins.
 - `dj_state`: Redis-persisted desired command, acknowledgement, live-display
-  heartbeat, MusicKit/audio readiness, confirmed player state, and current song.
+  heartbeat, MusicKit/audio readiness, confirmed player state, current song,
+  retained failure details, and the latest DJ reset acknowledgement.
 
 Drink orders move from `received` to `in_progress` to `complete`. Completed
 orders track prep duration from `started_at` when available, and drink-ready
@@ -196,6 +197,10 @@ The `/admin/dj` workspace visibly distinguishes an admin request from the
 live-display receiver's confirmed player state. MusicKit signing material stays
 in Vault at runtime; the Media Services private key and browser user token are
 never stored in Redis.
+
+The DJ reset workflow clears only transient control/playback/receiver state;
+the curated `dj_playlist` is retained. A reset remains pending until the live
+display acknowledges it, including when the TV is temporarily offline.
 
 `HALLOWEEN_PARTY_START` controls attendee route availability and the dashboard
 mode, but not the live display rotation. The live display is intentionally

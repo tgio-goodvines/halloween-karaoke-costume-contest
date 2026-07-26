@@ -845,6 +845,92 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("playing", display_payload["dj"]["receiver"]["playback_status"])
         self.assertEqual("Thriller", display_payload["dj"]["current_song"]["title"])
 
+    def test_dj_failure_remains_visible_after_a_regular_receiver_heartbeat(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "203709340", "title": "Thriller", "artist": "Michael Jackson"}
+            )
+        ]
+        main.queue_dj_command("play_song", "dj-1")
+        command_id = main.dj_state["current_command"]["id"]
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "error",
+                "authorization_status": "error",
+                "audio_enabled": False,
+                "acknowledged_command_id": command_id,
+                "command_succeeded": False,
+                "error": "Apple Music authorization was cancelled.",
+            }
+        )
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "error",
+                "authorization_status": "error",
+                "audio_enabled": False,
+            }
+        )
+
+        flow = main.dj_command_flow()
+        self.assertEqual("failed", main.dj_state["last_command"]["status"])
+        self.assertEqual("Apple Music authorization was cancelled.", main.dj_state["receiver"]["last_error"])
+        self.assertEqual("failed", flow[0]["state"])
+        self.assertIn("cancelled", flow[0]["detail"])
+        self.assertIn("cancelled", flow[2]["detail"])
+
+    def test_dj_workflow_reset_preserves_playlist_and_waits_for_display_acknowledgement(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "203709340", "title": "Thriller", "artist": "Michael Jackson"}
+            )
+        ]
+        main.queue_dj_command("play_song", "dj-1")
+
+        reset_command = main.queue_dj_workflow_reset()
+
+        self.assertEqual("reset", main.dj_state["current_command"]["action"])
+        self.assertEqual("pending", main.dj_state["last_reset"]["status"])
+        self.assertEqual([], main.dj_state["desired"]["queue_order"])
+        self.assertEqual("pending", main.dj_command_flow()[0]["state"])
+        self.assertEqual("Thriller", main.dj_playlist[0]["title"])
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "needs_audio_enable",
+                "authorization_status": "not_authorized",
+                "audio_enabled": False,
+                "playback_status": "stopped",
+                "acknowledged_command_id": reset_command["id"],
+                "command_succeeded": True,
+                "clear_error": True,
+            }
+        )
+
+        self.assertIsNone(main.dj_state["current_command"])
+        self.assertIsNone(main.dj_state["last_command"])
+        self.assertEqual("acknowledged", main.dj_state["last_reset"]["status"])
+        self.assertEqual("offline", main.dj_state["receiver"]["status"])
+        self.assertEqual("stopped", main.dj_state["desired"]["playback_status"])
+        self.assertEqual("confirmed", main.dj_command_flow()[0]["state"])
+        self.assertEqual("Thriller", main.dj_playlist[0]["title"])
+
+    def test_admin_can_request_dj_workflow_reset_while_display_is_offline(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post("/admin/dj", data={"action": "reset_dj_workflow"})
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("reset", state["dj_state"]["current_command"]["action"])
+        self.assertEqual("pending", state["dj_state"]["last_reset"]["status"])
+        self.assertIn("will complete when the live display reconnects", response.get_data(as_text=True))
+
     def test_dj_receiver_requires_admin_session_and_json_csrf_outside_testing(self):
         self.save_current_state()
         main.app.config["TESTING"] = False

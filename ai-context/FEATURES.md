@@ -146,8 +146,12 @@
   controls, individual-song playback, play-from-beginning, shuffle, previous,
   pause, stop, and next controls.
 - DJ workspace presents an explicit Admin request → Live display → Apple Music
-  → Audio output flow, with pending/confirmed/failed command state, receiver
-  heartbeat, authorization status, and a readable recovery message.
+  → Audio output flow, with pending/confirmed/failed/timed-out command state,
+  receiver heartbeat, retained authorization errors, and a readable recovery
+  message.
+- DJ workspace has a confirmed **Reset DJ Workflow** recovery action. It stops
+  the live display when connected, clears transient receiver/playback/command
+  state only after acknowledgement, and preserves the saved playlist.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.
@@ -212,6 +216,9 @@ app state.
 - Persistent Now Playing dock shows the display receiver's confirmed DJ status,
   song artwork/title/artist, and one-time Enable DJ Audio action for MusicKit;
   it does not replace rotation, event overrides, or drink-ready notices.
+- The display waits for MusicKit before pairing, retains a meaningful
+  authorization error across heartbeats, and has a receiver-ID fallback for
+  browsers without `crypto.randomUUID`.
 - Live-display cards use dynamic browser-size scaling, long/dense text classes,
   and overflow wrapping so normal desktop/laptop browser windows and narrow
   browsers do not clip cards.

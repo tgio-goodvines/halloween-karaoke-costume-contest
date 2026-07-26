@@ -658,6 +658,15 @@
       </form>
     </div>
 
+    <details class="dj-reset-workflow">
+      <summary>Reset DJ workflow</summary>
+      <p>Stops the display receiver, clears pending or failed commands and playback state, and returns the DJ controls to standby. Your saved playlist is kept.</p>
+      <form method="post" onsubmit="return window.confirm('Reset the DJ workflow? The playlist will be kept, but the live display will need Enable DJ Audio again.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="reset_dj_workflow" class="button button--danger">Confirm DJ Reset</button>
+      </form>
+    </details>
+
     {% if not apple_music_configured %}
       <p class="dj-setup-warning">Apple Music is not configured yet. Playlist editing works now, but the display cannot authorize or play music until the MusicKit Vault settings are added.</p>
     {% endif %}

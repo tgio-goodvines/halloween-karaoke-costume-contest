@@ -73,7 +73,9 @@
 - `GET /api/dj/musickit-token` -> authenticated developer-token endpoint for
   the display-side MusicKit Web receiver.
 - `POST /api/dj/receiver-state` -> authenticated, CSRF-protected receiver
-  heartbeat/player state/command acknowledgement endpoint.
+  heartbeat/player state/command acknowledgement endpoint. Explicit receiver
+  errors persist until a successful clear, so heartbeats cannot hide a failed
+  Apple Music pairing or command.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
@@ -255,8 +257,9 @@ locked winner.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
   panel markup plus a persistent DJ Now Playing dock.
-- `dj-display.js`: display-side MusicKit receiver, heartbeats, command
-  acknowledgements, and Now Playing dock updates.
+- `dj-display.js`: display-side MusicKit receiver, load-safe pairing,
+  persistent error reporting, reset acknowledgement, command acknowledgements,
+  heartbeats, and Now Playing dock updates.
 - `email/*.html`: generated HTML email bodies for RSVP confirmation/update,
   host RSVP notification, account welcome, password reset, and drink order
   notifications. These use email-client-safe inline CSS aligned with the dark

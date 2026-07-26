@@ -7,6 +7,7 @@
   const updatesEndpoint = body.dataset.displayUpdates;
   const receiverEndpoint = body.dataset.djReceiverApi;
   const tokenEndpoint = body.dataset.djTokenApi;
+  const appleMusicConfigured = body.dataset.djAppleMusicConfigured === 'true';
   const csrfToken = body.dataset.csrfToken || '';
   const enableButton = document.querySelector('[data-dj-enable]');
   const artworkWrap = document.querySelector('[data-dj-artwork-wrap]');
@@ -15,12 +16,16 @@
   const titleElement = document.querySelector('[data-dj-title]');
   const artistElement = document.querySelector('[data-dj-artist]');
   const detailElement = document.querySelector('[data-dj-detail]');
-  const receiverId = window.sessionStorage.getItem('halloween-dj-receiver-id') || crypto.randomUUID();
+  const receiverId = window.sessionStorage.getItem('halloween-dj-receiver-id')
+    || (window.crypto?.randomUUID?.() || `receiver-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   window.sessionStorage.setItem('halloween-dj-receiver-id', receiverId);
 
   let dj = {};
   let music = null;
   let audioEnabled = false;
+  let authorizationStatus = 'not_authorized';
+  let receiverError = '';
+  let pairingInProgress = false;
   let processingCommandId = '';
 
   try {
@@ -35,6 +40,19 @@
 
   const setDetail = (text) => {
     if (detailElement) detailElement.textContent = text || '';
+  };
+
+  const errorMessage = (error, fallback) => {
+    const candidates = [
+      error?.message,
+      error?.error?.message,
+      error?.detail,
+      typeof error === 'string' ? error : '',
+    ];
+    const message = candidates.find((candidate) => (
+      typeof candidate === 'string' && candidate.trim() && candidate.trim().toLowerCase() !== 'undefined'
+    ));
+    return message ? message.trim() : fallback;
   };
 
   const render = () => {
@@ -65,23 +83,27 @@
     }
 
     if (enableButton) {
-      if (audioEnabled) enableButton.setAttribute('hidden', '');
+      if (audioEnabled || pairingInProgress || !appleMusicConfigured) enableButton.setAttribute('hidden', '');
       else enableButton.removeAttribute('hidden');
     }
   };
 
-  const statusPayload = (extra = {}) => ({
-    receiver_id: receiverId,
-    status: audioEnabled ? 'ready' : (extra.status || 'needs_audio_enable'),
-    authorization_status: audioEnabled ? 'authorized' : (extra.authorization_status || 'not_authorized'),
-    audio_enabled: audioEnabled,
-    playback_status: extra.playback_status || receiver().playback_status || 'stopped',
-    current_song_id: extra.current_song_id || receiver().current_song_id || '',
-    playback_position_seconds: extra.playback_position_seconds || 0,
-    acknowledged_command_id: extra.acknowledged_command_id || '',
-    command_succeeded: Boolean(extra.command_succeeded),
-    error: extra.error || '',
-  });
+  const statusPayload = (extra = {}) => {
+    const hasError = Object.prototype.hasOwnProperty.call(extra, 'error');
+    return {
+      receiver_id: receiverId,
+      status: extra.status || (audioEnabled ? 'ready' : (receiverError ? 'error' : 'needs_audio_enable')),
+      authorization_status: extra.authorization_status || (audioEnabled ? 'authorized' : authorizationStatus),
+      audio_enabled: audioEnabled,
+      playback_status: extra.playback_status || receiver().playback_status || 'stopped',
+      current_song_id: extra.current_song_id || receiver().current_song_id || '',
+      playback_position_seconds: extra.playback_position_seconds || 0,
+      acknowledged_command_id: extra.acknowledged_command_id || '',
+      command_succeeded: Boolean(extra.command_succeeded),
+      clear_error: Boolean(extra.clear_error),
+      error: hasError ? extra.error : receiverError,
+    };
+  };
 
   const report = async (extra = {}) => {
     if (!receiverEndpoint) return;
@@ -103,18 +125,49 @@
     }
   };
 
+  const waitForMusicKit = async () => {
+    if (window.MusicKit) return window.MusicKit;
+    return new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error('Apple Music player did not load. Refresh this display and try again.')), 12000);
+      const finish = () => {
+        if (!window.MusicKit) return;
+        window.clearTimeout(timeout);
+        window.removeEventListener('musickitloaded', finish);
+        resolve(window.MusicKit);
+      };
+      window.addEventListener('musickitloaded', finish, { once: true });
+      window.setTimeout(finish, 0);
+    });
+  };
+
   const ensureMusicKit = async () => {
     if (music) return music;
-    if (!window.MusicKit) throw new Error('Apple Music player is still loading. Please try again.');
+    const musicKit = await waitForMusicKit();
     const response = await fetch(tokenEndpoint, { credentials: 'same-origin', cache: 'no-store' });
     const payload = await response.json();
     if (!response.ok || !payload.developer_token) throw new Error(payload.error || 'Apple Music is not configured.');
-    await window.MusicKit.configure({
+    await musicKit.configure({
       developerToken: payload.developer_token,
       app: { name: payload.app_name || 'Halloween Party DJ', build: '1.0.0' },
     });
-    music = window.MusicKit.getInstance();
+    music = musicKit.getInstance();
+    if (!music || typeof music.authorize !== 'function') throw new Error('Apple Music did not initialize correctly. Refresh this display and try again.');
     return music;
+  };
+
+  const resetLocalReceiver = async () => {
+    let stopError = null;
+    try {
+      if (music && typeof music.stop === 'function') await music.stop();
+    } catch (error) {
+      stopError = error;
+    }
+    music = null;
+    audioEnabled = false;
+    authorizationStatus = 'not_authorized';
+    receiverError = '';
+    processingCommandId = '';
+    if (stopError) throw stopError;
   };
 
   const queueSongs = async (queueOrder) => {
@@ -132,14 +185,47 @@
     if (!command || !command.id || command.id === processingCommandId) return;
     processingCommandId = command.id;
 
+    if (command.action === 'reset') {
+      try {
+        await resetLocalReceiver();
+        setDetail('DJ workflow reset. Enable DJ Audio before playing music again.');
+        await report({
+          status: 'needs_audio_enable',
+          authorization_status: 'not_authorized',
+          acknowledged_command_id: command.id,
+          command_succeeded: true,
+          playback_status: 'stopped',
+          current_song_id: '',
+          error: '',
+          clear_error: true,
+        });
+      } catch (error) {
+        const message = errorMessage(error, 'The live display could not stop Apple Music during the reset.');
+        receiverError = message;
+        authorizationStatus = 'error';
+        setDetail(message);
+        await report({
+          status: 'error',
+          authorization_status: 'error',
+          acknowledged_command_id: command.id,
+          command_succeeded: false,
+          error: message,
+        });
+      }
+      processingCommandId = '';
+      return;
+    }
+
     if (!audioEnabled || !music) {
-      setDetail('Enable DJ Audio on this display before remote controls can play music.');
+      receiverError = 'DJ audio has not been enabled on the live display yet.';
+      authorizationStatus = 'not_authorized';
+      setDetail(receiverError);
       await report({
         status: 'needs_audio_enable',
         authorization_status: 'not_authorized',
         acknowledged_command_id: command.id,
         command_succeeded: false,
-        error: 'DJ audio has not been enabled on the live display yet.',
+        error: receiverError,
       });
       return;
     }
@@ -172,10 +258,15 @@
         command_succeeded: true,
         playback_status: playbackStatus,
         current_song_id: currentSongId,
+        error: '',
+        clear_error: true,
       });
+      receiverError = '';
       setDetail('Live display confirmed the DJ command.');
     } catch (error) {
-      const message = error?.message || 'Apple Music could not complete the DJ command.';
+      const message = errorMessage(error, 'Apple Music could not complete the DJ command.');
+      receiverError = message;
+      authorizationStatus = 'error';
       setDetail(message);
       await report({
         status: 'error',
@@ -203,22 +294,28 @@
   };
 
   enableButton?.addEventListener('click', async () => {
+    pairingInProgress = true;
     enableButton.disabled = true;
     setDetail('Connecting Apple Music…');
     try {
       const instance = await ensureMusicKit();
       await instance.authorize();
       audioEnabled = true;
+      authorizationStatus = 'authorized';
+      receiverError = '';
       setDetail('Apple Music is connected. Remote DJ controls are ready.');
-      render();
-      await report({ status: 'ready', authorization_status: 'authorized' });
+      await report({ status: 'ready', authorization_status: 'authorized', error: '', clear_error: true });
       await sync();
     } catch (error) {
-      const message = error?.message || 'Apple Music authorization did not complete.';
+      const message = errorMessage(error, 'Apple Music authorization did not complete.');
+      receiverError = message;
+      authorizationStatus = 'error';
       setDetail(message);
       await report({ status: 'error', authorization_status: 'error', error: message });
     } finally {
+      pairingInProgress = false;
       enableButton.disabled = false;
+      render();
     }
   });
 

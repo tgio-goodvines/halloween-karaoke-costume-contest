@@ -32,7 +32,7 @@ normal rotation, karaoke/costume overrides, and drink-ready notices continue.
 
 ## Redis State
 
-Schema version 3 stores DJ data inside the canonical `halloween:state` JSON
+Schema version 4 stores DJ data inside the canonical `halloween:state` JSON
 document:
 
 - `dj_playlist`: ordered song dictionaries with stable app IDs, Apple Music
@@ -43,14 +43,19 @@ document:
 - `dj_state.current_command`: the pending command with a UUID and monotonic
   revision. A pending command has not yet been confirmed by the display.
 - `dj_state.last_command`: the final success/failure acknowledgement and any
-  error message.
+  error message. Failed commands remain visible until the next command or
+  reset; routine heartbeats cannot erase their diagnostics.
+- `dj_state.last_reset`: an audit record for the latest reset request and its
+  pending, acknowledged, or failed display acknowledgement.
 - `dj_state.receiver`: receiver identity, heartbeat, Apple Music/audio
   readiness, confirmed playback state/current song, elapsed position, and the
   latest receiver error.
 
 The receiver becomes visually `offline` after 20 seconds without a heartbeat.
 The admin flow marks a pending command as `timed out` after 8 seconds without
-an acknowledgement, but retains it for a possible late display response.
+an acknowledgement, but retains it for a possible late display response. A
+failed command is rendered failed—not confirmed—until the operator sends a new
+command or resets the workflow.
 
 ## State Flow
 
@@ -64,7 +69,8 @@ The DJ workspace always renders these four stages:
 
 This prevents the historical control failure mode where a button press was
 shown as playback even though the display had not received it or browser audio
-had not been unlocked.
+had not been unlocked. MusicKit startup is deferred until the Apple library has
+loaded, and client errors are normalized so the UI never reports `undefined`.
 
 ## MusicKit Setup
 
@@ -92,14 +98,20 @@ by MusicKit and is not persisted server-side.
   complete the Apple Music prompt there.
 - **Command failed/timed out:** the workspace displays the receiver’s message;
   correct setup and resend the desired command.
+- **Reset DJ Workflow:** use the confirmed danger action in `/admin/dj` to stop
+  the receiver and clear transient playback, command, pairing/status, and error
+  data while preserving the playlist. If the TV is offline, reset stays pending
+  and completes on its next connection. Browser-managed Apple authorization is
+  not revoked; use **Enable DJ Audio** again after reset.
 - **Song unavailable:** use the playlist entry editor to replace its Apple
   Music catalog ID, then play the corrected song.
 
 ## Verification
 
 `tests/test_redis_state.py` covers DJ state serialization, playlist CRUD,
-pending commands, display-receiver acknowledgement, confirmed Now Playing
-payloads, and JSON CSRF/admin authorization. Run:
+pending commands, failed-command error retention, reset acknowledgement and
+playlist preservation, confirmed Now Playing payloads, and JSON CSRF/admin
+authorization. Run:
 
 ```bash
 python -m compileall main.py

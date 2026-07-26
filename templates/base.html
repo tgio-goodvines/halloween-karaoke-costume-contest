@@ -6,7 +6,8 @@
     <title>{{ title if title else party_title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
-  <body>
+  {% set page_shell_class = body_class if body_class is defined and body_class else ('admin-page' if request.endpoint in ('admin_login', 'admin_portal', 'bartender_portal') else 'attendee-page') %}
+  <body class="{{ page_shell_class }}">
     <header class="site-header">
       <div class="container site-header__inner">
         <span class="site-header__status site-header__status--clearance" aria-hidden="true">

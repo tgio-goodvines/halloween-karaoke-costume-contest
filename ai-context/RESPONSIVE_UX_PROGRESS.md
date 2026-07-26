@@ -58,6 +58,22 @@ in normal browser windows and on mobile phone browsers.
 - If future work adds more admin controls, prefer extending the disclosure
   pattern rather than adding more always-open form panels.
 
+## 2026-07-26 Scrolling Performance Safeguards
+
+- The shared attendee/admin pages use a distinct performance profile from the
+  live display. They disable the fixed CRT overlays and backdrop blurs that
+  force expensive repainting during scroll.
+- Repeated cards use `content-visibility: auto` plus an intrinsic size so
+  off-screen sections are skipped until approaching the viewport.
+- On phone widths, repeated cards simplify to flat, bordered rows. This keeps
+  long menus, RSVP lists, queues, and admin pages responsive.
+- Keep rich animated/blurred effects scoped to `/live-display`; it is a
+  presentation surface rather than a scrolling workspace.
+- Do not remove the body-page class in `templates/base.html`: it activates the
+  performance profile. Admin and bartender endpoints receive `admin-page`;
+  all other shared-page endpoints receive `attendee-page` unless a template
+  explicitly supplies `body_class`.
+
 ## 2026 Lab-Terminal Redesign Verification
 
 - Rechecked the redesigned UI at a 390x844 mobile viewport after the

@@ -3495,3 +3495,140 @@ textarea,
 .site-footer {
   color: #a1a1aa;
 }
+
+/*
+  Scrolling-page performance profile.
+
+  The richer glass/CRT effects remain available to the live display, which is
+  intentionally a largely static presentation. Shared attendee, bartender,
+  and admin pages can be long lists, so avoid effects that require repainting
+  the content behind every card as it moves beneath the viewport.
+*/
+:is(.attendee-page, .admin-page)::before,
+:is(.attendee-page, .admin-page)::after {
+  display: none;
+}
+
+:is(.attendee-page, .admin-page) .site-header,
+:is(.attendee-page, .admin-page) :is(
+  .signup-callout,
+  .slides,
+  .admin-panel,
+  .admin-section,
+  .form-section,
+  .feature-engagement,
+  .menu-section,
+  .portal-card,
+  .rsvp-landing,
+  .rsvp-card,
+  .rsvp-details article,
+  .rsvp-update-card,
+  .menu-card,
+  .order-card,
+  .request-card,
+  .bartender-card,
+  .voting-card,
+  .submitted-list,
+  .karaoke-lineup,
+  .rsvp-map,
+  .contest-banner,
+  .flash,
+  .success,
+  .errors,
+  .admin-entry,
+  .access-settings__form,
+  .party-code-status,
+  .rsvp-admin-item,
+  .contest-chart__item
+) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:is(.attendee-page, .admin-page) :is(
+  .signup-callout,
+  .slides,
+  .admin-panel,
+  .admin-section,
+  .form-section,
+  .feature-engagement,
+  .menu-section,
+  .portal-card,
+  .rsvp-landing,
+  .rsvp-card,
+  .rsvp-details article,
+  .rsvp-update-card,
+  .menu-card,
+  .order-card,
+  .request-card,
+  .bartender-card,
+  .voting-card,
+  .submitted-list,
+  .karaoke-lineup,
+  .rsvp-map,
+  .contest-banner,
+  .admin-entry,
+  .access-settings__form,
+  .party-code-status,
+  .rsvp-admin-item,
+  .contest-chart__item
+) {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.34), 0 0 10px rgba(255, 49, 49, 0.08);
+}
+
+:is(.attendee-page, .admin-page) :is(
+  .admin-section,
+  .admin-entry,
+  .access-settings__form,
+  .rsvp-admin-item,
+  .contest-chart__item,
+  .signup-callout,
+  .slides,
+  .form-section,
+  .feature-engagement,
+  .menu-section,
+  .portal-card,
+  .rsvp-landing,
+  .rsvp-card,
+  .rsvp-details article,
+  .rsvp-update-card,
+  .menu-card,
+  .order-card,
+  .request-card,
+  .bartender-card,
+  .voting-card,
+  .submitted-list,
+  .karaoke-lineup,
+  .rsvp-map,
+  .contest-banner
+) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+:is(.attendee-page, .admin-page) :is(
+  .admin-entry,
+  .access-settings__form,
+  .rsvp-admin-item,
+  .menu-card,
+  .order-card,
+  .request-card,
+  .bartender-card,
+  .voting-card,
+  .rsvp-details article,
+  .rsvp-update-card
+):hover {
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38), 0 0 14px rgba(255, 49, 49, 0.12);
+}
+
+@media (max-width: 600px) {
+  :is(.attendee-page, .admin-page)
+    :is(.submitted-list, .menu-section, .form-section, .portal-card, .rsvp-landing, .admin-panel, .admin-section, .slides, .signup-summary > div, .feature-engagement)
+    :is(.menu-card, .order-card, .request-card, .bartender-card, .admin-entry, .rsvp-update-card, .voting-card, .feature-engagement__grid a, .rsvp-details article) {
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding-inline: 0;
+  }
+}

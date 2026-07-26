@@ -100,7 +100,7 @@
     <h3>Latest Updates</h3>
     {% if rsvp_updates %}
       <div class="rsvp-update-list">
-        {% for update in rsvp_updates %}
+        {% for update in rsvp_updates[:3] %}
           <article class="rsvp-update-card{% if loop.first %} rsvp-update-card--latest{% endif %}">
             <p class="rsvp-update-card__eyebrow">{{ 'Latest update' if loop.first else 'Update' }}</p>
             <h4>{{ update.title }}</h4>
@@ -111,6 +111,21 @@
           </article>
         {% endfor %}
       </div>
+      {% if rsvp_updates|length > 3 %}
+        <details class="public-list__more">
+          <summary>Show {{ rsvp_updates|length - 3 }} earlier update{{ 's' if rsvp_updates|length - 3 != 1 else '' }}</summary>
+          <div class="rsvp-update-list">
+            {% for update in rsvp_updates[3:] %}
+              <article class="rsvp-update-card">
+                <p class="rsvp-update-card__eyebrow">Update</p>
+                <h4>{{ update.title }}</h4>
+                <p>{{ update.message }}</p>
+                {% if update.created_at %}<p class="rsvp-update-card__meta">{{ update.created_at }}</p>{% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        </details>
+      {% endif %}
     {% else %}
       <article class="rsvp-update-card rsvp-update-card--latest">
         <p class="rsvp-update-card__eyebrow">Latest update</p>

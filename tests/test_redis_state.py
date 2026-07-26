@@ -1270,7 +1270,7 @@ class RedisStateTests(unittest.TestCase):
 
         with main.app.test_client() as client:
             self.login_admin(client)
-            response = client.get("/admin")
+            response = client.get("/admin/guests")
 
         body = response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
@@ -1367,9 +1367,9 @@ class RedisStateTests(unittest.TestCase):
 
         with main.app.test_client() as client:
             self.login_admin(client)
-            form_response = client.get("/admin")
+            form_response = client.get("/admin/guests")
             response = client.post(
-                "/admin",
+                "/admin/guests",
                 data={
                     "action": "add_rsvp_update",
                     "title": "Long update",

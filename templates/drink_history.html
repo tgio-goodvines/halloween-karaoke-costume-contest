@@ -3,8 +3,13 @@
 
 {% block content %}
 <section class="form-section">
-  <h2>Drink Order History</h2>
-  <p>Review every drink order tied to your party account and reorder available favorites.</p>
+  <div class="section-heading-row">
+    <div>
+      <h2>Drink Order History</h2>
+      <p>Review every drink order tied to your party account and reorder available favorites.</p>
+    </div>
+    <a class="button" href="{{ url_for('party_menu') }}">Back to Menu</a>
+  </div>
   <p class="contest-status">
     Specialty drinks: {{ specialty_drink_count }} of {{ specialty_drink_limit }} included orders used.
     {% if specialty_extra_orders_open %}

@@ -48,12 +48,22 @@
   <h3>Karaoke Lineup</h3>
   {% if karaoke_signups %}
     <ol>
-      {% for signup in karaoke_signups %}
+      {% for signup in karaoke_signups[:8] %}
         <li>
           <strong>{{ signup.name }}</strong> will sing "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
         </li>
       {% endfor %}
     </ol>
+    {% if karaoke_signups|length > 8 %}
+      <details class="public-list__more">
+        <summary>Show {{ karaoke_signups|length - 8 }} more song{{ 's' if karaoke_signups|length - 8 != 1 else '' }}</summary>
+        <ol start="9">
+          {% for signup in karaoke_signups[8:] %}
+            <li><strong>{{ signup.name }}</strong> will sing "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}</li>
+          {% endfor %}
+        </ol>
+      </details>
+    {% endif %}
   {% else %}
     <p>No songs submitted yet. Choose yours above!</p>
   {% endif %}

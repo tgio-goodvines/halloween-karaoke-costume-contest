@@ -3,8 +3,13 @@
 
 {% block content %}
 <section class="form-section">
-  <h2>Food and Drink Menu</h2>
-  <p>Browse what is available tonight and send drink orders straight to the bar.</p>
+  <div class="section-heading-row">
+    <div>
+      <h2>Food and Drink Menu</h2>
+      <p>Browse what is available tonight and send drink orders straight to the bar.</p>
+    </div>
+    <a class="button" href="{{ url_for('party_drink_history') }}">Order History</a>
+  </div>
   <p class="contest-status">
     Specialty drinks: {{ specialty_drink_count }} of {{ specialty_drink_limit }} included orders used.
     {% if specialty_extra_orders_open %}

@@ -41,7 +41,7 @@
 | `templates/karaoke_signup.html` | Karaoke signup form and submitted karaoke lineup. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
-| `templates/admin.html` | Admin dashboard for public landing, party-code controls, live-display WiFi settings, RSVP list, party detail/map address editing, RSVP update posting/removal, food/drink menu CRUD with images/recipes/specialty/orderable controls, bartender tip settings, bartender role assignment, entry CRUD/reordering, contest controls, vote tally, winner state, and karaoke launch. |
+| `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, preserving existing CSRF-protected admin actions. |
 | `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including event override markup and top-layer notice image markup for drink-ready cards. |
 
 ## Untracked Local Files Present During Review
@@ -82,6 +82,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/REDIS_MIGRATION_PLAN.md` | Durable progress tracker for the in-progress process-memory to Redis refactor. |
 | `ai-context/REDIS_ENHANCEMENT_IMPLEMENTATION_PLAN.md` | Durable progress tracker for schema v2, ID-keyed ballots, auth/CSRF, and Redis interaction enhancements. |
 | `ai-context/RESPONSIVE_UX_PROGRESS.md` | Completed responsive UX implementation tracker for live display browser scaling, attendee mobile optimization, admin mobile disclosure forms, and verification results. |
+| `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` | Admin workspace information architecture, responsive behavior, attendee list-compaction refinements, verification, and extension rules. |
 | `ai-context/STYLING_REFINEMENT_PROGRESS.md` | Progress and implementation notes for the attached-wireframe styling refinement across pages, live display, and generated emails. |
 | `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` | Active GitHub Actions plan for deploying merged `main` commits to the existing EC2 ASG through AWS CLI and SSM, without S3 or GoodVines disruption. |
 | `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` | Durable progress tracker for the GitHub Actions deployment implementation, validation status, and external setup requirements. |
@@ -117,6 +118,7 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── REDIS_MIGRATION_PLAN.md
 │   ├── REDIS_STATE_DESIGN.md
 │   ├── RESPONSIVE_UX_PROGRESS.md
+│   ├── ADMIN_WORKSPACE_UX_PROGRESS.md
 │   ├── VAULT_ADMIN_TOKEN_RECOVERY.md
 │   └── VAULT_SECRETS_DESIGN.md
 ├── deploy/

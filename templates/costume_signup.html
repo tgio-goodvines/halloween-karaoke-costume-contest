@@ -60,12 +60,22 @@
   <h3>Submitted Costumes</h3>
   {% if costume_signups %}
     <ul>
-      {% for signup in costume_signups %}
+      {% for signup in costume_signups[:8] %}
         <li>
           <strong>{{ signup.name }}</strong> as {{ signup.costume }}{% if signup.contact %} &mdash; {{ signup.contact }}{% endif %}
         </li>
       {% endfor %}
     </ul>
+    {% if costume_signups|length > 8 %}
+      <details class="public-list__more">
+        <summary>Show {{ costume_signups|length - 8 }} more costume{{ 's' if costume_signups|length - 8 != 1 else '' }}</summary>
+        <ul>
+          {% for signup in costume_signups[8:] %}
+            <li><strong>{{ signup.name }}</strong> as {{ signup.costume }}{% if signup.contact %} &mdash; {{ signup.contact }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </details>
+    {% endif %}
   {% else %}
     <p>No entries yet. Submit yours above!</p>
   {% endif %}

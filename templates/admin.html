@@ -4,9 +4,20 @@
 {% block content %}
 <section class="admin-panel">
   <header class="admin-panel__header">
-    <h2>Admin Controls</h2>
-    <p>Use this dashboard to edit the costume contest and karaoke signups in real time.</p>
+    <p class="admin-panel__eyebrow">Control room</p>
+    <h2>{{ admin_workspaces[admin_view].label }}</h2>
+    <p>{{ admin_workspaces[admin_view].description }}</p>
   </header>
+
+  <nav class="admin-workspace-nav" aria-label="Admin workspaces">
+    {% for key, workspace in admin_workspaces.items() %}
+      <a href="{{ url_for('admin_portal', admin_view=key) }}"{% if key == admin_view %} aria-current="page"{% endif %}>
+        {{ workspace.label }}
+        {% if key == 'guests' %}<span>{{ rsvp_signups|length }}</span>{% endif %}
+        {% if key == 'bar' and active_drink_order_count %}<span>{{ active_drink_order_count }}</span>{% endif %}
+      </a>
+    {% endfor %}
+  </nav>
 
   {% if errors %}
     <div class="flash flash--error">
@@ -29,6 +40,43 @@
     </div>
   {% endif %}
 
+  {% if admin_view == 'home' %}
+    <section class="admin-home" aria-label="Tonight at a glance">
+      <header class="admin-home__intro">
+        <h3>At a glance</h3>
+        <p>Open the workspace that matches the job in front of you. Long lists and editing tools stay out of this control-room view.</p>
+      </header>
+      <div class="admin-home__grid">
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='guests') }}">
+          <span class="admin-home__label">RSVPs</span>
+          <strong>{{ rsvp_signups|length }}</strong>
+          <span>{{ rsvp_guest_total }} guest{{ 's' if rsvp_guest_total != 1 else '' }} confirmed</span>
+        </a>
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='bar') }}">
+          <span class="admin-home__label">Bar queue</span>
+          <strong>{{ active_drink_order_count }}</strong>
+          <span>active drink order{{ 's' if active_drink_order_count != 1 else '' }}</span>
+        </a>
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='program') }}">
+          <span class="admin-home__label">Costume voting</span>
+          <strong>{% if costume_contest_state.voting_open %}Live{% elif costume_contest_state.winner_locked %}Locked{% else %}Standby{% endif %}</strong>
+          <span>{{ costume_signups|length }} costume {{ 'entry' if costume_signups|length == 1 else 'entries' }}</span>
+        </a>
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='program') }}">
+          <span class="admin-home__label">Karaoke</span>
+          <strong>{% if karaoke_state.party_started %}Live{% else %}Standby{% endif %}</strong>
+          <span>{{ karaoke_signups|length }} song{{ 's' if karaoke_signups|length != 1 else '' }} in lineup</span>
+        </a>
+      </div>
+      <div class="admin-home__next-actions">
+        <a class="button button--primary" href="{{ url_for('bartender_portal') }}">Open Bartender Queue</a>
+        <a class="button" href="{{ url_for('admin_portal', admin_view='public') }}">Review Public Info</a>
+        <a class="button" href="{{ url_for('admin_portal', admin_view='menu') }}">Manage Menu</a>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if admin_view == 'public' %}
   <section class="admin-section admin-section--access">
     <h3>Public Access</h3>
     <p>Control what guests see at tnq-halloween.com and manage the party code guests enter when they submit an RSVP.</p>
@@ -145,7 +193,9 @@
       </form>
     </div>
   </section>
+  {% endif %}
 
+  {% if admin_view == 'guests' %}
   <section class="admin-section admin-section--rsvps">
     <h3>RSVP List</h3>
     <p>
@@ -332,49 +382,54 @@
       <p class="admin-empty">No RSVP updates have been posted yet.</p>
     {% endif %}
   </section>
+  {% endif %}
 
+  {% if admin_view == 'program' %}
   <section class="admin-section admin-section--contest">
     <h3>Costume Contest Controls</h3>
     <p>Kick off the contest, monitor live voting, and announce the winner straight from this dashboard.</p>
 
     <div class="contest-actions">
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="start_costume_contest" class="button button--primary">
-          Start the Costume Contest
-        </button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="stop_costume_contest" class="button button--outline">
-          Stop Costume Contest
-        </button>
-      </form>
-      <form method="post" onsubmit="return confirm('Reset the costume contest? This clears votes, winner, scoreboard state, and the active display override while keeping costume entries.');">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="reset_costume_contest" class="button button--danger">
-          Reset Costume Contest
-        </button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="lock_costume_winner" class="button button--accent">
-          Lock In Winner
-        </button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="show_costume_winner" class="button">
-          Show Winner on Live Display
-        </button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="clear_display_override" class="button button--outline">
-          Restore Live Display
-        </button>
-      </form>
+      {% if not costume_contest_state.contest_started %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="action" value="start_costume_contest" class="button button--primary">Start the Costume Contest</button>
+        </form>
+      {% else %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="action" value="stop_costume_contest" class="button button--outline">Stop Costume Contest</button>
+        </form>
+        {% if not costume_contest_state.winner_locked %}
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" name="action" value="lock_costume_winner" class="button button--accent" {% if not costume_leader or not costume_leader.count %}disabled{% endif %}>Lock In Winner</button>
+          </form>
+        {% else %}
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" name="action" value="show_costume_winner" class="button button--primary">Show Winner on Live Display</button>
+          </form>
+        {% endif %}
+      {% endif %}
+      {% if live_override %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="action" value="clear_display_override" class="button button--outline">Restore Live Display</button>
+        </form>
+      {% endif %}
     </div>
+
+    {% if costume_contest_state.contest_started or costume_contest_state.winner_locked %}
+      <details class="admin-danger-zone">
+        <summary>Reset costume contest</summary>
+        <p>Clears votes, winner, scoreboard state, and the active display override while keeping costume entries.</p>
+        <form method="post" onsubmit="return confirm('Reset the costume contest? This clears votes, winner, scoreboard state, and the active display override while keeping costume entries.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="action" value="reset_costume_contest" class="button button--danger">Reset Costume Contest</button>
+        </form>
+      </details>
+    {% endif %}
 
     {% if costume_contest_state.voting_open %}
       <p class="contest-status contest-status--active">Voting is live — guests can score every costume right now.</p>
@@ -467,25 +522,29 @@
     <p>Launch the singing session and spotlight the next performer on the live display.</p>
 
     <div class="contest-actions">
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="start_karaoke_party" class="button button--primary">
-          Start the Halloween Karaoke Party
-        </button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="stop_karaoke_party" class="button button--outline">
-          Stop Karaoke Party
-        </button>
-      </form>
-      <form method="post" onsubmit="return confirm('Reset the karaoke party? This stops karaoke and clears the active singer/display override while keeping the lineup.');">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="reset_karaoke_party" class="button button--danger">
-          Reset Karaoke Party
-        </button>
-      </form>
+      {% if not karaoke_state.party_started %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="action" value="start_karaoke_party" class="button button--primary">Start the Halloween Karaoke Party</button>
+        </form>
+      {% else %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="action" value="stop_karaoke_party" class="button button--outline">Stop Karaoke Party</button>
+        </form>
+      {% endif %}
     </div>
+
+    {% if karaoke_state.party_started %}
+      <details class="admin-danger-zone">
+        <summary>Reset karaoke party</summary>
+        <p>Stops karaoke and clears the active singer/display override while keeping the lineup.</p>
+        <form method="post" onsubmit="return confirm('Reset the karaoke party? This stops karaoke and clears the active singer/display override while keeping the lineup.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" name="action" value="reset_karaoke_party" class="button button--danger">Reset Karaoke Party</button>
+        </form>
+      </details>
+    {% endif %}
 
     {% if karaoke_state.party_started %}
       <p class="contest-status contest-status--active">Karaoke party is live on the big screen!</p>
@@ -507,7 +566,9 @@
       <p class="contest-status">Add karaoke signups to build the performance queue.</p>
     {% endif %}
   </section>
+  {% endif %}
 
+  {% if admin_view == 'bar' %}
   <section class="admin-section admin-section--bar">
     <h3>Bar Operations</h3>
     <p>
@@ -574,7 +635,9 @@
       </form>
     </details>
   </section>
+  {% endif %}
 
+  {% if admin_view == 'menu' %}
   <section class="admin-section admin-section--menu">
     <h3>Food and Drink Menu</h3>
     <p>Add menu images, descriptions, and drink recipes for guests and bartenders.</p>
@@ -722,7 +785,9 @@
       <p class="admin-empty">No food or drink menu items yet.</p>
     {% endif %}
   </section>
+  {% endif %}
 
+  {% if admin_view == 'accounts' %}
   <section class="admin-section admin-section--users">
     <h3>User Accounts</h3>
     <p>Create accounts, edit access, reset passwords, and remove users.</p>
@@ -818,7 +883,9 @@
       <p class="admin-empty">No registered party accounts yet.</p>
     {% endif %}
   </section>
+  {% endif %}
 
+  {% if admin_view == 'program' %}
   <div class="admin-grid">
     <section class="admin-section">
       <h3>Costume Contest Signups</h3>
@@ -981,5 +1048,6 @@
       {% endif %}
     </section>
   </div>
+  {% endif %}
 </section>
 {% endblock %}

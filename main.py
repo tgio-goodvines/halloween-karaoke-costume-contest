@@ -23,6 +23,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from flask import (
     Flask,
     Response,
+    abort,
     has_request_context,
     jsonify,
     redirect,
@@ -355,6 +356,16 @@ LANDING_PAGE_TARGETS: dict[str, dict[str, str]] = {
         "label": "Live display",
         "description": "Use the big-screen live display as the public root route.",
     },
+}
+
+ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
+    "home": {"label": "Tonight", "description": "Live party status and next actions."},
+    "guests": {"label": "Guests", "description": "RSVPs, guest updates, and party details."},
+    "public": {"label": "Public Info", "description": "Guest-facing access and display settings."},
+    "program": {"label": "Program", "description": "Costume contest, karaoke, and lineups."},
+    "bar": {"label": "Bar", "description": "Drink operations and bartender tipping."},
+    "menu": {"label": "Menu", "description": "Food and drink availability."},
+    "accounts": {"label": "Accounts", "description": "Party accounts and bartender access."},
 }
 
 
@@ -3456,8 +3467,12 @@ def admin_login():
     )
 
 
-@app.route("/admin", methods=["GET", "POST"])
-def admin_portal():
+@app.route("/admin", defaults={"admin_view": "home"}, methods=["GET", "POST"])
+@app.route("/admin/<admin_view>", methods=["GET", "POST"])
+def admin_portal(admin_view: str):
+    if admin_view not in ADMIN_WORKSPACES:
+        abort(404)
+
     errors: List[str] = []
     messages: List[str] = []
     global live_display_event_override, live_display_notice_override
@@ -4399,6 +4414,8 @@ def admin_portal():
 
     return render_template(
         "admin.html",
+        admin_view=admin_view,
+        admin_workspaces=ADMIN_WORKSPACES,
         costume_signups=costume_signups,
         karaoke_signups=karaoke_signups,
         errors=errors,

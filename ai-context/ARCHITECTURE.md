@@ -64,7 +64,10 @@
 - `POST /party/logout` and `POST /admin/logout` -> compatibility aliases for
   the single logout behavior.
 - `GET|POST /admin/login` -> password-backed admin session login; grants the `admin` role.
-- `GET|POST /admin` -> admin dashboard and all admin mutations.
+- `GET|POST /admin` -> concise **Tonight** admin control-room dashboard and all
+  admin mutations. Focused workspaces are available at `/admin/guests`,
+  `/admin/public`, `/admin/program`, `/admin/bar`, `/admin/menu`, and
+  `/admin/accounts`; they share the existing POST action handler.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
@@ -237,15 +240,11 @@ locked winner.
 - `rsvp.html`: standalone guest RSVP landing page with RSVP prompt, RSVP form
   party-code field, party details, Google Maps directions/embed,
   newest-to-oldest update cards, and optional portal account links.
-- `admin.html`: all admin actions, public landing settings, attendee experience
-  mode override, explicit party-code management with active/not-set status and
-  hint editing, host RSVP notification email configuration, live-display WiFi
-  settings, RSVP list CRUD, party detail/map address editing, selective RSVP update
-  posting/resending/removal, and live
-  contest/karaoke state, menu management with specialty/orderable drink
-  controls, bartender tip settings, user account CRUD/password reset/bartender
-  role assignment, and bar operations summary; add/edit entry forms are
-  disclosure rows to keep mobile admin scanning manageable.
+- `admin.html`: workspace-based admin control room. `/admin` provides
+  tonight-at-a-glance cards and next actions; focused guest, public-info,
+  program, bar, menu, and account workspaces selectively render the existing
+  management controls and POST actions. Individual add/edit records remain
+  disclosure rows to keep mobile scanning manageable.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
   panel markup.

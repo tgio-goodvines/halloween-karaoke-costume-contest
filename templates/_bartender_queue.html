@@ -8,7 +8,7 @@
         <article class="bartender-card bartender-card--{{ order.status }}">
           <div class="bartender-card__media">
             {% if order.item_image_url %}
-              <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" loading="lazy" decoding="async">
+              <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}">
             {% else %}
               <div class="menu-card__placeholder" aria-hidden="true">Drink</div>
             {% endif %}

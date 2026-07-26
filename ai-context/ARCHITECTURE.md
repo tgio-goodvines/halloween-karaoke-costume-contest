@@ -6,9 +6,7 @@
   to `/rsvp`.
 - `GET /health` -> JSON health API for service and Redis readiness; returns
   `503` in production if Redis cannot be reached.
-- `GET /live-display` -> renders `templates/display.html` with rotation
-  entries, counts, override state, jukebox state, display layout mode, and
-  activity rail state; requires an `admin` role session.
+- `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, and override state; requires an `admin` role session.
 - `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`; requires an `admin` role session.
 - `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
 - `GET|POST /rsvp` -> public RSVP landing page; shows party details, an
@@ -51,27 +49,6 @@
   rendered queue fragment plus a queue version. `static/bartender.js` polls it
   every few seconds so new drink orders appear on `/bartender` without a full
   page reload.
-- `GET /api/youtube-search` -> signed-in attendee/admin JSON endpoint for
-  karaoke song discovery. Requires `HALLOWEEN_YOUTUBE_API_KEY`; regular users
-  can use it on the party date. It searches YouTube Data API v3 for embeddable
-  videos and returns normalized video metadata for the signup form.
-- `GET|POST /party/jukebox` -> signed-in attendee Apple Music jukebox request
-  page, available on the party date and redirected to `/party` before then.
-  Attendees search/select Apple Music tracks and submit requests subject to
-  admin request rules, explicit filtering, duplicate cooldown, and per-user
-  active request limits.
-- `GET /api/jukebox-search` -> signed-in attendee/admin JSON endpoint for
-  Apple Music catalog song search. Requires
-  `HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN`; regular users can use it on the
-  party date.
-- `GET /api/jukebox-state` -> signed-in attendee/admin JSON endpoint for
-  current jukebox settings, now-playing, and upcoming queue state.
-- `GET /api/apple-music-token` -> admin-only JSON endpoint that returns the
-  configured MusicKit developer token and storefront for the live-display
-  browser.
-- `POST /api/jukebox/playback-event` -> admin-only endpoint used by the
-  live-display MusicKit controller to mark jukebox queue items started, ended,
-  or skipped and broadcast display updates.
 - `GET|POST /party/login` -> public attendee account sign-in form; validates a
   Redis-stored password hash and grants the `regular` role.
 - `GET|POST /party/password-reset` -> public account recovery request form;
@@ -93,9 +70,8 @@
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
 - `GET|POST /party/costumes` -> attendee costume signup form, available on
   the party date and redirected to `/party` before then.
-- `GET|POST /party/karaoke` -> attendee karaoke signup form with optional
-  YouTube search-and-fill, available on the party date and redirected to
-  `/party` before then.
+- `GET|POST /party/karaoke` -> attendee karaoke signup form, available on the
+  party date and redirected to `/party` before then.
 - `GET|POST /party/costumes/vote` -> logged-in one-ballot-per-session voting
   on the party date while the costume contest is started, voting is open, and
   no winner is locked.
@@ -115,8 +91,6 @@
 - Food/drink menu management, specialty drink limit enforcement, drink order
   lifecycle, bartender role checks, prep-time estimates, bartender tip settings,
   and drink notification emails.
-- Apple Music jukebox settings, playlist, attendee requests, queue generation,
-  random request insertion, playback-state sync, and catalog search.
 - RSVP confirmation/update recipient collection, account welcome email,
   password reset email, and Amazon SES email sending when enabled.
 - Display update broadcasting via `threading.Condition`.
@@ -165,13 +139,6 @@ That function increments `display_update_version` and notifies `display_update_c
 
 `static/display.js` also polls `/api/display-data` every 30 seconds as a fallback.
 
-`/api/display-data` also includes:
-
-- `layout`: `idle` or `dashboard`, plus booleans for left jukebox rail and
-  right activity rail visibility.
-- `activity`: compact lists/counts for active bartender orders, ready drinks,
-  costume lineup previews, and karaoke lineup previews.
-
 ## Rotation Entry Model
 
 `build_rotation_entries()` returns a list of dictionaries. Display entries can contain:
@@ -186,7 +153,7 @@ That function increments `display_update_version` and notifies `display_update_c
 - `scoreboard`: structured top-score rows.
 
 The base rotation always starts with WiFi/app sign-in instructions, costume and
-karaoke signup prompts, jukebox request prompts, drink-order promotion, and live-update explanation
+karaoke signup prompts, drink-order promotion, and live-update explanation
 cards. The WiFi card tells guests to connect to the configured network and then
 browse to `tnq-halloween.com` to start the party experience. The WiFi
 network/password values come from Redis-backed
@@ -207,53 +174,20 @@ The attendee portal has a related but separate date gate: `party_day_has_arrived
 uses the persisted `event_experience_mode` first, then compares the local date
 of `HALLOWEEN_PARTY_START` to the current date when the mode is `auto`. Admins
 can force `pre_party` or `party_day` from `/admin` to test attendee UX states.
-Before the effective party date, `/party/menu`, `/party/jukebox`,
-`/party/costumes`, and `/party/karaoke` redirect to `/party`, and `base.html`
-hides the Menu, Jukebox, Costume, Karaoke, and Voting links. On the effective party date, those links/routes
+Before the effective party date, `/party/menu`, `/party/costumes`, and
+`/party/karaoke` redirect to `/party`, and `base.html` hides the Menu, Costume,
+Karaoke, and Voting links. On the effective party date, those links/routes
 become available. Voting still depends on `costume_voting_is_visible()`, which
 also requires the admin contest state to have started/open voting with no
 locked winner.
 
 ## Frontend Responsibilities
 
-`templates/admin.html` is organized into tab panels for setup, jukebox, guests,
-stage controls, bar/menu, and lineups. `static/admin.js` owns the tab state and
-soft admin refresh behavior: it submits admin POST forms with `fetch`, swaps the
-returned admin panel fragment in place, preserves the active tab/open
-disclosures/scroll position, and refreshes from display-update SSE events when
-the admin is not actively editing a field. Admin background refreshes ignore the
-initial SSE snapshot and wait until scrolling is idle so the panel is not
-replaced while the operator is moving through the page. The admin body uses
-lighter admin-only CSS overrides to avoid fixed scanline overlays,
-backdrop-blurred repeated cards, and heavy shadows during scroll.
-
-Base-layout attendee pages default to `body.attendee-page`. That shell applies
-the same scroll-performance policy to guest-facing surfaces: no fixed scanline
-overlay, no repeated card backdrop blur, lighter shadows, and
-`content-visibility: auto` on long card/section lists. Attendee card images use
-native lazy loading and async decoding where practical so menu/order/request
-artwork does not compete with scrolling. On narrow screens, nested cards flatten
-into separated rows inside the outer panel so borders and padding do not keep
-squeezing already-small content columns.
-
-The party-day attendee dashboard includes a `feature-engagement` card that
-promotes the active guest tools: menu/bar orders, jukebox requests when open,
-costume signup, karaoke signup, and voting when the contest vote is visible.
-
-`static/jukebox-status.js` polls `/api/jukebox-state` on `/party/jukebox` so
-attendees see now-playing, request availability, pending count, and their own
-request status changes without reloading the page. The jukebox state endpoint
-returns all request statuses to admins, but only the current account's request
-records to regular attendees.
-
 `templates/display.html` renders initial display state and embeds JSON in:
 
 - `#entries-data`
 - `#override-data`
 - `#notice-override-data`
-- `#jukebox-data`
-- `#layout-data`
-- `#activity-data`
 
 `static/display.js` then owns:
 
@@ -262,37 +196,14 @@ records to regular attendees.
 - Applying display entries to the card DOM.
 - Switching between default, CTA, and scoreboard layouts.
 - Applying costume/winner styling classes.
-- Switching the page between idle full-card mode and dashboard mode.
-- Rendering and independently rotating the dashboard right rail across active
-  bar orders, ready drinks, costume previews, and karaoke previews.
-- Applying long/dense/spotlight/mega sizing classes so sparse idle cards scale
-  up and crowded dashboard cards still fit.
 - Rotating cards every 8 seconds.
 - Fetching latest display data.
 - Connecting and reconnecting to SSE updates.
 - Rendering event override content.
 - Rendering drink-ready notice images above event overrides or normal rotation.
-- Running karaoke countdown timers and karaoke panel rotation for legacy
-  karaoke-start overrides.
-- Rendering karaoke stage overrides, including current singer/song data,
-  up-next data, the stage-card Open YouTube action, and maximized embedded
-  YouTube video mode.
+- Running karaoke countdown timers and karaoke panel rotation.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.
-
-`static/jukebox-player.js` owns Apple Music/MusicKit playback in the dashboard
-left rail on the live display:
-
-- Fetches the admin-only developer token from `/api/apple-music-token`.
-- Requires a host click to authorize/connect Apple Music and start playback.
-- Loads the app-owned upcoming queue into MusicKit, starts playback, and posts
-  started/ended/skipped events to `/api/jukebox/playback-event`.
-- Polls `/api/jukebox-state` so album art, now-playing text, and the up-next
-  rail stay current while `static/display.js` continues rotating cards.
-
-`static/jukebox-search.js` powers both admin and attendee Apple Music search
-forms by fetching `/api/jukebox-search` and filling hidden normalized track
-metadata fields.
 
 `static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds. The server chooses the slide set: pre-party RSVP details/updates before the party date, and event-night slides on the party date. When bartender tipping is enabled, the party-day slides include a tip prompt with the configured QR/payment image and payment handles.
 
@@ -320,10 +231,7 @@ metadata fields.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
-- `karaoke_signup.html`: karaoke entry form with YouTube search picker and submitted karaoke lineup.
-- `jukebox.html`: attendee Apple Music jukebox request page with catalog search,
-  selected-track submission, request note, now-playing status, and the attendee's
-  request history.
+- `karaoke_signup.html`: karaoke entry form and submitted karaoke lineup.
 - `costume_voting.html`: complete ballot form and post-vote state.
 - `admin_login.html`: admin password form when production admin auth is configured.
 - `rsvp.html`: standalone guest RSVP landing page with RSVP prompt, RSVP form
@@ -336,13 +244,11 @@ metadata fields.
   posting/resending/removal, and live
   contest/karaoke state, menu management with specialty/orderable drink
   controls, bartender tip settings, user account CRUD/password reset/bartender
-  role assignment, bar operations summary, karaoke video readiness badges, and
-  karaoke stage/video/next-singer controls, plus YouTube API key validation and
-  runtime override controls; add/edit entry forms are disclosure rows to keep
-  mobile admin scanning manageable.
+  role assignment, and bar operations summary; add/edit entry forms are
+  disclosure rows to keep mobile admin scanning manageable.
 - `display.html`: standalone live-display page without `base.html`; includes
-  default card, CTA, scoreboard, override, karaoke countdown/lineup panel
-  markup, and karaoke stage/video markup.
+  default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
+  panel markup.
 - `email/*.html`: generated HTML email bodies for RSVP confirmation/update,
   host RSVP notification, account welcome, password reset, and drink order
   notifications. These use email-client-safe inline CSS aligned with the dark

@@ -2,19 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const dataElement = document.getElementById('entries-data');
   const overrideElement = document.getElementById('override-data');
   const noticeOverrideElement = document.getElementById('notice-override-data');
-  const layoutElement = document.getElementById('layout-data');
-  const activityElement = document.getElementById('activity-data');
   const card = document.querySelector('[data-display-card]');
   const emptyState = document.querySelector('[data-empty-state]');
-  const leftRail = document.querySelector('[data-left-rail]');
-  const activityRail = document.querySelector('[data-activity-rail]');
-  const activityPanels = activityRail
-    ? Array.from(activityRail.querySelectorAll('[data-activity-panel]'))
-    : [];
-  const activityDrinkElement = activityRail ? activityRail.querySelector('[data-activity-drinks]') : null;
-  const activityReadyElement = activityRail ? activityRail.querySelector('[data-activity-ready]') : null;
-  const activityCostumeElement = activityRail ? activityRail.querySelector('[data-activity-costumes]') : null;
-  const activityKaraokeElement = activityRail ? activityRail.querySelector('[data-activity-karaoke]') : null;
   const overrideContainer = document.querySelector('[data-override-state]');
   const overrideCardElement = overrideContainer
     ? overrideContainer.querySelector('.display-override__card')
@@ -60,33 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const karaokeRotatorElement = karaokeOverrideElement
     ? karaokeOverrideElement.querySelector('[data-karaoke-rotator]')
     : null;
-  const karaokeStageElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-stage]')
-    : null;
-  const karaokeStageIntroElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-intro]')
-    : null;
-  const karaokeStageSingerElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-singer]')
-    : null;
-  const karaokeStageSongElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-song]')
-    : null;
-  const karaokeStageYoutubeElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-youtube]')
-    : null;
-  const karaokeStageNextElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-stage-next]')
-    : null;
-  const karaokeVideoElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-video]')
-    : null;
-  const karaokeVideoFrameElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-video-frame]')
-    : null;
-  const karaokeVideoFallbackElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-video-fallback]')
-    : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
   let hasRefreshedDisplayStylesheet = false;
@@ -116,39 +78,34 @@ document.addEventListener('DOMContentLoaded', () => {
     entriesSignature = '[]';
   }
 
-  const parseJsonElement = (element, fallback) => {
-    if (!element) {
-      return fallback;
-    }
-
-    try {
-      return JSON.parse(element.textContent || 'null') ?? fallback;
-    } catch (error) {
-      console.error('Unable to parse display JSON', error);
-      return fallback;
-    }
-  };
-
   let initialOverrideState = null;
-  const parsedOverrideState = parseJsonElement(overrideElement, null);
-  if (parsedOverrideState && typeof parsedOverrideState === 'object') {
-    initialOverrideState = parsedOverrideState;
+  if (overrideElement) {
+    try {
+      const parsed = JSON.parse(overrideElement.textContent || 'null');
+      if (parsed && typeof parsed === 'object') {
+        initialOverrideState = parsed;
+      }
+    } catch (error) {
+      console.error('Unable to parse override state', error);
+    }
   }
 
   let initialNoticeOverrideState = null;
-  const parsedNoticeOverrideState = parseJsonElement(noticeOverrideElement, null);
-  if (parsedNoticeOverrideState && typeof parsedNoticeOverrideState === 'object') {
-    initialNoticeOverrideState = parsedNoticeOverrideState;
+  if (noticeOverrideElement) {
+    try {
+      const parsed = JSON.parse(noticeOverrideElement.textContent || 'null');
+      if (parsed && typeof parsed === 'object') {
+        initialNoticeOverrideState = parsed;
+      }
+    } catch (error) {
+      console.error('Unable to parse notice override state', error);
+    }
   }
 
   let overrideState = null;
   let overrideSignature = 'null';
   let noticeOverrideState = null;
   let noticeOverrideSignature = 'null';
-  let layoutState = parseJsonElement(layoutElement, { mode: 'idle' });
-  let layoutSignature = 'null';
-  let activityState = parseJsonElement(activityElement, {});
-  let activitySignature = 'null';
 
   const defaultContent = card.querySelector('[data-entry-default]');
   const ctaLayout = card.querySelector('[data-cta-layout]');
@@ -196,98 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
       .length;
   };
 
-  const safeText = (value, fallback = '') => {
-    const text = value == null ? '' : String(value).trim();
-    return text || fallback;
-  };
-
-  const applyLayoutState = () => {
-    const mode = layoutState && layoutState.mode === 'dashboard' ? 'dashboard' : 'idle';
-    const leftRailEnabled = Boolean(layoutState && layoutState.left_rail_enabled);
-    const rightRailEnabled = Boolean(layoutState && layoutState.right_rail_enabled);
-
-    document.body.classList.toggle('display-mode--idle', mode === 'idle');
-    document.body.classList.toggle('display-mode--dashboard', mode === 'dashboard');
-    document.body.classList.toggle('display-mode--jukebox', leftRailEnabled);
-    document.body.classList.toggle('display-mode--activity', rightRailEnabled);
-
-    if (leftRail) {
-      if (leftRailEnabled) {
-        leftRail.removeAttribute('hidden');
-      } else {
-        leftRail.setAttribute('hidden', '');
-      }
-    }
-
-    if (activityRail) {
-      if (rightRailEnabled) {
-        activityRail.removeAttribute('hidden');
-      } else {
-        activityRail.setAttribute('hidden', '');
-      }
-    }
-  };
-
-  const sectionHasItems = (items) => Array.isArray(items) && items.length > 0;
-
-  const clearElement = (element) => {
-    if (element) {
-      element.innerHTML = '';
-    }
-  };
-
-  const appendTextElement = (parent, tagName, className, text) => {
-    const element = document.createElement(tagName);
-    if (className) {
-      element.className = className;
-    }
-    element.textContent = text;
-    parent.appendChild(element);
-    return element;
-  };
-
-  const renderActivityItems = (container, items, emptyText, renderItem) => {
-    if (!container) {
-      return;
-    }
-
-    clearElement(container);
-
-    if (!sectionHasItems(items)) {
-      const empty = document.createElement('p');
-      empty.className = 'activity-rail__empty';
-      empty.textContent = emptyText;
-      container.appendChild(empty);
-      return;
-    }
-
-    items.slice(0, 5).forEach((item, index) => {
-      const article = document.createElement('article');
-      article.className = 'activity-item';
-      renderItem(article, item, index);
-      container.appendChild(article);
-    });
-  };
-
-  const setActivityPanelVisibility = () => {
-    const activityMap = {
-      drinks: activityState.drink_orders,
-      ready: activityState.ready_drinks,
-      costumes: activityState.costumes,
-      karaoke: activityState.karaoke,
-    };
-
-    activityPanels.forEach((panel) => {
-      const key = panel.getAttribute('data-activity-panel');
-      if (sectionHasItems(activityMap[key])) {
-        panel.removeAttribute('hidden');
-      } else {
-        panel.setAttribute('hidden', '');
-        panel.classList.remove('is-active');
-      }
-    });
-  };
-
   let karaokeCountdownTimerId = null;
   let karaokeCountdownTarget = null;
   let karaokeRotatorPanels = [];
@@ -295,123 +160,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let karaokeRotatorTimerId = null;
   let karaokeRotatorResizeHandler = null;
   const KARAOKE_ROTATOR_INTERVAL = 8000;
-  let activityPanelIndex = 0;
-  let activityRotatorTimerId = null;
-  const ACTIVITY_ROTATOR_INTERVAL = 10000;
-
-  const visibleActivityPanels = () =>
-    activityPanels.filter((panel) => !panel.hasAttribute('hidden'));
-
-  const applyActivityPanelIndex = () => {
-    const panels = visibleActivityPanels();
-    if (!panels.length) {
-      return;
-    }
-
-    if (activityPanelIndex >= panels.length) {
-      activityPanelIndex = 0;
-    }
-
-    activityPanels.forEach((panel) => {
-      panel.classList.remove('is-active');
-    });
-    panels[activityPanelIndex].classList.add('is-active');
-  };
-
-  const stopActivityRotator = () => {
-    if (activityRotatorTimerId) {
-      window.clearInterval(activityRotatorTimerId);
-      activityRotatorTimerId = null;
-    }
-  };
-
-  const startActivityRotator = ({ resetIndex = false } = {}) => {
-    stopActivityRotator();
-    setActivityPanelVisibility();
-
-    const panels = visibleActivityPanels();
-    if (resetIndex || activityPanelIndex >= panels.length) {
-      activityPanelIndex = 0;
-    }
-    applyActivityPanelIndex();
-
-    if (panels.length <= 1) {
-      return;
-    }
-
-    activityRotatorTimerId = window.setInterval(() => {
-      const currentPanels = visibleActivityPanels();
-      if (!currentPanels.length) {
-        stopActivityRotator();
-        return;
-      }
-      activityPanelIndex = (activityPanelIndex + 1) % currentPanels.length;
-      applyActivityPanelIndex();
-    }, ACTIVITY_ROTATOR_INTERVAL);
-  };
-
-  const renderActivityRail = ({ resetIndex = false } = {}) => {
-    renderActivityItems(
-      activityDrinkElement,
-      activityState.drink_orders,
-      'No active bar orders.',
-      (article, order) => {
-        appendTextElement(article, 'span', 'activity-item__label', safeText(order.status_label, 'Order received'));
-        appendTextElement(article, 'strong', '', safeText(order.drink, 'Drink'));
-        appendTextElement(article, 'span', '', safeText(order.guest, 'Guest'));
-      }
-    );
-
-    renderActivityItems(
-      activityReadyElement,
-      activityState.ready_drinks,
-      'No drinks ready right now.',
-      (article, order) => {
-        article.classList.add('activity-item--ready');
-        const imageUrl = safeText(order.image_url);
-        if (imageUrl) {
-          const image = document.createElement('img');
-          image.className = 'activity-item__image';
-          image.src = imageUrl;
-          image.alt = '';
-          article.appendChild(image);
-        }
-        appendTextElement(article, 'span', 'activity-item__label', 'Ready now');
-        appendTextElement(article, 'strong', '', safeText(order.drink, 'Drink'));
-        appendTextElement(article, 'span', '', safeText(order.guest, 'Guest'));
-      }
-    );
-
-    renderActivityItems(
-      activityCostumeElement,
-      activityState.costumes,
-      'Costume lineup is open.',
-      (article, entry) => {
-        appendTextElement(article, 'span', 'activity-item__label', 'Contestant');
-        appendTextElement(article, 'strong', '', safeText(entry.name, 'Guest'));
-        appendTextElement(article, 'span', '', safeText(entry.costume, 'Costume coming soon'));
-      }
-    );
-
-    renderActivityItems(
-      activityKaraokeElement,
-      activityState.karaoke,
-      'Karaoke lineup is open.',
-      (article, entry, index) => {
-        appendTextElement(article, 'span', 'activity-item__label', `Singer #${index + 1}`);
-        appendTextElement(article, 'strong', '', safeText(entry.name, 'Singer'));
-        const artist = safeText(entry.artist);
-        const song = safeText(entry.song_title, 'Song coming soon');
-        appendTextElement(article, 'span', '', artist ? `${song} · ${artist}` : song);
-      }
-    );
-
-    if (layoutState && layoutState.right_rail_enabled) {
-      startActivityRotator({ resetIndex });
-    } else {
-      stopActivityRotator();
-    }
-  };
 
   const refreshDisplayStylesheet = () => {
     if (hasRefreshedDisplayStylesheet) {
@@ -604,134 +352,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return '';
   };
 
-  const resetKaraokeStage = () => {
-    if (karaokeStageElement) {
-      karaokeStageElement.setAttribute('hidden', '');
-    }
-    if (karaokeStageIntroElement) {
-      karaokeStageIntroElement.removeAttribute('hidden');
-    }
-    if (karaokeStageSingerElement) {
-      karaokeStageSingerElement.textContent = '';
-    }
-    if (karaokeStageSongElement) {
-      karaokeStageSongElement.textContent = '';
-    }
-    if (karaokeStageYoutubeElement) {
-      karaokeStageYoutubeElement.href = '#';
-      karaokeStageYoutubeElement.setAttribute('hidden', '');
-    }
-    if (karaokeStageNextElement) {
-      karaokeStageNextElement.textContent = '';
-      karaokeStageNextElement.setAttribute('hidden', '');
-    }
-    if (karaokeVideoElement) {
-      karaokeVideoElement.setAttribute('hidden', '');
-    }
-    if (karaokeVideoFrameElement) {
-      karaokeVideoFrameElement.removeAttribute('src');
-      karaokeVideoFrameElement.onerror = null;
-    }
-    if (karaokeVideoFallbackElement) {
-      karaokeVideoFallbackElement.textContent = '';
-      karaokeVideoFallbackElement.setAttribute('hidden', '');
-    }
-  };
-
-  const applyKaraokeStage = () => {
-    if (!karaokeStageElement) {
-      return;
-    }
-
-    const youtubeData =
-      overrideState && overrideState.youtube && typeof overrideState.youtube === 'object'
-        ? overrideState.youtube
-        : {};
-    const singerName =
-      overrideState && overrideState.singer_name ? String(overrideState.singer_name).trim() : 'Next Singer';
-    const songTitle =
-      overrideState && overrideState.song_title ? String(overrideState.song_title).trim() : '';
-    const artist = overrideState && overrideState.artist ? String(overrideState.artist).trim() : '';
-    const songLine = formatPerformerSong({ song_title: songTitle, artist });
-    const watchUrl = youtubeData.watch_url ? String(youtubeData.watch_url) : '';
-    const videoId = youtubeData.video_id ? String(youtubeData.video_id) : '';
-    const shouldShowVideo = Boolean(
-      overrideState &&
-        overrideState.mode === 'video' &&
-        overrideState.video_enabled &&
-        overrideState.video_playable &&
-        videoId
-    );
-
-    karaokeStageElement.removeAttribute('hidden');
-
-    if (karaokeStageSingerElement) {
-      karaokeStageSingerElement.textContent = singerName;
-    }
-    if (karaokeStageSongElement) {
-      karaokeStageSongElement.textContent = songLine || 'Song details coming up';
-    }
-    if (karaokeStageYoutubeElement) {
-      if (watchUrl) {
-        karaokeStageYoutubeElement.href = watchUrl;
-        karaokeStageYoutubeElement.removeAttribute('hidden');
-      } else {
-        karaokeStageYoutubeElement.href = '#';
-        karaokeStageYoutubeElement.setAttribute('hidden', '');
-      }
-    }
-
-    const nextSinger =
-      overrideState && overrideState.next_singer && typeof overrideState.next_singer === 'object'
-        ? overrideState.next_singer
-        : null;
-    if (karaokeStageNextElement) {
-      if (nextSinger && nextSinger.name) {
-        const nextSong = formatPerformerSong(nextSinger);
-        karaokeStageNextElement.textContent = nextSong
-          ? `Up next: ${nextSinger.name} • ${nextSong}`
-          : `Up next: ${nextSinger.name}`;
-        karaokeStageNextElement.removeAttribute('hidden');
-      } else {
-        karaokeStageNextElement.textContent = '';
-        karaokeStageNextElement.setAttribute('hidden', '');
-      }
-    }
-
-    if (karaokeStageIntroElement) {
-      if (shouldShowVideo) {
-        karaokeStageIntroElement.setAttribute('hidden', '');
-      } else {
-        karaokeStageIntroElement.removeAttribute('hidden');
-      }
-    }
-
-    if (karaokeVideoElement && karaokeVideoFrameElement) {
-      if (shouldShowVideo) {
-        const embedUrl = new URL(`https://www.youtube.com/embed/${videoId}`);
-        embedUrl.searchParams.set('autoplay', '1');
-        embedUrl.searchParams.set('playsinline', '1');
-        embedUrl.searchParams.set('rel', '0');
-        embedUrl.searchParams.set('origin', window.location.origin);
-        karaokeVideoFrameElement.src = embedUrl.toString();
-        karaokeVideoFrameElement.onerror = () => {
-          karaokeVideoElement.setAttribute('hidden', '');
-          if (karaokeStageIntroElement) {
-            karaokeStageIntroElement.removeAttribute('hidden');
-          }
-          if (karaokeVideoFallbackElement) {
-            karaokeVideoFallbackElement.textContent = 'Video playback was blocked. Use the stage card controls.';
-            karaokeVideoFallbackElement.removeAttribute('hidden');
-          }
-        };
-        karaokeVideoElement.removeAttribute('hidden');
-      } else {
-        karaokeVideoElement.setAttribute('hidden', '');
-        karaokeVideoFrameElement.removeAttribute('src');
-      }
-    }
-  };
-
   const updateKaraokeLineup = (entries) => {
     if (!karaokeLineupElement) {
       return;
@@ -877,10 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageText = overrideState && overrideState.message ? overrideState.message : '';
     const details = overrideState && Array.isArray(overrideState.details) ? overrideState.details : [];
     const overrideType = overrideState && overrideState.type ? String(overrideState.type) : '';
-    const isKaraokeOverride = Boolean(
-      (overrideType === 'karaoke_start' || overrideType === 'karaoke_stage') && karaokeOverrideElement
-    );
-    const isKaraokeStageOverride = overrideType === 'karaoke_stage';
+    const isKaraokeOverride = Boolean(overrideType === 'karaoke_start' && karaokeOverrideElement);
     const isContestStartOverride = overrideType === 'contest_start';
     const isContestWinnerOverride = overrideType === 'winner';
     const isDrinkReadyOverride = overrideType === 'drink_ready';
@@ -967,39 +584,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      if (isKaraokeStageOverride) {
-        if (karaokeRotatorElement) {
-          karaokeRotatorElement.setAttribute('hidden', '');
-          karaokeRotatorElement.style.height = '';
-        }
-        stopKaraokeRotator();
-        stopKaraokeCountdown();
-        updateKaraokeLineup([]);
-        applyKaraokeStage();
-      } else {
-        resetKaraokeStage();
-        if (karaokeRotatorElement) {
-          karaokeRotatorElement.removeAttribute('hidden');
-        }
-        const karaokeData =
-          overrideState && overrideState.karaoke && typeof overrideState.karaoke === 'object'
-            ? overrideState.karaoke
-            : {};
+      const karaokeData =
+        overrideState && overrideState.karaoke && typeof overrideState.karaoke === 'object'
+          ? overrideState.karaoke
+          : {};
 
-        const lineup = Array.isArray(karaokeData.lineup) ? karaokeData.lineup : [];
-        const countdownTarget =
-          karaokeData.countdown_target && typeof karaokeData.countdown_target === 'string'
-            ? karaokeData.countdown_target
-            : '';
-        const countdownLabel =
-          karaokeData.countdown_label && typeof karaokeData.countdown_label === 'string'
-            ? karaokeData.countdown_label
-            : '';
+      const lineup = Array.isArray(karaokeData.lineup) ? karaokeData.lineup : [];
+      const countdownTarget =
+        karaokeData.countdown_target && typeof karaokeData.countdown_target === 'string'
+          ? karaokeData.countdown_target
+          : '';
+      const countdownLabel =
+        karaokeData.countdown_label && typeof karaokeData.countdown_label === 'string'
+          ? karaokeData.countdown_label
+          : '';
 
-        updateKaraokeLineup(lineup);
-        startKaraokeCountdown(countdownTarget, countdownLabel);
-        startKaraokeRotator();
-      }
+      updateKaraokeLineup(lineup);
+      startKaraokeCountdown(countdownTarget, countdownLabel);
+      startKaraokeRotator();
     } else {
       if (generalOverrideElement) {
         generalOverrideElement.removeAttribute('hidden');
@@ -1013,7 +615,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (karaokeRotatorElement) {
         karaokeRotatorElement.style.height = '';
       }
-      resetKaraokeStage();
 
       if (karaokeTitleElement) {
         karaokeTitleElement.textContent = '';
@@ -1181,25 +782,14 @@ document.addEventListener('DOMContentLoaded', () => {
       'display-card--costume',
       'display-card--winner',
       'display-card--long',
-      'display-card--dense',
-      'display-card--spotlight',
-      'display-card--mega'
+      'display-card--dense'
     );
 
     const entryTextLength = getEntryTextLength(entry);
-    const isIdleLayout = layoutState && layoutState.mode !== 'dashboard';
-    if (isIdleLayout && entry.cta && entryTextLength < 230) {
-      card.classList.add('display-card--mega');
-    } else if (isIdleLayout && !hasScoreboard && entryTextLength < 150) {
-      card.classList.add('display-card--spotlight');
-    } else if (entryTextLength > 150) {
+    if (entryTextLength > 150) {
       card.classList.add('display-card--dense');
     } else if (entryTextLength > 95) {
       card.classList.add('display-card--long');
-    } else if (entry.cta && entryTextLength < 180) {
-      card.classList.add('display-card--mega');
-    } else if (!hasScoreboard && entryTextLength < 82) {
-      card.classList.add('display-card--spotlight');
     }
 
     if (hasScoreboard) {
@@ -1493,44 +1083,6 @@ document.addEventListener('DOMContentLoaded', () => {
     updateNoticeOverrideDisplay();
   };
 
-  const setLayoutState = (state, { force = false } = {}) => {
-    let signature = 'null';
-    try {
-      signature = JSON.stringify(state ?? null);
-    } catch (error) {
-      signature = 'null';
-    }
-
-    if (!force && signature === layoutSignature) {
-      return;
-    }
-
-    layoutSignature = signature;
-    layoutState = state && typeof state === 'object' ? state : { mode: 'idle' };
-    applyLayoutState();
-    renderActivityRail({ resetIndex: true });
-    renderEntries({ resetIndex: false });
-  };
-
-  const setActivityState = (state, { force = false } = {}) => {
-    let signature = 'null';
-    try {
-      signature = JSON.stringify(state ?? null);
-    } catch (error) {
-      signature = 'null';
-    }
-
-    if (!force && signature === activitySignature) {
-      return;
-    }
-
-    activitySignature = signature;
-    activityState = state && typeof state === 'object' ? state : {};
-    renderActivityRail({ resetIndex: true });
-  };
-
-  setLayoutState(layoutState, { force: true });
-  setActivityState(activityState, { force: true });
   setOverrideState(initialOverrideState ?? null, { force: true });
   setNoticeOverrideState(initialNoticeOverrideState ?? null, { force: true });
 
@@ -1562,13 +1114,9 @@ document.addEventListener('DOMContentLoaded', () => {
         override: newOverride,
         event_override: newEventOverride,
         notice_override: newNoticeOverride,
-        layout: newLayout,
-        activity: newActivity,
       } = payload;
 
       updateCounts(costumeCount, karaokeCount);
-      setLayoutState(newLayout || { mode: 'idle' });
-      setActivityState(newActivity || {});
       setOverrideState(newEventOverride || newOverride || null);
       setNoticeOverrideState(newNoticeOverride || null);
 
@@ -1618,7 +1166,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       eventSource.onmessage = () => {
         fetchLatestEntries();
-        window.dispatchEvent(new CustomEvent('halloween:display-update'));
       };
 
       eventSource.onopen = () => {

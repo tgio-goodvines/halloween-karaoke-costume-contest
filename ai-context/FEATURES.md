@@ -65,23 +65,7 @@
 - Karaoke signup at `/party/karaoke` is attendee-accessible on the party date.
 - Karaoke signup validation for required name, song title, and artist.
 - Optional YouTube link field for karaoke entries.
-- Attendees can search YouTube from the karaoke signup form when
-  `HALLOWEEN_YOUTUBE_API_KEY` is configured. Search returns embeddable video
-  candidates, and choosing one fills song title, artist/source, YouTube link,
-  video ID, embed status, thumbnail, channel, and duration metadata for
-  submission. Search results show thumbnails, duration badges, and inline
-  embedded previews before selection.
 - Karaoke signup success redirect and lineup display.
-- Apple Music jukebox requests at `/party/jukebox` are attendee-accessible on
-  the party date when admin enables the jukebox.
-- Attendees can search Apple Music catalog songs when
-  `HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN` is configured, choose a result, add an
-  optional request note, and submit it to the app-owned jukebox request queue.
-- Jukebox requests can require host approval or auto-approve depending on admin
-  settings. Active request limits, duplicate cooldown, and explicit-song
-  blocking are enforced server-side.
-- Approved attendee requests are randomly inserted into the upcoming playlist
-  queue within admin-configured position bounds instead of appended.
 - Event highlight slide rotation on the party dashboard. Pre-party slides use
   RSVP detail cards and host updates; party-day slides use the event-night
   lineup/menu/costume/karaoke prompts.
@@ -112,23 +96,13 @@
 ## Karaoke Features
 
 - Guests can join the karaoke lineup with name, song title, artist, and optional YouTube link.
-- Karaoke signups store derived YouTube metadata for live-display readiness:
-  video ID, normalized watch URL, embed status, YouTube title/channel,
-  thumbnail, duration, and last checked timestamp.
 - Admin can add, edit, delete, and reorder karaoke signups.
 - Admin page highlights the first karaoke signup as the opening act.
-- Admin warning/readiness badges show whether each signup is playable on the
-  live display, not embeddable, unverified, invalid, or missing a video.
+- Admin warning appears when the opening act has no YouTube link.
 - Admin can start, stop, and reset the Halloween karaoke party if at least one karaoke signup exists for start.
-- Starting karaoke stages the opening singer on the live display.
-- Admin can stage any singer, start a verified embeddable YouTube video for
-  that singer, return to the singer intro stage card, and advance to the next
-  singer in queue order.
-- Stopping or resetting karaoke clears active karaoke state and karaoke-stage
-  live-display override without deleting the lineup.
-- Live display has client-side support for karaoke stage cards, maximized
-  embedded YouTube video mode, a stage-card Open YouTube action, and legacy
-  countdown/lineup rendering for older override payloads.
+- Starting karaoke sets a live-display override with countdown to 11:00 PM MST and the current lineup.
+- Stopping or resetting karaoke clears active karaoke state and karaoke-start live-display override without deleting the lineup.
+- Live display has client-side support for countdown and rotating karaoke panels.
 
 ## Admin Features
 
@@ -150,17 +124,6 @@
 - Admin can manage the live-display WiFi network and password from the Public
   Access panel. Blank values are allowed and are hidden from the signup portal
   card.
-- Admin can configure YouTube karaoke search from the Public Access panel by
-  opening Google API Credentials, pasting a YouTube Data API v3 key, validating
-  it server-side, enabling it as a runtime override, or clearing the override
-  back to the deployed environment/Vault value.
-- Admin can manage Apple Music jukebox settings from `/admin`: enable/disable,
-  curated-playlist vs autoplay-seed mode, request open/paused state, approval
-  requirement, explicit-song policy, request limits, random insertion bounds,
-  duplicate cooldown, playlist looping, autoplay fallback, and seed metadata.
-- Admin can search Apple Music catalog, add/remove/reorder jukebox playlist
-  songs, approve/reject/skip attendee requests, regenerate the queue, and clear
-  the queue while preserving approved requests for later regeneration.
 - Admin can add, edit, and delete RSVP entries, and see the total guest count.
 - Admin can edit the static party detail cards and map address shown on the RSVP
   page.
@@ -230,7 +193,7 @@ app state.
 - Live display always rotates party-night cards, even before
   `HALLOWEEN_PARTY_START`, so hosts can stage/test the TV experience.
 - Rotates through WiFi/app sign-in instructions, costume signup prompts, karaoke
-  signup prompts, jukebox request prompts, drink-order promotion, live-update explanation cards,
+  signup prompts, drink-order promotion, live-update explanation cards,
   winner/scoreboard cards, costume entries, and karaoke entries.
 - Signup portal card includes admin-configurable WiFi network/password details
   and the party portal link.
@@ -238,37 +201,14 @@ app state.
 - Display data refreshes every 30 seconds via `/api/display-data`.
 - Display also updates immediately through server-sent events from `/api/display-updates`.
 - SSE endpoint sends keep-alive comments on idle intervals.
-- Display supports full-screen event override cards for contest start, winner announcement, and karaoke stage/video mode. Costume and karaoke event modes are mutually exclusive.
+- Display supports full-screen event override cards for contest start, winner announcement, and karaoke start. Costume and karaoke event modes are mutually exclusive.
 - Display supports temporary 10-second drink-ready notice cards with drink images. Drink notices render above the active event override or normal rotation without replacing the event card.
 - Live-display cards use dynamic browser-size scaling, long/dense text classes,
   and overflow wrapping so normal desktop/laptop browser windows and narrow
   browsers do not clip cards.
-- Karaoke stage override includes now-singing data, optional up-next data,
-  optional YouTube watch URL, and optional maximized embedded-video mode while
-  preserving the party title/header.
-- Live display has explicit idle and dashboard layouts. Idle mode is used when
-  jukebox is disabled and there is no drink, costume, or karaoke activity; it
-  keeps one large rotating focus card and scales short cards up with spotlight
-  and mega sizing. Dashboard mode appears when jukebox or activity exists and
-  splits the display into a left jukebox rail, center rotating focus card, and
-  right activity rail.
-- In dashboard mode, the left jukebox rail shows Apple Music album art,
-  now-playing/requester text, and the active jukebox state inside one unified
-  display card. Persistent playback controls stay on admin; the paired live
-  display only shows a temporary Apple Music authorization modal when admin
-  requests Connect/Play. Playback syncs back through
-  `/api/jukebox/playback-event`.
-- In dashboard mode, the right activity rail rotates independently between
-  active bartender orders, recently ready drinks, costume lineup previews, and
-  karaoke lineup previews. Empty rail sections are skipped.
-- MusicKit playback requires host Apple Music authorization in the live-display
-  browser and a configured `HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN`. Browser
-  audio still needs a user gesture before playback; Chromecast should cast the
-  Chrome tab to send display audio to the TV.
+- Karaoke start override includes countdown and upcoming-singer panel markup for
+  the existing client-side karaoke rotator.
 - Display client can cache-bust `display.css` once when an override becomes active.
-- The live display is a no-scroll viewport canvas: body/wrapper/main regions use
-  fixed viewport bounds and internal region sizing so normal desktop and narrow
-  display viewports do not create page scrolling.
 
 ## Styling And UX Features
 

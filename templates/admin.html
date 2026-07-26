@@ -1,22 +1,12 @@
 {% extends "base.html" %}
 {% set title = "Admin Portal" %}
-{% set body_class = "admin-page" %}
 
 {% block content %}
-<section class="admin-panel" data-admin-panel>
+<section class="admin-panel">
   <header class="admin-panel__header">
     <h2>Admin Controls</h2>
-    <p>Use this dashboard to edit the party setup, live display, contests, bar, and jukebox in real time.</p>
+    <p>Use this dashboard to edit the costume contest and karaoke signups in real time.</p>
   </header>
-
-  <nav class="admin-tabs" aria-label="Admin sections" data-admin-tabs>
-    <button type="button" class="admin-tabs__button" data-admin-tab="setup">Setup</button>
-    <button type="button" class="admin-tabs__button" data-admin-tab="jukebox">Jukebox</button>
-    <button type="button" class="admin-tabs__button" data-admin-tab="guests">Guests</button>
-    <button type="button" class="admin-tabs__button" data-admin-tab="stage">Stage</button>
-    <button type="button" class="admin-tabs__button" data-admin-tab="bar">Bar</button>
-    <button type="button" class="admin-tabs__button" data-admin-tab="lineups">Lineups</button>
-  </nav>
 
   {% if errors %}
     <div class="flash flash--error">
@@ -39,7 +29,6 @@
     </div>
   {% endif %}
 
-  <div class="admin-tab-panel" data-admin-tab-panel="setup">
   <section class="admin-section admin-section--access">
     <h3>Public Access</h3>
     <p>Control what guests see at tnq-halloween.com and manage the party code guests enter when they submit an RSVP.</p>
@@ -154,412 +143,9 @@
           Save WiFi Details
         </button>
       </form>
-
-      <form method="post" class="access-settings__form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <h4>YouTube Karaoke Search</h4>
-        <div class="party-code-status">
-          <p class="contest-status {% if youtube_api_configured %}contest-status--active{% else %}contest-status--inactive{% endif %}">
-            YouTube search is {% if youtube_api_configured %}configured{% else %}not configured{% endif %}.
-          </p>
-          <p class="contest-status">Source: {{ youtube_api_key_source }}</p>
-        </div>
-        <a
-          href="https://console.cloud.google.com/apis/credentials"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="button button--outline"
-        >
-          Open Google API Credentials
-        </a>
-        <label for="youtube_api_key">Paste YouTube Data API key</label>
-        <input
-          type="password"
-          id="youtube_api_key"
-          name="youtube_api_key"
-          maxlength="200"
-          autocomplete="off"
-          placeholder="API key is validated, not displayed">
-        <p class="form-helper">Enable YouTube Data API v3 for the key and restrict it to that API. Runtime saves last until the app restarts; add the key to Vault as youtube_api_key for production.</p>
-        <div class="contest-actions">
-          <button type="submit" name="action" value="update_youtube_api_key" class="button button--primary">
-            Validate And Enable Key
-          </button>
-          <button type="submit" name="action" value="clear_youtube_api_key_override" class="button button--outline">
-            Clear Runtime Override
-          </button>
-        </div>
-      </form>
     </div>
   </section>
-  </div>
 
-  <div class="admin-tab-panel" data-admin-tab-panel="jukebox">
-  <section class="admin-section admin-section--jukebox">
-    <h3>Apple Music Jukebox</h3>
-    <p>Build the party playlist, approve attendee requests, and command the live display that owns Apple Music playback.</p>
-    <div class="contest-status">
-      Procedure: Pair and authorize the display, complete Apple Music sign-in on the live display browser, add songs to the active playlist, approve requests into that playlist, then use DJ controls here.
-    </div>
-
-    <div class="access-settings">
-      <div class="access-settings__form">
-        <h4>DJ Controls</h4>
-        <div class="party-code-status">
-          <p class="contest-status {% if jukebox_playback_control.status == 'error' %}contest-status--inactive{% elif jukebox_playback_control.status == 'pending' %}contest-status--warning{% else %}contest-status--active{% endif %}" data-jukebox-command-status>
-            Last command: {{ jukebox_playback_control.command or 'none' }} · {{ jukebox_playback_control.status }}
-          </p>
-          {% if jukebox_now_playing.title %}
-            <p class="contest-status" data-jukebox-now-playing>Now playing: {{ jukebox_now_playing.title }}{% if jukebox_now_playing.artist %} by {{ jukebox_now_playing.artist }}{% endif %}</p>
-          {% else %}
-            <p class="contest-status" data-jukebox-now-playing>No song is marked as playing yet.</p>
-          {% endif %}
-          {% if jukebox_playback_control.error %}
-            <p class="contest-status contest-status--inactive" data-jukebox-command-error>{{ jukebox_playback_control.error }}</p>
-          {% else %}
-            <p class="contest-status contest-status--inactive" data-jukebox-command-error hidden></p>
-          {% endif %}
-          <p class="contest-status {% if jukebox_developer_token_configured %}contest-status--active{% else %}contest-status--inactive{% endif %}">
-            Token: {% if jukebox_developer_token_configured %}configured{% else %}missing{% endif %}
-          </p>
-          <p class="contest-status {% if jukebox_display_status.paired %}contest-status--active{% else %}contest-status--warning{% endif %}">
-            Display: {% if jukebox_display_status.paired %}paired{% else %}waiting for paired tab{% endif %}
-          </p>
-          <p class="contest-status {% if jukebox_display_status.musickit_loaded %}contest-status--active{% else %}contest-status--warning{% endif %}">
-            MusicKit: {% if jukebox_display_status.musickit_loaded %}loaded{% else %}not confirmed{% endif %}
-          </p>
-          <p class="contest-status {% if jukebox_display_status.apple_authorized %}contest-status--active{% else %}contest-status--warning{% endif %}">
-            Apple Account: {% if jukebox_display_status.apple_authorized %}authorized{% else %}authorization needed{% endif %}
-          </p>
-          <p class="contest-status {% if jukebox_display_status.playback_ready %}contest-status--active{% else %}contest-status--warning{% endif %}">
-            Playback: {% if jukebox_display_status.playback_ready %}ready{% else %}not ready{% endif %}
-          </p>
-          {% if jukebox_display_status.last_error %}
-            <p class="contest-status contest-status--inactive">{{ jukebox_display_status.last_error }}</p>
-          {% elif jukebox_display_status.message %}
-            <p class="contest-status">{{ jukebox_display_status.message }}</p>
-          {% endif %}
-        </div>
-        <p class="form-helper">Pair & Authorize Display opens a playback-only live-display tab and requests Apple Music authorization there. Complete Apple sign-in on that tab before pressing Play.</p>
-        <div class="contest-actions">
-          <form method="post" target="_blank" data-admin-native-form>
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" name="action" value="pair_live_display" class="button button--primary">Pair & Authorize Display</button>
-          </form>
-          <form method="post" data-jukebox-dj-form data-jukebox-dj-endpoint="{{ url_for('jukebox_dj_command') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="jukebox_dj_command">
-            <button type="submit" name="jukebox_command" value="connect" class="button button--outline" {% if not jukebox_developer_token_configured %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Connect Apple Music</button>
-            <button type="submit" name="jukebox_command" value="play" class="button button--primary" {% if not jukebox_playback_ready %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Play</button>
-            <button type="submit" name="jukebox_command" value="pause" class="button button--outline" {% if not jukebox_transport_ready %}disabled title="Start playback before using transport controls."{% endif %}>Pause</button>
-            <button type="submit" name="jukebox_command" value="stop" class="button button--outline" {% if not jukebox_transport_ready %}disabled title="Start playback before using transport controls."{% endif %}>Stop</button>
-            <button type="submit" name="jukebox_command" value="skip" class="button button--danger" {% if not jukebox_transport_ready %}disabled title="Start playback before using transport controls."{% endif %}>Skip</button>
-          </form>
-          <form method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" name="action" value="restart_jukebox_playlist" class="button button--primary" {% if not jukebox_playback_ready %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Restart Playlist</button>
-            <button type="submit" name="action" value="reset_jukebox_playlist" class="button button--outline">Reset Playlist</button>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <div class="access-settings">
-      <form method="post" class="access-settings__form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <h4>Jukebox Settings</h4>
-        <div class="party-code-status">
-          <p class="contest-status {% if jukebox_settings.enabled %}contest-status--active{% else %}contest-status--inactive{% endif %}">
-            Jukebox is {% if jukebox_settings.enabled %}enabled{% else %}disabled{% endif %}.
-          </p>
-          <p class="contest-status {% if jukebox_developer_token_configured %}contest-status--active{% else %}contest-status--inactive{% endif %}">
-            Apple Music developer token is {% if jukebox_developer_token_configured %}configured{% else %}not configured{% endif %}.
-          </p>
-        </div>
-        <label>
-          Jukebox enabled
-          <select name="jukebox_enabled">
-            <option value="yes" {% if jukebox_settings.enabled %}selected{% endif %}>Enabled</option>
-            <option value="no" {% if not jukebox_settings.enabled %}selected{% endif %}>Disabled</option>
-          </select>
-        </label>
-        <label>
-          Mode
-          <select name="jukebox_mode">
-            <option value="manual_playlist" {% if jukebox_settings.mode == 'manual_playlist' %}selected{% endif %}>Curated playlist</option>
-            <option value="autoplay_seed" {% if jukebox_settings.mode == 'autoplay_seed' %}selected{% endif %}>Autoplay seed</option>
-          </select>
-        </label>
-        <label>
-          Requests
-          <select name="jukebox_requests_enabled">
-            <option value="yes" {% if jukebox_settings.requests_enabled %}selected{% endif %}>Open</option>
-            <option value="no" {% if not jukebox_settings.requests_enabled %}selected{% endif %}>Paused</option>
-          </select>
-        </label>
-        <label>
-          Approval
-          <select name="jukebox_approval_required">
-            <option value="yes" {% if jukebox_settings.approval_required %}selected{% endif %}>Approval required</option>
-            <option value="no" {% if not jukebox_settings.approval_required %}selected{% endif %}>Auto-approve</option>
-          </select>
-        </label>
-        <label>
-          Explicit songs
-          <select name="jukebox_explicit_allowed">
-            <option value="yes" {% if jukebox_settings.explicit_allowed %}selected{% endif %}>Allowed</option>
-            <option value="no" {% if not jukebox_settings.explicit_allowed %}selected{% endif %}>Blocked</option>
-          </select>
-        </label>
-        <div class="admin-entry__fields">
-          <label>
-            Max active requests per guest
-            <input type="number" name="jukebox_max_requests_per_user" min="0" max="10" value="{{ jukebox_settings.max_requests_per_user }}">
-          </label>
-          <label>
-            Duplicate cooldown
-            <input type="number" name="jukebox_duplicate_cooldown" min="0" max="50" value="{{ jukebox_settings.duplicate_cooldown }}">
-          </label>
-        </div>
-        <label>
-          Loop playlist
-          <select name="jukebox_loop_playlist">
-            <option value="yes" {% if jukebox_settings.loop_playlist %}selected{% endif %}>Loop when queue ends</option>
-            <option value="no" {% if not jukebox_settings.loop_playlist %}selected{% endif %}>Stop when queue ends</option>
-          </select>
-        </label>
-        <label>
-          Shuffle playback
-          <select name="jukebox_shuffle_playlist">
-            <option value="yes" {% if jukebox_settings.shuffle_playlist %}selected{% endif %}>Shuffle active playlist</option>
-            <option value="no" {% if not jukebox_settings.shuffle_playlist %}selected{% endif %}>Keep playlist order</option>
-          </select>
-        </label>
-        <label>
-          Apple Music Autoplay fallback
-          <select name="jukebox_autoplay_fallback">
-            <option value="yes" {% if jukebox_settings.autoplay_fallback %}selected{% endif %}>Allow fallback</option>
-            <option value="no" {% if not jukebox_settings.autoplay_fallback %}selected{% endif %}>Keep app queue only</option>
-          </select>
-        </label>
-        <div class="admin-entry__fields">
-          <label>
-            Seed kind
-            <input type="text" name="jukebox_seed_kind" value="{{ jukebox_settings.seed_kind }}" maxlength="40">
-          </label>
-          <label>
-            Seed Apple Music ID
-            <input type="text" name="jukebox_seed_id" value="{{ jukebox_settings.seed_id }}" maxlength="160">
-          </label>
-          <label>
-            Seed title
-            <input type="text" name="jukebox_seed_title" value="{{ jukebox_settings.seed_title }}" maxlength="160">
-          </label>
-          <label>
-            Seed artist
-            <input type="text" name="jukebox_seed_artist" value="{{ jukebox_settings.seed_artist }}" maxlength="160">
-          </label>
-        </div>
-        <button type="submit" name="action" value="update_jukebox_settings" class="button button--primary">Save Jukebox Settings</button>
-      </form>
-
-      <div class="access-settings__form">
-        <h4>Playlists</h4>
-        <p class="form-helper">Build multiple playlists, choose one active playlist, and use it as the live display queue source.</p>
-        <div class="party-code-status">
-          <p class="contest-status contest-status--active">
-            Active: <span data-jukebox-active-playlist-name>{{ jukebox_active_playlist_name }}</span> · <span data-jukebox-active-playlist-count>{{ jukebox_queue|length }}</span> song{{ 's' if jukebox_queue|length != 1 else '' }} · <span data-jukebox-active-playlist-duration>{{ jukebox_active_duration_label }}</span>
-          </p>
-        </div>
-        <form method="post" class="admin-entry__fields">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="action" value="create_jukebox_playlist">
-          <label>
-            New playlist name
-            <input type="text" name="playlist_name" maxlength="80" placeholder="Dinner, Dance Floor, Late Night">
-          </label>
-          <button type="submit" class="button button--primary">Create Playlist</button>
-        </form>
-        {% if jukebox_playlists %}
-          <div class="admin-entry-list">
-            {% for playlist in jukebox_playlists %}
-              <article class="admin-entry admin-entry--static">
-                <div class="admin-entry__summary">
-                  <span class="admin-entry__rank">{% if playlist.is_active %}Active{% else %}{{ loop.index }}{% endif %}</span>
-                  <span class="admin-entry__summary-text">
-                    <strong>{{ playlist.name }}</strong>
-                    <span>{{ playlist.track_count }} song{{ 's' if playlist.track_count != 1 else '' }} · {{ playlist.duration_label }}</span>
-                  </span>
-                </div>
-                <div class="admin-entry__actions">
-                  <form method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="rename_jukebox_playlist">
-                    <input type="hidden" name="playlist_id" value="{{ playlist.id }}">
-                    <input type="text" name="playlist_name" value="{{ playlist.name }}" maxlength="80" aria-label="Playlist name">
-                    <button type="submit" class="button">Rename</button>
-                  </form>
-                  {% if not playlist.is_active %}
-                    <form method="post">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <input type="hidden" name="action" value="set_active_jukebox_playlist">
-                      <input type="hidden" name="playlist_id" value="{{ playlist.id }}">
-                      <button type="submit" class="button button--primary">Make Active</button>
-                    </form>
-                  {% endif %}
-                  {% if jukebox_playlists|length > 1 %}
-                    <form method="post">
-                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <input type="hidden" name="action" value="delete_jukebox_playlist">
-                      <input type="hidden" name="playlist_id" value="{{ playlist.id }}">
-                      <button type="submit" class="button button--danger">Delete</button>
-                    </form>
-                  {% endif %}
-                </div>
-              </article>
-            {% endfor %}
-          </div>
-        {% endif %}
-      </div>
-
-      <form method="post" class="access-settings__form jukebox-search-form" data-jukebox-search-form>
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <h4>Add Song To Active Playlist</h4>
-        <p class="form-helper">The active playlist is the running party queue. Add, remove, or reorder songs here and the display updates in realtime.</p>
-        <label for="admin_jukebox_search_query">Apple Music search</label>
-        <div class="song-search__controls">
-          <input type="search" id="admin_jukebox_search_query" data-jukebox-search-input placeholder="Song or artist">
-          <button type="button" class="button button--outline" data-jukebox-search-button>Search</button>
-        </div>
-        <div class="song-search__status" data-jukebox-search-status></div>
-        <div class="song-search__results" data-jukebox-search-results></div>
-        <input type="hidden" name="apple_music_id" data-jukebox-field="apple_music_id">
-        <input type="hidden" name="title" data-jukebox-field="title">
-        <input type="hidden" name="artist" data-jukebox-field="artist">
-        <input type="hidden" name="album" data-jukebox-field="album">
-        <input type="hidden" name="artwork_url" data-jukebox-field="artwork_url">
-        <input type="hidden" name="duration_ms" data-jukebox-field="duration_ms">
-        <input type="hidden" name="explicit" data-jukebox-field="explicit">
-        <p class="form-helper" data-jukebox-selected>Choose a song from search before adding it to the active playlist.</p>
-        <button type="submit" name="action" value="add_jukebox_track" class="button button--primary">Add To Playlist</button>
-      </form>
-    </div>
-
-    <h4>Active Playlist</h4>
-    <p class="form-helper">This is the one playable party playlist. Curated songs and approved requests appear here together in the order the live display will use.</p>
-    {% if jukebox_queue %}
-      <div class="admin-entry-list">
-        {% for item in jukebox_queue %}
-          <article class="admin-entry admin-entry--static">
-            <div class="admin-entry__summary">
-              <span class="admin-entry__rank">#{{ loop.index }}</span>
-              <span class="admin-entry__summary-text">
-                <strong>{{ item.title }}</strong>
-                <span>
-                  {% if item.status == 'playing' %}
-                    Playing now
-                  {% elif item.source == 'request' %}
-                    Guest request{% if item.requester_name %} from {{ item.requester_name }}{% endif %}
-                  {% else %}
-                    Curated playlist
-                  {% endif %}
-                  {% if item.artist %} · {{ item.artist }}{% endif %}
-                  {% if item.duration_ms %} · {{ jukebox_duration_label(item.duration_ms) }}{% endif %}
-                </span>
-              </span>
-            </div>
-            <div class="admin-entry__actions">
-              <form method="post" data-jukebox-dj-form data-jukebox-dj-endpoint="{{ url_for('jukebox_dj_command') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="action" value="jukebox_dj_command">
-                <input type="hidden" name="jukebox_command" value="play">
-                <input type="hidden" name="queue_item_id" value="{{ item.id }}">
-                <button type="submit" class="button button--primary" {% if not jukebox_playback_ready %}disabled title="{{ jukebox_playback_blocker }}"{% endif %}>Play Now</button>
-              </form>
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="queue_item_id" value="{{ item.id }}">
-                <input type="hidden" name="action" value="move_jukebox_queue_item_up">
-                <button type="submit" class="button">Move Up</button>
-              </form>
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="queue_item_id" value="{{ item.id }}">
-                <input type="hidden" name="action" value="move_jukebox_queue_item_down">
-                <button type="submit" class="button">Move Down</button>
-              </form>
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="queue_item_id" value="{{ item.id }}">
-                <input type="hidden" name="playlist_track_id" value="{{ item.playlist_track_id }}">
-                <input type="hidden" name="request_id" value="{{ item.request_id }}">
-                <input type="hidden" name="source" value="{{ item.source }}">
-                <input type="hidden" name="apple_music_id" value="{{ item.apple_music_id }}">
-                <input type="hidden" name="title" value="{{ item.title }}">
-                <input type="hidden" name="artist" value="{{ item.artist }}">
-                <input type="hidden" name="action" value="remove_jukebox_queue_item">
-                <button type="submit" class="button button--danger">Remove</button>
-              </form>
-            </div>
-          </article>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="admin-empty">No active playlist songs yet.</p>
-    {% endif %}
-
-    <h4>Requests</h4>
-    <p class="form-helper">Approve requests to add them into the active playlist. Rejecting a request removes it from this list.</p>
-    {% if jukebox_requests %}
-      <div class="admin-entry-list">
-        {% for request_item in jukebox_requests %}
-          <article class="admin-entry admin-entry--static">
-            <div class="admin-entry__summary">
-              <span class="admin-entry__rank" data-jukebox-request-status="{{ request_item.id }}">{{ request_item.status }}</span>
-              <span class="admin-entry__summary-text">
-                <strong>{{ request_item.title }}</strong>
-                <span>{{ request_item.artist }} · requested by {{ request_item.requester_name or 'Guest' }}</span>
-                {% if jukebox_request_queue_positions.get(request_item.id) %}
-                  <span>Queued #{{ jukebox_request_queue_positions.get(request_item.id) }}</span>
-                {% elif request_item.status == 'pending' %}
-                  <span>Waiting for host approval</span>
-                {% endif %}
-                {% if request_item.note %}<span>{{ request_item.note }}</span>{% endif %}
-              </span>
-            </div>
-            <div class="admin-entry__actions">
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="request_id" value="{{ request_item.id }}">
-                <input type="hidden" name="action" value="approve_jukebox_request">
-                <button type="submit" class="button button--primary">Approve</button>
-              </form>
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="request_id" value="{{ request_item.id }}">
-                <input type="hidden" name="apple_music_id" value="{{ request_item.apple_music_id }}">
-                <input type="hidden" name="title" value="{{ request_item.title }}">
-                <input type="hidden" name="artist" value="{{ request_item.artist }}">
-                <input type="hidden" name="action" value="reject_jukebox_request">
-                <button type="submit" class="button button--outline">Reject</button>
-              </form>
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="request_id" value="{{ request_item.id }}">
-                <input type="hidden" name="action" value="skip_jukebox_request">
-                <button type="submit" class="button button--danger">Skip</button>
-              </form>
-            </div>
-          </article>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="admin-empty">No jukebox requests yet.</p>
-    {% endif %}
-  </section>
-  </div>
-
-  <div class="admin-tab-panel" data-admin-tab-panel="guests">
   <section class="admin-section admin-section--rsvps">
     <h3>RSVP List</h3>
     <p>
@@ -746,9 +332,7 @@
       <p class="admin-empty">No RSVP updates have been posted yet.</p>
     {% endif %}
   </section>
-  </div>
 
-  <div class="admin-tab-panel" data-admin-tab-panel="stage">
   <section class="admin-section admin-section--contest">
     <h3>Costume Contest Controls</h3>
     <p>Kick off the contest, monitor live voting, and announce the winner straight from this dashboard.</p>
@@ -909,29 +493,6 @@
       <p class="contest-status contest-status--inactive">Karaoke party hasn't been started yet.</p>
     {% endif %}
 
-    {% if current_karaoke_signup %}
-      <div class="karaoke-lineup karaoke-lineup--current">
-        <h4>Now Staged</h4>
-        <p class="karaoke-lineup__name">{{ current_karaoke_signup.name }}</p>
-        <p class="karaoke-lineup__song">{{ '"%s"' | format(current_karaoke_signup.song_title) }} by {{ current_karaoke_signup.artist }}</p>
-        <p class="karaoke-lineup__note">{{ karaoke_video_status_label(current_karaoke_signup.youtube_embed_status) }}</p>
-        <div class="contest-actions">
-          <form method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" name="action" value="return_karaoke_stage_intro" class="button button--outline">
-              Return to Stage Card
-            </button>
-          </form>
-          <form method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" name="action" value="next_karaoke_singer" class="button button--primary">
-              Next Singer
-            </button>
-          </form>
-        </div>
-      </div>
-    {% endif %}
-
     {% set first_karaoke = karaoke_signups[0] if karaoke_signups else None %}
     {% if first_karaoke %}
       <div class="karaoke-lineup">
@@ -946,9 +507,7 @@
       <p class="contest-status">Add karaoke signups to build the performance queue.</p>
     {% endif %}
   </section>
-  </div>
 
-  <div class="admin-tab-panel" data-admin-tab-panel="bar">
   <section class="admin-section admin-section--bar">
     <h3>Bar Operations</h3>
     <p>
@@ -1163,9 +722,7 @@
       <p class="admin-empty">No food or drink menu items yet.</p>
     {% endif %}
   </section>
-  </div>
 
-  <div class="admin-tab-panel" data-admin-tab-panel="lineups">
   <section class="admin-section admin-section--users">
     <h3>User Accounts</h3>
     <p>Create accounts, edit access, reset passwords, and remove users.</p>
@@ -1279,12 +836,6 @@
         {% endif %}
         <form method="post" class="admin-entry__form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="youtube_video_id">
-          <input type="hidden" name="youtube_embed_status">
-          <input type="hidden" name="youtube_title">
-          <input type="hidden" name="youtube_channel">
-          <input type="hidden" name="youtube_thumbnail_url">
-          <input type="hidden" name="youtube_duration">
           <div class="admin-entry__fields">
             <label>
               Name
@@ -1391,19 +942,12 @@
                 <span class="admin-entry__summary-text">
                   <strong>{{ signup.name }}</strong>
                   <span>{{ signup.song_title }}{% if signup.artist %} by {{ signup.artist }}{% endif %}</span>
-                  <span class="karaoke-video-badge">{{ karaoke_video_status_label(signup.youtube_embed_status) }}</span>
                 </span>
               </summary>
               <form method="post" class="admin-entry__form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="entry_id" value="{{ signup.id }}">
                 <input type="hidden" name="index" value="{{ loop.index0 }}">
-                <input type="hidden" name="youtube_video_id" value="{{ signup.youtube_video_id }}">
-                <input type="hidden" name="youtube_embed_status" value="{{ signup.youtube_embed_status }}">
-                <input type="hidden" name="youtube_title" value="{{ signup.youtube_title }}">
-                <input type="hidden" name="youtube_channel" value="{{ signup.youtube_channel }}">
-                <input type="hidden" name="youtube_thumbnail_url" value="{{ signup.youtube_thumbnail_url }}">
-                <input type="hidden" name="youtube_duration" value="{{ signup.youtube_duration }}">
                 <div class="admin-entry__fields">
                   <label>
                     Name
@@ -1423,16 +967,6 @@
                   </label>
                 </div>
                 <div class="admin-entry__actions">
-                  <button type="submit" name="action" value="set_karaoke_stage" class="button button--outline">Set Stage</button>
-                  <button
-                    type="submit"
-                    name="action"
-                    value="start_karaoke_song"
-                    class="button button--primary"
-                    {% if signup.youtube_embed_status != 'verified_embeddable' %}disabled{% endif %}
-                  >
-                    Start Song
-                  </button>
                   <button type="submit" name="action" value="move_karaoke_up" class="button">Move Up</button>
                   <button type="submit" name="action" value="move_karaoke_down" class="button">Move Down</button>
                   <button type="submit" name="action" value="update_karaoke" class="button button--primary">Save Changes</button>
@@ -1447,11 +981,5 @@
       {% endif %}
     </section>
   </div>
-  </div>
 </section>
-{% endblock %}
-
-{% block scripts %}
-  <script src="{{ url_for('static', filename='jukebox-search.js') }}"></script>
-  <script src="{{ url_for('static', filename='admin.js', v='20260725-jukebox-actions2') }}"></script>
 {% endblock %}

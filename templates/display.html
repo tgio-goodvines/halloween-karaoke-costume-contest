@@ -7,12 +7,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='display.css') }}">
   </head>
-  {% set layout_mode = display_layout.mode if display_layout else 'idle' %}
   <body
-    class="display-mode display-mode--{{ layout_mode }}{% if display_layout and display_layout.left_rail_enabled %} display-mode--jukebox{% endif %}{% if display_layout and display_layout.right_rail_enabled %} display-mode--activity{% endif %}"
+    class="display-mode"
     data-display-api="{{ url_for('display_data') }}"
     data-display-updates="{{ url_for('display_updates') }}"
-    data-csrf-token="{{ csrf_token() }}"
   >
     {% set first_entry = entries[0] if entries else None %}
     {% set cta_details = first_entry.get('cta_details', {}) if first_entry else {} %}
@@ -35,30 +33,7 @@
         </div>
       </header>
 
-      <main class="display-main" data-display-main>
-        <aside class="display-dashboard__rail display-dashboard__rail--left" data-left-rail{% if not display_layout or not display_layout.left_rail_enabled %} hidden{% endif %}>
-        <section class="jukebox-display" data-jukebox-display{% if not jukebox or not jukebox.display_active %} hidden{% endif %}>
-          <div class="jukebox-display__player">
-            <p class="display-category">Apple Music Jukebox</p>
-            <div class="jukebox-display__art-wrap">
-              <img class="jukebox-display__art" data-jukebox-art alt="" hidden>
-              <div class="jukebox-display__art-placeholder" data-jukebox-art-placeholder>AM</div>
-            </div>
-            <div class="jukebox-display__meta">
-              <p class="jukebox-display__eyebrow" data-jukebox-state-label>Ready</p>
-              <h2 data-jukebox-title>{{ jukebox.now_playing.title if jukebox and jukebox.now_playing else 'Start the jukebox' }}</h2>
-              <p data-jukebox-artist>{{ jukebox.now_playing.artist if jukebox and jukebox.now_playing else 'Connect the host Apple Music account on this display' }}</p>
-              <p class="jukebox-display__requester" data-jukebox-requester></p>
-            </div>
-            <p class="jukebox-display__status" data-jukebox-status hidden>Host Apple Music authorization powers playback for everyone. Cast this Chrome tab for TV audio.</p>
-            <div class="jukebox-display__queue">
-              <p class="display-category">Up Next</p>
-              <ol data-jukebox-queue></ol>
-            </div>
-          </div>
-        </section>
-        </aside>
-        <section class="display-dashboard__focus" data-display-focus>
+      <main class="display-main">
         <section class="display-card{% if first_entry and not override %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry or override %} hidden{% endif %}>
           <div class="display-card__default" data-entry-default{% if first_entry and first_entry.get('cta_details') %} hidden{% endif %}>
             <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
@@ -154,36 +129,6 @@
               <h2 class="karaoke-card__title" data-karaoke-title></h2>
               <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
               <p class="karaoke-card__message" data-karaoke-message></p>
-              <div class="karaoke-stage" data-karaoke-stage hidden>
-                <div class="karaoke-stage__intro" data-karaoke-stage-intro>
-                  <p class="karaoke-stage__eyebrow">Now Singing</p>
-                  <h3 class="karaoke-stage__singer" data-karaoke-stage-singer></h3>
-                  <p class="karaoke-stage__song" data-karaoke-stage-song></p>
-                  <a
-                    class="karaoke-stage__youtube"
-                    data-karaoke-stage-youtube
-                    href="#"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    hidden
-                  >
-                    Open YouTube
-                  </a>
-                  <p class="karaoke-stage__next" data-karaoke-stage-next hidden></p>
-                </div>
-                <div class="karaoke-video" data-karaoke-video hidden>
-                  <div class="karaoke-video__frame-wrap">
-                    <iframe
-                      class="karaoke-video__frame"
-                      data-karaoke-video-frame
-                      title="Karaoke YouTube player"
-                      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-                      allowfullscreen
-                    ></iframe>
-                  </div>
-                  <p class="karaoke-video__fallback" data-karaoke-video-fallback hidden></p>
-                </div>
-              </div>
               <div class="karaoke-card__content">
                 <div class="karaoke-card__rotator" data-karaoke-rotator>
                   <section
@@ -227,109 +172,12 @@
             </ul>
           </div>
         </section>
-        </section>
-        <aside class="display-dashboard__rail display-dashboard__rail--right" data-activity-rail{% if not display_layout or not display_layout.right_rail_enabled %} hidden{% endif %}>
-          <div class="activity-rail__panel is-active" data-activity-panel="drinks">
-            <p class="display-category">Bar Queue</p>
-            <div class="activity-rail__content" data-activity-drinks>
-              {% set active_drinks = display_activity.drink_orders if display_activity else [] %}
-              {% if active_drinks %}
-                {% for order in active_drinks[:4] %}
-                  <article class="activity-item">
-                    <span class="activity-item__label">{{ order.status_label }}</span>
-                    <strong>{{ order.drink }}</strong>
-                    <span>{{ order.guest }}</span>
-                  </article>
-                {% endfor %}
-              {% else %}
-                <p class="activity-rail__empty">No active bar orders.</p>
-              {% endif %}
-            </div>
-          </div>
-          <div class="activity-rail__panel" data-activity-panel="ready">
-            <p class="display-category">Ready Drinks</p>
-            <div class="activity-rail__content" data-activity-ready>
-              {% set ready_drinks = display_activity.ready_drinks if display_activity else [] %}
-              {% if ready_drinks %}
-                {% for order in ready_drinks[:4] %}
-                  <article class="activity-item activity-item--ready">
-                    {% if order.image_url %}
-                      <img src="{{ order.image_url }}" alt="" class="activity-item__image">
-                    {% endif %}
-                    <span class="activity-item__label">Ready now</span>
-                    <strong>{{ order.drink }}</strong>
-                    <span>{{ order.guest }}</span>
-                  </article>
-                {% endfor %}
-              {% else %}
-                <p class="activity-rail__empty">No drinks ready right now.</p>
-              {% endif %}
-            </div>
-          </div>
-          <div class="activity-rail__panel" data-activity-panel="costumes">
-            <p class="display-category">Costume Lineup</p>
-            <div class="activity-rail__content" data-activity-costumes>
-              {% set costumes = display_activity.costumes if display_activity else [] %}
-              {% if costumes %}
-                {% for entry in costumes[:5] %}
-                  <article class="activity-item">
-                    <span class="activity-item__label">Contestant</span>
-                    <strong>{{ entry.name }}</strong>
-                    <span>{{ entry.costume }}</span>
-                  </article>
-                {% endfor %}
-              {% else %}
-                <p class="activity-rail__empty">Costume lineup is open.</p>
-              {% endif %}
-            </div>
-          </div>
-          <div class="activity-rail__panel" data-activity-panel="karaoke">
-            <p class="display-category">Karaoke Lineup</p>
-            <div class="activity-rail__content" data-activity-karaoke>
-              {% set karaoke = display_activity.karaoke if display_activity else [] %}
-              {% if karaoke %}
-                {% for entry in karaoke[:5] %}
-                  <article class="activity-item">
-                    <span class="activity-item__label">Singer #{{ loop.index }}</span>
-                    <strong>{{ entry.name }}</strong>
-                    <span>{{ entry.song_title }}{% if entry.artist %} · {{ entry.artist }}{% endif %}</span>
-                  </article>
-                {% endfor %}
-              {% else %}
-                <p class="activity-rail__empty">Karaoke lineup is open.</p>
-              {% endif %}
-            </div>
-          </div>
-        </aside>
       </main>
     </div>
-    <section
-      class="jukebox-auth"
-      data-jukebox-auth
-      role="dialog"
-      aria-live="assertive"
-      aria-label="Apple Music host authorization"
-      hidden
-    >
-      <div class="jukebox-auth__panel">
-        <p class="display-category">Host Apple Music</p>
-        <h2 data-jukebox-auth-title>Authorize Apple Music Display</h2>
-        <p data-jukebox-auth-message>Use this display browser to sign in with the host Apple Music subscriber account before playback starts.</p>
-        <div class="jukebox-auth__actions">
-          <button type="button" class="button button--primary" data-jukebox-auth-action>Authorize Apple Music</button>
-          <button type="button" class="button button--outline" data-jukebox-auth-dismiss>Dismiss</button>
-        </div>
-      </div>
-    </section>
 
     <script id="entries-data" type="application/json">{{ entries | tojson }}</script>
     <script id="override-data" type="application/json">{{ override | tojson }}</script>
     <script id="notice-override-data" type="application/json">{{ notice_override | tojson }}</script>
-    <script id="jukebox-data" type="application/json">{{ jukebox | tojson }}</script>
-    <script id="layout-data" type="application/json">{{ display_layout | tojson }}</script>
-    <script id="activity-data" type="application/json">{{ display_activity | tojson }}</script>
-    <script src="{{ url_for('static', filename='display.js', v='20260725-dj9') }}"></script>
-    <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js"></script>
-    <script src="{{ url_for('static', filename='jukebox-player.js', v='20260725-ready1') }}"></script>
+    <script src="{{ url_for('static', filename='display.js') }}"></script>
   </body>
 </html>

@@ -6,7 +6,7 @@
     <title>{{ title if title else party_title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
-  <body class="{{ body_class if body_class is defined and body_class else 'attendee-page' }}">
+  <body>
     <header class="site-header">
       <div class="container site-header__inner">
         <span class="site-header__status site-header__status--clearance" aria-hidden="true">
@@ -33,7 +33,6 @@
                   {% if party_day_has_arrived %}
                     <a href="{{ url_for('party_menu') }}">Menu</a>
                     <a href="{{ url_for('party_drink_history') }}">Drink History</a>
-                    <a href="{{ url_for('party_jukebox') }}">Jukebox</a>
                     <a href="{{ url_for('party_costumes') }}">Costume</a>
                     {% if costume_contest_state.voting_visible %}
                       <a href="{{ url_for('party_costume_voting') }}">Voting</a>

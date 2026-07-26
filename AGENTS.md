@@ -11,8 +11,6 @@ Start future repo work by reading these persistent context files:
 - `ai-context/UI_UX_DESIGN_SYSTEM.md` - current lab-terminal visual design system, palette, typography, surfaces, and implementation notes.
 - `ai-context/STYLING_REFINEMENT_PROGRESS.md` - attached-wireframe refinement progress across pages, live display, and generated emails.
 - `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
-- `ai-context/KARAOKE_YOUTUBE_STAGE_PROGRESS.md` - YouTube search, karaoke metadata, admin stage/video controls, and live-display stage/video mode progress.
-- `ai-context/JUKEBOX_APPLE_MUSIC_FEATURE.md` - Apple Music jukebox playlist, attendee requests, app-owned queue, MusicKit live-display playback, and implementation caveats.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
@@ -32,9 +30,6 @@ Important working notes:
 - Before the party date, `/party` shows pre-party RSVP details and host updates in Event Highlights and hides/blocks attendee menu, costume, karaoke, drink-order, and voting actions. On the party date, `/party` switches to the event-night dashboard.
 - `/party/menu` lets signed-in attendees view food/drink menu cards with images and order available drinks on the party date; food is currently view-only.
 - Admin can manage food/drink menu items, image URLs, availability, and drink recipes from `/admin`; bartender access is assigned to existing party accounts through account roles.
-- Karaoke signups can include YouTube metadata from attendee search; admin can stage singers, start verified embeddable videos, advance to the next singer, and the live display can show a current-singer stage card or maximized embedded video with an Open YouTube action from the stage card.
-- Apple Music jukebox support uses `HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN` and optional `HALLOWEEN_APPLE_MUSIC_STOREFRONT`; admin manages playlist/settings/requests from `/admin`, attendees request songs at `/party/jukebox` on the party date, and approved requests are randomly inserted into the app-owned queue.
-- Live-display jukebox playback is host-authorized MusicKit in the `/live-display` browser. Cast the Chrome tab, not the full screen, when using Chromecast for TV audio. Browser autoplay still requires a host click to connect/start.
 - `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.
 - Completing a drink order sends the ready email and creates a temporary 10-second live-display `drink_ready` notice with the drink image; attendees also see ready drink cards on `/party`. Drink-ready notices render above any active contest/karaoke/winner event override without replacing it.
 - Halloween outbound email uses the separate `tnq-halloween.com` SES identity and sender `no-reply@tnq-halloween.com`; do not change existing GoodVines SES identities or sender addresses for `appg-v.com` or `goodvines.app`.

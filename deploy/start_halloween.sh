@@ -47,15 +47,6 @@ HALLOWEEN_EMAIL_FROM="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" emai
 export HALLOWEEN_PUBLIC_BASE_URL
 HALLOWEEN_PUBLIC_BASE_URL="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" public_base_url "https://tnq-halloween.com")"
 
-export HALLOWEEN_YOUTUBE_API_KEY
-HALLOWEEN_YOUTUBE_API_KEY="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" youtube_api_key "")"
-
-export HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN
-HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" apple_music_developer_token "")"
-
-export HALLOWEEN_APPLE_MUSIC_STOREFRONT
-HALLOWEEN_APPLE_MUSIC_STOREFRONT="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" apple_music_storefront "us")"
-
 export HALLOWEEN_REDIS_HOST
 HALLOWEEN_REDIS_HOST="$(vault_field "${HALLOWEEN_REDIS_SECRET_PATH}" host)"
 

@@ -42,7 +42,7 @@
       {% for order in drink_orders %}
         <article class="order-card order-card--{{ order.status }}">
           {% if order.item_image_url %}
-            <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image" loading="lazy" decoding="async">
+            <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image">
           {% endif %}
           <div class="order-card__body">
             <p class="order-card__status">{{ drink_order_status_label(order.status) }}</p>

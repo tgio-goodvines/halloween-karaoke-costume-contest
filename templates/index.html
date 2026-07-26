@@ -55,42 +55,6 @@
   </div>
 </section>
 
-{% if party_day_has_arrived %}
-  <section class="feature-engagement">
-    <div class="feature-engagement__intro">
-      <p class="order-card__status">Party Tools</p>
-      <h2>Stay in the mix</h2>
-      <p>Order from the bar, send a song to the jukebox, join the costume lineup, and get your karaoke moment ready from one place.</p>
-    </div>
-    <div class="feature-engagement__grid">
-      <a href="{{ url_for('party_menu') }}">
-        <strong>Menu + Bar</strong>
-        <span>Order drinks and check your ready status.</span>
-      </a>
-      {% if jukebox_settings.enabled and jukebox_settings.requests_enabled %}
-        <a href="{{ url_for('party_jukebox') }}">
-          <strong>Jukebox</strong>
-          <span>Request Apple Music songs for the room.</span>
-        </a>
-      {% endif %}
-      <a href="{{ url_for('party_costumes') }}">
-        <strong>Costume</strong>
-        <span>Enter the contest or review the lineup.</span>
-      </a>
-      <a href="{{ url_for('party_karaoke') }}">
-        <strong>Karaoke</strong>
-        <span>Pick a song and get in the queue.</span>
-      </a>
-      {% if costume_contest_state.voting_visible %}
-        <a href="{{ url_for('party_costume_voting') }}">
-          <strong>Vote</strong>
-          <span>Score every costume before voting closes.</span>
-        </a>
-      {% endif %}
-    </div>
-  </section>
-{% endif %}
-
 {% if party_day_has_arrived and drink_orders %}
   <section class="submitted-list">
     <h3>Your Recent Drink Orders</h3>
@@ -98,7 +62,7 @@
       {% for order in drink_orders %}
         <article class="order-card order-card--{{ order.status }}">
           {% if order.item_image_url %}
-            <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image" loading="lazy" decoding="async">
+            <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image">
           {% endif %}
           <div class="order-card__body">
             <p class="order-card__status">{{ drink_order_status_label(order.status) }}</p>
@@ -124,7 +88,7 @@
     {% for slide in slides %}
       <article class="slide{% if loop.first %} active{% endif %}">
         {% if slide.image_url %}
-          <img class="slide__image" src="{{ slide.image_url }}" alt="{{ slide.title }}" loading="lazy" decoding="async">
+          <img class="slide__image" src="{{ slide.image_url }}" alt="{{ slide.title }}">
         {% endif %}
         <h3>{{ slide.title }}</h3>
         <p>{{ slide.content }}</p>

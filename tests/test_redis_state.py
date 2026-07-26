@@ -162,6 +162,8 @@ class RedisStateTests(unittest.TestCase):
         main.password_reset_tokens = {}
         main.menu_items = []
         main.drink_orders = []
+        main.dj_playlist = []
+        main.dj_state = main.copy.deepcopy(main.DEFAULT_DJ_STATE)
         main.rsvp_signups = []
         main.rsvp_updates = []
         main.submitted_costume_votes = set()
@@ -282,6 +284,37 @@ class RedisStateTests(unittest.TestCase):
                 "completed_seconds": 360,
             }
         ]
+        main.dj_playlist = [
+            {
+                "id": "dj-1",
+                "apple_music_id": "203709340",
+                "title": "Thriller",
+                "artist": "Michael Jackson",
+                "album": "Thriller",
+                "artwork_url": "https://example.test/thriller.jpg",
+                "duration_ms": 357000,
+                "explicit": False,
+                "enabled": True,
+                "created_at": "2026-07-06T00:00:00Z",
+            }
+        ]
+        main.dj_state["desired"] = {
+            "playback_status": "playing",
+            "song_id": "dj-1",
+            "queue_order": ["dj-1"],
+            "shuffle_enabled": False,
+        }
+        main.dj_state["receiver"].update(
+            {
+                "id": "tv-1",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+                "current_song_id": "dj-1",
+                "last_seen_at": "2026-07-06T00:00:00Z",
+            }
+        )
         main.rsvp_signups = [
             main.RSVPSignup(
                 "Morgan",
@@ -358,6 +391,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(main.menu_items[0]["orderable"])
         self.assertEqual("order-1", main.drink_orders[0]["id"])
         self.assertEqual(360, main.drink_orders[0]["completed_seconds"])
+        self.assertEqual("Thriller", main.dj_playlist[0]["title"])
+        self.assertEqual("dj-1", main.dj_state["receiver"]["current_song_id"])
         self.assertEqual("specialty", main.drink_orders[0]["drink_type"])
         self.assertEqual(1, main.drink_orders[0]["specialty_sequence_number"])
         self.assertEqual("Morgan", main.rsvp_signups[0].name)
@@ -734,6 +769,101 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(main.redis_key("display:pubsub"), published_channel)
         self.assertEqual(1, published_payload["version"])
         self.assertEqual("state-change", published_payload["reason"])
+
+    def test_admin_can_manage_dj_playlist_and_send_a_pending_command(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            add_response = client.post(
+                "/admin/dj",
+                data={
+                    "action": "add_dj_song",
+                    "title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "apple_music_id": "203709340",
+                    "album": "Thriller",
+                    "artwork_url": "https://example.test/thriller.jpg",
+                    "duration_ms": "357000",
+                    "enabled": "yes",
+                },
+            )
+            song_id = self.redis_state()["dj_playlist"][0]["id"]
+            play_response = client.post(
+                "/admin/dj",
+                data={"action": "play_dj_song", "song_id": song_id},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, add_response.status_code)
+        self.assertEqual(200, play_response.status_code)
+        self.assertEqual("Thriller", state["dj_playlist"][0]["title"])
+        self.assertEqual("play_song", state["dj_state"]["current_command"]["action"])
+        self.assertEqual("pending", state["dj_state"]["current_command"]["status"])
+        self.assertEqual(song_id, state["dj_state"]["desired"]["song_id"])
+        self.assertIn("Waiting for confirmation", play_response.get_data(as_text=True))
+
+    def test_dj_receiver_acknowledges_command_and_display_data_uses_confirmed_song(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {
+                    "id": "dj-1",
+                    "apple_music_id": "203709340",
+                    "title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "artwork_url": "https://example.test/thriller.jpg",
+                }
+            )
+        ]
+        main.queue_dj_command("play_song", "dj-1")
+        command_id = main.dj_state["current_command"]["id"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            receiver_response = client.post(
+                "/api/dj/receiver-state",
+                json={
+                    "receiver_id": "living-room-tv",
+                    "status": "ready",
+                    "authorization_status": "authorized",
+                    "audio_enabled": True,
+                    "playback_status": "playing",
+                    "current_song_id": "dj-1",
+                    "acknowledged_command_id": command_id,
+                    "command_succeeded": True,
+                },
+            )
+            display_response = client.get("/api/display-data")
+
+        state = self.redis_state()
+        display_payload = display_response.get_json()
+        self.assertEqual(200, receiver_response.status_code)
+        self.assertEqual(200, display_response.status_code)
+        self.assertIsNone(state["dj_state"]["current_command"])
+        self.assertEqual("succeeded", state["dj_state"]["last_command"]["status"])
+        self.assertEqual("playing", display_payload["dj"]["receiver"]["playback_status"])
+        self.assertEqual("Thriller", display_payload["dj"]["current_song"]["title"])
+
+    def test_dj_receiver_requires_admin_session_and_json_csrf_outside_testing(self):
+        self.save_current_state()
+        main.app.config["TESTING"] = False
+
+        with main.app.test_client() as client:
+            unauthorized_response = client.post("/api/dj/receiver-state", json={"receiver_id": "tv"})
+            self.login_admin(client)
+            with client.session_transaction() as session:
+                csrf_token = session["csrf_token"] = "dj-csrf"
+            rejected_response = client.post("/api/dj/receiver-state", json={"receiver_id": "tv"})
+            accepted_response = client.post(
+                "/api/dj/receiver-state",
+                json={"receiver_id": "tv", "status": "needs_audio_enable"},
+                headers={"X-CSRF-Token": csrf_token},
+            )
+
+        self.assertEqual(302, unauthorized_response.status_code)
+        self.assertEqual(400, rejected_response.status_code)
+        self.assertEqual(200, accepted_response.status_code)
 
     def test_health_returns_state_store_status(self):
         main.display_update_version = 5

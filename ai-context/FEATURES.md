@@ -142,6 +142,12 @@
 - Admin can add, edit, and delete party account users, reset account passwords
   directly, and assign or remove the `bartender` role.
 - Admin can open the bartender view and see bar operations summary counts.
+- DJ workspace at `/admin/dj` has Apple Music playlist CRUD, reorder/enable
+  controls, individual-song playback, play-from-beginning, shuffle, previous,
+  pause, stop, and next controls.
+- DJ workspace presents an explicit Admin request → Live display → Apple Music
+  → Audio output flow, with pending/confirmed/failed command state, receiver
+  heartbeat, authorization status, and a readable recovery message.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.
@@ -203,6 +209,9 @@ app state.
 - SSE endpoint sends keep-alive comments on idle intervals.
 - Display supports full-screen event override cards for contest start, winner announcement, and karaoke start. Costume and karaoke event modes are mutually exclusive.
 - Display supports temporary 10-second drink-ready notice cards with drink images. Drink notices render above the active event override or normal rotation without replacing the event card.
+- Persistent Now Playing dock shows the display receiver's confirmed DJ status,
+  song artwork/title/artist, and one-time Enable DJ Audio action for MusicKit;
+  it does not replace rotation, event overrides, or drink-ready notices.
 - Live-display cards use dynamic browser-size scaling, long/dense text classes,
   and overflow wrapping so normal desktop/laptop browser windows and narrow
   browsers do not clip cards.

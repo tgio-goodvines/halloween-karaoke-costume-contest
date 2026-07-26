@@ -11,6 +11,9 @@
     class="display-mode"
     data-display-api="{{ url_for('display_data') }}"
     data-display-updates="{{ url_for('display_updates') }}"
+    data-dj-receiver-api="{{ url_for('dj_receiver_state') }}"
+    data-dj-token-api="{{ url_for('dj_musickit_token') }}"
+    data-csrf-token="{{ csrf_token() }}"
   >
     {% set first_entry = entries[0] if entries else None %}
     {% set cta_details = first_entry.get('cta_details', {}) if first_entry else {} %}
@@ -32,6 +35,21 @@
           </div>
         </div>
       </header>
+
+      <section class="display-now-playing" data-dj-now-playing>
+        <div class="display-now-playing__artwork" data-dj-artwork-wrap hidden>
+          <img data-dj-artwork alt="">
+        </div>
+        <div class="display-now-playing__copy">
+          <span class="display-now-playing__label" data-dj-status>DJ standby</span>
+          <strong data-dj-title>No confirmed song</strong>
+          <span data-dj-artist>Open DJ controls from the admin console.</span>
+        </div>
+        <div class="display-now-playing__actions">
+          <button type="button" class="display-now-playing__enable" data-dj-enable{% if not apple_music_configured %} hidden{% endif %}>Enable DJ Audio</button>
+          <span class="display-now-playing__detail" data-dj-detail>{% if apple_music_configured %}Connect Apple Music on this display once.{% else %}Apple Music is not configured yet.{% endif %}</span>
+        </div>
+      </section>
 
       <main class="display-main">
         <section class="display-card{% if first_entry and not override %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry or override %} hidden{% endif %}>
@@ -178,6 +196,9 @@
     <script id="entries-data" type="application/json">{{ entries | tojson }}</script>
     <script id="override-data" type="application/json">{{ override | tojson }}</script>
     <script id="notice-override-data" type="application/json">{{ notice_override | tojson }}</script>
+    <script id="dj-data" type="application/json">{{ dj | tojson }}</script>
+    <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" defer></script>
     <script src="{{ url_for('static', filename='display.js') }}"></script>
+    <script src="{{ url_for('static', filename='dj-display.js') }}"></script>
   </body>
 </html>

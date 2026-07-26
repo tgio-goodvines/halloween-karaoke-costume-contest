@@ -47,6 +47,24 @@ HALLOWEEN_EMAIL_FROM="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" emai
 export HALLOWEEN_PUBLIC_BASE_URL
 HALLOWEEN_PUBLIC_BASE_URL="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" public_base_url "https://tnq-halloween.com")"
 
+# MusicKit is optional until the party display is paired. The Media Services
+# private key remains in Vault and is only used by Flask to issue developer
+# tokens to an authenticated live-display browser.
+export HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN
+HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" apple_music_developer_token "")"
+
+export HALLOWEEN_APPLE_MUSIC_TEAM_ID
+HALLOWEEN_APPLE_MUSIC_TEAM_ID="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" apple_music_team_id "")"
+
+export HALLOWEEN_APPLE_MUSIC_KEY_ID
+HALLOWEEN_APPLE_MUSIC_KEY_ID="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" apple_music_key_id "")"
+
+export HALLOWEEN_APPLE_MUSIC_PRIVATE_KEY
+HALLOWEEN_APPLE_MUSIC_PRIVATE_KEY="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" apple_music_private_key "")"
+
+export HALLOWEEN_APPLE_MUSIC_STOREFRONT
+HALLOWEEN_APPLE_MUSIC_STOREFRONT="$(vault_optional_field "${HALLOWEEN_APP_SECRET_PATH}" apple_music_storefront "us")"
+
 export HALLOWEEN_REDIS_HOST
 HALLOWEEN_REDIS_HOST="$(vault_field "${HALLOWEEN_REDIS_SECRET_PATH}" host)"
 

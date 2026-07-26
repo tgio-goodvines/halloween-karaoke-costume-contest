@@ -18,6 +18,8 @@
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, event override cards, top-layer drink-ready notices, CTA layout, scoreboard layout, and karaoke display panels. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
+| `static/dj-display.js` | Live-display MusicKit receiver: local audio enable/authorization, Redis-command execution, heartbeat/acknowledgement reporting, and Now Playing dock updates. |
+| `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
@@ -43,6 +45,7 @@
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
 | `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, preserving existing CSRF-protected admin actions. |
 | `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including event override markup and top-layer notice image markup for drink-ready cards. |
+| `ai-context/DJ_JUKEBOX_FEATURE.md` | Durable DJ feature state model, routes, MusicKit/Vault setup, visual acknowledgement flow, and recovery procedure. |
 
 ## Untracked Local Files Present During Review
 

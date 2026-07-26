@@ -66,8 +66,14 @@
 - `GET|POST /admin/login` -> password-backed admin session login; grants the `admin` role.
 - `GET|POST /admin` -> concise **Tonight** admin control-room dashboard and all
   admin mutations. Focused workspaces are available at `/admin/guests`,
-  `/admin/public`, `/admin/program`, `/admin/bar`, `/admin/menu`, and
+  `/admin/public`, `/admin/program`, `/admin/dj`, `/admin/bar`, `/admin/menu`, and
   `/admin/accounts`; they share the existing POST action handler.
+- `GET /api/dj/catalog-search` -> authenticated Apple Music catalog search;
+  the developer token stays server-side.
+- `GET /api/dj/musickit-token` -> authenticated developer-token endpoint for
+  the display-side MusicKit Web receiver.
+- `POST /api/dj/receiver-state` -> authenticated, CSRF-protected receiver
+  heartbeat/player state/command acknowledgement endpoint.
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
@@ -245,9 +251,12 @@ locked winner.
   program, bar, menu, and account workspaces selectively render the existing
   management controls and POST actions. Individual add/edit records remain
   disclosure rows to keep mobile scanning manageable.
+- `dj-admin.js`: Apple Music catalog search and add-song form hydration.
 - `display.html`: standalone live-display page without `base.html`; includes
   default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
-  panel markup.
+  panel markup plus a persistent DJ Now Playing dock.
+- `dj-display.js`: display-side MusicKit receiver, heartbeats, command
+  acknowledgements, and Now Playing dock updates.
 - `email/*.html`: generated HTML email bodies for RSVP confirmation/update,
   host RSVP notification, account welcome, password reset, and drink order
   notifications. These use email-client-safe inline CSS aligned with the dark

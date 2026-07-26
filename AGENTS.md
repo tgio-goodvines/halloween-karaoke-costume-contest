@@ -13,6 +13,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` - focused admin workspace architecture and the current scrolling/narrow-screen UX rules.
+- `ai-context/DJ_JUKEBOX_FEATURE.md` - DJ playlist, Redis command/acknowledgement state, MusicKit receiver setup, and operational recovery.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
 - `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 2 details for automatic Halloween install on replacement API EC2 instances.

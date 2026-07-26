@@ -5,13 +5,15 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
 from typing import List, Tuple
 from threading import Condition, Thread
-from urllib.parse import quote, quote_plus, unquote, urlparse
+from urllib.parse import quote, quote_plus, unquote, urlencode, urlparse
+from urllib.request import Request as UrlRequest, urlopen
 from uuid import uuid4
 import copy
 import hashlib
 import io
 import json
 import os
+import random
 import re
 import secrets
 import time
@@ -76,6 +78,15 @@ app.config["BARTENDER_TIP_UPLOAD_DIR"] = os.environ.get(
     "HALLOWEEN_BARTENDER_TIP_UPLOAD_DIR",
     os.path.join(app.static_folder or "static", "uploads", "bartender-tips"),
 )
+app.config["APPLE_MUSIC_TEAM_ID"] = os.environ.get("HALLOWEEN_APPLE_MUSIC_TEAM_ID", "").strip()
+app.config["APPLE_MUSIC_KEY_ID"] = os.environ.get("HALLOWEEN_APPLE_MUSIC_KEY_ID", "").strip()
+app.config["APPLE_MUSIC_PRIVATE_KEY"] = os.environ.get("HALLOWEEN_APPLE_MUSIC_PRIVATE_KEY", "").replace("\\n", "\n")
+app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = os.environ.get(
+    "HALLOWEEN_APPLE_MUSIC_DEVELOPER_TOKEN", ""
+).strip()
+app.config["APPLE_MUSIC_STOREFRONT"] = os.environ.get(
+    "HALLOWEEN_APPLE_MUSIC_STOREFRONT", "us"
+).strip().lower() or "us"
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -220,7 +231,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 2
+STATE_SCHEMA_VERSION = 3
 
 
 @dataclass
@@ -273,6 +284,42 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
     "party_started": False,
     "current_singer_index": None,
     "current_singer_id": None,
+}
+
+DJ_RECEIVER_STALE_SECONDS = 20
+DJ_COMMAND_TIMEOUT_SECONDS = 8
+DJ_PLAYBACK_STATUSES = {"stopped", "paused", "playing", "buffering", "unknown"}
+DJ_RECEIVER_STATUSES = {"offline", "needs_authorization", "needs_audio_enable", "ready", "error"}
+DJ_COMMAND_ACTIONS = {
+    "play_song",
+    "play_playlist",
+    "shuffle_playlist",
+    "pause",
+    "stop",
+    "next",
+    "previous",
+}
+DEFAULT_DJ_STATE: dict[str, object] = {
+    "command_revision": 0,
+    "current_command": None,
+    "last_command": None,
+    "receiver": {
+        "id": "",
+        "status": "offline",
+        "authorization_status": "not_configured",
+        "audio_enabled": False,
+        "playback_status": "stopped",
+        "current_song_id": "",
+        "playback_position_seconds": 0,
+        "last_seen_at": "",
+        "last_error": "",
+    },
+    "desired": {
+        "playback_status": "stopped",
+        "song_id": "",
+        "queue_order": [],
+        "shuffle_enabled": False,
+    },
 }
 
 DEFAULT_DRINK_ESTIMATE_SECONDS = 8 * 60
@@ -363,6 +410,7 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "guests": {"label": "Guests", "description": "RSVPs, guest updates, and party details."},
     "public": {"label": "Public Info", "description": "Guest-facing access and display settings."},
     "program": {"label": "Program", "description": "Costume contest, karaoke, and lineups."},
+    "dj": {"label": "DJ", "description": "Playlist, live-display receiver, and verified music controls."},
     "bar": {"label": "Bar", "description": "Drink operations and bartender tipping."},
     "menu": {"label": "Menu", "description": "Food and drink availability."},
     "accounts": {"label": "Accounts", "description": "Party accounts and bartender access."},
@@ -380,6 +428,8 @@ user_accounts: dict[str, dict[str, object]] = {}
 password_reset_tokens: dict[str, dict[str, object]] = {}
 menu_items: list[dict[str, object]] = []
 drink_orders: list[dict[str, object]] = []
+dj_playlist: list[dict[str, object]] = []
+dj_state: dict[str, object] = copy.deepcopy(DEFAULT_DJ_STATE)
 rsvp_signups: List[RSVPSignup] = []
 rsvp_updates: List[RSVPUpdate] = []
 submitted_costume_votes: set[str] = set()
@@ -415,6 +465,7 @@ STATE_MUTATION_ENDPOINTS = {
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
+    "dj_receiver_state",
 }
 STATE_REFRESH_ENDPOINTS = {
     "rsvp",
@@ -431,6 +482,8 @@ STATE_REFRESH_ENDPOINTS = {
     "party_costume_voting",
     "live_display",
     "display_data",
+    "dj_catalog_search",
+    "dj_musickit_token",
 }
 ADMIN_ENDPOINTS = {
     "admin_portal",
@@ -454,6 +507,9 @@ DISPLAY_ENDPOINTS = {
     "live_display",
     "display_updates",
     "display_data",
+    "dj_receiver_state",
+    "dj_catalog_search",
+    "dj_musickit_token",
 }
 ROLE_LOGIN_ENDPOINTS = {
     "regular": "party_login",
@@ -1627,6 +1683,302 @@ def current_display_override() -> dict[str, object] | None:
     return live_display_notice_override or live_display_event_override
 
 
+def normalize_dj_song(raw_song: object) -> dict[str, object] | None:
+    if not isinstance(raw_song, dict):
+        return None
+
+    title = str(raw_song.get("title", "") or "").strip()
+    artist = str(raw_song.get("artist", "") or "").strip()
+    apple_music_id = str(raw_song.get("apple_music_id", "") or "").strip()
+    if not title or not artist or not apple_music_id:
+        return None
+
+    try:
+        duration_ms = max(0, int(raw_song.get("duration_ms", 0) or 0))
+    except (TypeError, ValueError):
+        duration_ms = 0
+
+    return {
+        "id": str(raw_song.get("id", "") or uuid4().hex),
+        "apple_music_id": apple_music_id,
+        "title": title,
+        "artist": artist,
+        "album": str(raw_song.get("album", "") or "").strip(),
+        "artwork_url": safe_image_url(str(raw_song.get("artwork_url", "") or "")),
+        "duration_ms": duration_ms,
+        "explicit": bool(raw_song.get("explicit", False)),
+        "enabled": bool(raw_song.get("enabled", True)),
+        "created_at": str(raw_song.get("created_at", "") or _utc_now_iso()),
+    }
+
+
+def find_dj_song(song_id: str) -> dict[str, object] | None:
+    return next((song for song in dj_playlist if str(song.get("id", "")) == song_id), None)
+
+
+def enabled_dj_song_ids() -> list[str]:
+    return [str(song.get("id", "")) for song in dj_playlist if bool(song.get("enabled", True))]
+
+
+def dj_receiver_is_online(receiver: dict[str, object] | None = None) -> bool:
+    source = receiver if isinstance(receiver, dict) else dj_state.get("receiver", {})
+    if not isinstance(source, dict):
+        return False
+    last_seen = parse_utc_iso(source.get("last_seen_at"))
+    return bool(last_seen and last_seen >= datetime.now(timezone.utc) - timedelta(seconds=DJ_RECEIVER_STALE_SECONDS))
+
+
+def normalize_dj_state(raw_state: object) -> dict[str, object]:
+    state = copy.deepcopy(DEFAULT_DJ_STATE)
+    if not isinstance(raw_state, dict):
+        return state
+
+    try:
+        state["command_revision"] = max(0, int(raw_state.get("command_revision", 0) or 0))
+    except (TypeError, ValueError):
+        state["command_revision"] = 0
+
+    raw_receiver = raw_state.get("receiver")
+    if isinstance(raw_receiver, dict):
+        receiver = state["receiver"]
+        receiver["id"] = str(raw_receiver.get("id", "") or "").strip()[:120]
+        requested_status = str(raw_receiver.get("status", "offline") or "offline")
+        receiver["status"] = requested_status if requested_status in DJ_RECEIVER_STATUSES else "error"
+        receiver["authorization_status"] = str(raw_receiver.get("authorization_status", "") or "not_configured")[:80]
+        receiver["audio_enabled"] = bool(raw_receiver.get("audio_enabled", False))
+        playback_status = str(raw_receiver.get("playback_status", "stopped") or "stopped")
+        receiver["playback_status"] = playback_status if playback_status in DJ_PLAYBACK_STATUSES else "unknown"
+        receiver["current_song_id"] = str(raw_receiver.get("current_song_id", "") or "")
+        try:
+            receiver["playback_position_seconds"] = max(0, int(raw_receiver.get("playback_position_seconds", 0) or 0))
+        except (TypeError, ValueError):
+            receiver["playback_position_seconds"] = 0
+        receiver["last_seen_at"] = str(raw_receiver.get("last_seen_at", "") or "")
+        receiver["last_error"] = str(raw_receiver.get("last_error", "") or "").strip()[:500]
+
+    raw_desired = raw_state.get("desired")
+    if isinstance(raw_desired, dict):
+        desired = state["desired"]
+        requested_status = str(raw_desired.get("playback_status", "stopped") or "stopped")
+        desired["playback_status"] = requested_status if requested_status in DJ_PLAYBACK_STATUSES else "stopped"
+        desired["song_id"] = str(raw_desired.get("song_id", "") or "")
+        raw_queue_order = raw_desired.get("queue_order", [])
+        desired["queue_order"] = [str(song_id) for song_id in raw_queue_order] if isinstance(raw_queue_order, list) else []
+        desired["shuffle_enabled"] = bool(raw_desired.get("shuffle_enabled", False))
+
+    for key in ("current_command", "last_command"):
+        raw_command = raw_state.get(key)
+        if isinstance(raw_command, dict):
+            state[key] = {
+                "id": str(raw_command.get("id", "") or ""),
+                "revision": int(raw_command.get("revision", 0) or 0),
+                "action": str(raw_command.get("action", "") or ""),
+                "song_id": str(raw_command.get("song_id", "") or ""),
+                "queue_order": [str(song_id) for song_id in raw_command.get("queue_order", [])]
+                if isinstance(raw_command.get("queue_order"), list)
+                else [],
+                "requested_at": str(raw_command.get("requested_at", "") or ""),
+                "requested_by": str(raw_command.get("requested_by", "") or "")[:80],
+                "status": str(raw_command.get("status", "pending") or "pending"),
+                "acknowledged_at": str(raw_command.get("acknowledged_at", "") or ""),
+                "error": str(raw_command.get("error", "") or "")[:500],
+            }
+
+    return state
+
+
+def queue_dj_command(action: str, song_id: str = "", requested_by: str = "Admin") -> dict[str, object] | None:
+    if action not in DJ_COMMAND_ACTIONS:
+        return None
+
+    queue_order = enabled_dj_song_ids()
+    if action in {"play_song", "play_playlist", "shuffle_playlist"} and not queue_order:
+        return None
+
+    if action == "play_song":
+        song = find_dj_song(song_id)
+        if not song or not bool(song.get("enabled", True)):
+            return None
+        queue_order = [song_id] + [candidate_id for candidate_id in queue_order if candidate_id != song_id]
+    elif action == "shuffle_playlist":
+        random.SystemRandom().shuffle(queue_order)
+        song_id = queue_order[0]
+    elif action == "play_playlist":
+        song_id = queue_order[0]
+
+    desired = dj_state["desired"]
+    if action in {"play_song", "play_playlist", "shuffle_playlist", "next", "previous"}:
+        desired["playback_status"] = "playing"
+    elif action == "pause":
+        desired["playback_status"] = "paused"
+    elif action == "stop":
+        desired["playback_status"] = "stopped"
+    if song_id:
+        desired["song_id"] = song_id
+    if action in {"play_song", "play_playlist", "shuffle_playlist"}:
+        desired["queue_order"] = queue_order
+        desired["shuffle_enabled"] = action == "shuffle_playlist"
+
+    revision = int(dj_state.get("command_revision", 0) or 0) + 1
+    dj_state["command_revision"] = revision
+    command = {
+        "id": uuid4().hex,
+        "revision": revision,
+        "action": action,
+        "song_id": song_id,
+        "queue_order": copy.deepcopy(desired.get("queue_order", [])),
+        "requested_at": _utc_now_iso(),
+        "requested_by": requested_by,
+        "status": "pending",
+        "acknowledged_at": "",
+        "error": "",
+    }
+    dj_state["current_command"] = command
+    return command
+
+
+def record_dj_receiver_state(payload: dict[str, object]) -> None:
+    receiver = dj_state["receiver"]
+    receiver["id"] = str(payload.get("receiver_id", "") or receiver.get("id", ""))[:120]
+    requested_status = str(payload.get("status", "") or receiver.get("status", "offline"))
+    receiver["status"] = requested_status if requested_status in DJ_RECEIVER_STATUSES else "error"
+    receiver["authorization_status"] = str(payload.get("authorization_status", "") or receiver.get("authorization_status", ""))[:80]
+    receiver["audio_enabled"] = bool(payload.get("audio_enabled", False))
+    playback_status = str(payload.get("playback_status", "") or receiver.get("playback_status", "stopped"))
+    receiver["playback_status"] = playback_status if playback_status in DJ_PLAYBACK_STATUSES else "unknown"
+    receiver["current_song_id"] = str(payload.get("current_song_id", "") or receiver.get("current_song_id", ""))
+    try:
+        receiver["playback_position_seconds"] = max(0, int(payload.get("playback_position_seconds", 0) or 0))
+    except (TypeError, ValueError):
+        receiver["playback_position_seconds"] = 0
+    receiver["last_seen_at"] = _utc_now_iso()
+    receiver["last_error"] = str(payload.get("error", "") or "")[:500]
+
+    current_command = dj_state.get("current_command")
+    acknowledged_id = str(payload.get("acknowledged_command_id", "") or "")
+    if isinstance(current_command, dict) and acknowledged_id and acknowledged_id == current_command.get("id"):
+        succeeded = bool(payload.get("command_succeeded", False))
+        current_command["status"] = "succeeded" if succeeded else "failed"
+        current_command["acknowledged_at"] = _utc_now_iso()
+        current_command["error"] = "" if succeeded else receiver["last_error"] or "The display could not complete the DJ command."
+        dj_state["last_command"] = copy.deepcopy(current_command)
+        dj_state["current_command"] = None
+
+
+def dj_command_flow() -> list[dict[str, str]]:
+    receiver = dj_state.get("receiver", {})
+    current_command = dj_state.get("current_command")
+    receiver_online = dj_receiver_is_online(receiver if isinstance(receiver, dict) else None)
+    requested_state = "confirmed" if not current_command else "pending"
+    command_error = ""
+    if isinstance(current_command, dict):
+        requested_at = parse_utc_iso(current_command.get("requested_at"))
+        if requested_at and requested_at < datetime.now(timezone.utc) - timedelta(seconds=DJ_COMMAND_TIMEOUT_SECONDS):
+            requested_state = "timed_out"
+            command_error = "The live display has not confirmed this command yet."
+
+    return [
+        {"label": "Admin request", "state": requested_state, "detail": "Command saved in Redis." if current_command else "No command waiting."},
+        {"label": "Live display", "state": "connected" if receiver_online else "offline", "detail": "Receiver heartbeat is current." if receiver_online else "Open or refresh the live display on the TV."},
+        {"label": "Apple Music", "state": str(receiver.get("authorization_status", "not_configured") or "not_configured"), "detail": str(receiver.get("last_error", "") or "Authorize Apple Music on the display when needed.")},
+        {"label": "Audio output", "state": str(receiver.get("playback_status", "stopped") or "stopped"), "detail": command_error or ("DJ audio is enabled." if receiver.get("audio_enabled") else "Use Enable DJ Audio on the live display once.")},
+    ]
+
+
+def dj_view_state() -> dict[str, object]:
+    view = copy.deepcopy(dj_state)
+    receiver = view.get("receiver", {})
+    if isinstance(receiver, dict):
+        receiver["online"] = dj_receiver_is_online(receiver)
+        if not receiver["online"]:
+            receiver["effective_status"] = "offline"
+        else:
+            receiver["effective_status"] = receiver.get("status", "offline")
+    current_song = find_dj_song(str(receiver.get("current_song_id", "") if isinstance(receiver, dict) else ""))
+    desired_song = find_dj_song(str(view.get("desired", {}).get("song_id", ""))) if isinstance(view.get("desired"), dict) else None
+    view["current_song"] = copy.deepcopy(current_song)
+    view["desired_song"] = copy.deepcopy(desired_song)
+    view["playlist"] = copy.deepcopy(dj_playlist)
+    view["flow"] = dj_command_flow()
+    return view
+
+
+def apple_music_is_configured() -> bool:
+    return bool(
+        app.config["APPLE_MUSIC_DEVELOPER_TOKEN"]
+        or (
+            app.config["APPLE_MUSIC_TEAM_ID"]
+            and app.config["APPLE_MUSIC_KEY_ID"]
+            and app.config["APPLE_MUSIC_PRIVATE_KEY"]
+        )
+    )
+
+
+def apple_music_developer_token() -> str:
+    direct_token = app.config["APPLE_MUSIC_DEVELOPER_TOKEN"]
+    if direct_token:
+        return direct_token
+    if not apple_music_is_configured():
+        raise RuntimeError("Apple Music has not been configured for the DJ receiver.")
+
+    try:
+        import jwt
+    except ImportError as exc:
+        raise RuntimeError("PyJWT is required to sign Apple Music developer tokens.") from exc
+
+    now = int(time.time())
+    return str(
+        jwt.encode(
+            {"iss": app.config["APPLE_MUSIC_TEAM_ID"], "iat": now, "exp": now + 60 * 60 * 24 * 180},
+            app.config["APPLE_MUSIC_PRIVATE_KEY"],
+            algorithm="ES256",
+            headers={"kid": app.config["APPLE_MUSIC_KEY_ID"]},
+        )
+    )
+
+
+def search_apple_music_catalog(query: str) -> list[dict[str, object]]:
+    query = query.strip()
+    if not query:
+        return []
+    encoded_query = urlencode({"term": query, "types": "songs", "limit": 12})
+    url = f"https://api.music.apple.com/v1/catalog/{app.config['APPLE_MUSIC_STOREFRONT']}/search?{encoded_query}"
+    api_request = UrlRequest(url, headers={"Authorization": f"Bearer {apple_music_developer_token()}"})
+    try:
+        with urlopen(api_request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:  # Apple returns provider-specific HTTP errors.
+        raise RuntimeError("Apple Music catalog search is unavailable right now.") from exc
+
+    results = payload.get("results", {}).get("songs", {}).get("data", []) if isinstance(payload, dict) else []
+    songs: list[dict[str, object]] = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        attributes = result.get("attributes", {})
+        if not isinstance(attributes, dict):
+            continue
+        artwork = attributes.get("artwork", {})
+        artwork_url = str(artwork.get("url", "") or "") if isinstance(artwork, dict) else ""
+        if artwork_url:
+            artwork_url = artwork_url.replace("{w}", "300").replace("{h}", "300").replace("{f}", "jpg")
+        song = normalize_dj_song(
+            {
+                "id": uuid4().hex,
+                "apple_music_id": result.get("id", ""),
+                "title": attributes.get("name", ""),
+                "artist": attributes.get("artistName", ""),
+                "album": attributes.get("albumName", ""),
+                "artwork_url": artwork_url,
+                "duration_ms": attributes.get("durationInMillis", 0),
+                "explicit": attributes.get("contentRating") == "explicit",
+            }
+        )
+        if song:
+            songs.append(song)
+    return songs
+
+
 def build_menu_sections() -> dict[str, list[dict[str, object]]]:
     return {
         "drinks": [item for item in menu_items if item.get("category") == "drink"],
@@ -1784,6 +2136,8 @@ def snapshot_state() -> dict[str, object]:
         "password_reset_tokens": copy.deepcopy(password_reset_tokens),
         "menu_items": copy.deepcopy(menu_items),
         "drink_orders": copy.deepcopy(drink_orders),
+        "dj_playlist": copy.deepcopy(dj_playlist),
+        "dj_state": copy.deepcopy(dj_state),
         "registered_users": copy.deepcopy(registered_users),
         "rsvp_signups": [
             rsvp_signup_to_dict(signup) for signup in rsvp_signups
@@ -1815,7 +2169,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global user_accounts, costume_ballots, submitted_costume_votes
     global live_display_event_override, live_display_notice_override
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
-    global password_reset_tokens, menu_items, drink_orders, rsvp_notification_email, bartender_tip_settings
+    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_state, rsvp_notification_email, bartender_tip_settings
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -1897,6 +2251,15 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                 order = normalize_drink_order(raw_order)
                 if order:
                     drink_orders.append(order)
+
+    raw_dj_playlist = data.get("dj_playlist", [])
+    dj_playlist = []
+    if isinstance(raw_dj_playlist, list):
+        for raw_song in raw_dj_playlist:
+            song = normalize_dj_song(raw_song)
+            if song:
+                dj_playlist.append(song)
+    dj_state = normalize_dj_state(data.get("dj_state"))
 
     bartender_tip_settings = normalize_bartender_tip_settings(data.get("bartender_tip_settings", {}))
 
@@ -2339,7 +2702,7 @@ def validate_csrf_token():
         return None
 
     expected_token = session.get("csrf_token")
-    provided_token = request.form.get("csrf_token")
+    provided_token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
     if not expected_token or provided_token != expected_token:
         return Response("The form expired. Please go back, refresh, and try again.", status=400)
 
@@ -2747,6 +3110,8 @@ def live_display():
         karaoke_count=len(karaoke_signups),
         override=live_display_event_override,
         notice_override=live_display_notice_override,
+        dj=dj_view_state(),
+        apple_music_configured=apple_music_is_configured(),
     )
 
 
@@ -2791,9 +3156,56 @@ def display_data():
             "override": live_display_event_override,
             "event_override": live_display_event_override,
             "notice_override": live_display_notice_override,
+            "dj": dj_view_state(),
             "display_update_version": display_update_version,
         }
     )
+
+
+@app.route("/api/dj/musickit-token")
+def dj_musickit_token():
+    if not apple_music_is_configured():
+        return jsonify({"configured": False, "error": "Apple Music is not configured for this event."}), 503
+
+    try:
+        token = apple_music_developer_token()
+    except RuntimeError as exc:
+        app.logger.warning("Unable to issue Apple Music developer token: %s", exc)
+        return jsonify({"configured": False, "error": "Apple Music token setup is unavailable."}), 503
+
+    return jsonify(
+        {
+            "configured": True,
+            "developer_token": token,
+            "app_name": app.config["PARTY_TITLE"],
+        }
+    )
+
+
+@app.route("/api/dj/catalog-search")
+def dj_catalog_search():
+    query = request.args.get("q", "").strip()
+    if len(query) < 2:
+        return jsonify({"results": [], "error": "Enter at least two characters to search Apple Music."})
+    if not apple_music_is_configured():
+        return jsonify({"results": [], "error": "Apple Music is not configured for this event."}), 503
+    try:
+        results = search_apple_music_catalog(query)
+    except RuntimeError as exc:
+        app.logger.warning("Apple Music catalog search failed: %s", exc)
+        return jsonify({"results": [], "error": "Apple Music catalog search is unavailable right now."}), 502
+    return jsonify({"results": results})
+
+
+@app.route("/api/dj/receiver-state", methods=["POST"])
+def dj_receiver_state():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Expected a DJ receiver state payload."}), 400
+
+    record_dj_receiver_state(payload)
+    broadcast_display_update()
+    return jsonify({"dj": dj_view_state(), "command": copy.deepcopy(dj_state.get("current_command"))})
 
 
 @app.context_processor
@@ -3564,6 +3976,52 @@ def admin_portal(admin_view: str):
             "created_at": existing_created_at or _utc_now_iso(),
         }
 
+    def dj_song_from_form(existing_id: str | None = None, existing_created_at: str | None = None) -> dict[str, object] | None:
+        raw_artwork_url = request.form.get("artwork_url", "").strip()
+        normalized_artwork_url = safe_image_url(raw_artwork_url)
+        title = request.form.get("title", "").strip()
+        artist = request.form.get("artist", "").strip()
+        apple_music_id = request.form.get("apple_music_id", "").strip()
+        album = request.form.get("album", "").strip()
+        try:
+            duration_ms = max(0, int(request.form.get("duration_ms", "0") or 0))
+        except ValueError:
+            duration_ms = 0
+
+        if not title:
+            errors.append("DJ song title is required.")
+        elif len(title) > 180:
+            errors.append("DJ song title must be 180 characters or fewer.")
+        if not artist:
+            errors.append("DJ artist is required.")
+        elif len(artist) > 180:
+            errors.append("DJ artist must be 180 characters or fewer.")
+        if not apple_music_id:
+            errors.append("An Apple Music song ID is required for playback.")
+        elif len(apple_music_id) > 160:
+            errors.append("Apple Music song ID must be 160 characters or fewer.")
+        if len(album) > 180:
+            errors.append("Album must be 180 characters or fewer.")
+        if raw_artwork_url and not normalized_artwork_url:
+            errors.append("DJ artwork URL must be http, https, or a /static/ path.")
+        if errors:
+            return None
+
+        return normalize_dj_song(
+            {
+                "id": existing_id or uuid4().hex,
+                "title": title,
+                "artist": artist,
+                "apple_music_id": apple_music_id,
+                "album": album,
+                "artwork_url": normalized_artwork_url,
+                "duration_ms": duration_ms,
+                "explicit": request.form.get("explicit") == "yes",
+                "enabled": request.form.get("enabled") == "yes",
+                "created_at": existing_created_at or _utc_now_iso(),
+            }
+        )
+
     def bartender_tip_settings_from_form() -> dict[str, object] | None:
         image_url = request.form.get("tip_image_url", "").strip()
         uploaded_image_url, upload_error = save_uploaded_bartender_tip_image(request.files.get("tip_image_upload"))
@@ -3697,7 +4155,77 @@ def admin_portal(admin_view: str):
         action = request.form.get("action", "")
         should_broadcast = False
 
-        if action == "update_costume":
+        if action == "add_dj_song":
+            song = dj_song_from_form()
+            if song:
+                dj_playlist.append(song)
+                messages.append(f"Added {song['title']} by {song['artist']} to the DJ playlist.")
+                should_broadcast = True
+
+        elif action == "update_dj_song":
+            song_id = request.form.get("song_id", "").strip()
+            song_index = next((index for index, song in enumerate(dj_playlist) if song.get("id") == song_id), None)
+            if song_index is None:
+                errors.append("DJ song could not be found.")
+            else:
+                updated_song = dj_song_from_form(
+                    existing_id=song_id,
+                    existing_created_at=str(dj_playlist[song_index].get("created_at", "") or ""),
+                )
+                if updated_song:
+                    dj_playlist[song_index] = updated_song
+                    messages.append(f"Updated {updated_song['title']} in the DJ playlist.")
+                    should_broadcast = True
+
+        elif action == "delete_dj_song":
+            song_id = request.form.get("song_id", "").strip()
+            song_index = next((index for index, song in enumerate(dj_playlist) if song.get("id") == song_id), None)
+            if song_index is None:
+                errors.append("DJ song could not be found.")
+            else:
+                removed_song = dj_playlist.pop(song_index)
+                desired = dj_state["desired"]
+                desired["queue_order"] = [candidate_id for candidate_id in desired.get("queue_order", []) if candidate_id != song_id]
+                if desired.get("song_id") == song_id:
+                    desired["song_id"] = ""
+                if str(dj_state["receiver"].get("current_song_id", "")) == song_id:
+                    queue_dj_command("stop", requested_by="Admin")
+                messages.append(f"Removed {removed_song['title']} from the DJ playlist.")
+                should_broadcast = True
+
+        elif action in {"move_dj_song_up", "move_dj_song_down"}:
+            song_id = request.form.get("song_id", "").strip()
+            song_index = next((index for index, song in enumerate(dj_playlist) if song.get("id") == song_id), None)
+            if song_index is None:
+                errors.append("DJ song could not be found.")
+            elif action == "move_dj_song_up" and song_index == 0:
+                messages.append("DJ song is already at the top of the playlist.")
+            elif action == "move_dj_song_down" and song_index == len(dj_playlist) - 1:
+                messages.append("DJ song is already at the bottom of the playlist.")
+            else:
+                target_index = song_index - 1 if action == "move_dj_song_up" else song_index + 1
+                dj_playlist[song_index], dj_playlist[target_index] = dj_playlist[target_index], dj_playlist[song_index]
+                messages.append("DJ playlist order updated.")
+                should_broadcast = True
+
+        elif action in {"play_dj_song", "play_dj_playlist", "shuffle_dj_playlist", "pause_dj", "stop_dj", "next_dj", "previous_dj"}:
+            action_map = {
+                "play_dj_song": "play_song",
+                "play_dj_playlist": "play_playlist",
+                "shuffle_dj_playlist": "shuffle_playlist",
+                "pause_dj": "pause",
+                "stop_dj": "stop",
+                "next_dj": "next",
+                "previous_dj": "previous",
+            }
+            command = queue_dj_command(action_map[action], request.form.get("song_id", "").strip(), requested_by="Admin")
+            if not command:
+                errors.append("Add and enable at least one valid DJ song before sending this command.")
+            else:
+                messages.append("DJ command sent to the live display. Waiting for receiver confirmation.")
+                should_broadcast = True
+
+        elif action == "update_costume":
             index = parse_entry_index(
                 costume_signups,
                 "costume signup",
@@ -4459,6 +4987,9 @@ def admin_portal(admin_view: str):
         bartender_tip_settings=bartender_tip_settings,
         bartender_tip_methods=bartender_tip_methods(),
         user_accounts=user_accounts,
+        dj_playlist=dj_playlist,
+        dj_state=dj_view_state(),
+        apple_music_configured=apple_music_is_configured(),
     )
 
 

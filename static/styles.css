@@ -2094,6 +2094,195 @@ textarea:focus,
   }
 }
 
+/* DJ control-room state path. The connection state is intentionally explicit:
+   an admin request is not presented as playback until the display confirms it. */
+.dj-section__header,
+.dj-controls,
+.dj-catalog-search__controls,
+.dj-song-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dj-section__header {
+  justify-content: space-between;
+}
+
+.dj-status-pill,
+.dj-flow__state {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 0.3rem 0.6rem;
+  color: #f4f4f5;
+  background: rgba(255, 255, 255, 0.06);
+  font: 700 0.72rem/1 "Outfit", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dj-status-pill--ready,
+.dj-status-pill--playing,
+.dj-flow__step--connected .dj-flow__state,
+.dj-flow__step--confirmed .dj-flow__state,
+.dj-flow__step--playing .dj-flow__state {
+  border-color: rgba(96, 220, 145, 0.65);
+  background: rgba(65, 184, 109, 0.14);
+  color: #b8ffd2;
+}
+
+.dj-status-pill--offline,
+.dj-status-pill--error,
+.dj-flow__step--offline .dj-flow__state,
+.dj-flow__step--failed .dj-flow__state,
+.dj-flow__step--timed-out .dj-flow__state {
+  border-color: rgba(255, 85, 85, 0.72);
+  background: rgba(255, 49, 49, 0.14);
+  color: #ffb1b1;
+}
+
+.dj-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  list-style: none;
+  margin: 1.35rem 0;
+  padding: 0;
+}
+
+.dj-flow__step,
+.dj-status-card,
+.dj-catalog-search,
+.dj-catalog-result {
+  border: 1px solid rgba(255, 49, 49, 0.3);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.dj-flow__step {
+  position: relative;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.dj-flow__marker {
+  display: block;
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-bottom: 0.7rem;
+  border-radius: 50%;
+  background: #a1a1aa;
+  box-shadow: 0 0 0 4px rgba(161, 161, 170, 0.1);
+}
+
+.dj-flow__step--connected .dj-flow__marker,
+.dj-flow__step--confirmed .dj-flow__marker,
+.dj-flow__step--playing .dj-flow__marker {
+  background: #64dc91;
+  box-shadow: 0 0 0 4px rgba(100, 220, 145, 0.13), 0 0 18px rgba(100, 220, 145, 0.6);
+}
+
+.dj-flow__step--offline .dj-flow__marker,
+.dj-flow__step--failed .dj-flow__marker,
+.dj-flow__step--timed-out .dj-flow__marker {
+  background: #ff5555;
+  box-shadow: 0 0 0 4px rgba(255, 85, 85, 0.12), 0 0 18px rgba(255, 49, 49, 0.6);
+}
+
+.dj-flow__step strong,
+.dj-flow__step small {
+  display: block;
+}
+
+.dj-flow__step small,
+.dj-status-card p,
+.dj-catalog-search__message {
+  color: #a1a1aa;
+  overflow-wrap: anywhere;
+}
+
+.dj-flow__state {
+  margin: 0.45rem 0;
+}
+
+.dj-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.dj-status-card {
+  padding: 1rem;
+}
+
+.dj-status-card__label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: #ff8a8a;
+  font: 700 0.72rem/1 "Outfit", sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dj-status-card strong {
+  font: 700 1.05rem/1.2 "Outfit", sans-serif;
+}
+
+.dj-command-state,
+.dj-setup-warning {
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid #a1a1aa;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.dj-command-state--pending { border-left-color: #ffd166; }
+.dj-command-state--succeeded { border-left-color: #64dc91; }
+.dj-command-state--failed,
+.dj-setup-warning { border-left-color: #ff5555; }
+
+.dj-controls { margin-top: 1.25rem; }
+.dj-controls form,
+.dj-song-actions form { margin: 0; }
+
+.dj-catalog-search {
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.dj-catalog-search__controls input { flex: 1 1 16rem; }
+.dj-catalog-search__results { display: grid; gap: 0.6rem; margin-top: 0.85rem; }
+
+.dj-catalog-result {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem;
+}
+
+.dj-catalog-result img {
+  width: 3rem;
+  height: 3rem;
+  object-fit: cover;
+}
+
+.dj-catalog-result span { display: block; color: #a1a1aa; margin-top: 0.2rem; }
+
+@media (max-width: 760px) {
+  .dj-flow,
+  .dj-status-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 460px) {
+  .dj-flow,
+  .dj-status-grid { grid-template-columns: 1fr; }
+  .dj-catalog-result { grid-template-columns: 2.5rem minmax(0, 1fr); }
+  .dj-catalog-result .button { grid-column: 1 / -1; }
+}
+
 /* Workspace-first administration and shallow scrolling surfaces. */
 .admin-panel {
   max-width: 1160px;

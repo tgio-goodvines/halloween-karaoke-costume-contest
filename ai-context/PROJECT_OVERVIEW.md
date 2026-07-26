@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repo contains a Flask web app for "Qiana and Tony's 3rd Annual Halloween Party." It supports RSVP, attendee check-in, food/drink menu and drink ordering, costume contest signup and voting, karaoke signup, admin management, bartender operations, and a large-format live display for a TV/projector.
+This repo contains a Flask web app for "Qiana and Tony's 3rd Annual Halloween Party." It supports RSVP, attendee check-in, food/drink menu and drink ordering, costume contest signup and voting, karaoke signup, DJ playlist/playback controls, admin management, bartender operations, and a large-format live display for a TV/projector.
 
 The app is optimized for a short-lived party environment. Event state is
 persisted in Redis as a compact JSON document, with module-level Python globals
@@ -181,12 +181,21 @@ the process-local cache:
 - `contest_state`: contest started/stopped, voting open/closed, winner lock, scoreboard card visibility.
 - `karaoke_state`: whether karaoke has been started/stopped/reset and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.
+- `dj_playlist`: ordered Apple Music songs managed by admins.
+- `dj_state`: Redis-persisted desired command, acknowledgement, live-display
+  heartbeat, MusicKit/audio readiness, confirmed player state, and current song.
 
 Drink orders move from `received` to `in_progress` to `complete`. Completed
 orders track prep duration from `started_at` when available, and drink-ready
 events create a temporary 10-second live-display notice with the drink image.
 Drink notices render above active contest/karaoke/winner event overrides
 without replacing them.
+
+DJ commands share the Redis snapshot and display-update broadcast architecture.
+The `/admin/dj` workspace visibly distinguishes an admin request from the
+live-display receiver's confirmed player state. MusicKit signing material stays
+in Vault at runtime; the Media Services private key and browser user token are
+never stored in Redis.
 
 `HALLOWEEN_PARTY_START` controls attendee route availability and the dashboard
 mode, but not the live display rotation. The live display is intentionally

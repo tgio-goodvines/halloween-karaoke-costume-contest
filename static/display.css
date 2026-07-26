@@ -30,6 +30,81 @@ body.display-mode {
   overflow-x: hidden;
 }
 
+/* Persistent DJ dock: playback stays legible without replacing a contest,
+   karaoke, or drink-ready display layer. */
+.display-now-playing {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(12rem, auto);
+  align-items: center;
+  gap: clamp(0.75rem, 1.4vw, 1.25rem);
+  width: min(94vw, 1180px);
+  margin: 0 auto clamp(0.8rem, 1.6vh, 1.25rem);
+  padding: clamp(0.7rem, 1.4vw, 1rem) clamp(0.85rem, 1.8vw, 1.25rem);
+  border: 1px solid rgba(255, 49, 49, 0.52);
+  border-top-color: rgba(255, 49, 49, 0.88);
+  border-radius: 14px;
+  background: rgba(26, 26, 26, 0.82);
+  box-shadow: 0 -2px 24px rgba(255, 49, 49, 0.1), 0 8px 30px rgba(0, 0, 0, 0.42);
+}
+
+.display-now-playing__artwork,
+.display-now-playing__artwork img {
+  width: clamp(3.2rem, 6vw, 5rem);
+  height: clamp(3.2rem, 6vw, 5rem);
+}
+
+.display-now-playing__artwork img { object-fit: cover; }
+
+.display-now-playing__copy,
+.display-now-playing__actions { min-width: 0; }
+
+.display-now-playing__label,
+.display-now-playing__artist,
+.display-now-playing__detail { display: block; }
+
+.display-now-playing__label {
+  margin-bottom: 0.25rem;
+  color: #ff8a8a;
+  font: 700 clamp(0.62rem, 1vw, 0.82rem)/1 "Outfit", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.display-now-playing__copy strong {
+  display: block;
+  overflow: hidden;
+  color: #f4f4f5;
+  font: 700 clamp(1rem, 2.2vw, 1.6rem)/1.14 "Outfit", sans-serif;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 16px rgba(255, 49, 49, 0.2);
+  white-space: nowrap;
+}
+
+.display-now-playing__artist,
+.display-now-playing__detail { color: #d4d4d8; font-size: clamp(0.75rem, 1.25vw, 1rem); }
+
+.display-now-playing__actions { text-align: right; }
+.display-now-playing__enable {
+  margin-bottom: 0.35rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(255, 49, 49, 0.72);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 49, 49, 0.18);
+  font: 700 0.75rem/1 "Outfit", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.display-now-playing__enable:hover,
+.display-now-playing__enable:focus-visible { background: rgba(255, 49, 49, 0.34); }
+
+@media (max-width: 700px), (max-height: 640px) {
+  .display-now-playing { grid-template-columns: auto minmax(0, 1fr); }
+  .display-now-playing__actions { grid-column: 1 / -1; text-align: left; }
+  .display-now-playing__copy strong { white-space: normal; }
+}
+
 body.display-mode::before,
 body.display-mode::after {
   content: "";

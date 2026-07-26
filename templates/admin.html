@@ -67,6 +67,11 @@
           <strong>{% if karaoke_state.party_started %}Live{% else %}Standby{% endif %}</strong>
           <span>{{ karaoke_signups|length }} song{{ 's' if karaoke_signups|length != 1 else '' }} in lineup</span>
         </a>
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='dj') }}">
+          <span class="admin-home__label">DJ receiver</span>
+          <strong>{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</strong>
+          <span>{% if dj_state.current_song %}{{ dj_state.current_song.title }}{% else %}{{ dj_playlist|length }} song{{ 's' if dj_playlist|length != 1 else '' }} in playlist{% endif %}</span>
+        </a>
       </div>
       <div class="admin-home__next-actions">
         <a class="button button--primary" href="{{ url_for('bartender_portal') }}">Open Bartender Queue</a>
@@ -568,6 +573,171 @@
   </section>
   {% endif %}
 
+  {% if admin_view == 'dj' %}
+  <section class="admin-section admin-section--dj">
+    <header class="dj-section__header">
+      <div>
+        <h3>DJ Signal Path</h3>
+        <p>The request is only complete when the live display confirms playback. The state below separates the admin request from the receiver’s actual status.</p>
+      </div>
+      <span class="dj-status-pill dj-status-pill--{{ dj_state.receiver.effective_status }}">{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</span>
+    </header>
+
+    <ol class="dj-flow" aria-label="DJ control state flow">
+      {% for step in dj_state.flow %}
+        <li class="dj-flow__step dj-flow__step--{{ step.state|replace('_', '-') }}">
+          <span class="dj-flow__marker" aria-hidden="true"></span>
+          <strong>{{ step.label }}</strong>
+          <span class="dj-flow__state">{{ step.state|replace('_', ' ')|title }}</span>
+          <small>{{ step.detail }}</small>
+        </li>
+      {% endfor %}
+    </ol>
+
+    <div class="dj-status-grid">
+      <article class="dj-status-card">
+        <span class="dj-status-card__label">Requested</span>
+        <strong>{{ dj_state.desired.playback_status|title }}</strong>
+        <p>{% if dj_state.desired_song %}{{ dj_state.desired_song.title }} — {{ dj_state.desired_song.artist }}{% else %}No song selected{% endif %}</p>
+      </article>
+      <article class="dj-status-card">
+        <span class="dj-status-card__label">Confirmed by display</span>
+        <strong>{{ dj_state.receiver.playback_status|title }}</strong>
+        <p>{% if dj_state.current_song %}{{ dj_state.current_song.title }} — {{ dj_state.current_song.artist }}{% else %}No confirmed song{% endif %}</p>
+      </article>
+      <article class="dj-status-card">
+        <span class="dj-status-card__label">Receiver heartbeat</span>
+        <strong>{% if dj_state.receiver.online %}Connected{% else %}Offline{% endif %}</strong>
+        <p>{% if dj_state.receiver.last_seen_at %}Last seen {{ format_time_label(dj_state.receiver.last_seen_at) }}{% else %}Open the live display on the TV{% endif %}</p>
+      </article>
+      <article class="dj-status-card">
+        <span class="dj-status-card__label">Audio readiness</span>
+        <strong>{% if dj_state.receiver.audio_enabled %}Enabled{% else %}Needs display click{% endif %}</strong>
+        <p>{{ dj_state.receiver.authorization_status|replace('_', ' ')|title }}</p>
+      </article>
+    </div>
+
+    {% if dj_state.current_command %}
+      <p class="dj-command-state dj-command-state--pending">
+        <strong>Waiting for confirmation:</strong> {{ dj_state.current_command.action|replace('_', ' ')|title }} (revision {{ dj_state.current_command.revision }}).
+      </p>
+    {% elif dj_state.last_command %}
+      <p class="dj-command-state dj-command-state--{{ dj_state.last_command.status }}">
+        <strong>Last command:</strong> {{ dj_state.last_command.action|replace('_', ' ')|title }} — {{ dj_state.last_command.status|title }}{% if dj_state.last_command.error %}: {{ dj_state.last_command.error }}{% endif %}
+      </p>
+    {% endif %}
+
+    {% if dj_state.receiver.last_error %}
+      <p class="dj-command-state dj-command-state--failed"><strong>Receiver message:</strong> {{ dj_state.receiver.last_error }}</p>
+    {% endif %}
+
+    <div class="dj-controls">
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="play_dj_playlist" class="button button--primary" {% if not dj_playlist %}disabled{% endif %}>Play from Beginning</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="shuffle_dj_playlist" class="button" {% if not dj_playlist %}disabled{% endif %}>Shuffle & Play</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="previous_dj" class="button">Previous</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="pause_dj" class="button">Pause</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="stop_dj" class="button button--danger">Stop</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="next_dj" class="button">Next</button>
+      </form>
+    </div>
+
+    {% if not apple_music_configured %}
+      <p class="dj-setup-warning">Apple Music is not configured yet. Playlist editing works now, but the display cannot authorize or play music until the MusicKit Vault settings are added.</p>
+    {% endif %}
+  </section>
+
+  <section class="admin-section admin-section--dj">
+    <h3>DJ Playlist</h3>
+    <p>Use Apple Music catalog search to fill a song’s canonical metadata, or add its catalog song ID directly. Only enabled songs are included in playlist playback.</p>
+
+    <div class="dj-catalog-search" data-dj-catalog-search data-search-url="{{ url_for('dj_catalog_search') }}">
+      <label for="dj_catalog_query">Search Apple Music catalog</label>
+      <div class="dj-catalog-search__controls">
+        <input id="dj_catalog_query" type="search" placeholder="Song or artist" minlength="2" autocomplete="off">
+        <button type="button" class="button" data-dj-catalog-search-button>Search</button>
+      </div>
+      <p class="dj-catalog-search__message" data-dj-catalog-search-message>Search results are added to the form below; confirm the track before saving.</p>
+      <div class="dj-catalog-search__results" data-dj-catalog-search-results></div>
+    </div>
+
+    <details class="admin-entry admin-entry--new" open>
+      <summary class="admin-entry__summary">
+        <span class="admin-entry__rank">+</span>
+        <span class="admin-entry__summary-text"><strong>Add a DJ song</strong><span>Apple Music catalog metadata</span></span>
+      </summary>
+      <form method="post" class="admin-entry__form" data-dj-song-form>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="admin-entry__fields">
+          <label>Title<input type="text" name="title" maxlength="180" required data-dj-field="title"></label>
+          <label>Artist<input type="text" name="artist" maxlength="180" required data-dj-field="artist"></label>
+          <label>Apple Music Song ID<input type="text" name="apple_music_id" maxlength="160" required data-dj-field="apple_music_id"></label>
+          <label>Album<input type="text" name="album" maxlength="180" data-dj-field="album"></label>
+          <label>Artwork URL<input type="url" name="artwork_url" maxlength="500" inputmode="url" data-dj-field="artwork_url"></label>
+          <label>Duration (ms)<input type="number" name="duration_ms" min="0" data-dj-field="duration_ms"></label>
+          <label class="form-check"><input type="checkbox" name="enabled" value="yes" checked><span>Include in playlist playback</span></label>
+          <label class="form-check"><input type="checkbox" name="explicit" value="yes" data-dj-field="explicit"><span>Explicit track</span></label>
+        </div>
+        <button type="submit" name="action" value="add_dj_song" class="button button--primary">Add to DJ Playlist</button>
+      </form>
+    </details>
+
+    {% if dj_playlist %}
+      <div class="admin-entry-list dj-playlist">
+        {% for song in dj_playlist %}
+          <details class="admin-entry admin-entry--editable">
+            <summary class="admin-entry__summary">
+              <span class="admin-entry__rank">#{{ loop.index }}</span>
+              <span class="admin-entry__summary-text"><strong>{{ song.title }}</strong><span>{{ song.artist }}{% if song.album %} · {{ song.album }}{% endif %}{% if not song.enabled %} · Disabled{% endif %}</span></span>
+            </summary>
+            <div class="dj-song-actions">
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="song_id" value="{{ song.id }}"><button type="submit" name="action" value="play_dj_song" class="button button--primary" {% if not song.enabled %}disabled{% endif %}>Play This Song</button></form>
+            </div>
+            <form method="post" class="admin-entry__form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="song_id" value="{{ song.id }}">
+              <div class="admin-entry__fields">
+                <label>Title<input type="text" name="title" maxlength="180" required value="{{ song.title }}"></label>
+                <label>Artist<input type="text" name="artist" maxlength="180" required value="{{ song.artist }}"></label>
+                <label>Apple Music Song ID<input type="text" name="apple_music_id" maxlength="160" required value="{{ song.apple_music_id }}"></label>
+                <label>Album<input type="text" name="album" maxlength="180" value="{{ song.album }}"></label>
+                <label>Artwork URL<input type="url" name="artwork_url" maxlength="500" inputmode="url" value="{{ song.artwork_url }}"></label>
+                <label>Duration (ms)<input type="number" name="duration_ms" min="0" value="{{ song.duration_ms }}"></label>
+                <label class="form-check"><input type="checkbox" name="enabled" value="yes" {% if song.enabled %}checked{% endif %}><span>Include in playlist playback</span></label>
+                <label class="form-check"><input type="checkbox" name="explicit" value="yes" {% if song.explicit %}checked{% endif %}><span>Explicit track</span></label>
+              </div>
+              <div class="admin-entry__actions">
+                <button type="submit" name="action" value="move_dj_song_up" class="button">Move Up</button>
+                <button type="submit" name="action" value="move_dj_song_down" class="button">Move Down</button>
+                <button type="submit" name="action" value="update_dj_song" class="button button--primary">Save Changes</button>
+                <button type="submit" name="action" value="delete_dj_song" class="button button--danger" onclick="return confirm('Remove this song from the DJ playlist?');">Remove</button>
+              </div>
+            </form>
+          </details>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="admin-empty">No DJ songs yet. Add the first song or search the Apple Music catalog.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% if admin_view == 'bar' %}
   <section class="admin-section admin-section--bar">
     <h3>Bar Operations</h3>
@@ -1050,4 +1220,10 @@
   </div>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+  {% if admin_view == 'dj' %}
+    <script src="{{ url_for('static', filename='dj-admin.js') }}"></script>
+  {% endif %}
 {% endblock %}

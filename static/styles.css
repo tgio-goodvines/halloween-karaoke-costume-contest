@@ -935,28 +935,8 @@ main.container {
 }
 
 .bartender-completed-card {
-  grid-template-columns: minmax(3.35rem, 4.35rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
-}
-
-.bartender-completed-card__mark {
-  display: grid;
-  place-items: center;
-  min-width: 0;
-  padding: 0.65rem 0.35rem;
-  border-right: 1px solid rgba(255, 49, 49, 0.35);
-  background:
-    var(--scanline),
-    linear-gradient(180deg, rgba(255, 49, 49, 0.18), rgba(13, 12, 13, 0.88));
-  color: var(--primary);
-  font-family: "IBM Plex Mono", "Courier New", monospace;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  text-transform: uppercase;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
 }
 
 .bartender-completed-card .order-card__body {
@@ -2071,8 +2051,7 @@ textarea:focus,
   }
 
   .bartender-completed-card {
-    grid-template-columns: minmax(3rem, 3.6rem) minmax(0, 1fr);
-    padding: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .bartender-completed-card__header {
@@ -2819,7 +2798,7 @@ li,
 }
 
 .bartender-completed-card {
-  grid-template-columns: minmax(3.35rem, 4.35rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .admin-grid {

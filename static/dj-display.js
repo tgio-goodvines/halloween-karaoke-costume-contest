@@ -150,6 +150,7 @@
     await musicKit.configure({
       developerToken: payload.developer_token,
       app: { name: payload.app_name || 'Halloween Party DJ', build: '1.0.0' },
+      storefrontId: payload.storefront || 'us',
     });
     music = musicKit.getInstance();
     if (!music || typeof music.authorize !== 'function') throw new Error('Apple Music did not initialize correctly. Refresh this display and try again.');

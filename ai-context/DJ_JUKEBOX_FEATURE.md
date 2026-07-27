@@ -104,6 +104,10 @@ wrapper reads them into process environment variables:
   `apple_music_private_key` — server-side ES256 signing inputs.
 - `apple_music_storefront` — optional; defaults to `us`.
 
+The configured storefront is returned with the authenticated developer token
+and supplied to MusicKit’s web-player configuration. The live display and
+catalog search must use the same country code; production currently uses `us`.
+
 Never store the Media Services `.p8` key in Redis, templates, browser storage,
 Git, or chat. The display browser’s Apple Music user authorization is handled
 by MusicKit and is not persisted server-side.

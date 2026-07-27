@@ -978,6 +978,23 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(400, rejected_response.status_code)
         self.assertEqual(200, accepted_response.status_code)
 
+    def test_musickit_token_response_includes_configured_storefront(self):
+        original_token = main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"]
+        original_storefront = main.app.config["APPLE_MUSIC_STOREFRONT"]
+        main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = "test-developer-token"
+        main.app.config["APPLE_MUSIC_STOREFRONT"] = "us"
+        try:
+            with main.app.test_client() as client:
+                self.login_admin(client)
+                response = client.get("/api/dj/musickit-token")
+        finally:
+            main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = original_token
+            main.app.config["APPLE_MUSIC_STOREFRONT"] = original_storefront
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("us", payload["storefront"])
+
     def test_health_returns_state_store_status(self):
         main.display_update_version = 5
         main.redis_state_available = True

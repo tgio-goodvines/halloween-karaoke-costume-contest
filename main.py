@@ -3286,6 +3286,7 @@ def dj_musickit_token():
             "configured": True,
             "developer_token": token,
             "app_name": app.config["PARTY_TITLE"],
+            "storefront": app.config["APPLE_MUSIC_STOREFRONT"],
         }
     )
 

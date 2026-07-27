@@ -84,6 +84,11 @@ MusicKit browser authorization and requires a newly issued Music User Token, so
 the operator receives Apple’s account/consent flow instead of a false-ready
 state.
 
+The DJ admin workspace subscribes to the existing display-update stream and
+also polls the display-state API every five seconds. Receiver pairing,
+authorization, playback, reset, and command acknowledgements therefore update
+in-place without an admin-page refresh.
+
 ## MusicKit Setup
 
 The display must be opened in an admin-authenticated browser on the device

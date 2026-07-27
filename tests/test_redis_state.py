@@ -948,6 +948,16 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("pending", state["dj_state"]["last_reset"]["status"])
         self.assertIn("will complete when the live display reconnects", response.get_data(as_text=True))
 
+    def test_dj_admin_workspace_loads_live_receiver_status_updates(self):
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/admin/dj")
+
+        page = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("data-dj-status-root", page)
+        self.assertIn("dj-admin-status.js", page)
+
     def test_dj_receiver_requires_admin_session_and_json_csrf_outside_testing(self):
         self.save_current_state()
         main.app.config["TESTING"] = False

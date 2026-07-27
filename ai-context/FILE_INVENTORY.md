@@ -20,6 +20,7 @@
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, retained authorization diagnostics, reset handling, Redis-command execution, heartbeat/acknowledgement reporting, and Now Playing dock updates. |
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
+| `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal-path UI without reloading forms. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |

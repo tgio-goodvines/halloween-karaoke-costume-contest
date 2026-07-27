@@ -574,22 +574,27 @@
   {% endif %}
 
   {% if admin_view == 'dj' %}
-  <section class="admin-section admin-section--dj">
+  <section
+    class="admin-section admin-section--dj"
+    data-dj-status-root
+    data-dj-display-api="{{ url_for('display_data') }}"
+    data-dj-display-updates="{{ url_for('display_updates') }}"
+  >
     <header class="dj-section__header">
       <div>
         <h3>DJ Signal Path</h3>
         <p>The request is only complete when the live display confirms playback. The state below separates the admin request from the receiver’s actual status.</p>
       </div>
-      <span class="dj-status-pill dj-status-pill--{{ dj_state.receiver.effective_status }}">{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</span>
+      <span class="dj-status-pill dj-status-pill--{{ dj_state.receiver.effective_status }}" data-dj-receiver-status>{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</span>
     </header>
 
     <ol class="dj-flow" aria-label="DJ control state flow">
       {% for step in dj_state.flow %}
-        <li class="dj-flow__step dj-flow__step--{{ step.state|replace('_', '-') }}">
+        <li class="dj-flow__step dj-flow__step--{{ step.state|replace('_', '-') }}" data-dj-flow-step="{{ loop.index0 }}">
           <span class="dj-flow__marker" aria-hidden="true"></span>
           <strong>{{ step.label }}</strong>
-          <span class="dj-flow__state">{{ step.state|replace('_', ' ')|title }}</span>
-          <small>{{ step.detail }}</small>
+          <span class="dj-flow__state" data-dj-flow-state>{{ step.state|replace('_', ' ')|title }}</span>
+          <small data-dj-flow-detail>{{ step.detail }}</small>
         </li>
       {% endfor %}
     </ol>
@@ -597,39 +602,31 @@
     <div class="dj-status-grid">
       <article class="dj-status-card">
         <span class="dj-status-card__label">Requested</span>
-        <strong>{{ dj_state.desired.playback_status|title }}</strong>
-        <p>{% if dj_state.desired_song %}{{ dj_state.desired_song.title }} — {{ dj_state.desired_song.artist }}{% else %}No song selected{% endif %}</p>
+        <strong data-dj-requested-status>{{ dj_state.desired.playback_status|title }}</strong>
+        <p data-dj-requested-song>{% if dj_state.desired_song %}{{ dj_state.desired_song.title }} — {{ dj_state.desired_song.artist }}{% else %}No song selected{% endif %}</p>
       </article>
       <article class="dj-status-card">
         <span class="dj-status-card__label">Confirmed by display</span>
-        <strong>{{ dj_state.receiver.playback_status|title }}</strong>
-        <p>{% if dj_state.current_song %}{{ dj_state.current_song.title }} — {{ dj_state.current_song.artist }}{% else %}No confirmed song{% endif %}</p>
+        <strong data-dj-confirmed-status>{{ dj_state.receiver.playback_status|title }}</strong>
+        <p data-dj-confirmed-song>{% if dj_state.current_song %}{{ dj_state.current_song.title }} — {{ dj_state.current_song.artist }}{% else %}No confirmed song{% endif %}</p>
       </article>
       <article class="dj-status-card">
         <span class="dj-status-card__label">Receiver heartbeat</span>
-        <strong>{% if dj_state.receiver.online %}Connected{% else %}Offline{% endif %}</strong>
-        <p>{% if dj_state.receiver.last_seen_at %}Last seen {{ format_time_label(dj_state.receiver.last_seen_at) }}{% else %}Open the live display on the TV{% endif %}</p>
+        <strong data-dj-heartbeat-status>{% if dj_state.receiver.online %}Connected{% else %}Offline{% endif %}</strong>
+        <p data-dj-heartbeat-detail>{% if dj_state.receiver.last_seen_at %}Last seen {{ format_time_label(dj_state.receiver.last_seen_at) }}{% else %}Open the live display on the TV{% endif %}</p>
       </article>
       <article class="dj-status-card">
         <span class="dj-status-card__label">Audio readiness</span>
-        <strong>{% if dj_state.receiver.audio_enabled %}Enabled{% else %}Needs display click{% endif %}</strong>
-        <p>{{ dj_state.receiver.authorization_status|replace('_', ' ')|title }}</p>
+        <strong data-dj-audio-status>{% if dj_state.receiver.audio_enabled %}Enabled{% else %}Needs display click{% endif %}</strong>
+        <p data-dj-audio-detail>{{ dj_state.receiver.authorization_status|replace('_', ' ')|title }}</p>
       </article>
     </div>
 
-    {% if dj_state.current_command %}
-      <p class="dj-command-state dj-command-state--pending">
-        <strong>Waiting for confirmation:</strong> {{ dj_state.current_command.action|replace('_', ' ')|title }} (revision {{ dj_state.current_command.revision }}).
-      </p>
-    {% elif dj_state.last_command %}
-      <p class="dj-command-state dj-command-state--{{ dj_state.last_command.status }}">
-        <strong>Last command:</strong> {{ dj_state.last_command.action|replace('_', ' ')|title }} — {{ dj_state.last_command.status|title }}{% if dj_state.last_command.error %}: {{ dj_state.last_command.error }}{% endif %}
-      </p>
-    {% endif %}
+    <p class="dj-command-state{% if dj_state.current_command %} dj-command-state--pending{% elif dj_state.last_command %} dj-command-state--{{ dj_state.last_command.status }}{% endif %}" data-dj-command-state{% if not dj_state.current_command and not dj_state.last_command %} hidden{% endif %}>
+      {% if dj_state.current_command %}<strong>Waiting for confirmation:</strong> {{ dj_state.current_command.action|replace('_', ' ')|title }} (revision {{ dj_state.current_command.revision }}).{% elif dj_state.last_command %}<strong>Last command:</strong> {{ dj_state.last_command.action|replace('_', ' ')|title }} — {{ dj_state.last_command.status|title }}{% if dj_state.last_command.error %}: {{ dj_state.last_command.error }}{% endif %}{% endif %}
+    </p>
 
-    {% if dj_state.receiver.last_error %}
-      <p class="dj-command-state dj-command-state--failed"><strong>Receiver message:</strong> {{ dj_state.receiver.last_error }}</p>
-    {% endif %}
+    <p class="dj-command-state dj-command-state--failed" data-dj-receiver-error{% if not dj_state.receiver.last_error %} hidden{% endif %}>{% if dj_state.receiver.last_error %}<strong>Receiver message:</strong> {{ dj_state.receiver.last_error }}{% endif %}</p>
 
     <div class="dj-controls">
       <form method="post">
@@ -1234,5 +1231,6 @@
 {% block scripts %}
   {% if admin_view == 'dj' %}
     <script src="{{ url_for('static', filename='dj-admin.js') }}"></script>
+    <script src="{{ url_for('static', filename='dj-admin-status.js') }}"></script>
   {% endif %}
 {% endblock %}

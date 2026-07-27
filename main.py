@@ -234,7 +234,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 4
+STATE_SCHEMA_VERSION = 5
 
 
 @dataclass
@@ -291,6 +291,7 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
 
 DJ_RECEIVER_STALE_SECONDS = 20
 DJ_COMMAND_TIMEOUT_SECONDS = 8
+MAX_DJ_SONG_REQUESTS_PER_ATTENDEE = 3
 DJ_PLAYBACK_STATUSES = {"stopped", "paused", "playing", "buffering", "unknown"}
 DJ_RECEIVER_STATUSES = {"offline", "needs_authorization", "needs_audio_enable", "ready", "error"}
 DJ_COMMAND_ACTIONS = {
@@ -434,6 +435,7 @@ password_reset_tokens: dict[str, dict[str, object]] = {}
 menu_items: list[dict[str, object]] = []
 drink_orders: list[dict[str, object]] = []
 dj_playlist: list[dict[str, object]] = []
+dj_song_requests: list[dict[str, object]] = []
 dj_state: dict[str, object] = copy.deepcopy(DEFAULT_DJ_STATE)
 rsvp_signups: List[RSVPSignup] = []
 rsvp_updates: List[RSVPUpdate] = []
@@ -470,6 +472,7 @@ STATE_MUTATION_ENDPOINTS = {
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
+    "party_jukebox_request",
     "dj_receiver_state",
 }
 STATE_REFRESH_ENDPOINTS = {
@@ -485,6 +488,10 @@ STATE_REFRESH_ENDPOINTS = {
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
+    "party_jukebox",
+    "party_jukebox_data",
+    "party_jukebox_catalog_search",
+    "admin_dj_song_request_queue",
     "live_display",
     "display_data",
     "dj_catalog_search",
@@ -495,6 +502,7 @@ ADMIN_ENDPOINTS = {
     "export_state",
     "export_costume_results",
     "export_karaoke_lineup",
+    "admin_dj_song_request_queue",
 }
 BAR_ENDPOINTS = {
     "bartender_portal",
@@ -507,6 +515,9 @@ REGULAR_USER_ENDPOINTS = {
     "party_costumes",
     "party_karaoke",
     "party_costume_voting",
+    "party_jukebox",
+    "party_jukebox_data",
+    "party_jukebox_catalog_search",
 }
 DISPLAY_ENDPOINTS = {
     "live_display",
@@ -1717,6 +1728,46 @@ def normalize_dj_song(raw_song: object) -> dict[str, object] | None:
     }
 
 
+def normalize_dj_song_request(raw_request: object) -> dict[str, object] | None:
+    if not isinstance(raw_request, dict):
+        return None
+
+    requester_id = str(raw_request.get("requester_id", "") or "").strip()
+    requester_name = str(raw_request.get("requester_name", "") or "").strip()
+    raw_song = raw_request.get("song")
+    song = normalize_dj_song(raw_song)
+    if not requester_id or not requester_name or not song:
+        return None
+
+    return {
+        "id": str(raw_request.get("id", "") or uuid4().hex),
+        "requester_id": requester_id[:120],
+        "requester_name": requester_name[:80],
+        "requested_at": str(raw_request.get("requested_at", "") or _utc_now_iso()),
+        "song": song,
+    }
+
+
+def find_dj_song_request(request_id: str) -> dict[str, object] | None:
+    return next((entry for entry in dj_song_requests if str(entry.get("id", "")) == request_id), None)
+
+
+def user_dj_song_requests(user_id: str) -> list[dict[str, object]]:
+    return [request_entry for request_entry in dj_song_requests if request_entry.get("requester_id") == user_id]
+
+
+def attendee_jukebox_state(user_id: str) -> dict[str, object]:
+    receiver = dj_state.get("receiver", {})
+    current_song = find_dj_song(str(receiver.get("current_song_id", "") if isinstance(receiver, dict) else ""))
+    return {
+        "now_playing": copy.deepcopy(current_song),
+        "playback_status": str(receiver.get("playback_status", "stopped") if isinstance(receiver, dict) else "stopped"),
+        "playlist": [copy.deepcopy(song) for song in dj_playlist if bool(song.get("enabled", True))],
+        "pending_requests": copy.deepcopy(user_dj_song_requests(user_id)),
+        "request_limit": MAX_DJ_SONG_REQUESTS_PER_ATTENDEE,
+    }
+
+
 def find_dj_song(song_id: str) -> dict[str, object] | None:
     return next((song for song in dj_playlist if str(song.get("id", "")) == song_id), None)
 
@@ -2265,6 +2316,7 @@ def snapshot_state() -> dict[str, object]:
         "menu_items": copy.deepcopy(menu_items),
         "drink_orders": copy.deepcopy(drink_orders),
         "dj_playlist": copy.deepcopy(dj_playlist),
+        "dj_song_requests": copy.deepcopy(dj_song_requests),
         "dj_state": copy.deepcopy(dj_state),
         "registered_users": copy.deepcopy(registered_users),
         "rsvp_signups": [
@@ -2297,7 +2349,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global user_accounts, costume_ballots, submitted_costume_votes
     global live_display_event_override, live_display_notice_override
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
-    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_state, rsvp_notification_email, bartender_tip_settings
+    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -2387,6 +2439,13 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
             song = normalize_dj_song(raw_song)
             if song:
                 dj_playlist.append(song)
+    raw_dj_song_requests = data.get("dj_song_requests", [])
+    dj_song_requests = []
+    if isinstance(raw_dj_song_requests, list):
+        for raw_request in raw_dj_song_requests:
+            normalized_request = normalize_dj_song_request(raw_request)
+            if normalized_request:
+                dj_song_requests.append(normalized_request)
     dj_state = normalize_dj_state(data.get("dj_state"))
 
     bartender_tip_settings = normalize_bartender_tip_settings(data.get("bartender_tip_settings", {}))
@@ -3326,6 +3385,41 @@ def dj_catalog_search():
     return jsonify({"results": results})
 
 
+@app.route("/api/party/jukebox/catalog-search")
+def party_jukebox_catalog_search():
+    if not party_day_has_arrived():
+        return jsonify({"results": [], "error": "Song requests open on party day."}), 403
+
+    query = request.args.get("q", "").strip()
+    if len(query) < 2:
+        return jsonify({"results": [], "error": "Enter at least two characters to search Apple Music."})
+    if not apple_music_is_configured():
+        return jsonify({"results": [], "error": "Apple Music is not configured for this event."}), 503
+    try:
+        results = search_apple_music_catalog(query)
+    except RuntimeError as exc:
+        app.logger.warning("Attendee Apple Music catalog search failed: %s", exc)
+        return jsonify({"results": [], "error": "Apple Music catalog search is unavailable right now."}), 502
+    return jsonify({"results": results})
+
+
+@app.route("/api/party/jukebox-data")
+def party_jukebox_data():
+    if not party_day_has_arrived():
+        return jsonify({"error": "Song requests open on party day."}), 403
+    return jsonify(attendee_jukebox_state(str(session.get("user_id", "") or "")))
+
+
+@app.route("/api/admin/dj-song-request-queue")
+def admin_dj_song_request_queue():
+    return jsonify(
+        {
+            "html": render_template("_dj_song_request_queue.html", dj_song_requests=dj_song_requests),
+            "request_count": len(dj_song_requests),
+        }
+    )
+
+
 @app.route("/api/dj/receiver-state", methods=["POST"])
 def dj_receiver_state():
     payload = request.get_json(silent=True)
@@ -3538,10 +3632,83 @@ def party_dashboard():
         karaoke_signups=karaoke_signups,
         drink_orders=user_orders[:5] if party_day else [],
         ready_drink_orders=ready_orders,
+        jukebox=attendee_jukebox_state(str(session.get("user_id", "") or "")) if party_day else None,
         bartender_tip_settings=bartender_tip_settings,
         party_day_has_arrived=party_day,
         show_admin_link=False,
     )
+
+
+@app.route("/party/jukebox")
+def party_jukebox():
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
+
+    user_id = str(session.get("user_id", "") or "")
+    return render_template(
+        "jukebox.html",
+        jukebox=attendee_jukebox_state(user_id),
+        catalog_search_url=url_for("party_jukebox_catalog_search"),
+        jukebox_data_url=url_for("party_jukebox_data"),
+        request_url=url_for("party_jukebox_request"),
+        show_admin_link=False,
+    )
+
+
+@app.route("/party/jukebox/requests", methods=["POST"])
+def party_jukebox_request():
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
+
+    user_id = str(session.get("user_id", "") or "")
+    username = str(session.get("username", "") or "Guest").strip() or "Guest"
+    raw_song_request = {
+        "title": request.form.get("title", ""),
+        "artist": request.form.get("artist", ""),
+        "apple_music_id": request.form.get("apple_music_id", ""),
+        "album": request.form.get("album", ""),
+        "artwork_url": request.form.get("artwork_url", ""),
+    }
+    maximum_lengths = {"title": 180, "artist": 180, "apple_music_id": 160, "album": 180, "artwork_url": 500}
+    if any(len(str(value or "").strip()) > maximum_lengths[field] for field, value in raw_song_request.items()):
+        return redirect(url_for("party_jukebox", request_error="That song request contains invalid song metadata."))
+    song = normalize_dj_song(
+        {
+            "id": uuid4().hex,
+            **raw_song_request,
+            "duration_ms": request.form.get("duration_ms", 0),
+            "explicit": request.form.get("explicit") == "yes",
+        }
+    )
+    if not song:
+        return redirect(url_for("party_jukebox", request_error="Select a valid Apple Music song before requesting it."))
+
+    existing_requests = user_dj_song_requests(user_id)
+    if any(str(entry.get("song", {}).get("apple_music_id", "")) == song["apple_music_id"] for entry in existing_requests):
+        return redirect(url_for("party_jukebox", request_error="You already have that song in the request queue."))
+    if len(existing_requests) >= MAX_DJ_SONG_REQUESTS_PER_ATTENDEE:
+        return redirect(
+            url_for(
+                "party_jukebox",
+                request_error=f"You can keep up to {MAX_DJ_SONG_REQUESTS_PER_ATTENDEE} song requests pending at once.",
+            )
+        )
+
+    normalized_request = normalize_dj_song_request(
+        {
+            "id": uuid4().hex,
+            "requester_id": user_id,
+            "requester_name": username,
+            "requested_at": _utc_now_iso(),
+            "song": song,
+        }
+    )
+    if not normalized_request:
+        return redirect(url_for("party_jukebox", request_error="That song request could not be saved."))
+
+    dj_song_requests.append(normalized_request)
+    broadcast_display_update()
+    return redirect(url_for("party_jukebox", request_success="Song request sent to the DJ."))
 
 
 @app.route("/party/login", methods=["GET", "POST"])
@@ -4019,7 +4186,7 @@ def admin_portal(admin_view: str):
     global live_display_event_override, live_display_notice_override
     global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
-    global bartender_tip_settings
+    global bartender_tip_settings, dj_song_requests
 
     ensure_costume_votes_alignment()
 
@@ -4290,6 +4457,41 @@ def admin_portal(admin_view: str):
                 dj_playlist.append(song)
                 messages.append(f"Added {song['title']} by {song['artist']} to the DJ playlist.")
                 should_broadcast = True
+
+        elif action in {"approve_dj_song_request", "reject_dj_song_request"}:
+            request_id = request.form.get("request_id", "").strip()
+            request_index = next(
+                (index for index, entry in enumerate(dj_song_requests) if entry.get("id") == request_id),
+                None,
+            )
+            if request_index is None:
+                errors.append("Song request could not be found.")
+            else:
+                request_entry = dj_song_requests.pop(request_index)
+                requested_song = request_entry.get("song", {})
+                if action == "approve_dj_song_request":
+                    playlist_song = normalize_dj_song(
+                        {
+                            **requested_song,
+                            "id": uuid4().hex,
+                            "created_at": _utc_now_iso(),
+                            "enabled": True,
+                        }
+                    )
+                    if playlist_song is None:
+                        errors.append("Song request could not be converted into a playlist entry.")
+                        dj_song_requests.insert(request_index, request_entry)
+                    else:
+                        insertion_index = secrets.randbelow(len(dj_playlist) + 1)
+                        dj_playlist.insert(insertion_index, playlist_song)
+                        messages.append(
+                            f"Approved {playlist_song['title']} and added it at playlist position {insertion_index + 1}."
+                        )
+                        should_broadcast = True
+                else:
+                    request_song = requested_song if isinstance(requested_song, dict) else {}
+                    messages.append(f"Rejected {request_song.get('title', 'the song')} request from {request_entry.get('requester_name', 'a guest')}.")
+                    should_broadcast = True
 
         elif action == "update_dj_song":
             song_id = request.form.get("song_id", "").strip()
@@ -5125,6 +5327,7 @@ def admin_portal(admin_view: str):
         bartender_tip_methods=bartender_tip_methods(),
         user_accounts=user_accounts,
         dj_playlist=dj_playlist,
+        dj_song_requests=dj_song_requests,
         dj_state=dj_view_state(),
         apple_music_configured=apple_music_is_configured(),
     )

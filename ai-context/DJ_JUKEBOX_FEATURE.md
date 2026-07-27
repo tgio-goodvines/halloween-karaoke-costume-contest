@@ -25,6 +25,11 @@ complete.
 - `POST /api/dj/receiver-state` — authenticated JSON heartbeat and command
   acknowledgement from `static/dj-display.js`. It requires the normal CSRF
   token through `X-CSRF-Token` outside testing mode.
+- `GET /party/jukebox` — attendee party-day jukebox with confirmed Now Playing,
+  playlist, catalog search, and personal pending requests.
+- `GET /api/party/jukebox-data`, `GET /api/party/jukebox/catalog-search`, and
+  `POST /party/jukebox/requests` — attendee-authenticated safe state, catalog
+  search, and CSRF-protected request submission endpoints.
 
 `/api/display-data` contains a `dj` object. `templates/display.html` renders a
 persistent Now Playing dock that stays visible below the display header while
@@ -32,7 +37,7 @@ normal rotation, karaoke/costume overrides, and drink-ready notices continue.
 
 ## Redis State
 
-Schema version 4 stores DJ data inside the canonical `halloween:state` JSON
+Schema version 5 stores DJ data inside the canonical `halloween:state` JSON
 document:
 
 - `dj_playlist`: ordered song dictionaries with stable app IDs, Apple Music
@@ -50,6 +55,17 @@ document:
 - `dj_state.receiver`: receiver identity, heartbeat, Apple Music/audio
   readiness, confirmed playback state/current song, elapsed position, and the
   latest receiver error.
+- `dj_song_requests`: pending attendee requests with requester identity,
+  timestamp, and normalized Apple Music song metadata.
+
+## Attendee Song Requests
+
+Attendees can keep up to three pending requests and cannot request the same
+Apple Music song twice while it is pending. The admin DJ workspace resolves a
+request explicitly: approval atomically removes it and inserts an enabled
+playlist song at a random saved-playlist position; rejection removes it without
+changing the playlist. Neither decision sends a receiver command or changes the
+active MusicKit queue, preserving confirmed current playback.
 
 The receiver becomes visually `offline` after 20 seconds without a heartbeat.
 The admin flow marks a pending command as `timed out` after 8 seconds without

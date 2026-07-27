@@ -72,6 +72,10 @@
   the developer token stays server-side.
 - `GET /api/dj/musickit-token` -> authenticated developer-token endpoint for
   the display-side MusicKit Web receiver.
+- `GET /party/jukebox`, `GET /api/party/jukebox-data`,
+  `GET /api/party/jukebox/catalog-search`, and
+  `POST /party/jukebox/requests` -> attendee-authenticated party-day jukebox,
+  safe playback/playlist data, catalog search, and request submission.
 - `POST /api/dj/receiver-state` -> authenticated, CSRF-protected receiver
   heartbeat/player state/command acknowledgement endpoint. Explicit receiver
   errors persist until a successful clear, so heartbeats cannot hide a failed

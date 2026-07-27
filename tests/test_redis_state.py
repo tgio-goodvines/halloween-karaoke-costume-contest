@@ -165,6 +165,7 @@ class RedisStateTests(unittest.TestCase):
         main.menu_items = []
         main.drink_orders = []
         main.dj_playlist = []
+        main.dj_song_requests = []
         main.dj_state = main.copy.deepcopy(main.DEFAULT_DJ_STATE)
         main.rsvp_signups = []
         main.rsvp_updates = []
@@ -804,6 +805,163 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("pending", state["dj_state"]["current_command"]["status"])
         self.assertEqual(song_id, state["dj_state"]["desired"]["song_id"])
         self.assertIn("Waiting for confirmation", play_response.get_data(as_text=True))
+
+    def test_attendee_can_submit_song_request_and_admin_approval_randomly_inserts_it_without_command(self):
+        main.event_experience_mode = "party_day"
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "203709340", "title": "Thriller", "artist": "Michael Jackson"}
+            )
+        ]
+        self.save_current_state()
+        original_randbelow = main.secrets.randbelow
+        main.secrets.randbelow = lambda upper: upper - 1
+        try:
+            with main.app.test_client() as client:
+                self.login_regular(client)
+                request_response = client.post(
+                    "/party/jukebox/requests",
+                    data={
+                        "title": "Superstition",
+                        "artist": "Stevie Wonder",
+                        "apple_music_id": "1440823671",
+                        "album": "Talking Book",
+                        "artwork_url": "https://example.test/superstition.jpg",
+                        "duration_ms": "267000",
+                    },
+                )
+                request_id = self.redis_state()["dj_song_requests"][0]["id"]
+                self.login_admin(client)
+                approve_response = client.post(
+                    "/admin/dj",
+                    data={"action": "approve_dj_song_request", "request_id": request_id},
+                )
+        finally:
+            main.secrets.randbelow = original_randbelow
+
+        state = self.redis_state()
+        self.assertEqual(302, request_response.status_code)
+        self.assertEqual(200, approve_response.status_code)
+        self.assertEqual([], state["dj_song_requests"])
+        self.assertEqual(["Thriller", "Superstition"], [song["title"] for song in state["dj_playlist"]])
+        self.assertIsNone(state["dj_state"]["current_command"])
+        self.assertIn("playlist position 2", approve_response.get_data(as_text=True))
+
+    def test_rejected_song_request_is_removed_without_changing_playlist(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "203709340", "title": "Thriller", "artist": "Michael Jackson"}
+            )
+        ]
+        main.dj_song_requests = [
+            main.normalize_dj_song_request(
+                {
+                    "id": "request-1",
+                    "requester_id": "user-1",
+                    "requester_name": "Jamie",
+                    "song": {"apple_music_id": "1440823671", "title": "Superstition", "artist": "Stevie Wonder"},
+                }
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post("/admin/dj", data={"action": "reject_dj_song_request", "request_id": "request-1"})
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual([], state["dj_song_requests"])
+        self.assertEqual(["Thriller"], [song["title"] for song in state["dj_playlist"]])
+
+    def test_admin_song_request_queue_fragment_requires_admin_and_contains_requests(self):
+        main.dj_song_requests = [
+            main.normalize_dj_song_request(
+                {"id": "request-1", "requester_id": "user-1", "requester_name": "Jamie", "song": {"apple_music_id": "1440823671", "title": "Superstition", "artist": "Stevie Wonder"}}
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            unauthorized_response = client.get("/api/admin/dj-song-request-queue")
+            self.login_admin(client)
+            response = client.get("/api/admin/dj-song-request-queue")
+
+        payload = response.get_json()
+        self.assertEqual(302, unauthorized_response.status_code)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, payload["request_count"])
+        self.assertIn("Superstition", payload["html"])
+
+    def test_attendee_jukebox_only_exposes_confirmed_song_and_own_pending_requests(self):
+        main.event_experience_mode = "party_day"
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "203709340", "title": "Thriller", "artist": "Michael Jackson"}
+            )
+        ]
+        main.dj_state["desired"]["song_id"] = "missing-song"
+        main.dj_state["receiver"]["current_song_id"] = "dj-1"
+        main.dj_state["receiver"]["playback_status"] = "playing"
+        main.dj_song_requests = [
+            main.normalize_dj_song_request(
+                {"id": "request-1", "requester_id": "user-1", "requester_name": "Jamie", "song": {"apple_music_id": "1440823671", "title": "Superstition", "artist": "Stevie Wonder"}}
+            ),
+            main.normalize_dj_song_request(
+                {"id": "request-2", "requester_id": "user-2", "requester_name": "Alex", "song": {"apple_music_id": "1440767688", "title": "Billie Jean", "artist": "Michael Jackson"}}
+            ),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.get("/api/party/jukebox-data")
+            page_response = client.get("/party/jukebox")
+            dashboard_response = client.get("/party")
+
+        payload = response.get_json()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(200, page_response.status_code)
+        self.assertEqual(200, dashboard_response.status_code)
+        self.assertEqual("Thriller", payload["now_playing"]["title"])
+        self.assertEqual("playing", payload["playback_status"])
+        self.assertEqual(["request-1"], [entry["id"] for entry in payload["pending_requests"]])
+        self.assertNotIn("desired", payload)
+        self.assertNotIn("receiver", payload)
+        self.assertIn("data-party-jukebox", page_response.get_data(as_text=True))
+        self.assertIn("Open Jukebox", dashboard_response.get_data(as_text=True))
+
+    def test_attendee_song_request_prevents_duplicate_and_limits_pending_requests(self):
+        main.event_experience_mode = "party_day"
+        self.save_current_state()
+        base_song = {
+            "title": "Thriller",
+            "artist": "Michael Jackson",
+            "apple_music_id": "203709340",
+            "album": "Thriller",
+            "artwork_url": "",
+            "duration_ms": "357000",
+        }
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            first_response = client.post("/party/jukebox/requests", data=base_song)
+            duplicate_response = client.post("/party/jukebox/requests", data=base_song)
+            for index in range(2):
+                client.post(
+                    "/party/jukebox/requests",
+                    data={**base_song, "title": f"Song {index}", "apple_music_id": f"song-{index}"},
+                )
+            limited_response = client.post(
+                "/party/jukebox/requests",
+                data={**base_song, "title": "One Too Many", "apple_music_id": "song-limit"},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(302, first_response.status_code)
+        self.assertIn("already have that song", duplicate_response.location.replace("+", " "))
+        self.assertEqual(3, len(state["dj_song_requests"]))
+        self.assertIn("up to 3 song requests", limited_response.location.replace("+", " "))
 
     def test_dj_receiver_acknowledges_command_and_display_data_uses_confirmed_song(self):
         main.dj_playlist = [

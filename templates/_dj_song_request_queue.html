@@ -1,0 +1,27 @@
+<header>
+  <div>
+    <h4>Song Requests</h4>
+    <p>Approving adds the song at a random saved-playlist position. It does not interrupt current playback.</p>
+  </div>
+  <span class="dj-status-pill">{{ dj_song_requests|length }} waiting</span>
+</header>
+{% if dj_song_requests %}
+  <div class="dj-request-list">
+    {% for request_entry in dj_song_requests %}
+      <article class="dj-request-card">
+        {% if request_entry.song.artwork_url %}<img src="{{ request_entry.song.artwork_url }}" alt="" loading="lazy">{% endif %}
+        <div>
+          <strong>{{ request_entry.song.title }}</strong>
+          <span>{{ request_entry.song.artist }}{% if request_entry.song.album %} · {{ request_entry.song.album }}{% endif %}{% if request_entry.song.explicit %} · Explicit{% endif %}</span>
+          <small>Requested by {{ request_entry.requester_name }} · {{ format_time_label(request_entry.requested_at) }}</small>
+        </div>
+        <div class="dj-request-card__actions">
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="request_id" value="{{ request_entry.id }}"><button type="submit" name="action" value="approve_dj_song_request" class="button button--primary">Approve</button></form>
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="request_id" value="{{ request_entry.id }}"><button type="submit" name="action" value="reject_dj_song_request" class="button button--danger">Reject</button></form>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="admin-empty">No attendee song requests are waiting.</p>
+{% endif %}

@@ -64,6 +64,9 @@
 - List of submitted costume entries.
 - Karaoke signup at `/party/karaoke` is attendee-accessible on the party date.
 - Karaoke signup validation for required name, song title, and artist.
+- Party-day Jukebox at `/party/jukebox` shows confirmed Now Playing state and
+  the DJ playlist, lets attendees search Apple Music, and submit up to three
+  pending song requests for DJ approval.
 - Optional YouTube link field for karaoke entries.
 - Karaoke signup success redirect and lineup display.
 - Event highlight slide rotation on the party dashboard. Pre-party slides use
@@ -152,6 +155,9 @@
 - DJ workspace has a confirmed **Reset DJ Workflow** recovery action. It stops
   the live display when connected, clears transient receiver/playback/command
   state only after acknowledgement, and preserves the saved playlist.
+- DJ workspace shows attendee song requests with approve/reject controls.
+  Approval inserts the song at a random saved-playlist position without
+  interrupting the display’s current MusicKit queue; rejection removes it.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.

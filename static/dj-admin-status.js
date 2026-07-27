@@ -4,12 +4,14 @@
 
   const displayApi = root.dataset.djDisplayApi;
   const updatesApi = root.dataset.djDisplayUpdates;
+  const requestQueueApi = root.dataset.djRequestQueueUrl;
   const titleize = (value) => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   const songLabel = (song, fallback) => song ? [song.title, song.artist].filter(Boolean).join(' — ') : fallback;
   const stateClass = (value) => String(value || 'idle').replaceAll('_', '-');
   const flowSteps = [...root.querySelectorAll('[data-dj-flow-step]')];
   const commandState = root.querySelector('[data-dj-command-state]');
   const receiverError = root.querySelector('[data-dj-receiver-error]');
+  const requestQueue = root.querySelector('[data-dj-song-request-queue]');
 
   const setText = (selector, value) => {
     const element = root.querySelector(selector);
@@ -72,13 +74,27 @@
   };
 
   let refreshing = false;
+  const refreshRequestQueue = async () => {
+    if (!requestQueueApi || !requestQueue) return;
+    try {
+      const response = await fetch(requestQueueApi, { credentials: 'same-origin', cache: 'no-store' });
+      const payload = await response.json();
+      if (response.ok && typeof payload.html === 'string') requestQueue.innerHTML = payload.html;
+    } catch (error) {
+      console.error('Unable to refresh DJ song requests', error);
+    }
+  };
+
   const refresh = async () => {
     if (refreshing || !displayApi) return;
     refreshing = true;
     try {
       const response = await fetch(displayApi, { credentials: 'same-origin', cache: 'no-store' });
       const payload = await response.json();
-      if (response.ok) render(payload.dj);
+      if (response.ok) {
+        render(payload.dj);
+        await refreshRequestQueue();
+      }
     } catch (error) {
       console.error('Unable to refresh DJ admin status', error);
     } finally {

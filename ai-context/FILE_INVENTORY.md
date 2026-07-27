@@ -21,9 +21,11 @@
 | `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, retained authorization diagnostics, reset handling, Redis-command execution, heartbeat/acknowledgement reporting, and Now Playing dock updates. |
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
 | `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal-path UI without reloading forms. |
+| `static/jukebox.js` | Attendee jukebox catalog search, request submission, and safe Now Playing/playlist polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
+| `templates/jukebox.html` | Attendee party-day Jukebox page with confirmed Now Playing, playlist, catalog search, and personal pending requests. |
 | `templates/menu.html` | Attendee food/drink menu for `/party/menu`, including menu images, availability, specialty/standard badges, drink ordering, and recent order statuses. |
 | `templates/drink_history.html` | Attendee full drink order history for `/party/drink-history`, including account-scoped order records, reorder controls, and per-order bartender tip QR/payment disclosure. |
 | `templates/bartender.html` | Bartender/admin page shell for `/bartender`, with messages and the live-refresh queue container. |

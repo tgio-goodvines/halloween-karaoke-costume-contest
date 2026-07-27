@@ -128,7 +128,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 4. The following globals in `main.py` are
+`halloween:state` with schema version 5. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -182,6 +182,9 @@ the process-local cache:
 - `karaoke_state`: whether karaoke has been started/stopped/reset and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.
 - `dj_playlist`: ordered Apple Music songs managed by admins.
+- `dj_song_requests`: pending attendee Apple Music requests. Approval removes
+  the request and inserts the song at a random saved-playlist position;
+  rejection removes it without changing the playlist or current playback.
 - `dj_state`: Redis-persisted desired command, acknowledgement, live-display
   heartbeat, MusicKit/audio readiness, confirmed player state, current song,
   retained failure details, and the latest DJ reset acknowledgement.

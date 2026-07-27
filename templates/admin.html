@@ -14,6 +14,7 @@
       <a href="{{ url_for('admin_portal', admin_view=key) }}"{% if key == admin_view %} aria-current="page"{% endif %}>
         {{ workspace.label }}
         {% if key == 'guests' %}<span>{{ rsvp_signups|length }}</span>{% endif %}
+        {% if key == 'dj' and dj_song_requests %}<span>{{ dj_song_requests|length }}</span>{% endif %}
         {% if key == 'bar' and active_drink_order_count %}<span>{{ active_drink_order_count }}</span>{% endif %}
       </a>
     {% endfor %}
@@ -70,7 +71,7 @@
         <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='dj') }}">
           <span class="admin-home__label">DJ receiver</span>
           <strong>{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</strong>
-          <span>{% if dj_state.current_song %}{{ dj_state.current_song.title }}{% else %}{{ dj_playlist|length }} song{{ 's' if dj_playlist|length != 1 else '' }} in playlist{% endif %}</span>
+          <span>{% if dj_song_requests %}{{ dj_song_requests|length }} request{{ 's' if dj_song_requests|length != 1 else '' }} waiting · {% endif %}{% if dj_state.current_song %}{{ dj_state.current_song.title }}{% else %}{{ dj_playlist|length }} song{{ 's' if dj_playlist|length != 1 else '' }} in playlist{% endif %}</span>
         </a>
       </div>
       <div class="admin-home__next-actions">
@@ -579,6 +580,7 @@
     data-dj-status-root
     data-dj-display-api="{{ url_for('display_data') }}"
     data-dj-display-updates="{{ url_for('display_updates') }}"
+    data-dj-request-queue-url="{{ url_for('admin_dj_song_request_queue') }}"
   >
     <header class="dj-section__header">
       <div>
@@ -627,6 +629,10 @@
     </p>
 
     <p class="dj-command-state dj-command-state--failed" data-dj-receiver-error{% if not dj_state.receiver.last_error %} hidden{% endif %}>{% if dj_state.receiver.last_error %}<strong>Receiver message:</strong> {{ dj_state.receiver.last_error }}{% endif %}</p>
+
+    <section class="dj-request-queue" aria-label="Attendee song requests" data-dj-song-request-queue>
+      {% include "_dj_song_request_queue.html" %}
+    </section>
 
     <div class="dj-controls">
       <form method="post">

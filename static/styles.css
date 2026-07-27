@@ -2281,6 +2281,60 @@ textarea:focus,
 .dj-catalog-search__controls input { flex: 1 1 16rem; }
 .dj-catalog-search__results { display: grid; gap: 0.6rem; margin-top: 0.85rem; }
 
+.jukebox-overview,
+.jukebox-now-playing,
+.dj-request-queue > header,
+.dj-request-card,
+.jukebox-page__header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jukebox-overview,
+.jukebox-now-playing,
+.jukebox-search,
+.jukebox-pending,
+.jukebox-playlist,
+.dj-request-queue {
+  margin: 1rem 0;
+  padding: 1.2rem;
+  border: 1px solid var(--line, #3f3f46);
+  border-radius: 0.9rem;
+  background: rgba(26, 26, 26, 0.92);
+}
+
+.jukebox-now-playing { justify-content: flex-start; }
+.jukebox-now-playing img,
+.dj-request-card img { width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: 0.7rem; }
+.jukebox-now-playing h3,
+.jukebox-page__header h2,
+.jukebox-search h3,
+.jukebox-pending h3,
+.jukebox-playlist h3,
+.dj-request-queue h4 { margin: 0.2rem 0; }
+.jukebox-song-list { display: grid; gap: 0.55rem; padding-left: 1.3rem; }
+.jukebox-song-list li { display: grid; gap: 0.1rem; }
+.jukebox-song-list span,
+.dj-request-card span,
+.dj-request-card small { color: var(--text-muted, #a1a1aa); }
+.dj-request-list { display: grid; gap: 0.7rem; margin-top: 0.9rem; }
+.dj-request-card { justify-content: flex-start; padding: 0.75rem; border: 1px solid var(--line, #3f3f46); border-radius: 0.75rem; }
+.dj-request-card > div:nth-child(2) { display: grid; gap: 0.12rem; flex: 1; }
+.dj-request-card__actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+@media (max-width: 640px) {
+  .jukebox-overview,
+  .jukebox-page__header,
+  .dj-request-queue > header,
+  .dj-request-card { align-items: stretch; flex-direction: column; }
+  .jukebox-overview .button { width: 100%; text-align: center; }
+  .dj-request-card__actions form,
+  .dj-request-card__actions .button { flex: 1; }
+}
+
 .dj-catalog-result {
   display: grid;
   grid-template-columns: 3rem minmax(0, 1fr) auto;

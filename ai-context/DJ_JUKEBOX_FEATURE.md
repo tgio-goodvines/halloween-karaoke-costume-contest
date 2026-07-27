@@ -67,10 +67,18 @@ The DJ workspace always renders these four stages:
 4. **Audio output** — actual playback state and whether the display has been
    locally enabled for browser audio.
 
+When the display has completed Apple authorization and unlocked audio, the idle
+path is intentionally all green: **Admin request: Ready**, **Live display:
+Connected**, **Apple Music: Authorized**, and **Audio output: Ready**. Playback
+is not required for this healthy armed state.
+
 This prevents the historical control failure mode where a button press was
 shown as playback even though the display had not received it or browser audio
 had not been unlocked. MusicKit startup is deferred until the Apple library has
 loaded, and client errors are normalized so the UI never reports `undefined`.
+The display only reports Apple Music as authorized after MusicKit confirms an
+authenticated user; a cancelled or absent Apple sign-in can resolve without an
+exception and is therefore explicitly treated as a pairing failure.
 
 ## MusicKit Setup
 

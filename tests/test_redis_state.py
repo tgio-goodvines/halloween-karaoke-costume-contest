@@ -881,6 +881,23 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("cancelled", flow[0]["detail"])
         self.assertIn("cancelled", flow[2]["detail"])
 
+    def test_dj_signal_path_is_green_ready_after_display_audio_is_enabled(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "stopped",
+                "clear_error": True,
+            }
+        )
+
+        flow = main.dj_command_flow()
+        self.assertEqual(["ready", "connected", "authorized", "ready"], [step["state"] for step in flow])
+        self.assertIn("armed", flow[0]["detail"])
+        self.assertIn("unlocked", flow[3]["detail"])
+
     def test_dj_workflow_reset_preserves_playlist_and_waits_for_display_acknowledgement(self):
         main.dj_playlist = [
             main.normalize_dj_song(

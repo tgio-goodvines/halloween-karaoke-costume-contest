@@ -299,7 +299,11 @@
     setDetail('Connecting Apple Music…');
     try {
       const instance = await ensureMusicKit();
-      await instance.authorize();
+      const wasAuthorized = Boolean(instance.isAuthorized);
+      const userToken = await instance.authorize();
+      if (!instance.isAuthorized || (!userToken && !wasAuthorized)) {
+        throw new Error('Apple Music sign-in did not complete. Click Enable DJ Audio again and finish the Apple prompt on this display.');
+      }
       audioEnabled = true;
       authorizationStatus = 'authorized';
       receiverError = '';

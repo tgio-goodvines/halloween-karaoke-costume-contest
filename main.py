@@ -1947,8 +1947,15 @@ def dj_command_flow() -> list[dict[str, str]]:
     last_command = dj_state.get("last_command")
     last_reset = dj_state.get("last_reset")
     receiver_online = dj_receiver_is_online(receiver if isinstance(receiver, dict) else None)
-    requested_state = "idle"
-    requested_detail = "No command waiting."
+    receiver_ready = bool(
+        isinstance(receiver, dict)
+        and receiver_online
+        and receiver.get("status") == "ready"
+        and receiver.get("authorization_status") == "authorized"
+        and receiver.get("audio_enabled")
+    )
+    requested_state = "ready" if receiver_ready else "idle"
+    requested_detail = "DJ controls are armed and ready for a song." if receiver_ready else "No command waiting."
     command_error = ""
     if isinstance(current_command, dict):
         requested_state = "pending"
@@ -1972,11 +1979,17 @@ def dj_command_flow() -> list[dict[str, str]]:
             requested_state = "confirmed"
             requested_detail = "The live display confirmed the last DJ command."
 
+    audio_state = str(receiver.get("playback_status", "stopped") or "stopped")
+    audio_detail = command_error or ("DJ audio is enabled." if receiver.get("audio_enabled") else "Use Enable DJ Audio on the live display once.")
+    if receiver_ready and audio_state == "stopped":
+        audio_state = "ready"
+        audio_detail = "Audio is unlocked and ready to play."
+
     return [
         {"label": "Admin request", "state": requested_state, "detail": requested_detail},
         {"label": "Live display", "state": "connected" if receiver_online else "offline", "detail": "Receiver heartbeat is current." if receiver_online else "Open or refresh the live display on the TV."},
         {"label": "Apple Music", "state": str(receiver.get("authorization_status", "not_configured") or "not_configured"), "detail": str(receiver.get("last_error", "") or "Authorize Apple Music on the display when needed.")},
-        {"label": "Audio output", "state": str(receiver.get("playback_status", "stopped") or "stopped"), "detail": command_error or ("DJ audio is enabled." if receiver.get("audio_enabled") else "Use Enable DJ Audio on the live display once.")},
+        {"label": "Audio output", "state": audio_state, "detail": audio_detail},
     ]
 
 

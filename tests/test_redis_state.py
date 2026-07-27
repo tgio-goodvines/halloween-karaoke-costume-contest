@@ -931,6 +931,89 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("data-party-jukebox", page_response.get_data(as_text=True))
         self.assertIn("Open Jukebox", dashboard_response.get_data(as_text=True))
 
+    def test_apple_music_catalog_search_returns_safe_eight_song_pages(self):
+        class FakeAppleResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def read(self):
+                return json.dumps(self.payload).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+        requested_urls = []
+        payloads = [
+            {"results": {"songs": {"data": [{"id": "song-1", "attributes": {"name": "Song 1", "artistName": "Artist 1"}}], "next": "/v1/catalog/us/search?offset=8"}}},
+            {"results": {"songs": {"data": [{"id": "song-9", "attributes": {"name": "Song 9", "artistName": "Artist 9"}}]}}},
+        ]
+        original_urlopen = main.urlopen
+        original_developer_token = main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"]
+
+        def fake_urlopen(api_request, timeout):
+            requested_urls.append(api_request.full_url)
+            return FakeAppleResponse(payloads.pop(0))
+
+        main.urlopen = fake_urlopen
+        main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = "test-developer-token"
+        try:
+            first_page = main.search_apple_music_catalog("Artist", 0)
+            second_page = main.search_apple_music_catalog("Artist", 8)
+        finally:
+            main.urlopen = original_urlopen
+            main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = original_developer_token
+
+        self.assertEqual(["Song 1"], [song["title"] for song in first_page["results"]])
+        self.assertEqual(8, first_page["next_offset"])
+        self.assertIsNone(second_page["next_offset"])
+        self.assertIn("limit=8", requested_urls[0])
+        self.assertIn("offset=0", requested_urls[0])
+        self.assertIn("offset=8", requested_urls[1])
+
+    def test_catalog_search_endpoints_return_pages_and_reject_invalid_offsets(self):
+        main.event_experience_mode = "party_day"
+        original_search = main.search_apple_music_catalog
+        original_developer_token = main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"]
+        captured_offsets = []
+
+        def fake_search(query, offset=0):
+            captured_offsets.append((query, offset))
+            return {
+                "results": [{"title": "Song 9", "artist": "Artist", "apple_music_id": "song-9"}],
+                "next_offset": None,
+            }
+
+        main.search_apple_music_catalog = fake_search
+        main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = "test-developer-token"
+        try:
+            with main.app.test_client() as client:
+                self.login_admin(client)
+                admin_response = client.get("/api/dj/catalog-search?q=Artist&offset=8")
+                invalid_admin_response = client.get("/api/dj/catalog-search?q=Artist&offset=provider-url")
+                self.login_regular(client)
+                attendee_response = client.get("/api/party/jukebox/catalog-search?q=Artist&offset=8")
+                invalid_attendee_response = client.get("/api/party/jukebox/catalog-search?q=Artist&offset=-1")
+                misaligned_attendee_response = client.get("/api/party/jukebox/catalog-search?q=Artist&offset=7")
+        finally:
+            main.search_apple_music_catalog = original_search
+            main.app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = original_developer_token
+
+        self.assertEqual(200, admin_response.status_code)
+        self.assertEqual(8, admin_response.get_json()["offset"])
+        self.assertEqual(200, attendee_response.status_code)
+        self.assertEqual(8, attendee_response.get_json()["offset"])
+        self.assertEqual([("Artist", 8), ("Artist", 8)], captured_offsets)
+        self.assertEqual(400, invalid_admin_response.status_code)
+        self.assertEqual(400, invalid_attendee_response.status_code)
+        self.assertEqual(400, misaligned_attendee_response.status_code)
+
+        page_html = client.get("/party/jukebox").get_data(as_text=True)
+        self.assertIn("data-jukebox-pagination", page_html)
+        self.assertIn("Song title or artist", page_html)
+
     def test_attendee_song_request_prevents_duplicate_and_limits_pending_requests(self):
         main.event_experience_mode = "party_day"
         self.save_current_state()

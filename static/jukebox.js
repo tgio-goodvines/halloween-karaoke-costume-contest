@@ -8,7 +8,14 @@
   const searchButton = root.querySelector('[data-jukebox-search]');
   const searchMessage = root.querySelector('[data-jukebox-search-message]');
   const results = root.querySelector('[data-jukebox-results]');
+  const pagination = root.querySelector('[data-jukebox-pagination]');
+  const previousButton = root.querySelector('[data-jukebox-previous]');
+  const nextButton = root.querySelector('[data-jukebox-next]');
+  const pageLabel = root.querySelector('[data-jukebox-page]');
   const requestForm = document.querySelector('[data-jukebox-request-form]');
+  let activeQuery = '';
+  let activeOffset = 0;
+  let nextOffset = null;
 
   const setMessage = (message, isError = false) => {
     if (!searchMessage) return;
@@ -80,23 +87,45 @@
     });
   };
 
-  const search = async () => {
+  const updatePagination = () => {
+    if (!pagination) return;
+    const hasResults = Boolean(results?.children.length);
+    pagination.hidden = !hasResults;
+    if (previousButton) previousButton.disabled = activeOffset === 0;
+    if (nextButton) nextButton.disabled = nextOffset === null;
+    if (pageLabel) pageLabel.textContent = hasResults ? `Page ${Math.floor(activeOffset / 8) + 1}` : '';
+  };
+
+  const search = async (offset = 0) => {
     const term = (query?.value || '').trim();
     if (term.length < 2) return setMessage('Enter at least two characters to search Apple Music.', true);
+    if (term !== activeQuery) offset = 0;
     searchButton.disabled = true;
+    if (previousButton) previousButton.disabled = true;
+    if (nextButton) nextButton.disabled = true;
     setMessage('Searching Apple Music…');
     if (results) results.innerHTML = '';
     try {
       const url = new URL(searchUrl, window.location.origin);
       url.searchParams.set('q', term);
+      url.searchParams.set('offset', String(offset));
       const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Search failed.');
       const songs = Array.isArray(payload.results) ? payload.results : [];
-      if (!songs.length) return setMessage('No matching songs found. Try another search.');
+      activeQuery = term;
+      activeOffset = Number.isInteger(payload.offset) ? payload.offset : offset;
+      nextOffset = Number.isInteger(payload.next_offset) ? payload.next_offset : null;
+      if (!songs.length) {
+        updatePagination();
+        return setMessage(activeOffset ? 'No more matching songs found.' : 'No matching songs found. Try another search.');
+      }
       renderResults(songs);
-      setMessage(`${songs.length} matching song${songs.length === 1 ? '' : 's'} found.`);
+      updatePagination();
+      setMessage(`${songs.length} matching song${songs.length === 1 ? '' : 's'} found on page ${Math.floor(activeOffset / 8) + 1}.`);
     } catch (error) {
+      nextOffset = null;
+      updatePagination();
       setMessage(error.message || 'Apple Music catalog search is unavailable.', true);
     } finally {
       searchButton.disabled = false;
@@ -126,6 +155,10 @@
   };
 
   searchButton?.addEventListener('click', search);
+  previousButton?.addEventListener('click', () => search(Math.max(0, activeOffset - 8)));
+  nextButton?.addEventListener('click', () => {
+    if (nextOffset !== null) search(nextOffset);
+  });
   query?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();

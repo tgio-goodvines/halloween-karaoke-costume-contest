@@ -2280,6 +2280,18 @@ textarea:focus,
 
 .dj-catalog-search__controls input { flex: 1 1 16rem; }
 .dj-catalog-search__results { display: grid; gap: 0.6rem; margin-top: 0.85rem; }
+.dj-catalog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-top: 0.85rem;
+  color: var(--text-muted, #a1a1aa);
+  font: 700 0.78rem/1 "Outfit", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dj-catalog-pagination[hidden] { display: none; }
 
 .jukebox-overview,
 .jukebox-now-playing,
@@ -2331,6 +2343,10 @@ textarea:focus,
   .dj-request-queue > header,
   .dj-request-card { align-items: stretch; flex-direction: column; }
   .jukebox-overview .button { width: 100%; text-align: center; }
+  .dj-catalog-pagination { align-items: stretch; flex-wrap: wrap; }
+  .dj-catalog-pagination [data-jukebox-page],
+  .dj-catalog-pagination [data-dj-catalog-page] { flex: 1 0 100%; text-align: center; }
+  .dj-catalog-pagination .button { flex: 1; }
   .dj-request-card__actions form,
   .dj-request-card__actions .button { flex: 1; }
 }

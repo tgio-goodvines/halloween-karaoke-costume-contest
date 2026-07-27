@@ -30,11 +30,16 @@
     <h3>Request a Song</h3>
     <div class="dj-catalog-search__controls">
       <label class="visually-hidden" for="jukebox_query">Search Apple Music</label>
-      <input id="jukebox_query" type="search" minlength="2" autocomplete="off" placeholder="Search song or artist" data-jukebox-query>
+      <input id="jukebox_query" type="search" minlength="2" autocomplete="off" placeholder="Song title or artist" data-jukebox-query>
       <button type="button" class="button button--primary" data-jukebox-search>Search</button>
     </div>
-    <p class="dj-catalog-search__message" data-jukebox-search-message>Search Apple Music, then choose the song you want the DJ to consider.</p>
+    <p class="dj-catalog-search__message" data-jukebox-search-message role="status" aria-live="polite">Search by song title, artist, or both, then choose the song you want the DJ to consider.</p>
     <div class="dj-catalog-search__results" data-jukebox-results></div>
+    <nav class="dj-catalog-pagination" aria-label="Song search results" data-jukebox-pagination hidden>
+      <button type="button" class="button" data-jukebox-previous disabled>Previous</button>
+      <span data-jukebox-page></span>
+      <button type="button" class="button" data-jukebox-next disabled>Next</button>
+    </nav>
   </section>
 
   <section class="jukebox-pending">

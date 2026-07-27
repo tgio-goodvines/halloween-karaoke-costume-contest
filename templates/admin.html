@@ -682,11 +682,16 @@
     <div class="dj-catalog-search" data-dj-catalog-search data-search-url="{{ url_for('dj_catalog_search') }}">
       <label for="dj_catalog_query">Search Apple Music catalog</label>
       <div class="dj-catalog-search__controls">
-        <input id="dj_catalog_query" type="search" placeholder="Song or artist" minlength="2" autocomplete="off">
+        <input id="dj_catalog_query" type="search" placeholder="Song title or artist" minlength="2" autocomplete="off">
         <button type="button" class="button" data-dj-catalog-search-button>Search</button>
       </div>
-      <p class="dj-catalog-search__message" data-dj-catalog-search-message>Search results are added to the form below; confirm the track before saving.</p>
+      <p class="dj-catalog-search__message" data-dj-catalog-search-message role="status" aria-live="polite">Search by song title, artist, or both. Confirm a result before saving it.</p>
       <div class="dj-catalog-search__results" data-dj-catalog-search-results></div>
+      <nav class="dj-catalog-pagination" aria-label="Catalog search results" data-dj-catalog-pagination hidden>
+        <button type="button" class="button" data-dj-catalog-previous disabled>Previous</button>
+        <span data-dj-catalog-page></span>
+        <button type="button" class="button" data-dj-catalog-next disabled>Next</button>
+      </nav>
     </div>
 
     <details class="admin-entry admin-entry--new" open>

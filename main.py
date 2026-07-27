@@ -2116,11 +2116,39 @@ def apple_music_developer_token() -> str:
     )
 
 
-def search_apple_music_catalog(query: str) -> list[dict[str, object]]:
+APPLE_MUSIC_CATALOG_PAGE_SIZE = 8
+APPLE_MUSIC_CATALOG_MAX_OFFSET = 200
+
+
+def parse_catalog_search_offset(raw_offset: str | None) -> int | None:
+    """Return a bounded catalog result offset without accepting provider URLs."""
+    if raw_offset in {None, ""}:
+        return 0
+    try:
+        offset = int(raw_offset)
+    except (TypeError, ValueError):
+        return None
+    if (
+        offset < 0
+        or offset > APPLE_MUSIC_CATALOG_MAX_OFFSET
+        or offset % APPLE_MUSIC_CATALOG_PAGE_SIZE != 0
+    ):
+        return None
+    return offset
+
+
+def search_apple_music_catalog(query: str, offset: int = 0) -> dict[str, object]:
     query = query.strip()
     if not query:
-        return []
-    encoded_query = urlencode({"term": query, "types": "songs", "limit": 12})
+        return {"results": [], "next_offset": None}
+    encoded_query = urlencode(
+        {
+            "term": query,
+            "types": "songs",
+            "limit": APPLE_MUSIC_CATALOG_PAGE_SIZE,
+            "offset": offset,
+        }
+    )
     url = f"https://api.music.apple.com/v1/catalog/{app.config['APPLE_MUSIC_STOREFRONT']}/search?{encoded_query}"
     api_request = UrlRequest(url, headers={"Authorization": f"Bearer {apple_music_developer_token()}"})
     try:
@@ -2129,7 +2157,8 @@ def search_apple_music_catalog(query: str) -> list[dict[str, object]]:
     except Exception as exc:  # Apple returns provider-specific HTTP errors.
         raise RuntimeError("Apple Music catalog search is unavailable right now.") from exc
 
-    results = payload.get("results", {}).get("songs", {}).get("data", []) if isinstance(payload, dict) else []
+    song_results = payload.get("results", {}).get("songs", {}) if isinstance(payload, dict) else {}
+    results = song_results.get("data", []) if isinstance(song_results, dict) else []
     songs: list[dict[str, object]] = []
     for result in results:
         if not isinstance(result, dict):
@@ -2155,7 +2184,14 @@ def search_apple_music_catalog(query: str) -> list[dict[str, object]]:
         )
         if song:
             songs.append(song)
-    return songs
+    # Apple returns an opaque `next` URL. We use it only as a signal that a
+    # following page exists; the browser passes a bounded numeric offset to our
+    # own endpoint, never a provider-controlled URL.
+    has_next_page = bool(song_results.get("next")) if isinstance(song_results, dict) else False
+    return {
+        "results": songs,
+        "next_offset": offset + APPLE_MUSIC_CATALOG_PAGE_SIZE if has_next_page else None,
+    }
 
 
 def build_menu_sections() -> dict[str, list[dict[str, object]]]:
@@ -3375,14 +3411,17 @@ def dj_catalog_search():
     query = request.args.get("q", "").strip()
     if len(query) < 2:
         return jsonify({"results": [], "error": "Enter at least two characters to search Apple Music."})
+    offset = parse_catalog_search_offset(request.args.get("offset"))
+    if offset is None:
+        return jsonify({"results": [], "error": "That search results page is invalid."}), 400
     if not apple_music_is_configured():
         return jsonify({"results": [], "error": "Apple Music is not configured for this event."}), 503
     try:
-        results = search_apple_music_catalog(query)
+        search_page = search_apple_music_catalog(query, offset)
     except RuntimeError as exc:
         app.logger.warning("Apple Music catalog search failed: %s", exc)
         return jsonify({"results": [], "error": "Apple Music catalog search is unavailable right now."}), 502
-    return jsonify({"results": results})
+    return jsonify({**search_page, "offset": offset})
 
 
 @app.route("/api/party/jukebox/catalog-search")
@@ -3393,14 +3432,17 @@ def party_jukebox_catalog_search():
     query = request.args.get("q", "").strip()
     if len(query) < 2:
         return jsonify({"results": [], "error": "Enter at least two characters to search Apple Music."})
+    offset = parse_catalog_search_offset(request.args.get("offset"))
+    if offset is None:
+        return jsonify({"results": [], "error": "That search results page is invalid."}), 400
     if not apple_music_is_configured():
         return jsonify({"results": [], "error": "Apple Music is not configured for this event."}), 503
     try:
-        results = search_apple_music_catalog(query)
+        search_page = search_apple_music_catalog(query, offset)
     except RuntimeError as exc:
         app.logger.warning("Attendee Apple Music catalog search failed: %s", exc)
         return jsonify({"results": [], "error": "Apple Music catalog search is unavailable right now."}), 502
-    return jsonify({"results": results})
+    return jsonify({**search_page, "offset": offset})
 
 
 @app.route("/api/party/jukebox-data")

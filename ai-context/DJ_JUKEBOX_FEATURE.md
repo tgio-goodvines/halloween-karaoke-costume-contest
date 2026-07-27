@@ -17,8 +17,9 @@ complete.
 - `GET|POST /admin/dj` — DJ workspace. Playlist CRUD, order changes,
   individual-song play, start-from-beginning, shuffle-and-play, previous,
   pause, stop, next, and visible command/receiver state flow.
-- `GET /api/dj/catalog-search?q=` — authenticated Apple Music catalog search
-  used by the DJ form. The developer token remains server-side.
+- `GET /api/dj/catalog-search?q=&offset=` — authenticated Apple Music catalog
+  search used by the DJ form. It returns eight songs per page plus an optional
+  numeric `next_offset`; the developer token remains server-side.
 - `GET /api/dj/musickit-token` — returns a short-lived developer token only to
   the authenticated live display/admin browser; never returns the Media
   Services private key.
@@ -30,6 +31,18 @@ complete.
 - `GET /api/party/jukebox-data`, `GET /api/party/jukebox/catalog-search`, and
   `POST /party/jukebox/requests` — attendee-authenticated safe state, catalog
   search, and CSRF-protected request submission endpoints.
+
+## Catalog Search
+
+Both the DJ workspace and attendee jukebox use one combined **Song title or
+artist** field. Apple Music catalog search matches either value, while entering
+both terms narrows the results without adding two competing controls.
+
+Results are shown eight at a time with Previous/Next controls. The server uses
+Apple's pagination only as a signal that another page exists, then exposes a
+bounded numeric `offset` to the browser. It never accepts or follows an
+Apple-provided next URL from a client request. This keeps the developer-token
+request server-side and prevents the search endpoint from becoming a URL proxy.
 
 `/api/display-data` contains a `dj` object. `templates/display.html` renders a
 persistent Now Playing dock that stays visible below the display header while

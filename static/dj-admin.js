@@ -9,7 +9,14 @@
   const searchButton = searchRoot.querySelector('[data-dj-catalog-search-button]');
   const message = searchRoot.querySelector('[data-dj-catalog-search-message]');
   const results = searchRoot.querySelector('[data-dj-catalog-search-results]');
+  const pagination = searchRoot.querySelector('[data-dj-catalog-pagination]');
+  const previousButton = searchRoot.querySelector('[data-dj-catalog-previous]');
+  const nextButton = searchRoot.querySelector('[data-dj-catalog-next]');
+  const pageLabel = searchRoot.querySelector('[data-dj-catalog-page]');
   const searchUrl = searchRoot.dataset.searchUrl;
+  let activeQuery = '';
+  let activeOffset = 0;
+  let nextOffset = null;
 
   const setMessage = (text, isError = false) => {
     if (!message) return;
@@ -73,31 +80,51 @@
     });
   };
 
-  const search = async () => {
+  const updatePagination = () => {
+    if (!pagination) return;
+    const hasResults = Boolean(results?.children.length);
+    pagination.hidden = !hasResults;
+    if (previousButton) previousButton.disabled = activeOffset === 0;
+    if (nextButton) nextButton.disabled = nextOffset === null;
+    if (pageLabel) pageLabel.textContent = hasResults ? `Page ${Math.floor(activeOffset / 8) + 1}` : '';
+  };
+
+  const search = async (offset = 0) => {
     const query = (queryInput?.value || '').trim();
     if (query.length < 2) {
       setMessage('Enter at least two characters to search Apple Music.', true);
       return;
     }
     if (!searchUrl) return;
+    if (query !== activeQuery) offset = 0;
 
     searchButton.disabled = true;
+    if (previousButton) previousButton.disabled = true;
+    if (nextButton) nextButton.disabled = true;
     setMessage('Searching Apple Music…');
     if (results) results.innerHTML = '';
     try {
       const url = new URL(searchUrl, window.location.origin);
       url.searchParams.set('q', query);
+      url.searchParams.set('offset', String(offset));
       const response = await fetch(url, { cache: 'no-store' });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Search failed.');
       const songs = Array.isArray(payload.results) ? payload.results : [];
+      activeQuery = query;
+      activeOffset = Number.isInteger(payload.offset) ? payload.offset : offset;
+      nextOffset = Number.isInteger(payload.next_offset) ? payload.next_offset : null;
       if (!songs.length) {
-        setMessage('No Apple Music songs matched that search. You can still add a catalog ID manually.');
+        updatePagination();
+        setMessage(activeOffset ? 'No more Apple Music songs matched that search.' : 'No Apple Music songs matched that search. You can still add a catalog ID manually.');
         return;
       }
       renderResults(songs);
-      setMessage(`${songs.length} matching song${songs.length === 1 ? '' : 's'} found.`);
+      updatePagination();
+      setMessage(`${songs.length} matching song${songs.length === 1 ? '' : 's'} found on page ${Math.floor(activeOffset / 8) + 1}.`);
     } catch (error) {
+      nextOffset = null;
+      updatePagination();
       setMessage(error.message || 'Apple Music catalog search is unavailable.', true);
     } finally {
       searchButton.disabled = false;
@@ -105,6 +132,10 @@
   };
 
   searchButton?.addEventListener('click', search);
+  previousButton?.addEventListener('click', () => search(Math.max(0, activeOffset - 8)));
+  nextButton?.addEventListener('click', () => {
+    if (nextOffset !== null) search(nextOffset);
+  });
   queryInput?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();

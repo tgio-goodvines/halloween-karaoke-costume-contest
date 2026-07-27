@@ -103,10 +103,16 @@ wrapper reads them into process environment variables:
 - `apple_music_team_id`, `apple_music_key_id`, and
   `apple_music_private_key` — server-side ES256 signing inputs.
 - `apple_music_storefront` — optional; defaults to `us`.
+- `apple_music_web_origin` — optional canonical HTTPS origin for MusicKit Web;
+  defaults to `HALLOWEEN_PUBLIC_BASE_URL` (`https://tnq-halloween.com`).
 
 The configured storefront is returned with the authenticated developer token
 and supplied to MusicKit’s web-player configuration. The live display and
 catalog search must use the same country code; production currently uses `us`.
+When the app signs its developer token, it includes the canonical web origin
+claim. This is required for the display browser to exchange an Apple Music
+authorization for a user storefront; a pre-signed replacement token must carry
+the same claim.
 
 Never store the Media Services `.p8` key in Redis, templates, browser storage,
 Git, or chat. The display browser’s Apple Music user authorization is handled

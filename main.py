@@ -87,6 +87,9 @@ app.config["APPLE_MUSIC_DEVELOPER_TOKEN"] = os.environ.get(
 app.config["APPLE_MUSIC_STOREFRONT"] = os.environ.get(
     "HALLOWEEN_APPLE_MUSIC_STOREFRONT", "us"
 ).strip().lower() or "us"
+app.config["APPLE_MUSIC_WEB_ORIGIN"] = os.environ.get(
+    "HALLOWEEN_APPLE_MUSIC_WEB_ORIGIN", app.config["PUBLIC_BASE_URL"]
+).strip()
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -2022,6 +2025,15 @@ def apple_music_is_configured() -> bool:
     )
 
 
+def apple_music_web_origin() -> str:
+    """Return the canonical browser origin Apple should bind a MusicKit token to."""
+    raw_origin = str(app.config.get("APPLE_MUSIC_WEB_ORIGIN", "") or "").strip()
+    parsed = urlparse(raw_origin)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 def apple_music_developer_token() -> str:
     direct_token = app.config["APPLE_MUSIC_DEVELOPER_TOKEN"]
     if direct_token:
@@ -2035,9 +2047,17 @@ def apple_music_developer_token() -> str:
         raise RuntimeError("PyJWT is required to sign Apple Music developer tokens.") from exc
 
     now = int(time.time())
+    claims = {"iss": app.config["APPLE_MUSIC_TEAM_ID"], "iat": now, "exp": now + 60 * 60 * 24 * 180}
+    # MusicKit on the Web uses this claim while exchanging the subscriber's
+    # authorization for a Music User Token. Omitting it can allow catalog
+    # searches but fail the subsequent /v1/me/storefront request.
+    web_origin = apple_music_web_origin()
+    if web_origin:
+        claims["origin"] = web_origin
+
     return str(
         jwt.encode(
-            {"iss": app.config["APPLE_MUSIC_TEAM_ID"], "iat": now, "exp": now + 60 * 60 * 24 * 180},
+            claims,
             app.config["APPLE_MUSIC_PRIVATE_KEY"],
             algorithm="ES256",
             headers={"kid": app.config["APPLE_MUSIC_KEY_ID"]},

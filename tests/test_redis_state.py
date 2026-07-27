@@ -1,7 +1,9 @@
 import io
 import json
 import os
+import sys
 import tempfile
+import types
 import unittest
 
 import redis
@@ -994,6 +996,40 @@ class RedisStateTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(200, response.status_code)
         self.assertEqual("us", payload["storefront"])
+
+    def test_generated_musickit_token_binds_to_configured_web_origin(self):
+        original_team_id = main.app.config["APPLE_MUSIC_TEAM_ID"]
+        original_key_id = main.app.config["APPLE_MUSIC_KEY_ID"]
+        original_private_key = main.app.config["APPLE_MUSIC_PRIVATE_KEY"]
+        original_origin = main.app.config["APPLE_MUSIC_WEB_ORIGIN"]
+        original_jwt = sys.modules.get("jwt")
+        captured = {}
+
+        def encode(claims, private_key, algorithm, headers):
+            captured.update({"claims": claims, "private_key": private_key, "algorithm": algorithm, "headers": headers})
+            return "signed-token"
+
+        main.app.config["APPLE_MUSIC_TEAM_ID"] = "team-id"
+        main.app.config["APPLE_MUSIC_KEY_ID"] = "key-id"
+        main.app.config["APPLE_MUSIC_PRIVATE_KEY"] = "private-key"
+        main.app.config["APPLE_MUSIC_WEB_ORIGIN"] = "https://tnq-halloween.com/display"
+        sys.modules["jwt"] = types.SimpleNamespace(encode=encode)
+        try:
+            token = main.apple_music_developer_token()
+        finally:
+            main.app.config["APPLE_MUSIC_TEAM_ID"] = original_team_id
+            main.app.config["APPLE_MUSIC_KEY_ID"] = original_key_id
+            main.app.config["APPLE_MUSIC_PRIVATE_KEY"] = original_private_key
+            main.app.config["APPLE_MUSIC_WEB_ORIGIN"] = original_origin
+            if original_jwt is None:
+                del sys.modules["jwt"]
+            else:
+                sys.modules["jwt"] = original_jwt
+
+        self.assertEqual("signed-token", token)
+        self.assertEqual("https://tnq-halloween.com", captured["claims"]["origin"])
+        self.assertEqual("ES256", captured["algorithm"])
+        self.assertEqual({"kid": "key-id"}, captured["headers"])
 
     def test_health_returns_state_store_status(self):
         main.display_update_version = 5

@@ -79,6 +79,10 @@ loaded, and client errors are normalized so the UI never reports `undefined`.
 The display only reports Apple Music as authorized after MusicKit confirms an
 authenticated user; a cancelled or absent Apple sign-in can resolve without an
 exception and is therefore explicitly treated as a pairing failure.
+The first **Enable DJ Audio** click on a freshly loaded display clears any stale
+MusicKit browser authorization and requires a newly issued Music User Token, so
+the operator receives Apple’s account/consent flow instead of a false-ready
+state.
 
 ## MusicKit Setup
 

@@ -24,6 +24,7 @@
   let music = null;
   let audioEnabled = false;
   let authorizationStatus = 'not_authorized';
+  let verifiedMusicUserToken = '';
   let receiverError = '';
   let pairingInProgress = false;
   let processingCommandId = '';
@@ -299,11 +300,17 @@
     setDetail('Connecting Apple Music…');
     try {
       const instance = await ensureMusicKit();
-      const wasAuthorized = Boolean(instance.isAuthorized);
+      // MusicKit can retain an unusable/stale browser authorization from an
+      // earlier page. The first explicit enable click must establish a real
+      // Music User Token so the operator sees Apple's consent/account flow.
+      if (!verifiedMusicUserToken && instance.isAuthorized && typeof instance.unauthorize === 'function') {
+        await instance.unauthorize();
+      }
       const userToken = await instance.authorize();
-      if (!instance.isAuthorized || (!userToken && !wasAuthorized)) {
+      if (!instance.isAuthorized || !userToken) {
         throw new Error('Apple Music sign-in did not complete. Click Enable DJ Audio again and finish the Apple prompt on this display.');
       }
+      verifiedMusicUserToken = userToken;
       audioEnabled = true;
       authorizationStatus = 'authorized';
       receiverError = '';

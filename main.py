@@ -89,7 +89,7 @@ app.config["APPLE_MUSIC_STOREFRONT"] = os.environ.get(
 ).strip().lower() or "us"
 app.config["APPLE_MUSIC_WEB_ORIGIN"] = os.environ.get(
     "HALLOWEEN_APPLE_MUSIC_WEB_ORIGIN", app.config["PUBLIC_BASE_URL"]
-).strip()
+).strip() or app.config["PUBLIC_BASE_URL"]
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like

@@ -5227,18 +5227,23 @@ def admin_youtube_connect():
     except YouTubeApiError as exc:
         return redirect(url_for("admin_portal", admin_view="karaoke", youtube_error=exc.message))
     session["youtube_oauth_state"] = state
+    session["youtube_oauth_code_verifier"] = str(flow.code_verifier or "")
     return redirect(authorization_url)
 
 
 @app.get("/admin/karaoke/youtube/callback")
 def admin_youtube_callback():
     expected_state = str(session.pop("youtube_oauth_state", "") or "")
+    code_verifier = str(session.pop("youtube_oauth_code_verifier", "") or "")
     provided_state = request.args.get("state", "")
     if not expected_state or not secrets.compare_digest(expected_state, provided_state):
         return redirect(url_for("admin_portal", admin_view="karaoke", youtube_error="YouTube authorization state did not match."))
+    if not code_verifier:
+        return redirect(url_for("admin_portal", admin_view="karaoke", youtube_error="YouTube authorization session expired. Reconnect and try again."))
     redirect_uri = url_for("admin_youtube_callback", _external=True, _scheme="https")
     try:
         flow = build_oauth_flow(youtube_config(), redirect_uri=redirect_uri, state=expected_state)
+        flow.code_verifier = code_verifier
         authorization_response = (
             f"{redirect_uri}?{request.query_string.decode('utf-8', errors='ignore')}"
         )

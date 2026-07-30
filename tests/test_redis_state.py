@@ -3852,6 +3852,52 @@ class RedisStateTests(unittest.TestCase):
             response.headers["Location"],
         )
 
+    def test_youtube_oauth_callback_reuses_pkce_verifier_from_connect_session(self):
+        self.enable_youtube_karaoke()
+
+        class FakeOAuthFlow:
+            def __init__(self, *, verifier="", refresh_token="new-refresh-token"):
+                self.code_verifier = verifier
+                self.credentials = types.SimpleNamespace(refresh_token=refresh_token)
+                self.fetch_verifier = ""
+
+            def authorization_url(self, **_kwargs):
+                return "https://accounts.google.test/authorize", "oauth-state"
+
+            def fetch_token(self, **_kwargs):
+                self.fetch_verifier = self.code_verifier
+
+        connect_flow = FakeOAuthFlow(verifier="pkce-verifier")
+        callback_flow = FakeOAuthFlow()
+
+        with patch.object(
+            main,
+            "build_oauth_flow",
+            side_effect=[connect_flow, callback_flow],
+        ):
+            with main.app.test_client() as client:
+                self.login_admin(client)
+                connect = client.get("/admin/karaoke/youtube/connect")
+                with client.session_transaction() as session:
+                    self.assertEqual("oauth-state", session["youtube_oauth_state"])
+                    self.assertEqual(
+                        "pkce-verifier",
+                        session["youtube_oauth_code_verifier"],
+                    )
+                callback = client.get(
+                    "/admin/karaoke/youtube/callback?state=oauth-state&code=authorization-code"
+                )
+
+        self.assertEqual(302, connect.status_code)
+        self.assertEqual(
+            "https://accounts.google.test/authorize",
+            connect.headers["Location"],
+        )
+        self.assertEqual(302, callback.status_code)
+        self.assertIn("youtube_success=", callback.headers["Location"])
+        self.assertEqual("pkce-verifier", callback_flow.fetch_verifier)
+        self.assertEqual("new-refresh-token", main.app.config["YOUTUBE_REFRESH_TOKEN"])
+
     def test_persisted_youtube_state_contains_operational_metadata_but_no_credentials(self):
         self.enable_youtube_karaoke()
         snapshot = self.redis_state()

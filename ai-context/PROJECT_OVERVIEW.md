@@ -124,7 +124,8 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
     explicit party-code replacement/status/hint controls, live-display WiFi
     details, and event state at `/admin`. The Public Info workspace also offers
     a session-local role-view demo; navigation available only through extra real
-    session roles is shown as Hidden in the selected role view.
+    session roles is shown as Hidden and those role-only views are unavailable
+    in the selected role view.
 12. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
 13. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
 14. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.

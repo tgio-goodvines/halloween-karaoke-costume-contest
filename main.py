@@ -2920,6 +2920,11 @@ def role_is_hidden_in_preview(role: str) -> bool:
     return role in session_roles() and role not in preview_roles()
 
 
+def preview_has_role(role: str) -> bool:
+    """Return the effective role for a role-view demo, never a newly granted role."""
+    return role in preview_roles()
+
+
 def grant_session_role(role: str) -> None:
     roles = session_roles()
     roles.add(role)
@@ -2950,14 +2955,19 @@ def required_role_for_endpoint(endpoint: str | None) -> str | None:
 
 @app.before_request
 def protect_role_routes():
+    # This endpoint is the intentional recovery hatch for a preview that hides
+    # the admin role. It verifies the real session role inside the view.
+    if request.endpoint == "exit_role_preview":
+        return None
+
     required_role = required_role_for_endpoint(request.endpoint)
     if not required_role:
         return None
 
-    if session_has_role(required_role):
+    if preview_has_role(required_role):
         return None
 
-    if required_role == "bartender" and session_has_role("admin"):
+    if required_role == "bartender" and preview_has_role("admin"):
         return None
 
     login_endpoint = ROLE_LOGIN_ENDPOINTS[required_role]
@@ -4338,6 +4348,16 @@ def logout():
     return redirect(url_for("party_login"))
 
 
+@app.post("/admin/role-preview/exit")
+def exit_role_preview():
+    """Clear local preview state even when the selected role hides admin routes."""
+    if not session_has_role("admin"):
+        return redirect(url_for("admin_login", next=request.path))
+
+    session.pop("role_preview", None)
+    return redirect(url_for("admin_portal", admin_view="public"))
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     errors: List[str] = []
@@ -4652,6 +4672,12 @@ def admin_portal(admin_view: str):
                 messages.append(
                     f"Role preview enabled for {ROLE_PREVIEW_OPTIONS[requested_preview]['label']}."
                 )
+                preview_destinations = {
+                    "regular": "party_dashboard",
+                    "bartender": "bartender_portal",
+                    "admin": "admin_portal",
+                }
+                return redirect(url_for(preview_destinations[requested_preview]))
             else:
                 session.pop("role_preview", None)
                 messages.append("Role preview cleared. Full session view restored.")

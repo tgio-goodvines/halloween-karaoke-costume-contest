@@ -66,9 +66,9 @@
       <aside class="role-preview-banner" aria-label="Role preview active">
         <div class="container role-preview-banner__inner">
           <p><strong>Role preview: {{ role_preview_label }}</strong> — items marked <span>Hidden</span> are available only because this browser also has additional session roles.</p>
-          <form method="post" action="{{ url_for('admin_portal', admin_view='public') }}">
+          <form method="post" action="{{ url_for('exit_role_preview') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" name="action" value="clear_role_preview">Exit Preview</button>
+            <button type="submit">Exit Preview</button>
           </form>
         </div>
       </aside>

@@ -17,6 +17,22 @@
     <p>YouTube requests, playlist synchronization, run of show, and stage controls.</p>
   </header>
 
+  {% if karaoke_admin.enabled and karaoke_admin.youtube.playlist_id %}
+    <section class="karaoke-playback-launch" aria-label="YouTube karaoke playback">
+      <div>
+        <p class="admin-panel__eyebrow">Playback</p>
+        <strong>{{ karaoke_admin.youtube.playlist_title or 'YouTube event playlist' }}</strong>
+        <span>Approved songs are written to this playlist. Refresh the YouTube tab if it is already open when the queue changes.</span>
+      </div>
+      <a
+        class="button button--primary"
+        href="https://www.youtube.com/playlist?list={{ karaoke_admin.youtube.playlist_id }}"
+        target="_blank"
+        rel="noopener"
+      >Open YouTube Playlist</a>
+    </section>
+  {% endif %}
+
   <nav class="admin-workspace-nav" aria-label="Admin workspaces">
     {% for key, workspace in admin_workspaces.items() %}
       <a href="{{ url_for('admin_portal', admin_view=key) }}"{% if key == admin_view %} aria-current="page"{% endif %}>
@@ -82,7 +98,7 @@
         <button class="button" type="button" data-karaoke-api="{{ url_for('admin_karaoke_reconcile') }}">Reconcile</button>
       {% endif %}
       {% if karaoke_admin.youtube.playlist_id %}
-        <a class="button" href="https://www.youtube.com/playlist?list={{ karaoke_admin.youtube.playlist_id }}" target="_blank" rel="noopener">Open Playlist on This Device</a>
+        <a class="button button--primary" href="https://www.youtube.com/playlist?list={{ karaoke_admin.youtube.playlist_id }}" target="_blank" rel="noopener">Open YouTube Playlist</a>
       {% endif %}
     </div>
 
@@ -310,7 +326,7 @@
           {% endif %}
           <button class="button" name="action" value="clear_display_override">Restore Display Rotation</button>
         </form>
-        {% if karaoke_admin.enabled and karaoke_admin.youtube.playlist_id %}<a class="button" href="https://www.youtube.com/playlist?list={{ karaoke_admin.youtube.playlist_id }}" target="_blank" rel="noopener">Open Playlist on This Device</a>{% endif %}
+        {% if karaoke_admin.enabled and karaoke_admin.youtube.playlist_id %}<a class="button button--primary" href="https://www.youtube.com/playlist?list={{ karaoke_admin.youtube.playlist_id }}" target="_blank" rel="noopener">Open YouTube Playlist</a>{% endif %}
       </div>
       <p class="karaoke-stage__notice">Stage status tracks the party workflow only. Start and control playback in the official YouTube tab.</p>
     </aside>

@@ -3639,6 +3639,11 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Host review", html)
         self.assertIn("Thriller", html)
         self.assertIn("Approve and Add to Playlist", html)
+        self.assertIn("Open YouTube Playlist", html)
+        self.assertIn(
+            "Approved songs are written to this playlist",
+            html,
+        )
         self.assertIn("Find on YouTube", html)
         self.assertIn(
             'data-karaoke-query="Thriller Michael Jackson karaoke"',

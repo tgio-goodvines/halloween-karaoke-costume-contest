@@ -9,9 +9,23 @@ remains in the official YouTube website; no embedded player is included.
 
 ## Current Status
 
-Repository implementation is complete on
-`agent/youtube-karaoke-workflow`. Production configuration, authorization,
-merge, and deployment remain in progress.
+Repository implementation is merged and deployed to production behind
+`enabled=false`. Production Google/Vault configuration, host authorization,
+playlist rehearsal, and feature enablement remain in progress.
+
+Deployment record:
+
+- Pull request: `#57`
+- Feature commit: `a5c425da498f9857c946d2a5e01a443f521f5400`
+- Squash-merged/deployed commit: `84f1395280056ef8258511487c8bcdaa81ee8750`
+- GitHub Actions run: `30552734485`
+- Workflow result: success
+- EC2 release: `/opt/halloween/releases/84f1395280056ef8258511487c8bcdaa81ee8750`
+- `halloween-party`: active
+- Halloween public health: healthy with Redis DB `1`, prefix `halloween`
+- GoodVines public health: `{"online":"true"}`
+- `/admin/karaoke` redirects to admin login and `/party/karaoke` redirects to
+  party login when unauthenticated.
 
 ## Completed Application Work
 
@@ -86,7 +100,8 @@ merge, and deployment remain in progress.
 6. Run production search and playlist insert/move/delete/reconcile smoke tests.
 7. Set `enabled=true`, restart only `halloween-party`, and repeat Halloween and
    GoodVines health checks.
-8. Merge to `main`, verify GitHub Actions, and record the deployed commit/run.
+8. After full production rehearsal, update this record with the selected
+   channel/playlist identifiers and final enablement result.
 
 ## Guardrails
 

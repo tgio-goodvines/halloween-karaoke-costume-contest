@@ -2,8 +2,8 @@
 
 ## Status
 
-Implementation complete in the repository on
-`agent/youtube-karaoke-workflow`; production enablement is in progress.
+Implementation is merged and deployed to production behind the disabled
+feature flag; production enablement is in progress.
 
 Code, automated tests, deployment wiring, responsive browser QA, and the
 operator provisioning script are complete. Production still requires:
@@ -13,7 +13,6 @@ operator provisioning script are complete. Production still requires:
 - a signed-in Google Cloud session to create/verify the OAuth web client and
   consent configuration,
 - host authorization of the intended YouTube channel,
-- merge/deploy, and
 - production insert/move/delete/reconcile smoke tests.
 
 Live progress and operational handoff details are recorded in

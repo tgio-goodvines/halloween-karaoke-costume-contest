@@ -179,8 +179,15 @@ Post-update verification on 2026-07-06:
 - `deploy/configure_youtube_vault.sh` is ready to create the narrowly scoped
   Vault policy/role and disabled secret path after explicit approval.
 - Production deployment and feature enablement remain pending Google Cloud
-  OAuth setup, host channel authorization, Vault approval, merge, and smoke
+  OAuth setup, host channel authorization, Vault approval, and playlist smoke
   tests. See `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md`.
+- PR `#57` squash-merged as
+  `84f1395280056ef8258511487c8bcdaa81ee8750`.
+- GitHub Actions run `30552734485` succeeded and deployed that exact release to
+  API EC2 instance `i-0294c49da0f0e8341`.
+- Post-deploy Halloween/Redis and GoodVines health checks passed. YouTube
+  karaoke remains disabled until the account-level setup and rehearsal are
+  complete.
 
 After the first successful deployment, the repo received follow-up commits on
 `main` to document and harden deployment knowledge:

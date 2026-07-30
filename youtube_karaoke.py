@@ -15,6 +15,7 @@ import json
 import re
 import socket
 
+import boto3
 import hvac
 import httplib2
 import requests
@@ -612,8 +613,17 @@ class VaultYouTubeSecretStore:
             raise ValueError("Vault secret path must include mount and path.")
 
     def _client(self):
+        credentials = boto3.Session().get_credentials()
+        if credentials is None:
+            raise RuntimeError("AWS credentials are unavailable for Vault authentication.")
+        frozen = credentials.get_frozen_credentials()
         client = hvac.Client(url=self.vault_addr)
-        client.auth.aws.iam_login(role=self.aws_auth_role)
+        client.auth.aws.iam_login(
+            access_key=frozen.access_key,
+            secret_key=frozen.secret_key,
+            session_token=frozen.token,
+            role=self.aws_auth_role,
+        )
         if not client.is_authenticated():
             raise RuntimeError("Vault AWS authentication failed.")
         return client

@@ -5,11 +5,12 @@ import sys
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import redis
 
 import main
+import youtube_karaoke
 
 
 class FakeLock:
@@ -3546,6 +3547,40 @@ class RedisStateTests(unittest.TestCase):
         )
         self.assertEqual("", main.parse_youtube_video_id("https://example.com/watch?v=abc123DEF45"))
         self.assertEqual("", main.parse_youtube_video_id("not-a-youtube-video"))
+
+    def test_youtube_vault_store_uses_aws_provider_chain_credentials(self):
+        frozen_credentials = types.SimpleNamespace(
+            access_key="temporary-access-key",
+            secret_key="temporary-secret-key",
+            token="temporary-session-token",
+        )
+        session = MagicMock()
+        session.get_credentials.return_value.get_frozen_credentials.return_value = (
+            frozen_credentials
+        )
+        client = MagicMock()
+        client.is_authenticated.return_value = True
+        client.secrets.kv.v1.read_secret.return_value = {
+            "data": {"enabled": "false"}
+        }
+
+        with (
+            patch.object(youtube_karaoke.boto3, "Session", return_value=session),
+            patch.object(youtube_karaoke.hvac, "Client", return_value=client),
+        ):
+            store = youtube_karaoke.VaultYouTubeSecretStore(
+                vault_addr="http://vault.test:8200",
+                aws_auth_role="halloween-api",
+            )
+            data = store.read()
+
+        self.assertEqual({"enabled": "false"}, data)
+        client.auth.aws.iam_login.assert_called_once_with(
+            access_key="temporary-access-key",
+            secret_key="temporary-secret-key",
+            session_token="temporary-session-token",
+            role="halloween-api",
+        )
 
     def test_attendee_search_uses_cache_without_spending_second_budget_unit(self):
         fake_youtube = self.enable_youtube_karaoke()

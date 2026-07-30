@@ -172,7 +172,12 @@
                 <form data-karaoke-api-form action="{{ url_for('admin_karaoke_replace', entry_id=entry.id) }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="url" name="youtube_link" required placeholder="Replacement YouTube link">
-                  <button class="button" type="button" data-karaoke-find-for>Find on YouTube</button>
+                  <button
+                    class="button"
+                    type="button"
+                    data-karaoke-find-for
+                    data-karaoke-query="{{ entry.song_title }} {{ entry.artist }} karaoke"
+                  >Find on YouTube</button>
                   <button class="button" type="submit">Replace Video</button>
                 </form>
                 <details>
@@ -229,7 +234,12 @@
                       <form data-karaoke-api-form action="{{ url_for('admin_karaoke_replace', entry_id=entry.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="url" name="youtube_link" required placeholder="Replacement YouTube link">
-                        <button class="button" type="button" data-karaoke-find-for>Find on YouTube</button>
+                        <button
+                          class="button"
+                          type="button"
+                          data-karaoke-find-for
+                          data-karaoke-query="{{ entry.song_title }} {{ entry.artist }} karaoke"
+                        >Find on YouTube</button>
                         <button class="button" type="submit">Replace Video</button>
                       </form>
                       <button class="button button--danger" type="button" data-karaoke-api="{{ url_for('admin_karaoke_remove', entry_id=entry.id) }}" data-confirm="Remove this entry from the lineup and YouTube playlist?">Remove</button>
@@ -309,5 +319,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='karaoke-admin.js') }}"></script>
+<script src="{{ url_for('static', filename='karaoke-admin.js', v='20260730-one-click-search') }}"></script>
 {% endblock %}

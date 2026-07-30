@@ -3639,6 +3639,11 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Host review", html)
         self.assertIn("Thriller", html)
         self.assertIn("Approve and Add to Playlist", html)
+        self.assertIn("Find on YouTube", html)
+        self.assertIn(
+            'data-karaoke-query="Thriller Michael Jackson karaoke"',
+            html,
+        )
 
     def test_disabled_youtube_flag_preserves_manual_admin_lineup_and_stage_controls(self):
         main.app.config["YOUTUBE_CLIENT_ID"] = "setup-client-id"

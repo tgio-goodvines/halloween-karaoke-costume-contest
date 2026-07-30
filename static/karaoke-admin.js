@@ -71,9 +71,16 @@
     button.addEventListener('click', () => {
       replacementInput = button.closest('form')?.querySelector('input[name="youtube_link"]') || null;
       const searchSection = searchForm?.closest('details');
-      if (searchSection) searchSection.open = true;
-      searchForm?.querySelector('input[name="q"]')?.focus();
-      searchSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const queryInput = searchForm?.querySelector('input[name="q"]');
+      if (!searchForm || !searchSection || !queryInput) {
+        showMessage('YouTube search is unavailable. Paste a direct YouTube link instead.', true);
+        return;
+      }
+      searchSection.open = true;
+      queryInput.value = button.dataset.karaokeQuery || '';
+      queryInput.focus();
+      searchSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      searchForm.requestSubmit();
     });
   });
 

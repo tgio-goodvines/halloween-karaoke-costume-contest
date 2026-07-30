@@ -60,6 +60,11 @@
 - `GET|POST /party/register` -> public attendee account creation form; stores a
   password hash in Redis app state, sends a welcome email when email is enabled,
   and grants the `regular` role.
+- `GET|POST /party/account` -> authenticated attendee account workspace. It
+  shows the account level, stored account roles, active session permissions,
+  profile details, and creation date; the attendee can update their own
+  display name/email or change their password after current-password
+  verification without changing the stable account ID.
 - `POST /logout` -> clears the current browser session regardless of regular/admin role.
 - `POST /party/logout` and `POST /admin/logout` -> compatibility aliases for
   the single logout behavior.

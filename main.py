@@ -460,6 +460,7 @@ bartender_tip_settings: dict[str, object] = copy.deepcopy(DEFAULT_BARTENDER_TIP_
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
+    "party_account",
     "party_login",
     "party_register",
     "password_reset_request",
@@ -476,6 +477,7 @@ STATE_MUTATION_ENDPOINTS = {
     "dj_receiver_state",
 }
 STATE_REFRESH_ENDPOINTS = {
+    "party_account",
     "rsvp",
     "rsvp_calendar",
     "admin_portal",
@@ -509,6 +511,7 @@ BAR_ENDPOINTS = {
     "bartender_queue_data",
 }
 REGULAR_USER_ENDPOINTS = {
+    "party_account",
     "party_dashboard",
     "party_menu",
     "party_bartender_tip",
@@ -781,6 +784,13 @@ def current_user_account() -> dict[str, object] | None:
         if str(account.get("id", "")) == user_id:
             return account
     return None
+
+
+def invalidate_password_reset_tokens_for_account(account_id: str) -> None:
+    """Remove reset links that must no longer work for an updated account."""
+    for token_hash, record in list(password_reset_tokens.items()):
+        if str(record.get("account_id", "")) == account_id:
+            password_reset_tokens.pop(token_hash, None)
 
 
 def hash_password_reset_token(token: str) -> str:
@@ -3677,6 +3687,104 @@ def party_dashboard():
         jukebox=attendee_jukebox_state(str(session.get("user_id", "") or "")) if party_day else None,
         bartender_tip_settings=bartender_tip_settings,
         party_day_has_arrived=party_day,
+        show_admin_link=False,
+    )
+
+
+@app.route("/party/account", methods=["GET", "POST"])
+def party_account():
+    account = current_user_account()
+    if account is None:
+        # Retain a simultaneous admin session, but remove the stale attendee identity.
+        session.pop("user_id", None)
+        session.pop("username", None)
+        revoke_session_role("regular")
+        revoke_session_role("bartender")
+        return redirect(url_for("party_login", next=url_for("party_account")))
+
+    errors: List[str] = []
+    messages: List[str] = []
+    account_id = str(account.get("id", "") or "")
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "update_profile":
+            username = request.form.get("username", "").strip()
+            email = request.form.get("email", "").strip()
+            normalized_username = normalize_username(username)
+            normalized_email = normalize_email(email)
+            existing_key = find_user_account_key_by_id(account_id)
+
+            if existing_key is None:
+                errors.append("Your account could not be found. Please sign in again.")
+            if not username:
+                errors.append("Name is required.")
+            elif len(username) > 80:
+                errors.append("Name must be 80 characters or fewer.")
+            elif normalized_username in user_accounts and normalized_username != existing_key:
+                errors.append("That name is already registered.")
+            if not email:
+                errors.append("Email is required so the hosts can send party updates.")
+            elif len(email) > 120 or not normalized_email:
+                errors.append("Enter a valid email address for party updates.")
+
+            if not errors and existing_key is not None:
+                account = user_accounts.pop(existing_key)
+                previous_email = str(account.get("email", "") or "")
+                account["username"] = username
+                account["email"] = normalized_email
+                user_accounts[normalized_username] = account
+                session["username"] = username
+                registered_users[account_id] = username
+                if existing_key != normalized_username or previous_email != normalized_email:
+                    invalidate_password_reset_tokens_for_account(account_id)
+                messages.append("Your profile details were updated.")
+
+        elif action == "change_password":
+            current_password = request.form.get("current_password", "")
+            new_password = request.form.get("new_password", "")
+            confirm_password = request.form.get("confirm_password", "")
+
+            if not current_password:
+                errors.append("Enter your current password.")
+            elif not check_password_hash(str(account.get("password_hash", "")), current_password):
+                errors.append("Your current password is incorrect.")
+            if len(new_password) < 8:
+                errors.append("New password must be at least 8 characters.")
+            elif new_password != confirm_password:
+                errors.append("New passwords do not match.")
+
+            if not errors:
+                account["password_hash"] = generate_password_hash(new_password)
+                invalidate_password_reset_tokens_for_account(account_id)
+                messages.append("Your password was updated.")
+
+        else:
+            errors.append("That account action is not available.")
+
+        if not errors:
+            persist_state_if_available()
+
+    account_roles = normalize_account_roles(account.get("roles", []))
+    role_labels = ["Attendee"]
+    if "bartender" in account_roles:
+        role_labels.append("Bartender")
+    created_at = parse_utc_iso(account.get("created_at"))
+    created_at_label = created_at.astimezone().strftime("%B %-d, %Y") if created_at else ""
+    profile_update_requested = request.method == "POST" and request.form.get("action") == "update_profile"
+
+    return render_template(
+        "account.html",
+        account=account,
+        errors=errors,
+        messages=messages,
+        role_labels=role_labels,
+        account_roles=account_roles,
+        active_session_roles=sorted(session_roles()),
+        created_at_label=created_at_label,
+        profile_username=request.form.get("username", "") if profile_update_requested else str(account.get("username", "")),
+        profile_email=request.form.get("email", "") if profile_update_requested else str(account.get("email", "")),
         show_admin_link=False,
     )
 

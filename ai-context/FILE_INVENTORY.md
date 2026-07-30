@@ -33,6 +33,7 @@
 | `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
 | `templates/halloween_login.html` | Public attendee account sign-in form. |
 | `templates/halloween_register.html` | Public attendee account registration form. |
+| `templates/account.html` | Authenticated attendee account details, role/session-permission diagnostics, profile settings, and password-change forms. |
 | `templates/email/rsvp_update.html` | Dark lab-terminal styled HTML email body for admin-posted RSVP update notifications. |
 | `templates/email/rsvp_confirmation.html` | Dark lab-terminal styled HTML email body for RSVP confirmation messages with party details and calendar links. |
 | `templates/email/account_welcome.html` | Dark lab-terminal styled HTML email body for party account creation welcome messages. |
@@ -49,6 +50,7 @@
 | `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, preserving existing CSRF-protected admin actions. |
 | `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including event override markup and top-layer notice image markup for drink-ready cards. |
 | `ai-context/DJ_JUKEBOX_FEATURE.md` | Durable DJ feature state model, routes, MusicKit/Vault setup, visual acknowledgement flow, and recovery procedure. |
+| `ai-context/ACCOUNT_MANAGEMENT_FEATURE.md` | Attendee account workspace behavior, access boundaries, persistence rules, and verification coverage. |
 
 ## Untracked Local Files Present During Review
 

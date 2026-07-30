@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% set title = "My Account" %}
+
+{% block content %}
+<section class="form-section account-summary">
+  <p class="eyebrow">Party Portal</p>
+  <h2>My Account</h2>
+  <p>Review your Halloween Party account and update the details only you control.</p>
+
+  <dl class="account-summary__details">
+    <div>
+      <dt>Name</dt>
+      <dd>{{ account.username }}</dd>
+    </div>
+    <div>
+      <dt>Email</dt>
+      <dd>{{ account.email }}</dd>
+    </div>
+    <div>
+      <dt>Account level</dt>
+      <dd>{{ role_labels | join(', ') }}</dd>
+    </div>
+    <div>
+      <dt>Assigned roles</dt>
+      <dd>{{ account_roles | join(', ') }}</dd>
+    </div>
+    <div>
+      <dt>Current session permissions</dt>
+      <dd>{{ active_session_roles | join(', ') }}</dd>
+    </div>
+    {% if created_at_label %}
+      <div>
+        <dt>Account created</dt>
+        <dd>{{ created_at_label }}</dd>
+      </div>
+    {% endif %}
+  </dl>
+</section>
+
+{% if errors %}
+  <div class="errors">
+    <ul>
+      {% for error in errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+{% if messages %}
+  <div class="success-message">
+    {% for message in messages %}
+      <p>{{ message }}</p>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<section class="form-section">
+  <h2>Profile details</h2>
+  <p>Use the name you want hosts and other guests to see.</p>
+  <form method="post" class="login-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="update_profile">
+
+    <label for="username">Name</label>
+    <input type="text" id="username" name="username" autocomplete="name" maxlength="80" required value="{{ profile_username }}">
+
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" autocomplete="email" maxlength="120" required value="{{ profile_email }}">
+
+    <button type="submit" class="button button--primary">Save Profile</button>
+  </form>
+</section>
+
+<section class="form-section">
+  <h2>Change password</h2>
+  <p>Choose a password with at least eight characters.</p>
+  <form method="post" class="login-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="change_password">
+
+    <label for="current_password">Current Password</label>
+    <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
+
+    <label for="new_password">New Password</label>
+    <input type="password" id="new_password" name="new_password" autocomplete="new-password" required minlength="8">
+
+    <label for="confirm_password">Confirm New Password</label>
+    <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" required minlength="8">
+
+    <button type="submit" class="button button--primary">Update Password</button>
+  </form>
+  <p class="form-helper">Forgot your password? <a href="{{ url_for('password_reset_request', next=url_for('party_account')) }}">Request a reset link</a>.</p>
+</section>
+{% endblock %}

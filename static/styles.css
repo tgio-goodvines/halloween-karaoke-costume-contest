@@ -188,6 +188,32 @@ a:focus {
   margin: 0;
 }
 
+.account-summary__details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.85rem;
+  margin: 1.5rem 0 0;
+}
+
+.account-summary__details div {
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 49, 49, 0.22);
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.account-summary__details dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.account-summary__details dd {
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+}
+
 .site-nav nav a,
 .site-nav__logout button {
   width: 100%;

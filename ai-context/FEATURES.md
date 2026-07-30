@@ -57,6 +57,11 @@
   browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
 - Logged-in user name is shown in the shared header menu.
+- Logged-in attendees can open `/party/account` from that menu before or during
+  the party to view account level, stored account roles, active session
+  permissions, profile details, and account creation date. They can update
+  their own name/email and change their password after current-password
+  verification; roles remain admin-managed.
 - Costume contest signup at `/party/costumes` is attendee-accessible on the
   party date.
 - Costume signup validation for required name and costume description.

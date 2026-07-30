@@ -114,15 +114,19 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    shows the signed-in attendee's full order history, supports reorder for
    currently available/orderable drinks, and shows a per-order bartender tip
    disclosure when admin tipping is enabled.
-9. Bartenders assigned from existing user accounts can manage drink orders at
+9. Signed-in attendees can open `/party/account` from the shared Menu at any
+   time to view their account level, stored roles, active session permissions,
+   display name, email, and creation date; they can update their own profile or
+   password without changing their stable account ID.
+10. Bartenders assigned from existing user accounts can manage drink orders at
    `/bartender`; admins can access the same view.
-10. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
+11. Admins sign in at `/admin/login` and manage RSVPs, entries, public landing settings,
     explicit party-code replacement/status/hint controls, live-display WiFi
     details, and event state at `/admin`.
-11. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
-12. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
-13. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
-14. Regular and admin sessions use one logout action in the header menu; it
+12. When the admin starts the costume contest, `/party/costumes/vote` and attendee voting navigation become available to logged-in guests; stopping or resetting the contest hides voting again.
+13. Each logged-in guest can submit one complete ballot, scoring every costume from 1 to 10.
+14. Admins can lock the winner, show winner/live override cards, restore the rotating display, and start the karaoke countdown.
+15. Regular and admin sessions use one logout action in the header menu; it
     clears the current browser session regardless of role.
 
 ## State Model

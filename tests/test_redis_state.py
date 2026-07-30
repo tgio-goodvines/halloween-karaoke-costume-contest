@@ -3073,6 +3073,106 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(0, len(fake_ses.sent_messages))
         self.assertEqual(1, len(state["password_reset_tokens"]))
 
+    def test_party_account_requires_login_and_shows_roles_and_session_permissions(self):
+        self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")["roles"] = ["regular", "bartender"]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            redirect_response = client.get("/party/account")
+            self.login_regular(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["bartender", "regular"]
+            account_response = client.get("/party/account")
+            dashboard_response = client.get("/party")
+
+        body = account_response.get_data(as_text=True)
+        self.assertEqual(302, redirect_response.status_code)
+        self.assertIn("/party/login", redirect_response.headers["Location"])
+        self.assertEqual(200, account_response.status_code)
+        self.assertIn("Account level", body)
+        self.assertIn("Assigned roles", body)
+        self.assertIn("Current session permissions", body)
+        self.assertIn("bartender, regular", body)
+        self.assertIn('href="/party/account"', dashboard_response.get_data(as_text=True))
+
+    def test_party_account_updates_profile_without_changing_account_id(self):
+        account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.post(
+                "/party/account",
+                data={
+                    "action": "update_profile",
+                    "username": "Jamie Wells",
+                    "email": "jamie.wells@example.com",
+                },
+            )
+            with client.session_transaction() as session:
+                session_username = session.get("username")
+
+        state = self.redis_state()
+        updated_account = state["user_accounts"]["jamie wells"]
+        self.assertEqual(200, response.status_code)
+        self.assertIn("profile details were updated", response.get_data(as_text=True))
+        self.assertNotIn("jamie", state["user_accounts"])
+        self.assertEqual(account["id"], updated_account["id"])
+        self.assertEqual("jamie.wells@example.com", updated_account["email"])
+        self.assertEqual("Jamie Wells", state["registered_users"][account["id"]])
+        self.assertEqual("Jamie Wells", session_username)
+
+    def test_party_account_rejects_invalid_profile_and_changes_password(self):
+        account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        main.password_reset_tokens["token-hash"] = {
+            "normalized_username": "jamie",
+            "account_id": account["id"],
+            "email": account["email"],
+            "created_at": "2026-07-01T00:00:00Z",
+            "expires_at": "2026-07-01T00:45:00Z",
+            "used_at": "",
+        }
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            invalid_profile_response = client.post(
+                "/party/account",
+                data={"action": "update_profile", "username": "", "email": "not-an-email"},
+            )
+            incorrect_password_response = client.post(
+                "/party/account",
+                data={
+                    "action": "change_password",
+                    "current_password": "incorrect",
+                    "new_password": "new-party-password",
+                    "confirm_password": "new-party-password",
+                },
+            )
+            password_response = client.post(
+                "/party/account",
+                data={
+                    "action": "change_password",
+                    "current_password": "party-password",
+                    "new_password": "new-party-password",
+                    "confirm_password": "new-party-password",
+                },
+            )
+            client.post("/logout")
+            login_response = client.post(
+                "/party/login",
+                data={"username": "Jamie", "password": "new-party-password"},
+            )
+
+        state = self.redis_state()
+        self.assertIn("Name is required.", invalid_profile_response.get_data(as_text=True))
+        self.assertIn("valid email", invalid_profile_response.get_data(as_text=True))
+        self.assertIn("current password is incorrect", incorrect_password_response.get_data(as_text=True))
+        self.assertIn("password was updated", password_response.get_data(as_text=True))
+        self.assertTrue(main.check_password_hash(state["user_accounts"]["jamie"]["password_hash"], "new-party-password"))
+        self.assertEqual({}, state["password_reset_tokens"])
+        self.assertEqual(302, login_response.status_code)
+
     def test_logout_clears_current_session(self):
         self.save_current_state()
 

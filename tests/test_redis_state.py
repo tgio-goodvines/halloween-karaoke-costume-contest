@@ -3241,6 +3241,22 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("Role preview:", restored_response.get_data(as_text=True))
         self.assertEqual(200, restored_response.status_code)
 
+    def test_attendee_preview_marks_bartender_capability_hidden_without_admin_role(self):
+        self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        main.event_experience_mode = "party_day"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["bartender", "regular"]
+                session["role_preview"] = "regular"
+            dashboard_response = client.get("/party")
+
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, dashboard_response.status_code)
+        self.assertIn('class="role-preview-hidden" aria-disabled="true">Bartender<span>Hidden</span>', dashboard_body)
+
     def test_party_login_refreshes_account_derived_roles_and_preserves_admin(self):
         self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
         self.save_current_state()

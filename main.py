@@ -2920,6 +2920,12 @@ def role_is_hidden_in_preview(role: str) -> bool:
     return role in session_roles() and role not in preview_roles()
 
 
+def capability_is_hidden_in_preview(*roles: str) -> bool:
+    """True when a route capability is real but absent from the selected preview."""
+    required_roles = set(roles)
+    return bool(session_roles() & required_roles) and not bool(preview_roles() & required_roles)
+
+
 def preview_has_role(role: str) -> bool:
     """Return the effective role for a role-view demo, never a newly granted role."""
     return role in preview_roles()
@@ -3553,6 +3559,7 @@ def inject_contest_state():
         "role_preview_roles": sorted(effective_preview_roles),
         "role_preview_options": ROLE_PREVIEW_OPTIONS,
         "role_is_hidden_in_preview": role_is_hidden_in_preview,
+        "capability_is_hidden_in_preview": capability_is_hidden_in_preview,
         "format_time_label": format_time_label,
         "drink_order_status_label": drink_order_status_label,
         "drink_type_label": drink_type_label,

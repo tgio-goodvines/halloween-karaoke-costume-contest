@@ -44,7 +44,7 @@
                   {% endif %}
                 {% endif %}
                 {% if bartender_authenticated or admin_authenticated %}
-                  <a href="{{ url_for('bartender_portal') }}"{% if role_is_hidden_in_preview('bartender') and role_is_hidden_in_preview('admin') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Bartender{% if role_is_hidden_in_preview('bartender') and role_is_hidden_in_preview('admin') %}<span>Hidden</span>{% endif %}</a>
+                  <a href="{{ url_for('bartender_portal') }}"{% if capability_is_hidden_in_preview('bartender', 'admin') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Bartender{% if capability_is_hidden_in_preview('bartender', 'admin') %}<span>Hidden</span>{% endif %}</a>
                 {% endif %}
                 {% if show_admin_nav_link %}
                   <a href="{{ url_for('admin_portal') }}"{% if role_is_hidden_in_preview('admin') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Admin{% if role_is_hidden_in_preview('admin') %}<span>Hidden</span>{% endif %}</a>

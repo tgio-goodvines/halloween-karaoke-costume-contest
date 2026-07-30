@@ -12,6 +12,9 @@ Bartender is `regular` plus `bartender`, and Admin is `admin`. The shared
 navigation retains links supplied by additional real session roles, but marks
 and disables them as **Hidden**. Protected routes also use the selected preview
 roles, so an Attendee preview cannot open the bartender or admin views.
+The bartender marker is capability-based: both a bartender assignment and an
+admin override can grant that view, so it is marked Hidden whenever neither is
+part of the selected preview.
 
 ## Safety Boundary
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parseaddr
 from typing import List, Tuple
@@ -37,6 +37,31 @@ from flask import (
     session,
     g,
 )
+
+from youtube_karaoke import (
+    VaultYouTubeSecretStore,
+    YouTubeApiError,
+    YouTubeConfig,
+    YouTubeService,
+    build_oauth_flow,
+    canonical_watch_url,
+    parse_youtube_video_id,
+)
+
+
+def _config_int(name: str, default: int) -> int:
+    raw_value = os.environ.get(name, "")
+    try:
+        return int(raw_value) if raw_value else default
+    except ValueError:
+        return default
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
 
 
 app = Flask(__name__)
@@ -90,6 +115,32 @@ app.config["APPLE_MUSIC_STOREFRONT"] = os.environ.get(
 app.config["APPLE_MUSIC_WEB_ORIGIN"] = os.environ.get(
     "HALLOWEEN_APPLE_MUSIC_WEB_ORIGIN", app.config["PUBLIC_BASE_URL"]
 ).strip() or app.config["PUBLIC_BASE_URL"]
+app.config["YOUTUBE_KARAOKE_ENABLED"] = os.environ.get(
+    "HALLOWEEN_YOUTUBE_KARAOKE_ENABLED", ""
+).strip().lower() in {"1", "true", "yes", "on"}
+app.config["YOUTUBE_API_KEY"] = os.environ.get("HALLOWEEN_YOUTUBE_API_KEY", "").strip()
+app.config["YOUTUBE_CLIENT_ID"] = os.environ.get("HALLOWEEN_YOUTUBE_CLIENT_ID", "").strip()
+app.config["YOUTUBE_CLIENT_SECRET"] = os.environ.get("HALLOWEEN_YOUTUBE_CLIENT_SECRET", "").strip()
+app.config["YOUTUBE_REFRESH_TOKEN"] = os.environ.get("HALLOWEEN_YOUTUBE_REFRESH_TOKEN", "").strip()
+app.config["YOUTUBE_REGION_CODE"] = (
+    os.environ.get("HALLOWEEN_YOUTUBE_REGION_CODE", "US").strip().upper() or "US"
+)
+app.config["YOUTUBE_SEARCH_DAILY_BUDGET"] = _config_int(
+    "HALLOWEEN_YOUTUBE_SEARCH_DAILY_BUDGET", 90
+)
+app.config["YOUTUBE_SEARCH_ACCOUNT_LIMIT"] = _config_int(
+    "HALLOWEEN_YOUTUBE_SEARCH_ACCOUNT_LIMIT", 10
+)
+app.config["YOUTUBE_VAULT_ADDR"] = os.environ.get(
+    "VAULT_ADDR", "http://172.31.118.0:8200"
+).strip()
+app.config["YOUTUBE_VAULT_AWS_AUTH_ROLE"] = os.environ.get(
+    "HALLOWEEN_YOUTUBE_VAULT_AWS_AUTH_ROLE",
+    os.environ.get("VAULT_AWS_AUTH_ROLE", "halloween-api"),
+).strip()
+app.config["YOUTUBE_VAULT_SECRET_PATH"] = os.environ.get(
+    "HALLOWEEN_YOUTUBE_VAULT_SECRET_PATH", "appsecrets/halloween_youtube"
+).strip()
 
 # Allow routes to respond to both `/path` and `/path/` so that users who
 # bookmark a trailing slash variant do not receive a 404 that might look like
@@ -234,7 +285,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 5
+STATE_SCHEMA_VERSION = 6
 
 
 @dataclass
@@ -252,6 +303,11 @@ class KaraokeSignup:
     artist: str
     youtube_link: str = ""
     id: str = ""
+    requester_id: str = ""
+    requested_at: str = ""
+    youtube: dict[str, object] = field(default_factory=dict)
+    workflow: dict[str, object] = field(default_factory=dict)
+    history: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -287,6 +343,56 @@ DEFAULT_KARAOKE_STATE: dict[str, object] = {
     "party_started": False,
     "current_singer_index": None,
     "current_singer_id": None,
+    "next_singer_id": None,
+    "stage_mode": "standby",
+}
+KARAOKE_VIDEO_VALIDATION_STATUSES = {"pending", "verified", "failed", "unavailable"}
+KARAOKE_APPROVAL_STATUSES = {"pending", "approved", "rejected", "cancelled"}
+KARAOKE_PLAYLIST_SYNC_STATUSES = {
+    "not_started",
+    "pending",
+    "synced",
+    "out_of_order",
+    "failed",
+    "removal_pending",
+    "removed",
+}
+KARAOKE_PERFORMANCE_STATUSES = {"waiting", "called", "on_stage", "completed", "skipped"}
+KARAOKE_HISTORY_LIMIT = 100
+KARAOKE_OPERATION_STALE_SECONDS = 60
+YOUTUBE_SEARCH_CACHE_SECONDS = 60 * 60 * 6
+YOUTUBE_SEARCH_PAGE_SIZE = 8
+YOUTUBE_SEARCH_QUERY_MAX_LENGTH = 180
+YOUTUBE_PLAYLIST_NOTE_PREFIX = "halloween-karaoke"
+DEFAULT_KARAOKE_WORKFLOW: dict[str, object] = {
+    "video_validation_status": "pending",
+    "approval_status": "pending",
+    "playlist_sync_status": "not_started",
+    "performance_status": "waiting",
+    "playlist_item_id": "",
+    "playlist_revision": 1,
+    "operation_id": "",
+    "operation_action": "",
+    "operation_started_at": "",
+    "last_sync_error_code": "",
+    "last_sync_error_message": "",
+    "approved_at": "",
+    "approved_by": "",
+    "called_at": "",
+    "started_at": "",
+    "completed_at": "",
+}
+DEFAULT_YOUTUBE_KARAOKE_STATE: dict[str, object] = {
+    "playlist_id": "",
+    "playlist_title": "",
+    "playlist_privacy": "",
+    "channel_id": "",
+    "channel_title": "",
+    "connection_status": "not_configured",
+    "last_connection_check_at": "",
+    "last_connection_error": "",
+    "last_reconciled_at": "",
+    "last_reconciliation_summary": {},
 }
 
 DJ_RECEIVER_STALE_SECONDS = 20
@@ -415,7 +521,8 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "home": {"label": "Tonight", "description": "Live party status and next actions."},
     "guests": {"label": "Guests", "description": "RSVPs, guest updates, and party details."},
     "public": {"label": "Public Info", "description": "Guest-facing access and display settings."},
-    "program": {"label": "Program", "description": "Costume contest, karaoke, and lineups."},
+    "program": {"label": "Program", "description": "Costume contest controls, voting, and results."},
+    "karaoke": {"label": "Karaoke", "description": "YouTube requests, playlist workflow, and stage controls."},
     "dj": {"label": "DJ", "description": "Playlist, live-display receiver, and verified music controls."},
     "bar": {"label": "Bar", "description": "Drink operations and bartender tipping."},
     "menu": {"label": "Menu", "description": "Food and drink availability."},
@@ -460,6 +567,7 @@ display_update_version = 0
 
 contest_state: dict[str, object] = copy.deepcopy(DEFAULT_CONTEST_STATE)
 karaoke_state: dict[str, object] = copy.deepcopy(DEFAULT_KARAOKE_STATE)
+youtube_karaoke: dict[str, object] = copy.deepcopy(DEFAULT_YOUTUBE_KARAOKE_STATE)
 party_details: dict[str, str] = copy.deepcopy(DEFAULT_PARTY_DETAILS)
 display_settings: dict[str, str] = copy.deepcopy(DEFAULT_DISPLAY_SETTINGS)
 bartender_tip_settings: dict[str, object] = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
@@ -477,7 +585,6 @@ STATE_MUTATION_ENDPOINTS = {
     "party_menu",
     "party_drink_history",
     "party_costumes",
-    "party_karaoke",
     "party_costume_voting",
     "party_jukebox_request",
     "dj_receiver_state",
@@ -495,6 +602,9 @@ STATE_REFRESH_ENDPOINTS = {
     "bartender_queue_data",
     "party_costumes",
     "party_karaoke",
+    "party_karaoke_search",
+    "party_karaoke_cancel",
+    "party_karaoke_replace",
     "party_costume_voting",
     "party_jukebox",
     "party_jukebox_data",
@@ -504,6 +614,9 @@ STATE_REFRESH_ENDPOINTS = {
     "display_data",
     "dj_catalog_search",
     "dj_musickit_token",
+    "admin_karaoke_state",
+    "admin_karaoke_search",
+    "admin_youtube_playlists",
 }
 ADMIN_ENDPOINTS = {
     "admin_portal",
@@ -511,6 +624,22 @@ ADMIN_ENDPOINTS = {
     "export_costume_results",
     "export_karaoke_lineup",
     "admin_dj_song_request_queue",
+    "admin_karaoke_state",
+    "admin_karaoke_search",
+    "admin_karaoke_approve",
+    "admin_karaoke_retry",
+    "admin_karaoke_reject",
+    "admin_karaoke_remove",
+    "admin_karaoke_replace",
+    "admin_karaoke_reconcile",
+    "admin_karaoke_sync_order",
+    "admin_youtube_test_connection",
+    "admin_youtube_playlists",
+    "admin_youtube_select_playlist",
+    "admin_youtube_create_playlist",
+    "admin_youtube_connect",
+    "admin_youtube_callback",
+    "admin_youtube_disconnect",
 }
 BAR_ENDPOINTS = {
     "bartender_portal",
@@ -524,6 +653,9 @@ REGULAR_USER_ENDPOINTS = {
     "party_bartender_tip",
     "party_costumes",
     "party_karaoke",
+    "party_karaoke_search",
+    "party_karaoke_cancel",
+    "party_karaoke_replace",
     "party_costume_voting",
     "party_jukebox",
     "party_jukebox_data",
@@ -566,6 +698,12 @@ def ensure_signup_ids() -> None:
     for signup in karaoke_signups:
         if not signup.id:
             signup.id = uuid4().hex
+        signup.youtube = normalize_karaoke_youtube(signup.youtube, signup.youtube_link)
+        signup.workflow = normalize_karaoke_workflow(
+            signup.workflow,
+            has_video=bool(signup.youtube.get("video_id")),
+        )
+        signup.history = normalize_karaoke_history(signup.history)
 
 
 def ensure_costume_votes_alignment() -> None:
@@ -2248,23 +2386,560 @@ def costume_signup_from_dict(data: dict[str, object]) -> CostumeSignup:
     )
 
 
-def karaoke_signup_to_dict(signup: KaraokeSignup) -> dict[str, str]:
+def normalize_karaoke_youtube(raw_youtube: object, youtube_link: str = "") -> dict[str, object]:
+    source = raw_youtube if isinstance(raw_youtube, dict) else {}
+    video_id = parse_youtube_video_id(source.get("video_id") or youtube_link)
+    return {
+        "video_id": video_id,
+        "title": str(source.get("title", "") or "").strip()[:300],
+        "channel_id": str(source.get("channel_id", "") or "").strip()[:120],
+        "channel_title": str(source.get("channel_title", "") or "").strip()[:180],
+        "thumbnail_url": safe_image_url(str(source.get("thumbnail_url", "") or "")),
+        "duration_seconds": max(0, _safe_int(source.get("duration_seconds"), 0)),
+        "privacy_status": str(source.get("privacy_status", "") or "").strip()[:40],
+        "upload_status": str(source.get("upload_status", "") or "").strip()[:40],
+        "embeddable": bool(source.get("embeddable", False)),
+        "age_restricted": bool(source.get("age_restricted", False)),
+        "region_allowed": bool(source.get("region_allowed", True)),
+        "available": bool(source.get("available", bool(video_id))),
+        "last_verified_at": str(source.get("last_verified_at", "") or ""),
+        "watch_url": canonical_watch_url(video_id),
+    }
+
+
+def normalize_karaoke_workflow(raw_workflow: object, *, has_video: bool) -> dict[str, object]:
+    source = raw_workflow if isinstance(raw_workflow, dict) else {}
+    workflow = copy.deepcopy(DEFAULT_KARAOKE_WORKFLOW)
+    workflow.update({key: copy.deepcopy(value) for key, value in source.items() if key in workflow})
+
+    validation_status = str(workflow.get("video_validation_status", "pending") or "pending")
+    approval_status = str(workflow.get("approval_status", "pending") or "pending")
+    playlist_status = str(workflow.get("playlist_sync_status", "not_started") or "not_started")
+    performance_status = str(workflow.get("performance_status", "waiting") or "waiting")
+    workflow["video_validation_status"] = (
+        validation_status if validation_status in KARAOKE_VIDEO_VALIDATION_STATUSES else "pending"
+    )
+    workflow["approval_status"] = (
+        approval_status if approval_status in KARAOKE_APPROVAL_STATUSES else "pending"
+    )
+    workflow["playlist_sync_status"] = (
+        playlist_status if playlist_status in KARAOKE_PLAYLIST_SYNC_STATUSES else "not_started"
+    )
+    workflow["performance_status"] = (
+        performance_status if performance_status in KARAOKE_PERFORMANCE_STATUSES else "waiting"
+    )
+    if not has_video and not source:
+        workflow["video_validation_status"] = "unavailable"
+
+    workflow["playlist_item_id"] = str(workflow.get("playlist_item_id", "") or "")[:180]
+    workflow["playlist_revision"] = max(1, _safe_int(workflow.get("playlist_revision"), 1))
+    workflow["operation_id"] = str(workflow.get("operation_id", "") or "")[:120]
+    workflow["operation_action"] = str(workflow.get("operation_action", "") or "")[:80]
+    workflow["operation_started_at"] = str(workflow.get("operation_started_at", "") or "")
+    workflow["last_sync_error_code"] = str(workflow.get("last_sync_error_code", "") or "")[:120]
+    workflow["last_sync_error_message"] = str(workflow.get("last_sync_error_message", "") or "")[:500]
+    for key in ("approved_at", "approved_by", "called_at", "started_at", "completed_at"):
+        workflow[key] = str(workflow.get(key, "") or "")[:180]
+    return workflow
+
+
+def normalize_karaoke_history(raw_history: object) -> list[dict[str, object]]:
+    if not isinstance(raw_history, list):
+        return []
+    history: list[dict[str, object]] = []
+    for raw_event in raw_history[-KARAOKE_HISTORY_LIMIT:]:
+        if not isinstance(raw_event, dict):
+            continue
+        event = str(raw_event.get("event", "") or "").strip()[:80]
+        if not event:
+            continue
+        history.append(
+            {
+                "event": event,
+                "at": str(raw_event.get("at", "") or ""),
+                "actor_id": str(raw_event.get("actor_id", "") or "")[:120],
+                "actor_name": str(raw_event.get("actor_name", "") or "")[:120],
+                "detail": str(raw_event.get("detail", "") or "")[:500],
+            }
+        )
+    return history
+
+
+def append_karaoke_history(
+    signup: KaraokeSignup,
+    event: str,
+    *,
+    detail: str = "",
+    actor_id: str = "",
+    actor_name: str = "",
+) -> None:
+    signup.history.append(
+        {
+            "event": event[:80],
+            "at": _utc_now_iso(),
+            "actor_id": actor_id[:120],
+            "actor_name": actor_name[:120],
+            "detail": detail[:500],
+        }
+    )
+    if len(signup.history) > KARAOKE_HISTORY_LIMIT:
+        signup.history[:] = signup.history[-KARAOKE_HISTORY_LIMIT:]
+
+
+def karaoke_entry_is_active(signup: KaraokeSignup) -> bool:
+    approval = str(signup.workflow.get("approval_status", "pending"))
+    performance = str(signup.workflow.get("performance_status", "waiting"))
+    return approval == "approved" and performance not in {"completed", "skipped"}
+
+
+def karaoke_entry_is_ready(signup: KaraokeSignup) -> bool:
+    return (
+        signup.workflow.get("video_validation_status") == "verified"
+        and signup.workflow.get("approval_status") == "approved"
+        and signup.workflow.get("playlist_sync_status") == "synced"
+        and signup.workflow.get("performance_status") == "waiting"
+    )
+
+
+def karaoke_entry_can_stage(signup: KaraokeSignup) -> bool:
+    if app.config.get("YOUTUBE_KARAOKE_ENABLED"):
+        return karaoke_entry_is_ready(signup)
+    return signup.workflow.get("performance_status") == "waiting"
+
+
+def karaoke_workflow_steps(signup: KaraokeSignup) -> list[dict[str, str]]:
+    workflow = signup.workflow
+    validation = str(workflow.get("video_validation_status", "pending"))
+    approval = str(workflow.get("approval_status", "pending"))
+    playlist = str(workflow.get("playlist_sync_status", "not_started"))
+    performance = str(workflow.get("performance_status", "waiting"))
+    terminal = approval in {"rejected", "cancelled"}
+
+    def state(completed: bool, current: bool = False, attention: bool = False) -> str:
+        if attention:
+            return "attention"
+        if completed:
+            return "complete"
+        if current and not terminal:
+            return "current"
+        return "waiting"
+
+    return [
+        {"key": "submitted", "label": "Submitted", "state": "complete"},
+        {
+            "key": "verified",
+            "label": "Video verified",
+            "state": state(
+                validation == "verified",
+                validation == "pending",
+                validation in {"failed", "unavailable"},
+            ),
+        },
+        {
+            "key": "approved",
+            "label": "Approved",
+            "state": state(
+                approval == "approved",
+                validation == "verified" and approval == "pending",
+                approval in {"rejected", "cancelled"},
+            ),
+        },
+        {
+            "key": "playlist",
+            "label": "Playlist synced",
+            "state": state(
+                playlist == "synced",
+                approval == "approved" and playlist in {"not_started", "pending", "out_of_order"},
+                playlist in {"failed", "removal_pending"},
+            ),
+        },
+        {
+            "key": "ready",
+            "label": "Ready",
+            "state": state(
+                karaoke_entry_is_ready(signup) or performance in {"called", "on_stage", "completed"},
+                playlist == "synced" and performance == "waiting",
+            ),
+        },
+        {
+            "key": "stage",
+            "label": "On stage",
+            "state": state(
+                performance in {"on_stage", "completed"},
+                performance == "called",
+                performance == "skipped",
+            ),
+        },
+        {
+            "key": "complete",
+            "label": "Complete",
+            "state": state(performance == "completed", performance == "on_stage"),
+        },
+    ]
+
+
+def youtube_config() -> YouTubeConfig:
+    return YouTubeConfig(
+        api_key=str(app.config.get("YOUTUBE_API_KEY", "") or ""),
+        client_id=str(app.config.get("YOUTUBE_CLIENT_ID", "") or ""),
+        client_secret=str(app.config.get("YOUTUBE_CLIENT_SECRET", "") or ""),
+        refresh_token=str(app.config.get("YOUTUBE_REFRESH_TOKEN", "") or ""),
+        region_code=str(app.config.get("YOUTUBE_REGION_CODE", "US") or "US"),
+    )
+
+
+def youtube_service() -> YouTubeService:
+    return YouTubeService(youtube_config())
+
+
+def youtube_vault_store() -> VaultYouTubeSecretStore:
+    return VaultYouTubeSecretStore(
+        vault_addr=str(app.config.get("YOUTUBE_VAULT_ADDR", "") or ""),
+        aws_auth_role=str(app.config.get("YOUTUBE_VAULT_AWS_AUTH_ROLE", "") or ""),
+        secret_path=str(app.config.get("YOUTUBE_VAULT_SECRET_PATH", "") or ""),
+    )
+
+
+def youtube_playlist_note(signup: KaraokeSignup) -> str:
+    revision = max(1, _safe_int(signup.workflow.get("playlist_revision"), 1))
+    return f"{YOUTUBE_PLAYLIST_NOTE_PREFIX}:{signup.id}:{revision}"
+
+
+def find_karaoke_signup(entry_id: str) -> KaraokeSignup | None:
+    return next((signup for signup in karaoke_signups if signup.id == entry_id), None)
+
+
+def approved_karaoke_signups(*, include_completed: bool = False) -> list[KaraokeSignup]:
+    entries = [
+        signup
+        for signup in karaoke_signups
+        if signup.workflow.get("approval_status") == "approved"
+    ]
+    if include_completed:
+        return entries
+    return [
+        signup
+        for signup in entries
+        if signup.workflow.get("performance_status") not in {"completed", "skipped"}
+    ]
+
+
+def active_karaoke_signups() -> list[KaraokeSignup]:
+    if app.config.get("YOUTUBE_KARAOKE_ENABLED"):
+        return approved_karaoke_signups()
+    return [
+        signup
+        for signup in karaoke_signups
+        if signup.workflow.get("performance_status") not in {"completed", "skipped"}
+    ]
+
+
+def public_karaoke_signups() -> list[KaraokeSignup]:
+    if not app.config.get("YOUTUBE_KARAOKE_ENABLED"):
+        return list(karaoke_signups)
+    return [
+        signup
+        for signup in approved_karaoke_signups(include_completed=False)
+        if signup.workflow.get("playlist_sync_status") == "synced"
+    ]
+
+
+def refresh_karaoke_stage_selection() -> None:
+    current_id = str(karaoke_state.get("current_singer_id", "") or "")
+    active_entries = active_karaoke_signups()
+    active_ids = [signup.id for signup in active_entries]
+    if current_id not in active_ids:
+        current_id = next(
+            (
+                signup.id
+                for signup in active_entries
+                if signup.workflow.get("performance_status") in {"called", "on_stage"}
+            ),
+            "",
+        )
+    karaoke_state["current_singer_id"] = current_id or None
+    karaoke_state["current_singer_index"] = (
+        active_ids.index(current_id) if current_id in active_ids else None
+    )
+
+    next_id = ""
+    if current_id in active_ids:
+        current_position = active_ids.index(current_id)
+        next_id = next(
+            (
+                signup.id
+                for signup in active_entries[current_position + 1 :]
+                if karaoke_entry_can_stage(signup)
+            ),
+            "",
+        )
+    if not next_id:
+        next_id = next(
+            (
+                signup.id
+                for signup in active_entries
+                if signup.id != current_id and karaoke_entry_can_stage(signup)
+            ),
+            "",
+        )
+    karaoke_state["next_singer_id"] = next_id or None
+
+
+def karaoke_signup_view(signup: KaraokeSignup) -> dict[str, object]:
+    workflow = copy.deepcopy(signup.workflow)
+    is_stale = False
+    if workflow.get("operation_id"):
+        operation_started = parse_utc_iso(workflow.get("operation_started_at"))
+        is_stale = bool(
+            operation_started
+            and operation_started
+            < datetime.now(timezone.utc) - timedelta(seconds=KARAOKE_OPERATION_STALE_SECONDS)
+        )
+    needs_attention = (
+        workflow.get("video_validation_status") in {"failed", "unavailable"}
+        or workflow.get("playlist_sync_status") in {"failed", "out_of_order", "removal_pending"}
+        or is_stale
+    )
+    return {
+        **karaoke_signup_to_dict(signup),
+        "workflow": workflow,
+        "steps": karaoke_workflow_steps(signup),
+        "ready": karaoke_entry_is_ready(signup),
+        "needs_attention": needs_attention,
+        "operation_stale": is_stale,
+        "queue_position": next(
+            (
+                index + 1
+                for index, entry in enumerate(active_karaoke_signups())
+                if entry.id == signup.id
+            ),
+            None,
+        ),
+    }
+
+
+def karaoke_admin_view_state() -> dict[str, object]:
+    ensure_signup_ids()
+    refresh_karaoke_stage_selection()
+    entries = [karaoke_signup_view(signup) for signup in karaoke_signups]
+    pending = (
+        [
+            entry
+            for entry in entries
+            if entry["workflow"].get("approval_status") == "pending"
+        ]
+        if app.config.get("YOUTUBE_KARAOKE_ENABLED")
+        else []
+    )
+    active = [karaoke_signup_view(signup) for signup in active_karaoke_signups()]
+    completed = [
+        entry
+        for entry in entries
+        if entry["workflow"].get("performance_status") in {"completed", "skipped"}
+        or entry["workflow"].get("approval_status") in {"rejected", "cancelled"}
+    ]
+    attention = (
+        [entry for entry in entries if entry.get("needs_attention")]
+        if app.config.get("YOUTUBE_KARAOKE_ENABLED")
+        else []
+    )
+    connection_needs_attention = bool(app.config.get("YOUTUBE_KARAOKE_ENABLED")) and (
+        not youtube_config().search_configured
+        or not youtube_config().oauth_client_configured
+        or not youtube_config().playlist_configured
+        or not youtube_karaoke.get("playlist_id")
+        or youtube_karaoke.get("connection_status") != "connected"
+    )
+    current = find_karaoke_signup(str(karaoke_state.get("current_singer_id", "") or ""))
+    next_signup = find_karaoke_signup(str(karaoke_state.get("next_singer_id", "") or ""))
+    remaining_seconds = sum(
+        max(0, _safe_int(signup.youtube.get("duration_seconds"), 0))
+        for signup in active_karaoke_signups()
+    )
+    return {
+        "enabled": bool(app.config.get("YOUTUBE_KARAOKE_ENABLED")),
+        "search_configured": youtube_config().search_configured,
+        "oauth_client_configured": youtube_config().oauth_client_configured,
+        "playlist_configured": youtube_config().playlist_configured,
+        "youtube": copy.deepcopy(youtube_karaoke),
+        "pending": pending,
+        "active": active,
+        "attention": attention,
+        "connection_needs_attention": connection_needs_attention,
+        "history": completed,
+        "current": karaoke_signup_view(current) if current else None,
+        "next": karaoke_signup_view(next_signup) if next_signup else None,
+        "metrics": {
+            "pending": len(pending),
+            "attention": len(attention) + int(connection_needs_attention),
+            "ready": sum(
+                1
+                for signup in active_karaoke_signups()
+                if karaoke_entry_can_stage(signup)
+            ),
+            "completed": sum(
+                1
+                for entry in entries
+                if entry["workflow"].get("performance_status") == "completed"
+            ),
+            "remaining_seconds": remaining_seconds,
+        },
+        "party_started": bool(karaoke_state.get("party_started")),
+        "stage_mode": str(karaoke_state.get("stage_mode", "standby") or "standby"),
+    }
+
+
+def build_karaoke_stage_override(signup: KaraokeSignup, mode: str) -> dict[str, object]:
+    labels = {
+        "call": ("Up Next", "Get ready at the microphone."),
+        "on_stage": ("Now Singing", "Cheer them on!"),
+        "complete": ("Karaoke", "Give it up for our singer!"),
+    }
+    title, message = labels.get(mode, labels["call"])
+    return {
+        "type": f"karaoke_{mode}",
+        "title": title,
+        "highlight": signup.name,
+        "message": message,
+        "image_url": str(signup.youtube.get("thumbnail_url", "") or ""),
+        "details": [
+            f'"{signup.song_title}"',
+            f"by {signup.artist}",
+        ],
+    }
+
+
+def youtube_search_cache_key(query: str, page_token: str) -> str:
+    signature = hashlib.sha256(f"{query.casefold()}|{page_token}".encode("utf-8")).hexdigest()
+    return redis_key(f"youtube-search:{signature}")
+
+
+def youtube_search_budget_keys(user_id: str) -> tuple[str, str]:
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return (
+        redis_key(f"youtube-search-budget:{day}"),
+        redis_key(f"youtube-search-account:{day}:{hashlib.sha256(user_id.encode('utf-8')).hexdigest()}"),
+    )
+
+
+def increment_youtube_search_budget(user_id: str) -> None:
+    if not redis_state_available:
+        return
+    global_key, account_key = youtube_search_budget_keys(user_id)
+    global_count = int(redis_client.get(global_key) or 0)
+    account_count = int(redis_client.get(account_key) or 0)
+    if global_count >= max(1, int(app.config["YOUTUBE_SEARCH_DAILY_BUDGET"])):
+        raise YouTubeApiError(
+            "search_budget_exhausted",
+            "YouTube search has reached its event safety limit for today. Paste a direct YouTube link instead.",
+        )
+    if account_count >= max(1, int(app.config["YOUTUBE_SEARCH_ACCOUNT_LIMIT"])):
+        raise YouTubeApiError(
+            "search_rate_limited",
+            "You have reached the current YouTube search limit. Paste a direct YouTube link or ask the host for help.",
+        )
+    global_count = redis_client.incr(global_key)
+    account_count = redis_client.incr(account_key)
+    if global_count == 1:
+        redis_client.expire(global_key, 60 * 60 * 48)
+    if account_count == 1:
+        redis_client.expire(account_key, 60 * 60 * 48)
+
+
+def search_youtube_karaoke(query: str, *, page_token: str, user_id: str) -> dict[str, object]:
+    cleaned_query = " ".join(str(query or "").split())
+    if not cleaned_query or len(cleaned_query) > YOUTUBE_SEARCH_QUERY_MAX_LENGTH:
+        raise YouTubeApiError(
+            "invalid_query",
+            f"Enter a search between 1 and {YOUTUBE_SEARCH_QUERY_MAX_LENGTH} characters.",
+        )
+    cache_key = youtube_search_cache_key(cleaned_query, page_token)
+    if redis_state_available:
+        cached = redis_client.get(cache_key)
+        if cached:
+            try:
+                payload = json.loads(cached)
+                if isinstance(payload, dict):
+                    payload["cached"] = True
+                    return payload
+            except (TypeError, json.JSONDecodeError):
+                pass
+
+    increment_youtube_search_budget(user_id)
+    payload = youtube_service().search_videos(
+        f"{cleaned_query} karaoke lyrics",
+        page_token=page_token,
+        limit=YOUTUBE_SEARCH_PAGE_SIZE,
+    )
+    safe_payload: dict[str, object] = {
+        "items": payload.get("items", []),
+        "next_page_token": str(payload.get("next_page_token", "") or ""),
+        "previous_page_token": str(payload.get("previous_page_token", "") or ""),
+        "cached": False,
+    }
+    if redis_state_available:
+        redis_client.setex(
+            cache_key,
+            YOUTUBE_SEARCH_CACHE_SECONDS,
+            json.dumps(safe_payload, sort_keys=True),
+        )
+    return safe_payload
+
+
+def verify_youtube_video(video_id_or_url: str) -> dict[str, object]:
+    video_id = parse_youtube_video_id(video_id_or_url)
+    if not video_id:
+        raise YouTubeApiError("invalid_video", "Select or paste a valid YouTube video.")
+    videos = youtube_service().get_videos([video_id])
+    if not videos:
+        raise YouTubeApiError("video_not_found", "That YouTube video is no longer available.")
+    video = videos[0]
+    if not video.get("available"):
+        raise YouTubeApiError(
+            "video_unavailable",
+            "That YouTube video is private, deleted, or unavailable in this region.",
+        )
+    if video.get("age_restricted"):
+        raise YouTubeApiError(
+            "video_age_restricted",
+            "That YouTube video is age-restricted. Choose another karaoke version for the event queue.",
+        )
+    return video
+
+
+def karaoke_signup_to_dict(signup: KaraokeSignup) -> dict[str, object]:
     return {
         "id": signup.id,
         "name": signup.name,
         "song_title": signup.song_title,
         "artist": signup.artist,
         "youtube_link": signup.youtube_link,
+        "requester_id": signup.requester_id,
+        "requested_at": signup.requested_at,
+        "youtube": copy.deepcopy(signup.youtube),
+        "workflow": copy.deepcopy(signup.workflow),
+        "history": copy.deepcopy(signup.history),
     }
 
 
 def karaoke_signup_from_dict(data: dict[str, object]) -> KaraokeSignup:
+    youtube_link = str(data.get("youtube_link", "") or "")
+    youtube = normalize_karaoke_youtube(data.get("youtube"), youtube_link)
+    workflow = normalize_karaoke_workflow(
+        data.get("workflow"),
+        has_video=bool(youtube.get("video_id")),
+    )
     return KaraokeSignup(
         id=str(data.get("id", "") or uuid4().hex),
         name=str(data.get("name", "") or ""),
         song_title=str(data.get("song_title", "") or ""),
         artist=str(data.get("artist", "") or ""),
-        youtube_link=str(data.get("youtube_link", "") or ""),
+        youtube_link=canonical_watch_url(str(youtube.get("video_id", "") or "")) or youtube_link,
+        requester_id=str(data.get("requester_id", "") or ""),
+        requested_at=str(data.get("requested_at", "") or ""),
+        youtube=youtube,
+        workflow=workflow,
+        history=normalize_karaoke_history(data.get("history")),
     )
 
 
@@ -2393,6 +3068,7 @@ def snapshot_state() -> dict[str, object]:
         "submitted_costume_votes": sorted(submitted_costume_votes),
         "contest_state": copy.deepcopy(contest_state),
         "karaoke_state": copy.deepcopy(karaoke_state),
+        "youtube_karaoke": copy.deepcopy(youtube_karaoke),
         "party_details": copy.deepcopy(party_details),
         "display_settings": copy.deepcopy(display_settings),
         "bartender_tip_settings": copy.deepcopy(bartender_tip_settings),
@@ -2414,7 +3090,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global user_accounts, costume_ballots, submitted_costume_votes
     global live_display_event_override, live_display_notice_override
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
-    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings
+    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -2578,6 +3254,13 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
             current_index = -1
         if 0 <= current_index < len(karaoke_signups):
             karaoke_state["current_singer_id"] = karaoke_signups[current_index].id
+
+    raw_youtube_karaoke = data.get("youtube_karaoke", {})
+    youtube_karaoke = copy.deepcopy(DEFAULT_YOUTUBE_KARAOKE_STATE)
+    if isinstance(raw_youtube_karaoke, dict):
+        for key in DEFAULT_YOUTUBE_KARAOKE_STATE:
+            if key in raw_youtube_karaoke:
+                youtube_karaoke[key] = copy.deepcopy(raw_youtube_karaoke[key])
 
     raw_party_details = data.get("party_details", {})
     party_details = copy.deepcopy(DEFAULT_PARTY_DETAILS)
@@ -2825,6 +3508,33 @@ def release_state_lock(state_lock: redis.lock.Lock | None) -> None:
         state_lock.release()
     except redis.exceptions.LockError as exc:
         app.logger.warning("Redis state lock could not be released cleanly: %s", exc)
+
+
+class StateMutationBusy(RuntimeError):
+    pass
+
+
+def explicit_state_mutation(mutator, *, broadcast: bool = True):
+    """Run a short state-only mutation without holding the lock across I/O."""
+    state_lock = acquire_state_lock() if redis_state_available else None
+    if redis_state_available and state_lock is None:
+        raise StateMutationBusy("The event state is busy. Please try again.")
+    try:
+        if redis_state_available:
+            load_state_from_redis()
+        result = mutator()
+        if broadcast:
+            broadcast_display_update()
+        elif redis_state_available:
+            save_state_to_redis()
+        return result
+    except redis.RedisError as exc:
+        app.logger.warning("YouTube karaoke state mutation could not reach Redis: %s", exc)
+        raise StateMutationBusy(
+            "The event state store is temporarily unavailable. Please try again."
+        ) from exc
+    finally:
+        release_state_lock(state_lock)
 
 
 def load_state_from_redis() -> bool:
@@ -3349,7 +4059,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "secondary": f'Performing "{signup.song_title}"',
             "tertiary": f"by {signup.artist}" if signup.artist else "",
         }
-        for signup in karaoke_signups
+        for signup in public_karaoke_signups()
     ]
 
     winner_entry = build_winner_entry()
@@ -3392,7 +4102,7 @@ def live_display():
         "display.html",
         entries=rotation_entries,
         costume_count=len(costume_signups),
-        karaoke_count=len(karaoke_signups),
+        karaoke_count=len(public_karaoke_signups()),
         override=live_display_event_override,
         notice_override=live_display_notice_override,
         dj=dj_view_state(),
@@ -3437,7 +4147,7 @@ def display_data():
         {
             "entries": rotation_entries,
             "costume_count": len(costume_signups),
-            "karaoke_count": len(karaoke_signups),
+            "karaoke_count": len(public_karaoke_signups()),
             "override": live_display_event_override,
             "event_override": live_display_event_override,
             "notice_override": live_display_notice_override,
@@ -3744,7 +4454,7 @@ def party_dashboard():
         "index.html",
         slides=slides,
         costume_signups=costume_signups,
-        karaoke_signups=karaoke_signups,
+        karaoke_signups=public_karaoke_signups(),
         drink_orders=user_orders[:5] if party_day else [],
         ready_drink_orders=ready_orders,
         jukebox=attendee_jukebox_state(str(session.get("user_id", "") or "")) if party_day else None,
@@ -3922,6 +4632,662 @@ def party_jukebox_request():
     dj_song_requests.append(normalized_request)
     broadcast_display_update()
     return redirect(url_for("party_jukebox", request_success="Song request sent to the DJ."))
+
+
+def begin_karaoke_playlist_operation(
+    entry_id: str,
+    action: str,
+    *,
+    approve: bool = False,
+) -> dict[str, object]:
+    operation_id = uuid4().hex
+
+    def begin() -> dict[str, object]:
+        signup = find_karaoke_signup(entry_id)
+        if not signup:
+            raise ValueError("Karaoke request could not be found.")
+        if not youtube_karaoke.get("playlist_id"):
+            raise ValueError("Choose a YouTube event playlist first.")
+        if not signup.youtube.get("video_id"):
+            raise ValueError("Choose and verify a YouTube video first.")
+        if approve:
+            signup.workflow["approval_status"] = "approved"
+            signup.workflow["approved_at"] = _utc_now_iso()
+            signup.workflow["approved_by"] = "admin"
+            append_karaoke_history(signup, "approved", actor_name="admin")
+        elif signup.workflow.get("approval_status") != "approved":
+            raise ValueError("Approve this request before synchronizing it.")
+
+        signup.workflow["playlist_sync_status"] = "pending"
+        signup.workflow["operation_id"] = operation_id
+        signup.workflow["operation_action"] = action
+        signup.workflow["operation_started_at"] = _utc_now_iso()
+        signup.workflow["last_sync_error_code"] = ""
+        signup.workflow["last_sync_error_message"] = ""
+        append_karaoke_history(
+            signup,
+            f"playlist_{action}_started",
+            actor_name="admin",
+        )
+        active_entries = approved_karaoke_signups()
+        return {
+            "operation_id": operation_id,
+            "playlist_id": str(youtube_karaoke.get("playlist_id", "") or ""),
+            "video_id": str(signup.youtube.get("video_id", "") or ""),
+            "position": next(
+                (index for index, entry in enumerate(active_entries) if entry.id == signup.id),
+                max(0, len(active_entries) - 1),
+            ),
+            "note": youtube_playlist_note(signup),
+            "existing_playlist_item_id": str(signup.workflow.get("playlist_item_id", "") or ""),
+        }
+
+    return explicit_state_mutation(begin)
+
+
+def finish_karaoke_playlist_operation(
+    entry_id: str,
+    operation_id: str,
+    *,
+    playlist_item_id: str = "",
+    error: YouTubeApiError | None = None,
+    event: str = "playlist_insert_confirmed",
+    playlist_sync_status: str = "synced",
+) -> bool:
+    def finish() -> bool:
+        signup = find_karaoke_signup(entry_id)
+        if not signup or signup.workflow.get("operation_id") != operation_id:
+            return False
+        signup.workflow["operation_id"] = ""
+        signup.workflow["operation_action"] = ""
+        signup.workflow["operation_started_at"] = ""
+        if error:
+            signup.workflow["playlist_sync_status"] = "failed"
+            signup.workflow["last_sync_error_code"] = (
+                "operation_result_unknown" if error.uncertain else error.code
+            )
+            signup.workflow["last_sync_error_message"] = error.message
+            append_karaoke_history(
+                signup,
+                "playlist_operation_unknown" if error.uncertain else "playlist_operation_failed",
+                detail=error.message,
+                actor_name="system",
+            )
+        else:
+            if playlist_item_id:
+                signup.workflow["playlist_item_id"] = playlist_item_id
+            signup.workflow["playlist_sync_status"] = playlist_sync_status
+            signup.workflow["last_sync_error_code"] = ""
+            signup.workflow["last_sync_error_message"] = ""
+            append_karaoke_history(signup, event, actor_name="system")
+        refresh_karaoke_stage_selection()
+        return True
+
+    return bool(explicit_state_mutation(finish))
+
+
+def sync_karaoke_entry_to_youtube(entry_id: str, *, approve: bool = False) -> dict[str, object]:
+    signup = find_karaoke_signup(entry_id)
+    if not signup:
+        raise ValueError("Karaoke request could not be found.")
+    verified_video = verify_youtube_video(str(signup.youtube.get("video_id") or signup.youtube_link))
+
+    def save_verification() -> None:
+        current = find_karaoke_signup(entry_id)
+        if not current:
+            raise ValueError("Karaoke request could not be found.")
+        current.youtube = normalize_karaoke_youtube(verified_video)
+        current.youtube_link = str(current.youtube.get("watch_url", "") or "")
+        current.workflow["video_validation_status"] = "verified"
+        append_karaoke_history(current, "video_verified", actor_name="system")
+
+    explicit_state_mutation(save_verification)
+    operation = begin_karaoke_playlist_operation(entry_id, "insert", approve=approve)
+    service = youtube_service()
+    try:
+        playlist_items = service.list_playlist_items(str(operation["playlist_id"]))
+        existing = next(
+            (item for item in playlist_items if item.get("note") == operation["note"]),
+            None,
+        )
+        if existing:
+            playlist_item_id = str(existing.get("playlist_item_id", "") or "")
+            actual_position = _safe_int(existing.get("position"), -1)
+        else:
+            inserted = service.insert_playlist_item(
+                str(operation["playlist_id"]),
+                str(operation["video_id"]),
+                position=min(int(operation["position"]), len(playlist_items)),
+                note=str(operation["note"]),
+            )
+            playlist_item_id = str(inserted.get("playlist_item_id", "") or "")
+            actual_position = _safe_int(inserted.get("position"), -1)
+        order_matches = actual_position == int(operation["position"])
+        finish_karaoke_playlist_operation(
+            entry_id,
+            str(operation["operation_id"]),
+            playlist_item_id=playlist_item_id,
+            playlist_sync_status="synced" if order_matches else "out_of_order",
+        )
+        message = (
+            "The karaoke request is approved and synchronized."
+            if order_matches
+            else "The karaoke request is approved and added. Synchronize playlist order after resolving earlier entries."
+        )
+        return {"ok": True, "message": message, "entry_id": entry_id}
+    except YouTubeApiError as exc:
+        finish_karaoke_playlist_operation(
+            entry_id,
+            str(operation["operation_id"]),
+            error=exc,
+        )
+        return {"ok": False, "message": exc.message, "code": exc.code, "entry_id": entry_id}
+
+
+@app.get("/api/admin/karaoke-state")
+def admin_karaoke_state():
+    return jsonify(karaoke_admin_view_state())
+
+
+@app.get("/api/admin/karaoke/search")
+def admin_karaoke_search():
+    query = request.args.get("q", "")
+    page_token = request.args.get("page_token", "")
+    if len(page_token) > 300:
+        return jsonify({"error": "Invalid YouTube result page."}), 400
+    try:
+        payload = search_youtube_karaoke(
+            query,
+            page_token=page_token,
+            user_id=f"admin:{session.get('user_id', 'host')}",
+        )
+    except YouTubeApiError as exc:
+        return jsonify({"error": exc.message, "code": exc.code}), 429 if "limit" in exc.code or "budget" in exc.code else 503
+    return jsonify(payload)
+
+
+@app.post("/api/admin/karaoke/entries/<entry_id>/approve")
+def admin_karaoke_approve(entry_id: str):
+    try:
+        result = sync_karaoke_entry_to_youtube(entry_id, approve=True)
+    except (StateMutationBusy, ValueError, YouTubeApiError) as exc:
+        message = exc.message if isinstance(exc, YouTubeApiError) else str(exc)
+        return jsonify({"ok": False, "message": message}), 409
+    return jsonify(result), 200 if result["ok"] else 502
+
+
+@app.post("/api/admin/karaoke/entries/<entry_id>/retry")
+def admin_karaoke_retry(entry_id: str):
+    try:
+        result = sync_karaoke_entry_to_youtube(entry_id, approve=False)
+    except (StateMutationBusy, ValueError, YouTubeApiError) as exc:
+        message = exc.message if isinstance(exc, YouTubeApiError) else str(exc)
+        return jsonify({"ok": False, "message": message}), 409
+    return jsonify(result), 200 if result["ok"] else 502
+
+
+@app.post("/api/admin/karaoke/entries/<entry_id>/reject")
+def admin_karaoke_reject(entry_id: str):
+    reason = request.form.get("reason", "").strip()[:500]
+
+    def reject() -> None:
+        signup = find_karaoke_signup(entry_id)
+        if not signup:
+            raise ValueError("Karaoke request could not be found.")
+        if signup.workflow.get("playlist_item_id"):
+            raise ValueError("Remove the synchronized playlist entry instead of rejecting it.")
+        signup.workflow["approval_status"] = "rejected"
+        append_karaoke_history(signup, "rejected", detail=reason, actor_name="admin")
+        refresh_karaoke_stage_selection()
+
+    try:
+        explicit_state_mutation(reject)
+    except (StateMutationBusy, ValueError) as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 409
+    return jsonify({"ok": True, "message": "Karaoke request rejected."})
+
+
+@app.post("/api/admin/karaoke/entries/<entry_id>/remove")
+def admin_karaoke_remove(entry_id: str):
+    operation_id = uuid4().hex
+
+    def begin_remove() -> dict[str, str]:
+        signup = find_karaoke_signup(entry_id)
+        if not signup:
+            raise ValueError("Karaoke entry could not be found.")
+        playlist_item_id = str(signup.workflow.get("playlist_item_id", "") or "")
+        signup.workflow["playlist_sync_status"] = "removal_pending"
+        signup.workflow["operation_id"] = operation_id
+        signup.workflow["operation_action"] = "remove"
+        signup.workflow["operation_started_at"] = _utc_now_iso()
+        append_karaoke_history(signup, "playlist_remove_started", actor_name="admin")
+        return {"playlist_item_id": playlist_item_id}
+
+    try:
+        operation = explicit_state_mutation(begin_remove)
+        if operation["playlist_item_id"]:
+            youtube_service().delete_playlist_item(operation["playlist_item_id"])
+
+        def finish_remove() -> None:
+            signup = find_karaoke_signup(entry_id)
+            if not signup or signup.workflow.get("operation_id") != operation_id:
+                return
+            signup.workflow["operation_id"] = ""
+            signup.workflow["operation_action"] = ""
+            signup.workflow["operation_started_at"] = ""
+            signup.workflow["playlist_sync_status"] = "removed"
+            signup.workflow["playlist_item_id"] = ""
+            signup.workflow["approval_status"] = "cancelled"
+            append_karaoke_history(signup, "playlist_remove_confirmed", actor_name="system")
+            refresh_karaoke_stage_selection()
+
+        explicit_state_mutation(finish_remove)
+    except YouTubeApiError as exc:
+        finish_karaoke_playlist_operation(entry_id, operation_id, error=exc)
+        return jsonify({"ok": False, "message": exc.message, "code": exc.code}), 502
+    except (StateMutationBusy, ValueError) as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 409
+    return jsonify({"ok": True, "message": "Karaoke entry removed from the active lineup and playlist."})
+
+
+@app.post("/api/admin/karaoke/entries/<entry_id>/replace")
+def admin_karaoke_replace(entry_id: str):
+    raw_video = request.form.get("youtube_video_id") or request.form.get("youtube_link", "")
+    operation_id = uuid4().hex
+    try:
+        video = verify_youtube_video(raw_video)
+
+        def replace_pending() -> bool:
+            signup = find_karaoke_signup(entry_id)
+            if not signup:
+                raise ValueError("Karaoke entry could not be found.")
+            if signup.workflow.get("approval_status") != "pending":
+                return False
+            signup.workflow["playlist_revision"] = max(
+                1, _safe_int(signup.workflow.get("playlist_revision"), 1)
+            ) + 1
+            signup.youtube = normalize_karaoke_youtube(video)
+            signup.youtube_link = str(signup.youtube.get("watch_url", "") or "")
+            signup.workflow["video_validation_status"] = "verified"
+            append_karaoke_history(signup, "video_replaced", actor_name="admin")
+            return True
+
+        if explicit_state_mutation(replace_pending):
+            return jsonify({"ok": True, "message": "Pending karaoke video replaced and ready for host approval."})
+
+        def begin_replace() -> dict[str, object]:
+            signup = find_karaoke_signup(entry_id)
+            if not signup:
+                raise ValueError("Karaoke entry could not be found.")
+            if signup.workflow.get("approval_status") != "approved":
+                raise ValueError("Approve the request before replacing its synchronized video.")
+            old_playlist_item_id = str(signup.workflow.get("playlist_item_id", "") or "")
+            signup.workflow["playlist_revision"] = max(
+                1, _safe_int(signup.workflow.get("playlist_revision"), 1)
+            ) + 1
+            signup.youtube = normalize_karaoke_youtube(video)
+            signup.youtube_link = str(signup.youtube.get("watch_url", "") or "")
+            signup.workflow["video_validation_status"] = "verified"
+            signup.workflow["playlist_sync_status"] = "pending"
+            signup.workflow["operation_id"] = operation_id
+            signup.workflow["operation_action"] = "replace"
+            signup.workflow["operation_started_at"] = _utc_now_iso()
+            append_karaoke_history(signup, "video_replaced", actor_name="admin")
+            append_karaoke_history(signup, "playlist_insert_started", actor_name="admin")
+            active_entries = approved_karaoke_signups()
+            return {
+                "playlist_id": str(youtube_karaoke.get("playlist_id", "") or ""),
+                "video_id": str(signup.youtube.get("video_id", "") or ""),
+                "position": next(
+                    (index for index, entry in enumerate(active_entries) if entry.id == entry_id),
+                    max(0, len(active_entries) - 1),
+                ),
+                "note": youtube_playlist_note(signup),
+                "old_playlist_item_id": old_playlist_item_id,
+            }
+
+        operation = explicit_state_mutation(begin_replace)
+        service = youtube_service()
+        playlist_items = service.list_playlist_items(str(operation["playlist_id"]))
+        existing = next(
+            (
+                item
+                for item in playlist_items
+                if item.get("note") == operation["note"]
+            ),
+            None,
+        )
+        inserted = existing or service.insert_playlist_item(
+            str(operation["playlist_id"]),
+            str(operation["video_id"]),
+            position=min(int(operation["position"]), len(playlist_items)),
+            note=str(operation["note"]),
+        )
+        new_item_id = str(inserted.get("playlist_item_id", "") or "")
+        order_matches = _safe_int(inserted.get("position"), -1) == int(operation["position"])
+        orphan_warning = ""
+        old_item_id = str(operation["old_playlist_item_id"] or "")
+        if old_item_id and old_item_id != new_item_id:
+            try:
+                service.delete_playlist_item(old_item_id)
+            except YouTubeApiError:
+                orphan_warning = " The prior playlist item could not be removed and will appear in reconciliation."
+        finish_karaoke_playlist_operation(
+            entry_id,
+            operation_id,
+            playlist_item_id=new_item_id,
+            event="playlist_replacement_confirmed",
+            playlist_sync_status="synced" if order_matches else "out_of_order",
+        )
+    except YouTubeApiError as exc:
+        finish_karaoke_playlist_operation(entry_id, operation_id, error=exc)
+        return jsonify({"ok": False, "message": exc.message, "code": exc.code}), 502
+    except (StateMutationBusy, ValueError) as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 409
+    return jsonify({"ok": True, "message": f"Karaoke video replaced and synchronized.{orphan_warning}"})
+
+
+def reconcile_karaoke_playlist() -> dict[str, object]:
+    playlist_id = str(youtube_karaoke.get("playlist_id", "") or "")
+    if not playlist_id:
+        raise ValueError("Choose a YouTube event playlist first.")
+    playlist_items = youtube_service().list_playlist_items(playlist_id)
+    items_by_note = {
+        str(item.get("note", "") or ""): item
+        for item in playlist_items
+        if str(item.get("note", "") or "").startswith(f"{YOUTUBE_PLAYLIST_NOTE_PREFIX}:")
+    }
+
+    def reconcile_state() -> dict[str, object]:
+        synced = 0
+        missing = 0
+        out_of_order = 0
+        expected_entries = approved_karaoke_signups()
+        expected_notes = set()
+        for expected_position, signup in enumerate(expected_entries):
+            note = youtube_playlist_note(signup)
+            expected_notes.add(note)
+            item = items_by_note.get(note)
+            if not item:
+                signup.workflow["playlist_sync_status"] = "failed"
+                signup.workflow["last_sync_error_code"] = "playlist_item_missing"
+                signup.workflow["last_sync_error_message"] = "The approved item is missing from the YouTube playlist."
+                signup.workflow["operation_id"] = ""
+                signup.workflow["operation_action"] = ""
+                signup.workflow["operation_started_at"] = ""
+                missing += 1
+                continue
+            signup.workflow["playlist_item_id"] = str(item.get("playlist_item_id", "") or "")
+            signup.workflow["operation_id"] = ""
+            signup.workflow["operation_action"] = ""
+            signup.workflow["operation_started_at"] = ""
+            if int(item.get("position", -1)) != expected_position:
+                signup.workflow["playlist_sync_status"] = "out_of_order"
+                out_of_order += 1
+            else:
+                signup.workflow["playlist_sync_status"] = "synced"
+                signup.workflow["last_sync_error_code"] = ""
+                signup.workflow["last_sync_error_message"] = ""
+                synced += 1
+        orphan_count = sum(1 for note in items_by_note if note not in expected_notes)
+        summary = {
+            "synced": synced,
+            "missing": missing,
+            "out_of_order": out_of_order,
+            "orphan_app_items": orphan_count,
+            "foreign_items": max(0, len(playlist_items) - len(items_by_note)),
+        }
+        youtube_karaoke["last_reconciled_at"] = _utc_now_iso()
+        youtube_karaoke["last_reconciliation_summary"] = summary
+        return summary
+
+    return explicit_state_mutation(reconcile_state)
+
+
+@app.post("/api/admin/karaoke/reconcile")
+def admin_karaoke_reconcile():
+    try:
+        summary = reconcile_karaoke_playlist()
+    except (StateMutationBusy, ValueError, YouTubeApiError) as exc:
+        message = exc.message if isinstance(exc, YouTubeApiError) else str(exc)
+        return jsonify({"ok": False, "message": message}), 502
+    return jsonify({"ok": True, "message": "YouTube playlist reconciliation completed.", "summary": summary})
+
+
+@app.post("/api/admin/karaoke/sync-order")
+def admin_karaoke_sync_order():
+    entries = approved_karaoke_signups()
+    playlist_id = str(youtube_karaoke.get("playlist_id", "") or "")
+    if not playlist_id:
+        return jsonify({"ok": False, "message": "Choose a YouTube event playlist first."}), 409
+    failures: list[tuple[str, YouTubeApiError]] = []
+    service = youtube_service()
+    try:
+        current_items = service.list_playlist_items(playlist_id)
+    except YouTubeApiError as exc:
+        return jsonify({"ok": False, "message": exc.message, "code": exc.code}), 502
+    current_by_id = {
+        str(item.get("playlist_item_id", "") or ""): item
+        for item in current_items
+    }
+    for position, signup in enumerate(entries):
+        playlist_item_id = str(signup.workflow.get("playlist_item_id", "") or "")
+        if not playlist_item_id:
+            failures.append((signup.id, YouTubeApiError("playlist_item_missing", "Playlist item is missing.")))
+            continue
+        current_item = current_by_id.get(playlist_item_id)
+        if (
+            current_item
+            and _safe_int(current_item.get("position"), -1) == position
+            and current_item.get("note") == youtube_playlist_note(signup)
+        ):
+            continue
+        try:
+            service.move_playlist_item(
+                playlist_item_id,
+                playlist_id,
+                str(signup.youtube.get("video_id", "") or ""),
+                position=position,
+                note=youtube_playlist_note(signup),
+            )
+        except YouTubeApiError as exc:
+            failures.append((signup.id, exc))
+
+    if not failures:
+        try:
+            confirmed_items = service.list_playlist_items(playlist_id)
+            confirmed_by_id = {
+                str(item.get("playlist_item_id", "") or ""): item
+                for item in confirmed_items
+            }
+            for position, signup in enumerate(entries):
+                playlist_item_id = str(signup.workflow.get("playlist_item_id", "") or "")
+                confirmed = confirmed_by_id.get(playlist_item_id)
+                if (
+                    not confirmed
+                    or _safe_int(confirmed.get("position"), -1) != position
+                    or confirmed.get("note") != youtube_playlist_note(signup)
+                ):
+                    failures.append(
+                        (
+                            signup.id,
+                            YouTubeApiError(
+                                "playlist_order_not_confirmed",
+                                "YouTube did not confirm the requested playlist position.",
+                            ),
+                        )
+                    )
+        except YouTubeApiError as exc:
+            failures.extend((signup.id, exc) for signup in entries)
+
+    def finish_order() -> None:
+        failed_by_id = {entry_id: error for entry_id, error in failures}
+        for signup in approved_karaoke_signups():
+            error = failed_by_id.get(signup.id)
+            if error:
+                signup.workflow["playlist_sync_status"] = "failed"
+                signup.workflow["last_sync_error_code"] = error.code
+                signup.workflow["last_sync_error_message"] = error.message
+                append_karaoke_history(signup, "playlist_order_failed", detail=error.message, actor_name="system")
+            else:
+                signup.workflow["playlist_sync_status"] = "synced"
+                signup.workflow["last_sync_error_code"] = ""
+                signup.workflow["last_sync_error_message"] = ""
+                append_karaoke_history(signup, "playlist_order_confirmed", actor_name="system")
+
+    try:
+        explicit_state_mutation(finish_order)
+    except StateMutationBusy as exc:
+        return jsonify({"ok": False, "message": str(exc)}), 409
+    if failures:
+        return jsonify({"ok": False, "message": f"{len(failures)} playlist positions could not be synchronized."}), 502
+    return jsonify({"ok": True, "message": "YouTube playlist order synchronized."})
+
+
+@app.post("/api/admin/karaoke/youtube/test")
+def admin_youtube_test_connection():
+    try:
+        channel = youtube_service().connection_status()
+
+        def save_connection() -> None:
+            youtube_karaoke["channel_id"] = channel["channel_id"]
+            youtube_karaoke["channel_title"] = channel["channel_title"]
+            youtube_karaoke["connection_status"] = "connected"
+            youtube_karaoke["last_connection_check_at"] = _utc_now_iso()
+            youtube_karaoke["last_connection_error"] = ""
+
+        explicit_state_mutation(save_connection)
+    except (StateMutationBusy, YouTubeApiError) as exc:
+        message = exc.message if isinstance(exc, YouTubeApiError) else str(exc)
+        return jsonify({"ok": False, "message": message}), 502
+    return jsonify({"ok": True, "message": f"Connected to YouTube channel {channel['channel_title']}."})
+
+
+@app.get("/api/admin/karaoke/youtube/playlists")
+def admin_youtube_playlists():
+    try:
+        payload = youtube_service().list_owned_playlists(page_token=request.args.get("page_token", ""))
+    except YouTubeApiError as exc:
+        return jsonify({"error": exc.message, "code": exc.code}), 502
+    return jsonify(payload)
+
+
+@app.post("/api/admin/karaoke/youtube/playlist")
+def admin_youtube_select_playlist():
+    playlist_id = request.form.get("playlist_id", "").strip()
+    try:
+        payload = youtube_service().list_owned_playlists()
+        playlist = next((item for item in payload["items"] if item["playlist_id"] == playlist_id), None)
+        if not playlist:
+            raise ValueError("Choose a playlist owned by the connected YouTube account.")
+
+        def select() -> None:
+            youtube_karaoke["playlist_id"] = playlist["playlist_id"]
+            youtube_karaoke["playlist_title"] = playlist["title"]
+            youtube_karaoke["playlist_privacy"] = playlist["privacy"]
+            youtube_karaoke["last_reconciled_at"] = ""
+            youtube_karaoke["last_reconciliation_summary"] = {}
+
+        explicit_state_mutation(select)
+    except (StateMutationBusy, ValueError, YouTubeApiError) as exc:
+        message = exc.message if isinstance(exc, YouTubeApiError) else str(exc)
+        return jsonify({"ok": False, "message": message}), 409
+    return jsonify({"ok": True, "message": f"Selected playlist {playlist['title']}."})
+
+
+@app.post("/api/admin/karaoke/youtube/playlist/create")
+def admin_youtube_create_playlist():
+    title = request.form.get("title", "").strip() or f"Halloween Karaoke {app.config['PARTY_YEAR']}"
+    privacy = request.form.get("privacy", "private")
+    try:
+        playlist = youtube_service().create_playlist(title, privacy=privacy)
+
+        def select_created() -> None:
+            youtube_karaoke["playlist_id"] = playlist["playlist_id"]
+            youtube_karaoke["playlist_title"] = playlist["title"]
+            youtube_karaoke["playlist_privacy"] = playlist["privacy"]
+
+        explicit_state_mutation(select_created)
+    except (StateMutationBusy, YouTubeApiError) as exc:
+        message = exc.message if isinstance(exc, YouTubeApiError) else str(exc)
+        return jsonify({"ok": False, "message": message}), 502
+    return jsonify({"ok": True, "message": f"Created and selected playlist {playlist['title']}."})
+
+
+@app.get("/admin/karaoke/youtube/connect")
+def admin_youtube_connect():
+    redirect_uri = url_for("admin_youtube_callback", _external=True, _scheme="https")
+    try:
+        flow = build_oauth_flow(youtube_config(), redirect_uri=redirect_uri)
+        authorization_url, state = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
+        )
+    except YouTubeApiError as exc:
+        return redirect(url_for("admin_portal", admin_view="karaoke", youtube_error=exc.message))
+    session["youtube_oauth_state"] = state
+    return redirect(authorization_url)
+
+
+@app.get("/admin/karaoke/youtube/callback")
+def admin_youtube_callback():
+    expected_state = str(session.pop("youtube_oauth_state", "") or "")
+    provided_state = request.args.get("state", "")
+    if not expected_state or not secrets.compare_digest(expected_state, provided_state):
+        return redirect(url_for("admin_portal", admin_view="karaoke", youtube_error="YouTube authorization state did not match."))
+    redirect_uri = url_for("admin_youtube_callback", _external=True, _scheme="https")
+    try:
+        flow = build_oauth_flow(youtube_config(), redirect_uri=redirect_uri, state=expected_state)
+        authorization_response = (
+            f"{redirect_uri}?{request.query_string.decode('utf-8', errors='ignore')}"
+        )
+        flow.fetch_token(authorization_response=authorization_response)
+        refresh_token = str(flow.credentials.refresh_token or app.config.get("YOUTUBE_REFRESH_TOKEN", "") or "")
+        if not refresh_token:
+            raise YouTubeApiError("refresh_token_missing", "Google did not return offline YouTube access. Reconnect and approve access.")
+        if app.config.get("TESTING"):
+            app.config["YOUTUBE_REFRESH_TOKEN"] = refresh_token
+        else:
+            youtube_vault_store().update_refresh_token(refresh_token)
+            app.config["YOUTUBE_REFRESH_TOKEN"] = refresh_token
+        channel = youtube_service().connection_status()
+
+        def save_connection() -> None:
+            youtube_karaoke["channel_id"] = channel["channel_id"]
+            youtube_karaoke["channel_title"] = channel["channel_title"]
+            youtube_karaoke["connection_status"] = "connected"
+            youtube_karaoke["last_connection_check_at"] = _utc_now_iso()
+            youtube_karaoke["last_connection_error"] = ""
+
+        explicit_state_mutation(save_connection)
+    except Exception as exc:
+        api_error = exc if isinstance(exc, YouTubeApiError) else YouTubeApiError(
+            "oauth_failed", "YouTube authorization could not be completed."
+        )
+        app.logger.warning("YouTube OAuth callback failed: %s", type(exc).__name__)
+        return redirect(url_for("admin_portal", admin_view="karaoke", youtube_error=api_error.message))
+    return redirect(url_for("admin_portal", admin_view="karaoke", youtube_success="YouTube account connected."))
+
+
+@app.post("/admin/karaoke/youtube/disconnect")
+def admin_youtube_disconnect():
+    try:
+        youtube_service().revoke_credentials()
+        if not app.config.get("TESTING"):
+            youtube_vault_store().update_refresh_token("")
+        app.config["YOUTUBE_REFRESH_TOKEN"] = ""
+
+        def disconnect() -> None:
+            youtube_karaoke["connection_status"] = "not_connected"
+            youtube_karaoke["last_connection_check_at"] = _utc_now_iso()
+            youtube_karaoke["last_connection_error"] = ""
+
+        explicit_state_mutation(disconnect)
+    except (StateMutationBusy, YouTubeApiError, RuntimeError) as exc:
+        message = exc.message if isinstance(exc, YouTubeApiError) else str(exc)
+        return redirect(url_for("admin_portal", admin_view="karaoke", youtube_error=message))
+    return redirect(url_for("admin_portal", admin_view="karaoke", youtube_success="YouTube account disconnected."))
 
 
 @app.route("/party/login", methods=["GET", "POST"])
@@ -5210,12 +6576,17 @@ def admin_portal(admin_view: str):
                 errors.append("Artist is required.")
 
             if index is not None and name and song_title and artist:
-                karaoke_signups[index] = KaraokeSignup(
-                    id=karaoke_signups[index].id,
-                    name=name,
-                    song_title=song_title,
-                    artist=artist,
-                    youtube_link=youtube_link,
+                existing_signup = karaoke_signups[index]
+                existing_signup.name = name
+                existing_signup.song_title = song_title
+                existing_signup.artist = artist
+                if not app.config.get("YOUTUBE_KARAOKE_ENABLED"):
+                    existing_signup.youtube_link = youtube_link
+                    existing_signup.youtube = normalize_karaoke_youtube({}, youtube_link)
+                append_karaoke_history(
+                    existing_signup,
+                    "details_updated",
+                    actor_name="admin",
                 )
                 messages.append(f"Updated karaoke signup for {name}.")
                 should_broadcast = True
@@ -5228,12 +6599,20 @@ def admin_portal(admin_view: str):
                 request.form.get("index"),
             )
             if index is not None:
-                removed = karaoke_signups.pop(index)
-                if karaoke_state.get("current_singer_id") == removed.id:
-                    karaoke_state["current_singer_id"] = None
-                    karaoke_state["current_singer_index"] = None
-                messages.append(f"Removed karaoke signup for {removed.name}.")
-                should_broadcast = True
+                candidate = karaoke_signups[index]
+                if (
+                    app.config.get("YOUTUBE_KARAOKE_ENABLED")
+                    and candidate.workflow.get("playlist_item_id")
+                    and candidate.workflow.get("playlist_sync_status") != "removed"
+                ):
+                    errors.append("Remove this synchronized entry from the dedicated Karaoke workspace.")
+                else:
+                    removed = karaoke_signups.pop(index)
+                    if karaoke_state.get("current_singer_id") == removed.id:
+                        karaoke_state["current_singer_id"] = None
+                        karaoke_state["current_singer_index"] = None
+                    messages.append(f"Removed karaoke signup for {removed.name}.")
+                    should_broadcast = True
 
         elif action == "add_karaoke":
             name = request.form.get("name", "").strip()
@@ -5380,7 +6759,8 @@ def admin_portal(admin_view: str):
             should_broadcast = True
 
         elif action == "start_karaoke_party":
-            if karaoke_signups:
+            karaoke_lineup = public_karaoke_signups()
+            if karaoke_lineup:
                 lineup_entries = [
                     {
                         "id": signup.id,
@@ -5388,12 +6768,20 @@ def admin_portal(admin_view: str):
                         "song_title": signup.song_title,
                         "artist": signup.artist,
                     }
-                    for signup in karaoke_signups
+                    for signup in karaoke_lineup
                 ]
 
                 karaoke_state["party_started"] = True
                 karaoke_state["current_singer_index"] = None
-                karaoke_state["current_singer_id"] = karaoke_signups[0].id if karaoke_signups else None
+                first_ready = next(
+                    (signup for signup in karaoke_lineup if karaoke_entry_can_stage(signup)),
+                    None,
+                )
+                karaoke_state["current_singer_id"] = (
+                    first_ready.id if first_ready else karaoke_lineup[0].id
+                )
+                karaoke_state["stage_mode"] = "countdown"
+                refresh_karaoke_stage_selection()
                 contest_state["contest_started"] = False
                 contest_state["voting_open"] = False
 
@@ -5423,14 +6811,155 @@ def admin_portal(admin_view: str):
                 should_broadcast = True
             else:
                 errors.append(
-                    "Add at least one karaoke signup before starting the karaoke party."
+                    "Approve at least one karaoke signup before starting the karaoke party."
                 )
+
+        elif action == "call_karaoke_singer":
+            entry_id = request.form.get("entry_id", "").strip()
+            signup = find_karaoke_signup(entry_id) if entry_id else find_karaoke_signup(
+                str(karaoke_state.get("next_singer_id", "") or "")
+            )
+            if not signup:
+                signup = next(
+                    (entry for entry in active_karaoke_signups() if karaoke_entry_can_stage(entry)),
+                    None,
+                )
+            if not signup:
+                errors.append("No ready karaoke singer is available to call.")
+            elif not karaoke_entry_can_stage(signup):
+                errors.append("This singer is not ready. Resolve video approval and playlist synchronization first.")
+            else:
+                previous = find_karaoke_signup(str(karaoke_state.get("current_singer_id", "") or ""))
+                if previous and previous.id != signup.id and previous.workflow.get("performance_status") == "called":
+                    previous.workflow["performance_status"] = "waiting"
+                signup.workflow["performance_status"] = "called"
+                signup.workflow["called_at"] = _utc_now_iso()
+                append_karaoke_history(signup, "called_to_stage", actor_name="admin")
+                karaoke_state["party_started"] = True
+                karaoke_state["current_singer_id"] = signup.id
+                karaoke_state["stage_mode"] = "called"
+                refresh_karaoke_stage_selection()
+                live_display_event_override = build_karaoke_stage_override(signup, "call")
+                messages.append(f"Called {signup.name} to the karaoke stage.")
+                should_broadcast = True
+
+        elif action == "mark_karaoke_on_stage":
+            signup = find_karaoke_signup(
+                request.form.get("entry_id", "").strip()
+                or str(karaoke_state.get("current_singer_id", "") or "")
+            )
+            if not signup or signup.workflow.get("performance_status") not in {"called", "waiting"}:
+                errors.append("Call a ready singer before marking them on stage.")
+            elif not (
+                karaoke_entry_can_stage(signup)
+                or signup.workflow.get("performance_status") == "called"
+            ):
+                errors.append("This singer is not ready for the stage.")
+            else:
+                signup.workflow["performance_status"] = "on_stage"
+                signup.workflow["started_at"] = _utc_now_iso()
+                append_karaoke_history(signup, "performance_started", actor_name="admin")
+                karaoke_state["current_singer_id"] = signup.id
+                karaoke_state["stage_mode"] = "on_stage"
+                refresh_karaoke_stage_selection()
+                live_display_event_override = build_karaoke_stage_override(signup, "on_stage")
+                messages.append(f"Marked {signup.name} on stage. Start the video in the official YouTube tab.")
+                should_broadcast = True
+
+        elif action in {"complete_karaoke_and_advance", "skip_karaoke_singer"}:
+            signup = find_karaoke_signup(
+                request.form.get("entry_id", "").strip()
+                or str(karaoke_state.get("current_singer_id", "") or "")
+            )
+            if not signup:
+                errors.append("No current karaoke singer was found.")
+            else:
+                if action == "complete_karaoke_and_advance":
+                    signup.workflow["performance_status"] = "completed"
+                    signup.workflow["completed_at"] = _utc_now_iso()
+                    append_karaoke_history(signup, "performance_completed", actor_name="admin")
+                    messages.append(f"Completed {signup.name}'s karaoke performance.")
+                else:
+                    signup.workflow["performance_status"] = "skipped"
+                    signup.workflow["completed_at"] = _utc_now_iso()
+                    append_karaoke_history(
+                        signup,
+                        "performance_skipped",
+                        detail=request.form.get("reason", "").strip(),
+                        actor_name="admin",
+                    )
+                    messages.append(f"Skipped {signup.name} and advanced the lineup.")
+                karaoke_state["current_singer_id"] = None
+                karaoke_state["stage_mode"] = "standby"
+                refresh_karaoke_stage_selection()
+                next_signup = find_karaoke_signup(str(karaoke_state.get("next_singer_id", "") or ""))
+                if next_signup:
+                    live_display_event_override = build_karaoke_stage_override(next_signup, "call")
+                else:
+                    live_display_event_override = build_karaoke_stage_override(signup, "complete")
+                should_broadcast = True
+
+        elif action in {
+            "move_karaoke_to_top",
+            "move_karaoke_up",
+            "move_karaoke_down",
+            "move_karaoke_to_end",
+        }:
+            entry_id = request.form.get("entry_id", "").strip()
+            approved_entries = active_karaoke_signups()
+            movable_ids = {entry.id for entry in approved_entries}
+            current_position = next(
+                (idx for idx, entry in enumerate(approved_entries) if entry.id == entry_id),
+                None,
+            )
+            if current_position is None:
+                errors.append("Karaoke signup could not be found.")
+            else:
+                signup = approved_entries.pop(current_position)
+                if action == "move_karaoke_to_top":
+                    target_position = 0
+                elif action == "move_karaoke_up":
+                    target_position = max(0, current_position - 1)
+                elif action == "move_karaoke_down":
+                    target_position = min(len(approved_entries), current_position + 1)
+                else:
+                    target_position = len(approved_entries)
+                approved_entries.insert(target_position, signup)
+                ordered_approved = iter(approved_entries)
+                karaoke_signups[:] = [
+                    next(ordered_approved)
+                    if entry.id in movable_ids
+                    else entry
+                    for entry in karaoke_signups
+                ]
+                if signup.workflow.get("performance_status") in {"called", "on_stage"}:
+                    signup.workflow["performance_status"] = "waiting"
+                if app.config.get("YOUTUBE_KARAOKE_ENABLED"):
+                    for entry in approved_karaoke_signups():
+                        if entry.workflow.get("playlist_sync_status") == "synced":
+                            entry.workflow["playlist_sync_status"] = "out_of_order"
+                append_karaoke_history(
+                    signup,
+                    {
+                        "move_karaoke_to_top": "moved_to_top",
+                        "move_karaoke_up": "moved_up",
+                        "move_karaoke_down": "moved_down",
+                        "move_karaoke_to_end": "moved_to_end",
+                    }[action],
+                    actor_name="admin",
+                )
+                karaoke_state["current_singer_id"] = None
+                refresh_karaoke_stage_selection()
+                messages.append(f"Updated {signup.name}'s karaoke lineup position.")
+                should_broadcast = True
 
         elif action == "stop_karaoke_party":
             karaoke_state["party_started"] = False
             karaoke_state["current_singer_index"] = None
             karaoke_state["current_singer_id"] = None
-            if live_display_event_override and live_display_event_override.get("type") == "karaoke_start":
+            karaoke_state["next_singer_id"] = None
+            karaoke_state["stage_mode"] = "standby"
+            if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("karaoke_"):
                 live_display_event_override = None
             messages.append("Karaoke party stopped.")
             write_state_backup_if_available("karaoke-stop")
@@ -5472,44 +7001,6 @@ def admin_portal(admin_view: str):
             else:
                 errors.append("No votes have been submitted yet, so a winner cannot be locked in.")
 
-        elif action == "move_karaoke_up":
-            index = parse_entry_index(
-                karaoke_signups,
-                "karaoke signup",
-                request.form.get("entry_id"),
-                request.form.get("index"),
-            )
-            if index is not None:
-                if index == 0:
-                    messages.append("Karaoke signup is already at the top.")
-                else:
-                    moved_signup = karaoke_signups[index]
-                    karaoke_signups[index - 1], karaoke_signups[index] = (
-                        karaoke_signups[index],
-                        karaoke_signups[index - 1],
-                    )
-                    messages.append(f"Moved karaoke signup for {moved_signup.name} up.")
-                    should_broadcast = True
-
-        elif action == "move_karaoke_down":
-            index = parse_entry_index(
-                karaoke_signups,
-                "karaoke signup",
-                request.form.get("entry_id"),
-                request.form.get("index"),
-            )
-            if index is not None:
-                if index == len(karaoke_signups) - 1:
-                    messages.append("Karaoke signup is already at the bottom.")
-                else:
-                    moved_signup = karaoke_signups[index]
-                    karaoke_signups[index + 1], karaoke_signups[index] = (
-                        karaoke_signups[index],
-                        karaoke_signups[index + 1],
-                    )
-                    messages.append(f"Moved karaoke signup for {moved_signup.name} down.")
-                    should_broadcast = True
-
         else:
             errors.append("Unknown action submitted. Please try again.")
 
@@ -5522,7 +7013,7 @@ def admin_portal(admin_view: str):
     top_costume_rankings = rank_costume_entries(costume_scores)[:5]
 
     return render_template(
-        "admin.html",
+        "admin_karaoke.html" if admin_view == "karaoke" else "admin.html",
         admin_view=admin_view,
         admin_workspaces=ADMIN_WORKSPACES,
         costume_signups=costume_signups,
@@ -5572,6 +7063,9 @@ def admin_portal(admin_view: str):
         dj_song_requests=dj_song_requests,
         dj_state=dj_view_state(),
         apple_music_configured=apple_music_is_configured(),
+        karaoke_admin=karaoke_admin_view_state(),
+        karaoke_admin_state_url=url_for("admin_karaoke_state"),
+        karaoke_admin_search_url=url_for("admin_karaoke_search"),
     )
 
 
@@ -5657,10 +7151,11 @@ def party_karaoke():
         return redirect(url_for("party_dashboard"))
 
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
+        name = request.form.get("name", "").strip() or str(session.get("username", "") or "").strip()
         song_title = request.form.get("song_title", "").strip()
         artist = request.form.get("artist", "").strip()
         youtube_link = request.form.get("youtube_link", "").strip()
+        youtube_video_id = request.form.get("youtube_video_id", "").strip()
 
         if not name:
             errors.append("Name is required.")
@@ -5669,30 +7164,154 @@ def party_karaoke():
         if not artist:
             errors.append("Artist is required.")
 
+        verified_video: dict[str, object] | None = None
+        if app.config.get("YOUTUBE_KARAOKE_ENABLED") and not errors:
+            try:
+                verified_video = verify_youtube_video(youtube_video_id or youtube_link)
+            except YouTubeApiError as exc:
+                errors.append(exc.message)
+
         if not errors:
-            karaoke_signups.append(
-                KaraokeSignup(
-                    id=uuid4().hex,
-                    name=name,
-                    song_title=song_title,
-                    artist=artist,
-                    youtube_link=youtube_link,
-                )
-            )
-            submitted = True
-            broadcast_display_update()
-            return redirect(url_for("party_karaoke", success="1"))
+            def add_signup() -> None:
+                if app.config.get("YOUTUBE_KARAOKE_ENABLED") and verified_video:
+                    workflow = normalize_karaoke_workflow({}, has_video=True)
+                    workflow["video_validation_status"] = "verified"
+                    signup = KaraokeSignup(
+                        id=uuid4().hex,
+                        requester_id=str(session.get("user_id", "") or ""),
+                        requested_at=_utc_now_iso(),
+                        name=name,
+                        song_title=song_title,
+                        artist=artist,
+                        youtube_link=str(verified_video.get("watch_url", "") or ""),
+                        youtube=normalize_karaoke_youtube(verified_video),
+                        workflow=workflow,
+                    )
+                    append_karaoke_history(
+                        signup,
+                        "submitted",
+                        actor_id=str(session.get("user_id", "") or ""),
+                        actor_name=name,
+                    )
+                    append_karaoke_history(signup, "video_verified")
+                else:
+                    signup = KaraokeSignup(
+                        id=uuid4().hex,
+                        requester_id=str(session.get("user_id", "") or ""),
+                        requested_at=_utc_now_iso(),
+                        name=name,
+                        song_title=song_title,
+                        artist=artist,
+                        youtube_link=youtube_link,
+                    )
+                karaoke_signups.append(signup)
+
+            try:
+                explicit_state_mutation(add_signup)
+            except StateMutationBusy as exc:
+                errors.append(str(exc))
+            else:
+                submitted = True
+                return redirect(url_for("party_karaoke", success="1"))
 
     if request.args.get("success") == "1":
         submitted = True
 
+    user_id = str(session.get("user_id", "") or "")
     return render_template(
         "karaoke_signup.html",
         errors=errors,
         submitted=submitted,
-        karaoke_signups=karaoke_signups,
+        karaoke_signups=public_karaoke_signups(),
+        own_karaoke_requests=[
+            karaoke_signup_view(signup)
+            for signup in karaoke_signups
+            if signup.requester_id == user_id
+        ],
+        youtube_karaoke_enabled=bool(app.config.get("YOUTUBE_KARAOKE_ENABLED")),
+        youtube_search_configured=youtube_config().search_configured,
+        youtube_search_url=url_for("party_karaoke_search"),
+        default_karaoke_name=str(session.get("username", "") or ""),
         show_admin_link=False,
     )
+
+
+@app.get("/api/party/karaoke/search")
+def party_karaoke_search():
+    if not party_day_has_arrived():
+        return jsonify({"error": "Karaoke requests are not open yet."}), 403
+    query = request.args.get("q", "")
+    page_token = request.args.get("page_token", "")
+    if len(page_token) > 300:
+        return jsonify({"error": "Invalid YouTube result page."}), 400
+    try:
+        payload = search_youtube_karaoke(
+            query,
+            page_token=page_token,
+            user_id=str(session.get("user_id", "") or request.remote_addr or "guest"),
+        )
+    except YouTubeApiError as exc:
+        return jsonify({"error": exc.message, "code": exc.code}), 429 if "limit" in exc.code or "budget" in exc.code else 503
+    return jsonify(payload)
+
+
+@app.post("/party/karaoke/<entry_id>/cancel")
+def party_karaoke_cancel(entry_id: str):
+    user_id = str(session.get("user_id", "") or "")
+
+    def cancel() -> None:
+        signup = find_karaoke_signup(entry_id)
+        if not signup or signup.requester_id != user_id:
+            raise ValueError("Karaoke request could not be found.")
+        if signup.workflow.get("approval_status") != "pending":
+            raise ValueError("Only a pending karaoke request can be cancelled.")
+        signup.workflow["approval_status"] = "cancelled"
+        append_karaoke_history(
+            signup,
+            "cancelled",
+            actor_id=user_id,
+            actor_name=str(session.get("username", "") or ""),
+        )
+
+    try:
+        explicit_state_mutation(cancel)
+    except (StateMutationBusy, ValueError) as exc:
+        return redirect(url_for("party_karaoke", request_error=str(exc)))
+    return redirect(url_for("party_karaoke", request_success="Karaoke request cancelled."))
+
+
+@app.post("/party/karaoke/<entry_id>/replace")
+def party_karaoke_replace(entry_id: str):
+    user_id = str(session.get("user_id", "") or "")
+    raw_video = request.form.get("youtube_video_id") or request.form.get("youtube_link", "")
+    try:
+        video = verify_youtube_video(raw_video)
+
+        def replace() -> None:
+            signup = find_karaoke_signup(entry_id)
+            if not signup or signup.requester_id != user_id:
+                raise ValueError("Karaoke request could not be found.")
+            if signup.workflow.get("approval_status") != "pending":
+                raise ValueError("Only a pending karaoke request can be replaced.")
+            signup.youtube = normalize_karaoke_youtube(video)
+            signup.youtube_link = str(signup.youtube.get("watch_url", "") or "")
+            signup.workflow["video_validation_status"] = "verified"
+            signup.workflow["playlist_revision"] = max(
+                1, _safe_int(signup.workflow.get("playlist_revision"), 1)
+            ) + 1
+            append_karaoke_history(
+                signup,
+                "video_replaced",
+                actor_id=user_id,
+                actor_name=str(session.get("username", "") or ""),
+            )
+
+        explicit_state_mutation(replace)
+    except YouTubeApiError as exc:
+        return redirect(url_for("party_karaoke", request_error=exc.message))
+    except (StateMutationBusy, ValueError) as exc:
+        return redirect(url_for("party_karaoke", request_error=str(exc)))
+    return redirect(url_for("party_karaoke", request_success="Karaoke video replaced and returned to host review."))
 
 
 @app.route("/party/costumes/vote", methods=["GET", "POST"])

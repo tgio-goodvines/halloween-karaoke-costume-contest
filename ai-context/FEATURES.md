@@ -68,11 +68,17 @@
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.
 - Karaoke signup at `/party/karaoke` is attendee-accessible on the party date.
-- Karaoke signup validation for required name, song title, and artist.
+- Karaoke signup validates name, song title, artist, and—when YouTube karaoke
+  is enabled—an exact available, non-age-restricted YouTube video.
 - Party-day Jukebox at `/party/jukebox` shows confirmed Now Playing state and
   the DJ playlist, lets attendees search Apple Music, and submit up to three
   pending song requests for DJ approval.
-- Optional YouTube link field for karaoke entries.
+- YouTube karaoke search is explicit-submit, paginated, Redis-cached, and
+  protected by daily project/account safety budgets with direct-link fallback.
+- Attendees see personal seven-step workflow status and may replace or cancel
+  only their own pending requests.
+- Public karaoke lineups include only approved, playlist-synchronized entries
+  while the YouTube workflow is enabled.
 - Karaoke signup success redirect and lineup display.
 - Event highlight slide rotation on the party dashboard. Pre-party slides use
   RSVP detail cards and host updates; party-day slides use the event-night
@@ -103,10 +109,20 @@
 
 ## Karaoke Features
 
-- Guests can join the karaoke lineup with name, song title, artist, and optional YouTube link.
-- Admin can add, edit, delete, and reorder karaoke signups.
-- Admin page highlights the first karaoke signup as the opening act.
-- Admin warning appears when the opening act has no YouTube link.
+- Guests choose an exact YouTube karaoke video or paste a direct link, then
+  track Submitted, Video verified, Approved, Playlist synced, Ready, On stage,
+  and Complete.
+- `/admin/karaoke` is the dedicated host operations workspace for YouTube
+  connection health, playlist creation/selection, pending review, attention
+  recovery, run-of-show order, history, and stage controls.
+- Approval revalidates the video and synchronizes a dedicated host-owned
+  playlist through idempotent signup/revision markers.
+- Admin can approve, reject, retry, replace, remove, reconcile, move
+  top/up/down/end, and synchronize YouTube playlist order.
+- Playback stays in the official YouTube site. Stage controls update workflow
+  and live-display singer cards but never claim remote playback confirmation.
+- The legacy name/title/artist/optional-link workflow remains intact when
+  `HALLOWEEN_YOUTUBE_KARAOKE_ENABLED=false`.
 - Admin can start, stop, and reset the Halloween karaoke party if at least one karaoke signup exists for start.
 - Starting karaoke sets a live-display override with countdown to 11:00 PM MST and the current lineup.
 - Stopping or resetting karaoke clears active karaoke state and karaoke-start live-display override without deleting the lineup.

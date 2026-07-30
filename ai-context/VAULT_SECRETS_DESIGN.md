@@ -80,6 +80,7 @@ Recommended paths:
 appsecrets/halloween_app
 appsecrets/halloween_redis
 appsecrets/halloween_github
+appsecrets/halloween_youtube
 ```
 
 ### `appsecrets/halloween_app`
@@ -142,6 +143,30 @@ Recommended keys:
 
 This secret is for EC2-side repository checkout during deployment. GitHub
 Actions should not store or print this token.
+
+### `appsecrets/halloween_youtube`
+
+Purpose: YouTube search, OAuth web-client, offline host authorization, and
+feature/quota configuration.
+
+Keys:
+
+```text
+enabled
+api_key
+oauth_client_id
+oauth_client_secret
+oauth_refresh_token
+region_code
+search_daily_budget
+search_account_limit
+```
+
+`deploy/configure_youtube_vault.sh` provisions a separate
+`halloween-api-policy` and `halloween-api` AWS auth role. That role is bound to
+the existing API EC2 IAM principal but grants only create/read/update on this
+one secret path. Do not add write capability to `goodvines-api` or change any
+GoodVines policy.
 
 ## Environment Contract
 

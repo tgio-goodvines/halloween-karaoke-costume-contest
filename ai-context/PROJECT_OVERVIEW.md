@@ -11,9 +11,8 @@ remaining as a process-local cache in `main.py`.
 ## Runtime
 
 - Python version: `.python-version` pins `3.11.9`.
-- Dependencies: `requirements.txt` requires `flask>=3.0,<4.0`,
-  `redis>=5.0,<6.0`, and `boto3>=1.34,<2.0`; production also uses
-  `gunicorn`.
+- Dependencies: `requirements.txt` requires Flask, redis-py, boto3, the Google
+  API/OAuth clients, and hvac; production also uses gunicorn.
 - Entrypoint: `main.py`.
 - Local run behavior: `python main.py` starts Flask debug mode on `0.0.0.0:80`.
 - Secret key: `HALLOWEEN_APP_SECRET`, falling back to `dev-secret-key`.
@@ -106,7 +105,10 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    a SES welcome email when email is enabled.
 6. On the party date, attendees can submit costume entries at
    `/party/costumes`.
-7. On the party date, attendees can submit karaoke songs at `/party/karaoke`.
+7. On the party date, attendees can search for and select an exact YouTube
+   karaoke video at `/party/karaoke`, submit it for host approval, and track
+   verification/approval/playlist/stage progress. The legacy optional-link flow
+   remains available while the YouTube feature flag is disabled.
 8. On the party date, attendees can view food and drink menu cards with images
    at `/party/menu` and order available/orderable drinks from the bar.
    Specialty drinks are limited to 3 included attendee orders; after 11:00 PM,
@@ -135,11 +137,15 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 5. The following globals in `main.py` are
+`halloween:state` with schema version 6. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
-- `karaoke_signups`: list of `KaraokeSignup` dataclass instances with stable IDs.
+- `karaoke_signups`: list of `KaraokeSignup` dataclass instances with stable
+  IDs, requester identity, exact YouTube metadata, independent workflow state,
+  playlist item/revision/operation metadata, and bounded history.
+- `youtube_karaoke`: non-secret host channel, event playlist, connection, and
+  reconciliation metadata. API keys and OAuth credentials never enter Redis.
 - `costume_ballots`: maps `user_id` to `{costume_id: score}`.
 - `user_accounts`: maps normalized usernames to Redis-backed attendee account
   records with stable IDs, password hashes, and roles such as `regular` and

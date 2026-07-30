@@ -40,7 +40,7 @@
     <section class="karaoke-attention-panel">
       <p class="admin-panel__eyebrow">Feature flag</p>
       <h3>YouTube karaoke is disabled</h3>
-      <p>The manual karaoke lineup remains active. Configure and validate the host connection, then enable <code>HALLOWEEN_YOUTUBE_KARAOKE_ENABLED</code> when the playlist workflow is ready.</p>
+      <p>The manual karaoke lineup remains active. Configure and validate the host connection below, then enable the dedicated Vault feature flag when the playlist workflow is ready.</p>
       <details>
         <summary>Add a manual karaoke entry</summary>
         <form method="post">
@@ -55,7 +55,6 @@
     </section>
   {% endif %}
 
-  {% if karaoke_admin.enabled %}
   <section class="karaoke-connection{% if karaoke_admin.youtube.connection_status != 'connected' %} karaoke-connection--attention{% endif %}">
     <header>
       <div>
@@ -113,7 +112,6 @@
       </details>
     {% endif %}
   </section>
-  {% endif %}
 
   <section class="karaoke-metrics" aria-label="Karaoke workflow metrics">
     <article><span>Awaiting review</span><strong>{{ karaoke_admin.metrics.pending }}</strong></article>

@@ -3606,6 +3606,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Approve and Add to Playlist", html)
 
     def test_disabled_youtube_flag_preserves_manual_admin_lineup_and_stage_controls(self):
+        main.app.config["YOUTUBE_CLIENT_ID"] = "setup-client-id"
+        main.app.config["YOUTUBE_CLIENT_SECRET"] = "setup-client-secret"
         main.karaoke_signups = [
             main.KaraokeSignup(
                 id="manual-karaoke",
@@ -3628,6 +3630,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, page.status_code)
         html = page.get_data(as_text=True)
         self.assertIn("Add a manual karaoke entry", html)
+        self.assertIn("YouTube connection", html)
+        self.assertIn("Connect YouTube", html)
         self.assertIn("Manual Singer", html)
         self.assertNotIn("Approve and Add to Playlist", html)
         self.assertEqual(200, called.status_code)

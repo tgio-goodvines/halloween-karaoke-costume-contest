@@ -18,7 +18,7 @@
           Live
           <span class="lab-led"></span>
         </span>
-        {% set show_admin_nav_link = show_admin_link is not defined or show_admin_link %}
+        {% set show_admin_nav_link = admin_authenticated %}
         {% if not hide_site_nav and (regular_authenticated or bartender_authenticated or admin_authenticated or show_admin_nav_link) %}
           <div class="site-header__meta">
             <details class="site-nav">

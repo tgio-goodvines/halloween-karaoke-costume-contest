@@ -122,6 +122,11 @@ The app uses Flask sessions for role and attendee identity. Regular attendee
 accounts live in Redis app state as `user_accounts`; active session display
 names are also tracked in `registered_users` by account ID.
 
+Navigation is the union of active session roles: a mixed regular/bartender/admin
+session exposes the destinations for each represented role. Attendee sign-in
+refreshes the account-derived regular/bartender roles while retaining an active
+admin role in the same browser session.
+
 ## Session Management
 
 The app uses Flask's default signed-cookie session model. Each browser/profile

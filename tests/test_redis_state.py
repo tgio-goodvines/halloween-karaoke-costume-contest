@@ -3173,6 +3173,66 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual({}, state["password_reset_tokens"])
         self.assertEqual(302, login_response.status_code)
 
+    def test_combined_session_roles_expose_all_role_navigation_and_views(self):
+        account = self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        account["roles"] = ["regular", "bartender"]
+        main.event_experience_mode = "party_day"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            self.login_admin(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["admin", "bartender", "regular"]
+            dashboard_response = client.get("/party")
+            responses = [
+                client.get("/party/account"),
+                client.get("/party/menu"),
+                client.get("/party/drink-history"),
+                client.get("/party/jukebox"),
+                client.get("/party/costumes"),
+                client.get("/party/karaoke"),
+                client.get("/bartender"),
+                client.get("/admin"),
+                client.get("/live-display"),
+            ]
+
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, dashboard_response.status_code)
+        for label in ("Account", "Menu", "Drink History", "Jukebox", "Costume", "Karaoke", "Bartender", "Admin"):
+            self.assertIn(f">{label}<", dashboard_body)
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+
+    def test_party_login_refreshes_account_derived_roles_and_preserves_admin(self):
+        self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["admin", "bartender"]
+            response = client.post(
+                "/party/login",
+                data={"username": "Jamie", "password": "party-password"},
+            )
+            with client.session_transaction() as session:
+                roles = session.get("roles", [])
+                admin_authenticated = session.get("admin_authenticated")
+
+        self.assertEqual(302, response.status_code)
+        self.assertEqual(["admin", "regular"], roles)
+        self.assertTrue(admin_authenticated)
+
+    def test_jukebox_request_uses_regular_role_protection(self):
+        main.event_experience_mode = "party_day"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            response = client.post("/party/jukebox/requests", data={})
+
+        self.assertEqual(302, response.status_code)
+        self.assertIn("/party/login", response.headers["Location"])
+
     def test_logout_clears_current_session(self):
         self.save_current_state()
 

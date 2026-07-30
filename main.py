@@ -514,6 +514,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_account",
     "party_dashboard",
     "party_menu",
+    "party_drink_history",
     "party_bartender_tip",
     "party_costumes",
     "party_karaoke",
@@ -521,6 +522,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_jukebox",
     "party_jukebox_data",
     "party_jukebox_catalog_search",
+    "party_jukebox_request",
 }
 DISPLAY_ENDPOINTS = {
     "live_display",
@@ -784,6 +786,17 @@ def current_user_account() -> dict[str, object] | None:
         if str(account.get("id", "")) == user_id:
             return account
     return None
+
+
+def sync_attendee_session_roles(account: dict[str, object]) -> None:
+    """Refresh account-derived attendee roles without removing other active roles."""
+    roles = session_roles()
+    roles.add("regular")
+    if account_has_role(account, "bartender"):
+        roles.add("bartender")
+    else:
+        roles.discard("bartender")
+    session["roles"] = sorted(roles)
 
 
 def invalidate_password_reset_tokens_for_account(account_id: str) -> None:
@@ -3890,9 +3903,7 @@ def party_login():
 
             session["user_id"] = user_id
             session["username"] = display_name
-            grant_session_role("regular")
-            if account_has_role(account, "bartender"):
-                grant_session_role("bartender")
+            sync_attendee_session_roles(account)
             registered_users[user_id] = display_name
             persist_state_if_available()
 
@@ -4045,7 +4056,7 @@ def party_register():
             user_accounts[normalized_username] = account
             session["user_id"] = account["id"]
             session["username"] = account["username"]
-            grant_session_role("regular")
+            sync_attendee_session_roles(account)
             registered_users[account["id"]] = account["username"]
             send_account_welcome_email(account)
             persist_state_if_available()

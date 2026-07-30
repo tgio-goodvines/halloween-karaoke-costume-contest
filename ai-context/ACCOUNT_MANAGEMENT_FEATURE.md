@@ -33,6 +33,19 @@ for signed-in regular attendees. It remains available before the party day.
 - Every account-page form uses the app's existing CSRF protection and Redis
   mutation lock/persistence lifecycle.
 
+## Session Role Behavior
+
+- The shared Menu is role-union based: an active session shows the navigation
+  for every role currently represented in that browser session. A session with
+  `regular`, `bartender`, and `admin` therefore shows attendee, bartender, and
+  admin destinations together.
+- Party account sign-in refreshes account-derived roles (`regular` and optional
+  `bartender`) while retaining a separately active `admin` role. Removing the
+  bartender role in admin takes effect at the attendee's next sign-in.
+- Attendee route protection is consistent for party views, including drink
+  history and jukebox requests. Account-scoped attendee actions additionally
+  require the current account ID in the session.
+
 ## Verification
 
 `tests/test_redis_state.py` covers sign-in protection, menu navigation, role

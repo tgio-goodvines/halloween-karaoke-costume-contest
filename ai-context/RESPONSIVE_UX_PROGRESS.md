@@ -58,6 +58,16 @@ in normal browser windows and on mobile phone browsers.
 - If future work adds more admin controls, prefer extending the disclosure
   pattern rather than adding more always-open form panels.
 
+## YouTube Karaoke Responsive Verification (2026-07-30)
+
+- Verified the dedicated `/admin/karaoke` workspace at desktop and `390x844`.
+- Verified `/party/karaoke` search, fallback disclosure, selection form, and
+  personal/public queue sections at `390x844`.
+- Added compact vertical workflow steps on phones and a seven-marker compact
+  attendee stepper.
+- Corrected hidden pagination, empty-selection grid width, finder summary
+  spacing, and mobile search-control stacking during browser QA.
+
 ## 2026-07-26 Scrolling Performance Safeguards
 
 - The shared attendee/admin pages use a distinct performance profile from the

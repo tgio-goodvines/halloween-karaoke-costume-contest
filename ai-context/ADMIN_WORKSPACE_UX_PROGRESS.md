@@ -11,7 +11,11 @@ Replace the previous single, very long `/admin` document with a compact control-
 - `/admin` is the **Tonight** control room. It contains RSVP, bar, costume, and karaoke status cards plus direct next-action links. It intentionally excludes long lists and edit forms.
 - `/admin/guests` contains RSVP management, static party details, and RSVP updates/email recipient selection.
 - `/admin/public` contains landing-page selection, party-date experience mode, RSVP party code/hint, RSVP host notification recipient, and live-display WiFi values.
-- `/admin/program` contains costume contest controls, karaoke controls, vote status, and both lineup management surfaces.
+- `/admin/program` contains costume contest controls and a compact link to the
+  dedicated karaoke operations workspace.
+- `/admin/karaoke` contains YouTube connection/playlist health, host review,
+  attention recovery, approved run of show, synchronization/history, and
+  sticky stage controls.
 - `/admin/bar` contains bar-operation metrics and bartender tipping settings; the live queue remains in `/bartender`.
 - `/admin/menu` contains menu item CRUD.
 - `/admin/accounts` contains account creation, account updates, password resets, and bartender role assignment.
@@ -34,6 +38,16 @@ The route continues to use the existing `admin_portal` POST action handler, so e
 - Costume-voting submit remains visible at the bottom of the viewport while a guest works through a long ballot.
 
 ## Verification
+
+### YouTube karaoke workspace verification (2026-07-30)
+
+- Browser-verified `/admin/karaoke` at normal desktop and `390x844`.
+- Verified the workspace rail remains horizontally scrollable on phones, the
+  connection/metrics cards collapse cleanly, and the stage rail becomes the
+  first normal-flow section.
+- Verified the attendee `/party/karaoke` guided search/selection layout at
+  `390x844`, including hidden pagination before results and a full-width empty
+  selection prompt.
 
 - `python -m pytest` — 70 passing tests.
 - `python -m compileall main.py` — passed.

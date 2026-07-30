@@ -5,6 +5,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 import redis
 
@@ -53,6 +54,17 @@ class FakeRedis:
         self.ttls[key] = ttl
         return True
 
+    def incr(self, key):
+        value = int(self.store.get(key, 0)) + 1
+        self.store[key] = str(value)
+        return value
+
+    def expire(self, key, ttl):
+        if key in self.store:
+            self.ttls[key] = ttl
+            return True
+        return False
+
     def exists(self, key):
         return int(key in self.store)
 
@@ -100,6 +112,101 @@ class FakeSESClient:
         return {"MessageId": f"message-{len(self.sent_messages)}"}
 
 
+class FakeYouTubeService:
+    def __init__(self):
+        self.video_id = "abc123DEF45"
+        self.search_calls = []
+        self.get_video_calls = []
+        self.playlist_items = []
+        self.insert_calls = []
+        self.move_calls = []
+        self.delete_calls = []
+        self.fail_insert = None
+        self.channel = {"channel_id": "channel-1", "channel_title": "Halloween Host"}
+        self.playlists = [
+            {"playlist_id": "playlist-1", "title": "Halloween Karaoke 2026", "privacy": "private"}
+        ]
+
+    def video(self, video_id=None, **updates):
+        selected_id = video_id or self.video_id
+        return {
+            "video_id": selected_id,
+            "title": "Thriller Karaoke",
+            "channel_id": "channel-sing",
+            "channel_title": "Sing King",
+            "thumbnail_url": "https://i.ytimg.com/vi/abc123DEF45/hqdefault.jpg",
+            "duration_seconds": 358,
+            "privacy_status": "public",
+            "upload_status": "processed",
+            "embeddable": True,
+            "age_restricted": False,
+            "region_allowed": True,
+            "available": True,
+            "last_verified_at": "2026-07-30T00:00:00Z",
+            "watch_url": f"https://www.youtube.com/watch?v={selected_id}",
+            **updates,
+        }
+
+    def search_videos(self, query, *, page_token="", limit=8):
+        self.search_calls.append((query, page_token, limit))
+        return {
+            "items": [self.video()],
+            "next_page_token": "next-token",
+            "previous_page_token": "",
+        }
+
+    def get_videos(self, video_ids, *, client=None):
+        self.get_video_calls.append(list(video_ids))
+        return [self.video(video_ids[0])] if video_ids else []
+
+    def connection_status(self):
+        return dict(self.channel)
+
+    def list_owned_playlists(self, *, page_token="", limit=25):
+        return {"items": list(self.playlists), "next_page_token": ""}
+
+    def create_playlist(self, title, *, privacy="private"):
+        playlist = {"playlist_id": "playlist-created", "title": title, "privacy": privacy}
+        self.playlists.append(playlist)
+        return playlist
+
+    def list_playlist_items(self, playlist_id):
+        return [dict(item) for item in self.playlist_items]
+
+    def insert_playlist_item(self, playlist_id, video_id, *, position, note):
+        self.insert_calls.append((playlist_id, video_id, position, note))
+        if self.fail_insert:
+            raise self.fail_insert
+        item = {
+            "playlist_item_id": f"playlist-item-{len(self.playlist_items) + 1}",
+            "video_id": video_id,
+            "position": position,
+            "note": note,
+        }
+        self.playlist_items.insert(position, item)
+        return dict(item)
+
+    def move_playlist_item(self, playlist_item_id, playlist_id, video_id, *, position, note):
+        self.move_calls.append((playlist_item_id, playlist_id, video_id, position, note))
+        item = next(entry for entry in self.playlist_items if entry["playlist_item_id"] == playlist_item_id)
+        self.playlist_items.remove(item)
+        item["position"] = position
+        item["note"] = note
+        self.playlist_items.insert(position, item)
+        for index, entry in enumerate(self.playlist_items):
+            entry["position"] = index
+        return dict(item)
+
+    def delete_playlist_item(self, playlist_item_id):
+        self.delete_calls.append(playlist_item_id)
+        self.playlist_items = [
+            item for item in self.playlist_items if item["playlist_item_id"] != playlist_item_id
+        ]
+
+    def revoke_credentials(self):
+        return None
+
+
 class RedisStateTests(unittest.TestCase):
     def setUp(self):
         self.fake_redis = FakeRedis()
@@ -116,6 +223,20 @@ class RedisStateTests(unittest.TestCase):
         self.original_create_ses_client = main.create_ses_client
         self.original_specialty_extra_orders_are_open = main.specialty_extra_orders_are_open
         self.original_app_env = os.environ.get("APP_ENV")
+        self.original_youtube_service = main.youtube_service
+        self.original_youtube_config = {
+            key: main.app.config[key]
+            for key in (
+                "YOUTUBE_KARAOKE_ENABLED",
+                "YOUTUBE_API_KEY",
+                "YOUTUBE_CLIENT_ID",
+                "YOUTUBE_CLIENT_SECRET",
+                "YOUTUBE_REFRESH_TOKEN",
+                "YOUTUBE_REGION_CODE",
+                "YOUTUBE_SEARCH_DAILY_BUDGET",
+                "YOUTUBE_SEARCH_ACCOUNT_LIMIT",
+            )
+        }
 
         main.redis_client = self.fake_redis
         main.redis_state_available = True
@@ -133,6 +254,7 @@ class RedisStateTests(unittest.TestCase):
         main.app.config["EMAIL_UPDATES_ENABLED"] = False
         main.app.config["EMAIL_FROM"] = "Halloween Party <no-reply@tnq-halloween.com>"
         main.app.config["PUBLIC_BASE_URL"] = "https://tnq-halloween.com"
+        main.app.config["YOUTUBE_KARAOKE_ENABLED"] = False
         self.reset_state()
 
     def tearDown(self):
@@ -148,6 +270,9 @@ class RedisStateTests(unittest.TestCase):
         main.rsvp_notification_email = self.original_rsvp_notification_email
         main.create_ses_client = self.original_create_ses_client
         main.specialty_extra_orders_are_open = self.original_specialty_extra_orders_are_open
+        main.youtube_service = self.original_youtube_service
+        for key, value in self.original_youtube_config.items():
+            main.app.config[key] = value
         if self.original_app_env is None:
             os.environ.pop("APP_ENV", None)
         else:
@@ -184,6 +309,7 @@ class RedisStateTests(unittest.TestCase):
         main.contest_state.update(main.copy.deepcopy(main.DEFAULT_CONTEST_STATE))
         main.karaoke_state.clear()
         main.karaoke_state.update(main.copy.deepcopy(main.DEFAULT_KARAOKE_STATE))
+        main.youtube_karaoke = main.copy.deepcopy(main.DEFAULT_YOUTUBE_KARAOKE_STATE)
         main.party_details = main.copy.deepcopy(main.DEFAULT_PARTY_DETAILS)
 
     def login_regular(self, client, user_id="user-1", username="Jamie"):
@@ -221,6 +347,39 @@ class RedisStateTests(unittest.TestCase):
 
     def save_current_state(self):
         main.save_state_to_redis()
+
+    def enable_youtube_karaoke(self):
+        fake_youtube = FakeYouTubeService()
+        main.youtube_service = lambda: fake_youtube
+        main.app.config["YOUTUBE_KARAOKE_ENABLED"] = True
+        main.app.config["YOUTUBE_API_KEY"] = "test-api-key"
+        main.app.config["YOUTUBE_CLIENT_ID"] = "test-client-id"
+        main.app.config["YOUTUBE_CLIENT_SECRET"] = "test-client-secret"
+        main.app.config["YOUTUBE_REFRESH_TOKEN"] = "test-refresh-token"
+        main.youtube_karaoke.update(
+            {
+                "connection_status": "connected",
+                "channel_id": fake_youtube.channel["channel_id"],
+                "channel_title": fake_youtube.channel["channel_title"],
+                "playlist_id": "playlist-1",
+                "playlist_title": "Halloween Karaoke 2026",
+                "playlist_privacy": "private",
+            }
+        )
+        self.save_current_state()
+        return fake_youtube
+
+    def submit_youtube_karaoke_request(self, client, *, video_id="abc123DEF45"):
+        return client.post(
+            "/party/karaoke",
+            data={
+                "name": "Jamie",
+                "song_title": "Thriller",
+                "artist": "Michael Jackson",
+                "youtube_video_id": video_id,
+                "youtube_link": f"https://www.youtube.com/watch?v={video_id}",
+            },
+        )
 
     def test_serialization_round_trip_preserves_state(self):
         main.costume_signups = [
@@ -3368,3 +3527,451 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(400, response.status_code)
         self.assertIn("form expired", response.get_data(as_text=True))
+
+    def test_youtube_url_parser_accepts_supported_formats_and_rejects_invalid_hosts(self):
+        video_id = "abc123DEF45"
+
+        self.assertEqual(video_id, main.parse_youtube_video_id(video_id))
+        self.assertEqual(
+            video_id,
+            main.parse_youtube_video_id(f"https://www.youtube.com/watch?v={video_id}&list=PL123"),
+        )
+        self.assertEqual(
+            video_id,
+            main.parse_youtube_video_id(f"https://youtu.be/{video_id}?si=share"),
+        )
+        self.assertEqual(
+            video_id,
+            main.parse_youtube_video_id(f"https://www.youtube.com/shorts/{video_id}"),
+        )
+        self.assertEqual("", main.parse_youtube_video_id("https://example.com/watch?v=abc123DEF45"))
+        self.assertEqual("", main.parse_youtube_video_id("not-a-youtube-video"))
+
+    def test_attendee_search_uses_cache_without_spending_second_budget_unit(self):
+        fake_youtube = self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            first = client.get("/api/party/karaoke/search?q=thriller")
+            second = client.get("/api/party/karaoke/search?q=thriller")
+
+        self.assertEqual(200, first.status_code)
+        self.assertEqual(200, second.status_code)
+        self.assertFalse(first.get_json()["cached"])
+        self.assertTrue(second.get_json()["cached"])
+        self.assertEqual(1, len(fake_youtube.search_calls))
+        budget_key, account_key = main.youtube_search_budget_keys("user-1")
+        self.assertEqual("1", self.fake_redis.store[budget_key])
+        self.assertEqual("1", self.fake_redis.store[account_key])
+
+    def test_youtube_karaoke_submission_is_pending_and_hidden_from_public_lineup(self):
+        self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = self.submit_youtube_karaoke_request(client)
+            page = client.get("/party/karaoke")
+
+        self.assertEqual(302, response.status_code)
+        self.assertEqual(1, len(main.karaoke_signups))
+        signup = main.karaoke_signups[0]
+        self.assertEqual("user-1", signup.requester_id)
+        self.assertEqual("pending", signup.workflow["approval_status"])
+        self.assertEqual("verified", signup.workflow["video_validation_status"])
+        self.assertEqual("abc123DEF45", signup.youtube["video_id"])
+        self.assertEqual([], main.public_karaoke_signups())
+        html = page.get_data(as_text=True)
+        self.assertIn("Your Karaoke Requests", html)
+        self.assertIn("Awaiting host approval", html)
+        self.assertIn("No approved karaoke songs are queued yet", html)
+
+    def test_admin_karaoke_workspace_is_protected_and_shows_pending_workflow(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+
+        with main.app.test_client() as client:
+            protected = client.get("/admin/karaoke")
+            self.login_admin(client)
+            response = client.get("/admin/karaoke")
+
+        self.assertEqual(302, protected.status_code)
+        self.assertIn("/admin/login", protected.headers["Location"])
+        self.assertEqual(200, response.status_code)
+        html = response.get_data(as_text=True)
+        self.assertIn("Karaoke Operations", html)
+        self.assertIn("Host review", html)
+        self.assertIn("Thriller", html)
+        self.assertIn("Approve and Add to Playlist", html)
+
+    def test_disabled_youtube_flag_preserves_manual_admin_lineup_and_stage_controls(self):
+        main.karaoke_signups = [
+            main.KaraokeSignup(
+                id="manual-karaoke",
+                name="Manual Singer",
+                song_title="Monster Mash",
+                artist="Bobby Pickett",
+                youtube_link="https://www.youtube.com/watch?v=abc123DEF45",
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            page = admin.get("/admin/karaoke")
+            called = admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": "manual-karaoke"},
+            )
+
+        self.assertEqual(200, page.status_code)
+        html = page.get_data(as_text=True)
+        self.assertIn("Add a manual karaoke entry", html)
+        self.assertIn("Manual Singer", html)
+        self.assertNotIn("Approve and Add to Playlist", html)
+        self.assertEqual(200, called.status_code)
+        self.assertEqual(
+            "called",
+            main.find_karaoke_signup("manual-karaoke").workflow["performance_status"],
+        )
+
+    def test_admin_approval_verifies_and_inserts_playlist_item(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+
+        self.assertEqual(200, response.status_code)
+        signup = main.find_karaoke_signup(entry_id)
+        self.assertEqual("approved", signup.workflow["approval_status"])
+        self.assertEqual("synced", signup.workflow["playlist_sync_status"])
+        self.assertTrue(signup.workflow["playlist_item_id"])
+        self.assertEqual(1, len(fake_youtube.insert_calls))
+        self.assertEqual([entry_id], [entry.id for entry in main.public_karaoke_signups()])
+
+    def test_admin_retry_is_idempotent_when_playlist_note_already_exists(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            self.assertEqual(
+                200,
+                admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve").status_code,
+            )
+            response = admin.post(f"/api/admin/karaoke/entries/{entry_id}/retry")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, len(fake_youtube.insert_calls))
+        self.assertEqual(1, len(fake_youtube.playlist_items))
+        self.assertEqual("synced", main.find_karaoke_signup(entry_id).workflow["playlist_sync_status"])
+
+    def test_age_restricted_video_is_rejected_during_server_side_verification(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        fake_youtube.get_videos = lambda video_ids, client=None: [
+            fake_youtube.video(video_ids[0], age_restricted=True)
+        ]
+
+        with self.assertRaises(main.YouTubeApiError) as error:
+            main.verify_youtube_video("abc123DEF45")
+
+        self.assertEqual("video_age_restricted", error.exception.code)
+
+    def test_playlist_failure_keeps_approved_request_visible_for_retry(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        fake_youtube.fail_insert = main.YouTubeApiError(
+            "quota_exceeded",
+            "YouTube quota is temporarily unavailable.",
+        )
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+
+        self.assertEqual(502, response.status_code)
+        signup = main.find_karaoke_signup(entry_id)
+        self.assertEqual("approved", signup.workflow["approval_status"])
+        self.assertEqual("failed", signup.workflow["playlist_sync_status"])
+        self.assertEqual("quota_exceeded", signup.workflow["last_sync_error_code"])
+        self.assertEqual([], main.public_karaoke_signups())
+        self.assertTrue(main.karaoke_signup_view(signup)["needs_attention"])
+
+    def test_reconciliation_recovers_uncertain_operation_from_playlist_note(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        signup = main.karaoke_signups[0]
+        signup.workflow["approval_status"] = "approved"
+        signup.workflow["playlist_sync_status"] = "failed"
+        signup.workflow["last_sync_error_code"] = "operation_result_unknown"
+        note = main.youtube_playlist_note(signup)
+        fake_youtube.playlist_items.append(
+            {
+                "playlist_item_id": "playlist-item-recovered",
+                "video_id": signup.youtube["video_id"],
+                "position": 0,
+                "note": note,
+            }
+        )
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post("/api/admin/karaoke/reconcile")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, response.get_json()["summary"]["synced"])
+        recovered = main.find_karaoke_signup(signup.id)
+        self.assertEqual("synced", recovered.workflow["playlist_sync_status"])
+        self.assertEqual("playlist-item-recovered", recovered.workflow["playlist_item_id"])
+
+    def test_attendee_cannot_cancel_another_users_pending_request(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as owner:
+            self.login_regular(owner, user_id="user-owner", username="Owner")
+            self.submit_youtube_karaoke_request(owner)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as other:
+            self.login_regular(other, user_id="user-other", username="Other")
+            response = other.post(f"/party/karaoke/{entry_id}/cancel")
+
+        self.assertEqual(302, response.status_code)
+        self.assertIn("request_error=", response.headers["Location"])
+        self.assertEqual("pending", main.find_karaoke_signup(entry_id).workflow["approval_status"])
+
+    def test_stage_workflow_updates_status_and_live_display_without_embedding_video(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            called = admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": entry_id},
+            )
+            on_stage = admin.post(
+                "/admin/karaoke",
+                data={"action": "mark_karaoke_on_stage", "entry_id": entry_id},
+            )
+
+        self.assertEqual(200, called.status_code)
+        self.assertEqual(200, on_stage.status_code)
+        signup = main.find_karaoke_signup(entry_id)
+        self.assertEqual("on_stage", signup.workflow["performance_status"])
+        self.assertEqual("on_stage", main.karaoke_state["stage_mode"])
+        self.assertEqual("karaoke_on_stage", main.live_display_event_override["type"])
+        self.assertNotIn("embed", json.dumps(main.live_display_event_override).lower())
+
+    def test_admin_lineup_reorder_marks_playlist_order_for_resynchronization(self):
+        self.enable_youtube_karaoke()
+        entries = []
+        for index, name in enumerate(("First", "Second", "Third")):
+            signup = main.KaraokeSignup(
+                id=f"karaoke-{index}",
+                name=name,
+                song_title=f"Song {index}",
+                artist="Artist",
+                youtube_link=f"https://www.youtube.com/watch?v=abc123DEF4{index}",
+                youtube=main.normalize_karaoke_youtube(
+                    {
+                        **FakeYouTubeService().video(f"abc123DEF4{index}"),
+                        "video_id": f"abc123DEF4{index}",
+                    }
+                ),
+                workflow=main.normalize_karaoke_workflow({}, has_video=True),
+            )
+            signup.workflow.update(
+                {
+                    "video_validation_status": "verified",
+                    "approval_status": "approved",
+                    "playlist_sync_status": "synced",
+                    "playlist_item_id": f"playlist-item-{index}",
+                }
+            )
+            entries.append(signup)
+        main.karaoke_signups = entries
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(
+                "/admin/karaoke",
+                data={"action": "move_karaoke_to_top", "entry_id": "karaoke-2"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(
+            ["karaoke-2", "karaoke-0", "karaoke-1"],
+            [entry.id for entry in main.approved_karaoke_signups()],
+        )
+        self.assertTrue(
+            all(
+                entry.workflow["playlist_sync_status"] == "out_of_order"
+                for entry in main.approved_karaoke_signups()
+            )
+        )
+
+    def test_youtube_oauth_callback_rejects_state_mismatch_without_fetching_tokens(self):
+        self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            with client.session_transaction() as session:
+                session["youtube_oauth_state"] = "expected-state"
+            response = client.get(
+                "/admin/karaoke/youtube/callback?state=unexpected-state&code=authorization-code"
+            )
+
+        self.assertEqual(302, response.status_code)
+        self.assertIn("youtube_error=", response.headers["Location"])
+        self.assertIn(
+            "YouTube+authorization+state+did+not+match",
+            response.headers["Location"],
+        )
+
+    def test_persisted_youtube_state_contains_operational_metadata_but_no_credentials(self):
+        self.enable_youtube_karaoke()
+        snapshot = self.redis_state()
+        serialized = json.dumps(snapshot)
+
+        self.assertEqual("playlist-1", snapshot["youtube_karaoke"]["playlist_id"])
+        self.assertNotIn("test-api-key", serialized)
+        self.assertNotIn("test-client-secret", serialized)
+        self.assertNotIn("test-refresh-token", serialized)
+
+    def test_schema_versions_one_through_five_upgrade_karaoke_workflow_to_v6(self):
+        for schema_version in range(1, 6):
+            with self.subTest(schema_version=schema_version):
+                self.reset_state()
+                snapshot = main.snapshot_state()
+                snapshot["schema_version"] = schema_version
+                snapshot.pop("youtube_karaoke", None)
+                snapshot["karaoke_signups"] = [
+                    {
+                        "id": "legacy-karaoke",
+                        "name": "Legacy Singer",
+                        "song_title": "Monster Mash",
+                        "artist": "Bobby Pickett",
+                        "youtube_link": "https://youtu.be/abc123DEF45",
+                    }
+                ]
+                self.fake_redis.set(main.redis_key("state"), json.dumps(snapshot))
+
+                self.assertTrue(main.load_state_from_redis())
+                migrated = main.karaoke_signups[0]
+                self.assertEqual("legacy-karaoke", migrated.id)
+                self.assertEqual("abc123DEF45", migrated.youtube["video_id"])
+                self.assertEqual("pending", migrated.workflow["video_validation_status"])
+                self.assertEqual("pending", migrated.workflow["approval_status"])
+                self.assertEqual("not_started", migrated.workflow["playlist_sync_status"])
+                main.save_state_to_redis()
+                self.assertEqual(6, self.redis_state()["schema_version"])
+
+    def test_youtube_search_budget_blocks_new_uncached_queries_at_configured_limit(self):
+        self.enable_youtube_karaoke()
+        main.app.config["YOUTUBE_SEARCH_DAILY_BUDGET"] = 1
+
+        first = main.search_youtube_karaoke(
+            "thriller",
+            page_token="",
+            user_id="user-1",
+        )
+
+        self.assertFalse(first["cached"])
+        with self.assertRaises(main.YouTubeApiError) as error:
+            main.search_youtube_karaoke(
+                "monster mash",
+                page_token="",
+                user_id="user-1",
+            )
+        self.assertEqual("search_budget_exhausted", error.exception.code)
+
+    def test_admin_can_create_select_and_test_owned_youtube_playlist(self):
+        fake_youtube = self.enable_youtube_karaoke()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            created = admin.post(
+                "/api/admin/karaoke/youtube/playlist/create",
+                data={"title": "Private Rehearsal", "privacy": "private"},
+            )
+            selected = admin.post(
+                "/api/admin/karaoke/youtube/playlist",
+                data={"playlist_id": "playlist-1"},
+            )
+            tested = admin.post("/api/admin/karaoke/youtube/test")
+
+        self.assertEqual(200, created.status_code)
+        self.assertIn("Private Rehearsal", created.get_json()["message"])
+        self.assertEqual(200, selected.status_code)
+        self.assertEqual(200, tested.status_code)
+        self.assertEqual("playlist-1", main.youtube_karaoke["playlist_id"])
+        self.assertEqual(fake_youtube.channel["channel_id"], main.youtube_karaoke["channel_id"])
+        self.assertTrue(main.youtube_karaoke["last_connection_check_at"])
+
+    def test_admin_replacement_inserts_new_revision_before_removing_old_item(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            self.assertEqual(
+                200,
+                admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve").status_code,
+            )
+            old_item_id = main.find_karaoke_signup(entry_id).workflow["playlist_item_id"]
+            response = admin.post(
+                f"/api/admin/karaoke/entries/{entry_id}/replace",
+                data={"youtube_link": "https://www.youtube.com/watch?v=abc123DEF46"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        signup = main.find_karaoke_signup(entry_id)
+        self.assertEqual(2, signup.workflow["playlist_revision"])
+        self.assertEqual("abc123DEF46", signup.youtube["video_id"])
+        self.assertEqual("synced", signup.workflow["playlist_sync_status"])
+        self.assertNotEqual(old_item_id, signup.workflow["playlist_item_id"])
+        self.assertEqual([old_item_id], fake_youtube.delete_calls)
+        self.assertEqual(2, len(fake_youtube.insert_calls))
+
+    def test_admin_removal_deletes_only_known_playlist_item_and_cancels_entry(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            playlist_item_id = main.find_karaoke_signup(entry_id).workflow["playlist_item_id"]
+            response = admin.post(f"/api/admin/karaoke/entries/{entry_id}/remove")
+
+        self.assertEqual(200, response.status_code)
+        signup = main.find_karaoke_signup(entry_id)
+        self.assertEqual("cancelled", signup.workflow["approval_status"])
+        self.assertEqual("removed", signup.workflow["playlist_sync_status"])
+        self.assertEqual([playlist_item_id], fake_youtube.delete_calls)
+        self.assertEqual([], main.public_karaoke_signups())

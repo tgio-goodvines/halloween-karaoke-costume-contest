@@ -4,16 +4,18 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, independent RSVP list, RSVP party-code validation, RSVP confirmation/update emails, RSVP calendar `.ics` generation, RSVP/registered-user email recipient collection, SES account welcome/update/reset email sending, password reset token lifecycle, food/drink menu and drink ordering, specialty drink limits, drink history/reorder, bartender tip settings, bartender roles/order queue, editable party details/map address, live-display WiFi settings, role-based session auth, configurable public landing, CSRF, admin actions, voting logic, scoreboard helpers, live-display JSON/SSE APIs. |
-| `requirements.txt` | Python dependency declaration; includes Flask 3.x, redis-py for Redis state, boto3 for SES email, and gunicorn for production. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, schema-v6 YouTube karaoke workflow/state/routes, admin stage controls, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
+| `youtube_karaoke.py` | YouTube URL/metadata normalization, Google API search and playlist client, bounded timeout/error translation, OAuth flow, and dedicated Vault refresh-token store. |
+| `requirements.txt` | Python dependencies including Flask, Redis, AWS/SES, Google YouTube/OAuth clients, hvac, and gunicorn. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
-| `deploy/start_halloween.sh` | systemd start wrapper that authenticates to Vault using AWS IAM auth, exports Halloween app/Redis/email secrets, and execs gunicorn. |
-| `deploy/halloween-party.service` | systemd unit for running the Halloween Flask app through gunicorn on `127.0.0.1:8081`. |
+| `deploy/start_halloween.sh` | systemd start wrapper that authenticates to Vault, exports Halloween app/Redis/email/YouTube settings, and execs gunicorn. |
+| `deploy/configure_youtube_vault.sh` | Services-EC2 operator script for the narrow YouTube Vault policy/role and disabled dedicated secret path. |
+| `deploy/halloween-party.service` | systemd unit for gunicorn on `127.0.0.1:8081`, including non-secret YouTube Vault role/path settings. |
 | `deploy/nginx-halloween.conf` | nginx host-routing config for `tnq-halloween.com` and `www.tnq-halloween.com`, including SSE-friendly proxy settings. |
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
-| `.env.example` | Example local Redis environment values for the existing `127.0.0.1:6379` ACL-protected Redis, DB `1`, the `halloween` prefix, live-display WiFi defaults, and Halloween email update settings. |
-| `tests/test_redis_state.py` | Unit tests for Redis-backed state serialization, load/save behavior, route persistence, voting, admin reorder alignment, food/drink ordering, specialty drink limits, drink history/reorder, bartender tipping, bartender priority sorting, bartender roles/order status transitions, display update publishing, and JSON exports using an in-memory Redis fake. |
+| `.env.example` | Blank/local Redis, email, MusicKit, and YouTube karaoke environment examples. |
+| `tests/test_redis_state.py` | Redis/state/route/security tests plus fake-backed YouTube search, workflow, playlist, reconciliation, ordering, stage, OAuth-state, migration, and secret-exclusion coverage. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, header menu, single logout action, menu cards, order cards, bartender tip disclosures, and bartender queue. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, event override cards, top-layer drink-ready notices, CTA layout, scoreboard layout, and karaoke display panels. |
@@ -22,6 +24,8 @@
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
 | `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal-path UI without reloading forms. |
 | `static/jukebox.js` | Attendee jukebox catalog search, request submission, and safe Now Playing/playlist polling. |
+| `static/karaoke.js` | Attendee YouTube search, pagination, exact-video selection, and direct-link fallback. |
+| `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
@@ -44,7 +48,9 @@
 | `templates/email/password_reset.html` | Dark lab-terminal styled HTML email body for one-time password reset links. |
 | `templates/email/_components.html` | Shared inline-safe HTML email macros for the refined lab-terminal shell, buttons, and detail tables used by generated email templates. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
-| `templates/karaoke_signup.html` | Karaoke signup form and submitted karaoke lineup. |
+| `templates/karaoke_signup.html` | Attendee exact-video karaoke request flow, personal workflow status/recovery, and synchronized public lineup. |
+| `templates/admin_karaoke.html` | Dedicated YouTube connection, review, attention, run-of-show, history, and stage operations workspace. |
+| `templates/_karaoke_workflow.html` | Shared karaoke media and seven-step workflow macros. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
 | `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, preserving existing CSRF-protected admin actions. |
@@ -92,6 +98,8 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/REDIS_ENHANCEMENT_IMPLEMENTATION_PLAN.md` | Durable progress tracker for schema v2, ID-keyed ballots, auth/CSRF, and Redis interaction enhancements. |
 | `ai-context/RESPONSIVE_UX_PROGRESS.md` | Completed responsive UX implementation tracker for live display browser scaling, attendee mobile optimization, admin mobile disclosure forms, and verification results. |
 | `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` | Admin workspace information architecture, responsive behavior, attendee list-compaction refinements, verification, and extension rules. |
+| `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` | Planned YouTube karaoke search, exact-video request workflow, host approval, playlist synchronization, dedicated admin workspace, stage controls, manual official-YouTube playback, security, migration, rollout, and acceptance criteria. |
+| `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` | Current YouTube karaoke implementation, verification, production prerequisites, guardrails, and rollout progress. |
 | `ai-context/STYLING_REFINEMENT_PROGRESS.md` | Progress and implementation notes for the attached-wireframe styling refinement across pages, live display, and generated emails. |
 | `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` | Active GitHub Actions plan for deploying merged `main` commits to the existing EC2 ASG through AWS CLI and SSM, without S3 or GoodVines disruption. |
 | `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` | Durable progress tracker for the GitHub Actions deployment implementation, validation status, and external setup requirements. |
@@ -128,6 +136,7 @@ These files are present locally but not tracked by Git at the time this context 
 │   ├── REDIS_STATE_DESIGN.md
 │   ├── RESPONSIVE_UX_PROGRESS.md
 │   ├── ADMIN_WORKSPACE_UX_PROGRESS.md
+│   ├── YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md
 │   ├── VAULT_ADMIN_TOKEN_RECOVERY.md
 │   └── VAULT_SECRETS_DESIGN.md
 ├── deploy/

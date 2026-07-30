@@ -1,0 +1,27 @@
+{% macro stepper(entry, compact=false) -%}
+<ol class="karaoke-workflow{% if compact %} karaoke-workflow--compact{% endif %}" aria-label="Karaoke request workflow">
+  {% for step in entry.steps %}
+    <li class="karaoke-workflow__step karaoke-workflow__step--{{ step.state }}" aria-current="{{ 'step' if step.state == 'current' else 'false' }}">
+      <span class="karaoke-workflow__marker" aria-hidden="true">{% if step.state == 'complete' %}✓{% elif step.state == 'attention' %}!{% elif step.state == 'current' %}●{% else %}○{% endif %}</span>
+      <span>{{ step.label }}</span>
+    </li>
+  {% endfor %}
+</ol>
+{%- endmacro %}
+
+{% macro media(entry) -%}
+<div class="karaoke-request__media">
+  {% if entry.youtube.thumbnail_url %}
+    <img src="{{ entry.youtube.thumbnail_url }}" alt="" loading="lazy">
+  {% else %}
+    <span class="karaoke-request__placeholder" aria-hidden="true">♪</span>
+  {% endif %}
+  <div>
+    <strong>{{ entry.youtube.title or entry.song_title }}</strong>
+    <span>{{ entry.youtube.channel_title or entry.artist }}</span>
+    {% if entry.youtube.duration_seconds %}
+      <small>{{ entry.youtube.duration_seconds // 60 }}:{{ '%02d' | format(entry.youtube.duration_seconds % 60) }}</small>
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}

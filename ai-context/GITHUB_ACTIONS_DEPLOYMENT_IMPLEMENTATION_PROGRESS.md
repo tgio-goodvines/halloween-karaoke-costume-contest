@@ -167,6 +167,21 @@ Post-update verification on 2026-07-06:
 
 ## Latest Repository Updates
 
+### YouTube karaoke deployment work (2026-07-30)
+
+- Repository code and deployment wiring are complete on
+  `agent/youtube-karaoke-workflow`.
+- `deploy/start_halloween.sh` loads optional YouTube settings from
+  `appsecrets/halloween_youtube`, with the existing app-level API key as a
+  temporary migration fallback.
+- `deploy/halloween-party.service` declares only the non-secret dedicated
+  YouTube Vault role/path.
+- `deploy/configure_youtube_vault.sh` is ready to create the narrowly scoped
+  Vault policy/role and disabled secret path after explicit approval.
+- Production deployment and feature enablement remain pending Google Cloud
+  OAuth setup, host channel authorization, Vault approval, merge, and smoke
+  tests. See `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md`.
+
 After the first successful deployment, the repo received follow-up commits on
 `main` to document and harden deployment knowledge:
 

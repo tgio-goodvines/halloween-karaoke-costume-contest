@@ -14,6 +14,7 @@
       <a href="{{ url_for('admin_portal', admin_view=key) }}"{% if key == admin_view %} aria-current="page"{% endif %}>
         {{ workspace.label }}
         {% if key == 'guests' %}<span>{{ rsvp_signups|length }}</span>{% endif %}
+        {% if key == 'karaoke' and karaoke_admin.metrics.attention %}<span aria-label="{{ karaoke_admin.metrics.attention }} karaoke issues">{{ karaoke_admin.metrics.attention }}</span>{% elif key == 'karaoke' and karaoke_admin.metrics.pending %}<span>{{ karaoke_admin.metrics.pending }}</span>{% elif key == 'karaoke' and karaoke_admin.stage_mode == 'on_stage' %}<span>LIVE</span>{% endif %}
         {% if key == 'dj' and dj_song_requests %}<span>{{ dj_song_requests|length }}</span>{% endif %}
         {% if key == 'bar' and active_drink_order_count %}<span>{{ active_drink_order_count }}</span>{% endif %}
       </a>
@@ -63,10 +64,10 @@
           <strong>{% if costume_contest_state.voting_open %}Live{% elif costume_contest_state.winner_locked %}Locked{% else %}Standby{% endif %}</strong>
           <span>{{ costume_signups|length }} costume {{ 'entry' if costume_signups|length == 1 else 'entries' }}</span>
         </a>
-        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='program') }}">
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='karaoke') }}">
           <span class="admin-home__label">Karaoke</span>
-          <strong>{% if karaoke_state.party_started %}Live{% else %}Standby{% endif %}</strong>
-          <span>{{ karaoke_signups|length }} song{{ 's' if karaoke_signups|length != 1 else '' }} in lineup</span>
+          <strong>{% if karaoke_admin.stage_mode == 'on_stage' %}Live{% elif karaoke_admin.metrics.attention %}Attention{% elif karaoke_admin.metrics.pending %}Review{% else %}Standby{% endif %}</strong>
+          <span>{{ karaoke_admin.metrics.pending }} pending · {{ karaoke_admin.metrics.ready }} ready</span>
         </a>
         <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='dj') }}">
           <span class="admin-home__label">DJ receiver</span>
@@ -538,53 +539,12 @@
   </section>
 
   <section class="admin-section admin-section--karaoke">
-    <h3>Karaoke Controls</h3>
-    <p>Launch the singing session and spotlight the next performer on the live display.</p>
-
-    <div class="contest-actions">
-      {% if not karaoke_state.party_started %}
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" name="action" value="start_karaoke_party" class="button button--primary">Start the Halloween Karaoke Party</button>
-        </form>
-      {% else %}
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" name="action" value="stop_karaoke_party" class="button button--outline">Stop Karaoke Party</button>
-        </form>
-      {% endif %}
-    </div>
-
-    {% if karaoke_state.party_started %}
-      <details class="admin-danger-zone">
-        <summary>Reset karaoke party</summary>
-        <p>Stops karaoke and clears the active singer/display override while keeping the lineup.</p>
-        <form method="post" onsubmit="return confirm('Reset the karaoke party? This stops karaoke and clears the active singer/display override while keeping the lineup.');">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" name="action" value="reset_karaoke_party" class="button button--danger">Reset Karaoke Party</button>
-        </form>
-      </details>
-    {% endif %}
-
-    {% if karaoke_state.party_started %}
-      <p class="contest-status contest-status--active">Karaoke party is live on the big screen!</p>
-    {% else %}
-      <p class="contest-status contest-status--inactive">Karaoke party hasn't been started yet.</p>
-    {% endif %}
-
-    {% set first_karaoke = karaoke_signups[0] if karaoke_signups else None %}
-    {% if first_karaoke %}
-      <div class="karaoke-lineup">
-        <h4>Opening Act</h4>
-        <p class="karaoke-lineup__name">{{ first_karaoke.name }}</p>
-        <p class="karaoke-lineup__song">{{ '"%s"' | format(first_karaoke.song_title) }} by {{ first_karaoke.artist }}</p>
-        {% if not first_karaoke.youtube_link %}
-          <p class="karaoke-lineup__note">Reminder: grab their YouTube link so Tony can cast it to the TV.</p>
-        {% endif %}
-      </div>
-    {% else %}
-      <p class="contest-status">Add karaoke signups to build the performance queue.</p>
-    {% endif %}
+    <h3>Karaoke Operations</h3>
+    <p>YouTube requests, playlist synchronization, and stage controls now have a dedicated workspace.</p>
+    <a class="button button--primary" href="{{ url_for('admin_portal', admin_view='karaoke') }}">
+      Open Karaoke Workspace
+      {% if karaoke_admin.metrics.attention %} · {{ karaoke_admin.metrics.attention }} need attention{% elif karaoke_admin.metrics.pending %} · {{ karaoke_admin.metrics.pending }} awaiting review{% endif %}
+    </a>
   </section>
   {% endif %}
 
@@ -1166,88 +1126,6 @@
       {% endif %}
     </section>
 
-    <section class="admin-section">
-      <h3>Karaoke Signups</h3>
-
-      <details class="admin-entry admin-entry--new">
-        <summary class="admin-entry__summary">
-          <span class="admin-entry__rank">+</span>
-          <span class="admin-entry__summary-text">
-            <strong>Add a karaoke entry</strong>
-            <span>Create a new song in the queue</span>
-          </span>
-        </summary>
-        <form method="post" class="admin-entry__form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="admin-entry__fields">
-            <label>
-              Name
-              <input type="text" name="name" required>
-            </label>
-            <label>
-              Song Title
-              <input type="text" name="song_title" required>
-            </label>
-            <label>
-              Artist
-              <input type="text" name="artist" required>
-            </label>
-            <label>
-              YouTube Link
-              <input type="url" name="youtube_link" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
-            </label>
-          </div>
-          <button type="submit" name="action" value="add_karaoke" class="button button--primary">Add Karaoke Signup</button>
-        </form>
-      </details>
-
-      {% if karaoke_signups %}
-        <div class="admin-entry-list">
-          {% for signup in karaoke_signups %}
-            <details class="admin-entry admin-entry--editable">
-              <summary class="admin-entry__summary">
-                <span class="admin-entry__rank">#{{ loop.index }}</span>
-                <span class="admin-entry__summary-text">
-                  <strong>{{ signup.name }}</strong>
-                  <span>{{ signup.song_title }}{% if signup.artist %} by {{ signup.artist }}{% endif %}</span>
-                </span>
-              </summary>
-              <form method="post" class="admin-entry__form">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="entry_id" value="{{ signup.id }}">
-                <input type="hidden" name="index" value="{{ loop.index0 }}">
-                <div class="admin-entry__fields">
-                  <label>
-                    Name
-                    <input type="text" name="name" value="{{ signup.name }}" required>
-                  </label>
-                  <label>
-                    Song Title
-                    <input type="text" name="song_title" value="{{ signup.song_title }}" required>
-                  </label>
-                  <label>
-                    Artist
-                    <input type="text" name="artist" value="{{ signup.artist }}" required>
-                  </label>
-                  <label>
-                    YouTube Link
-                    <input type="url" name="youtube_link" value="{{ signup.youtube_link }}" placeholder="https://www.youtube.com/watch?v=... (optional)" inputmode="url">
-                  </label>
-                </div>
-                <div class="admin-entry__actions">
-                  <button type="submit" name="action" value="move_karaoke_up" class="button">Move Up</button>
-                  <button type="submit" name="action" value="move_karaoke_down" class="button">Move Down</button>
-                  <button type="submit" name="action" value="update_karaoke" class="button button--primary">Save Changes</button>
-                  <button type="submit" name="action" value="delete_karaoke" class="button button--danger">Remove</button>
-                </div>
-              </form>
-            </details>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="admin-empty">No karaoke signups yet.</p>
-      {% endif %}
-    </section>
   </div>
   {% endif %}
 </section>

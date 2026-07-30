@@ -13,6 +13,8 @@ Environment=APP_ENV=production
 Environment=VAULT_ADDR=http://172.31.118.0:8200
 Environment=VAULT_AUTH_METHOD=aws
 Environment=VAULT_AWS_AUTH_ROLE=goodvines-api
+Environment=HALLOWEEN_YOUTUBE_VAULT_AWS_AUTH_ROLE=halloween-api
+Environment=HALLOWEEN_YOUTUBE_SECRET_PATH=appsecrets/halloween_youtube
 Environment=AWS_REGION=us-east-1
 Environment=HALLOWEEN_APP_PORT=8081
 ExecStart=/opt/halloween/current/deploy/start_halloween.sh

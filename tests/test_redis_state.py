@@ -3203,6 +3203,42 @@ class RedisStateTests(unittest.TestCase):
             self.assertIn(f">{label}<", dashboard_body)
         self.assertTrue(all(response.status_code == 200 for response in responses))
 
+    def test_admin_role_preview_marks_extra_session_navigation_hidden_without_changing_authorization(self):
+        self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
+        main.event_experience_mode = "party_day"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            self.login_admin(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["admin", "bartender", "regular"]
+
+            preview_response = client.post(
+                "/admin/public",
+                data={"action": "set_role_preview", "role_preview": "regular"},
+            )
+            dashboard_response = client.get("/party")
+            bartender_response = client.get("/bartender")
+            admin_response = client.get("/admin")
+            with client.session_transaction() as session:
+                preview_key = session.get("role_preview")
+
+            clear_response = client.post("/admin/public", data={"action": "clear_role_preview"})
+            restored_response = client.get("/party")
+
+        dashboard_body = dashboard_response.get_data(as_text=True)
+        self.assertEqual(200, preview_response.status_code)
+        self.assertEqual("regular", preview_key)
+        self.assertIn("Role preview: Attendee", dashboard_body)
+        self.assertIn("Bartender<span>Hidden</span>", dashboard_body)
+        self.assertIn("Admin<span>Hidden</span>", dashboard_body)
+        # Preview never alters the real, server-authorized session permissions.
+        self.assertEqual(200, bartender_response.status_code)
+        self.assertEqual(200, admin_response.status_code)
+        self.assertEqual(200, clear_response.status_code)
+        self.assertNotIn("Role preview:", restored_response.get_data(as_text=True))
+
     def test_party_login_refreshes_account_derived_roles_and_preserves_admin(self):
         self.add_user_account("Jamie", "party-password", "user-1", "jamie@example.com")
         self.save_current_state()

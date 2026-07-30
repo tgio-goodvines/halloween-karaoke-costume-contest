@@ -422,6 +422,12 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "accounts": {"label": "Accounts", "description": "Party accounts and bartender access."},
 }
 
+ROLE_PREVIEW_OPTIONS: dict[str, dict[str, object]] = {
+    "regular": {"label": "Attendee", "roles": {"regular"}},
+    "bartender": {"label": "Bartender", "roles": {"regular", "bartender"}},
+    "admin": {"label": "Admin", "roles": {"admin"}},
+}
+
 
 # Redis is the persistence target. These globals remain as the process-local
 # state cache while the app is migrated route by route.
@@ -2897,6 +2903,23 @@ def session_has_role(role: str) -> bool:
     return role in session_roles()
 
 
+def role_preview_key() -> str | None:
+    preview_key = str(session.get("role_preview", "") or "")
+    return preview_key if preview_key in ROLE_PREVIEW_OPTIONS else None
+
+
+def preview_roles() -> set[str]:
+    preview_key = role_preview_key()
+    if not preview_key:
+        return session_roles()
+    return set(ROLE_PREVIEW_OPTIONS[preview_key]["roles"])
+
+
+def role_is_hidden_in_preview(role: str) -> bool:
+    """True when a real session permission is intentionally hidden by role preview."""
+    return role in session_roles() and role not in preview_roles()
+
+
 def grant_session_role(role: str) -> None:
     roles = session_roles()
     roles.add(role)
@@ -3498,6 +3521,9 @@ def dj_receiver_state():
 
 @app.context_processor
 def inject_contest_state():
+    active_roles = session_roles()
+    effective_preview_roles = preview_roles()
+    preview_key = role_preview_key()
     return {
         "costume_contest_state": {
             "contest_started": bool(contest_state.get("contest_started")),
@@ -3507,9 +3533,16 @@ def inject_contest_state():
             "winner": contest_state.get("winner"),
         },
         "csrf_token": get_csrf_token,
-        "admin_authenticated": bool(session.get("admin_authenticated")),
-        "regular_authenticated": session_has_role("regular"),
-        "bartender_authenticated": session_has_role("bartender"),
+        # These reflect actual authorization. Preview is presentation-only and
+        # must never grant a capability or weaken server-side route protection.
+        "admin_authenticated": "admin" in active_roles,
+        "regular_authenticated": "regular" in active_roles,
+        "bartender_authenticated": "bartender" in active_roles,
+        "role_preview_key": preview_key,
+        "role_preview_label": ROLE_PREVIEW_OPTIONS[preview_key]["label"] if preview_key else "",
+        "role_preview_roles": sorted(effective_preview_roles),
+        "role_preview_options": ROLE_PREVIEW_OPTIONS,
+        "role_is_hidden_in_preview": role_is_hidden_in_preview,
         "format_time_label": format_time_label,
         "drink_order_status_label": drink_order_status_label,
         "drink_type_label": drink_type_label,
@@ -3794,7 +3827,7 @@ def party_account():
         messages=messages,
         role_labels=role_labels,
         account_roles=account_roles,
-        active_session_roles=sorted(session_roles()),
+        active_session_roles=sorted(preview_roles()),
         created_at_label=created_at_label,
         profile_username=request.form.get("username", "") if profile_update_requested else str(account.get("username", "")),
         profile_email=request.form.get("email", "") if profile_update_requested else str(account.get("email", "")),
@@ -4612,7 +4645,22 @@ def admin_portal(admin_view: str):
         action = request.form.get("action", "")
         should_broadcast = False
 
-        if action == "add_dj_song":
+        if action == "set_role_preview":
+            requested_preview = request.form.get("role_preview", "")
+            if requested_preview in ROLE_PREVIEW_OPTIONS:
+                session["role_preview"] = requested_preview
+                messages.append(
+                    f"Role preview enabled for {ROLE_PREVIEW_OPTIONS[requested_preview]['label']}."
+                )
+            else:
+                session.pop("role_preview", None)
+                messages.append("Role preview cleared. Full session view restored.")
+
+        elif action == "clear_role_preview":
+            session.pop("role_preview", None)
+            messages.append("Role preview cleared. Full session view restored.")
+
+        elif action == "add_dj_song":
             song = dj_song_from_form()
             if song:
                 dj_playlist.append(song)

@@ -51,6 +51,7 @@
 | `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including event override markup and top-layer notice image markup for drink-ready cards. |
 | `ai-context/DJ_JUKEBOX_FEATURE.md` | Durable DJ feature state model, routes, MusicKit/Vault setup, visual acknowledgement flow, and recovery procedure. |
 | `ai-context/ACCOUNT_MANAGEMENT_FEATURE.md` | Attendee account workspace behavior, access boundaries, persistence rules, and verification coverage. |
+| `ai-context/ROLE_VIEW_PREVIEW_FEATURE.md` | Admin role-view demo behavior, safety boundary, and regression coverage. |
 
 ## Untracked Local Files Present During Review
 

@@ -88,6 +88,20 @@
     <p>Control what guests see at tnq-halloween.com and manage the party code guests enter when they submit an RSVP.</p>
 
     <div class="access-settings">
+      <form method="post" class="access-settings__form role-preview-settings">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h4>Role View Demo</h4>
+        <label for="role_preview">Preview role</label>
+        <select id="role_preview" name="role_preview">
+          <option value="">Full current session</option>
+          {% for key, option in role_preview_options.items() %}
+            <option value="{{ key }}" {% if key == role_preview_key %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+        <p class="contest-status">Preview changes the visual role view only. It never grants access or changes the active account; navigation retained by another session role is marked <strong>Hidden</strong> and disabled.</p>
+        <button type="submit" name="action" value="set_role_preview" class="button button--primary">Apply Role Preview</button>
+      </form>
+
       <form method="post" class="access-settings__form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h4>Landing Page</h4>

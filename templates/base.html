@@ -30,24 +30,24 @@
                   <span class="site-nav__user">Signed in as Admin</span>
                 {% endif %}
                 {% if not hide_party_nav and regular_authenticated %}
-                  <a href="{{ url_for('party_dashboard') }}">Overview</a>
-                  <a href="{{ url_for('party_account') }}">Account</a>
+                  <a href="{{ url_for('party_dashboard') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Overview{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
+                  <a href="{{ url_for('party_account') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Account{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                   {% if party_day_has_arrived %}
-                    <a href="{{ url_for('party_menu') }}">Menu</a>
-                    <a href="{{ url_for('party_drink_history') }}">Drink History</a>
-                    <a href="{{ url_for('party_jukebox') }}">Jukebox</a>
-                    <a href="{{ url_for('party_costumes') }}">Costume</a>
+                    <a href="{{ url_for('party_menu') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Menu{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
+                    <a href="{{ url_for('party_drink_history') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Drink History{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
+                    <a href="{{ url_for('party_jukebox') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Jukebox{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
+                    <a href="{{ url_for('party_costumes') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Costume{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     {% if costume_contest_state.voting_visible %}
-                      <a href="{{ url_for('party_costume_voting') }}">Voting</a>
+                      <a href="{{ url_for('party_costume_voting') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Voting{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     {% endif %}
-                    <a href="{{ url_for('party_karaoke') }}">Karaoke</a>
+                    <a href="{{ url_for('party_karaoke') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Karaoke{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                   {% endif %}
                 {% endif %}
                 {% if bartender_authenticated or admin_authenticated %}
-                  <a href="{{ url_for('bartender_portal') }}">Bartender</a>
+                  <a href="{{ url_for('bartender_portal') }}"{% if role_is_hidden_in_preview('bartender') and role_is_hidden_in_preview('admin') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Bartender{% if role_is_hidden_in_preview('bartender') and role_is_hidden_in_preview('admin') %}<span>Hidden</span>{% endif %}</a>
                 {% endif %}
                 {% if show_admin_nav_link %}
-                  <a href="{{ url_for('admin_portal') }}">Admin</a>
+                  <a href="{{ url_for('admin_portal') }}"{% if role_is_hidden_in_preview('admin') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Admin{% if role_is_hidden_in_preview('admin') %}<span>Hidden</span>{% endif %}</a>
                 {% endif %}
                 {% if session.username or regular_authenticated or admin_authenticated %}
                   <form method="post" action="{{ url_for('logout') }}" class="site-nav__logout">
@@ -61,6 +61,18 @@
         {% endif %}
       </div>
     </header>
+
+    {% if role_preview_key and admin_authenticated %}
+      <aside class="role-preview-banner" aria-label="Role preview active">
+        <div class="container role-preview-banner__inner">
+          <p><strong>Role preview: {{ role_preview_label }}</strong> — items marked <span>Hidden</span> are available only because this browser also has additional session roles.</p>
+          <form method="post" action="{{ url_for('admin_portal', admin_view='public') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" name="action" value="clear_role_preview">Exit Preview</button>
+          </form>
+        </div>
+      </aside>
+    {% endif %}
 
     <main class="container">
       {% block content %}{% endblock %}

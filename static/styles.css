@@ -2120,6 +2120,70 @@ textarea:focus,
   }
 }
 
+/* Session-safe admin role-view demo. Hidden markers identify navigation that
+   belongs to an additional real session role, not to the previewed role. */
+.role-preview-banner {
+  border-block: 1px solid rgba(255, 49, 49, 0.52);
+  background: rgba(91, 17, 39, 0.86);
+  color: var(--text);
+}
+
+.role-preview-banner__inner {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.55rem;
+  font-size: 0.78rem;
+}
+
+.role-preview-banner p {
+  margin: 0;
+}
+
+.role-preview-banner span,
+.role-preview-hidden span {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.12rem 0.3rem;
+  border: 1px solid currentColor;
+  color: #ffd2dc;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.role-preview-banner button {
+  padding: 0.36rem 0.6rem;
+  border: 1px solid rgba(255, 210, 220, 0.78);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.role-preview-hidden {
+  opacity: 0.52;
+  filter: grayscale(0.7);
+  pointer-events: none;
+  text-decoration: line-through;
+}
+
+.role-preview-settings {
+  border-color: rgba(177, 109, 150, 0.65);
+}
+
+@media (max-width: 600px) {
+  .role-preview-banner__inner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 /* DJ control-room state path. The connection state is intentionally explicit:
    an admin request is not presented as playback until the display confirms it. */
 .dj-section__header,

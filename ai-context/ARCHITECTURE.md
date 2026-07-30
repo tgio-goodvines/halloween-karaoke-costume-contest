@@ -72,7 +72,9 @@
 - `GET|POST /admin` -> concise **Tonight** admin control-room dashboard and all
   admin mutations. Focused workspaces are available at `/admin/guests`,
   `/admin/public`, `/admin/program`, `/admin/dj`, `/admin/bar`, `/admin/menu`, and
-  `/admin/accounts`; they share the existing POST action handler.
+  `/admin/accounts`; they share the existing POST action handler. `/admin/public`
+  also owns the session-local role-view demo action; authorization always
+  continues to use the actual session roles.
 - `GET /api/dj/catalog-search` -> authenticated Apple Music catalog search;
   the developer token stays server-side.
 - `GET /api/dj/musickit-token` -> authenticated developer-token endpoint for

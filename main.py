@@ -2605,6 +2605,75 @@ def youtube_playlist_note(signup: KaraokeSignup) -> str:
     return f"{YOUTUBE_PLAYLIST_NOTE_PREFIX}:{signup.id}:{revision}"
 
 
+def find_matching_youtube_playlist_item(
+    playlist_items: list[dict[str, object]],
+    *,
+    playlist_item_id: str = "",
+    note: str = "",
+    video_id: str = "",
+    expected_position: int | None = None,
+    excluded_item_ids: set[str] | None = None,
+) -> dict[str, object] | None:
+    """Match an app entry without requiring YouTube to round-trip item notes.
+
+    YouTube accepts ``contentDetails.note`` on playlist item writes, but some
+    accounts return an empty note on later reads. Persisted playlist item IDs
+    remain authoritative; video and position are conservative recovery
+    fallbacks for an insert whose result was uncertain.
+    """
+
+    excluded = excluded_item_ids or set()
+
+    def available(item: dict[str, object]) -> bool:
+        return str(item.get("playlist_item_id", "") or "") not in excluded
+
+    if playlist_item_id:
+        by_id = next(
+            (
+                item
+                for item in playlist_items
+                if available(item)
+                and str(item.get("playlist_item_id", "") or "") == playlist_item_id
+            ),
+            None,
+        )
+        if by_id and (
+            not video_id or str(by_id.get("video_id", "") or "") == video_id
+        ):
+            return by_id
+
+    if note:
+        by_note = next(
+            (
+                item
+                for item in playlist_items
+                if available(item) and str(item.get("note", "") or "") == note
+            ),
+            None,
+        )
+        if by_note and (
+            not video_id or str(by_note.get("video_id", "") or "") == video_id
+        ):
+            return by_note
+
+    if not video_id:
+        return None
+    video_candidates = [
+        item
+        for item in playlist_items
+        if available(item) and str(item.get("video_id", "") or "") == video_id
+    ]
+    if expected_position is not None:
+        positioned = [
+            item
+            for item in video_candidates
+            if _safe_int(item.get("position"), -1) == expected_position
+        ]
+        if len(positioned) == 1:
+            return positioned[0]
+    return video_candidates[0] if len(video_candidates) == 1 else None
+
+
 def find_karaoke_signup(entry_id: str) -> KaraokeSignup | None:
     return next((signup for signup in karaoke_signups if signup.id == entry_id), None)
 
@@ -4746,9 +4815,12 @@ def sync_karaoke_entry_to_youtube(entry_id: str, *, approve: bool = False) -> di
     service = youtube_service()
     try:
         playlist_items = service.list_playlist_items(str(operation["playlist_id"]))
-        existing = next(
-            (item for item in playlist_items if item.get("note") == operation["note"]),
-            None,
+        existing = find_matching_youtube_playlist_item(
+            playlist_items,
+            playlist_item_id=str(operation["existing_playlist_item_id"]),
+            note=str(operation["note"]),
+            video_id=str(operation["video_id"]),
+            expected_position=int(operation["position"]),
         )
         if existing:
             playlist_item_id = str(existing.get("playlist_item_id", "") or "")
@@ -4949,13 +5021,11 @@ def admin_karaoke_replace(entry_id: str):
         operation = explicit_state_mutation(begin_replace)
         service = youtube_service()
         playlist_items = service.list_playlist_items(str(operation["playlist_id"]))
-        existing = next(
-            (
-                item
-                for item in playlist_items
-                if item.get("note") == operation["note"]
-            ),
-            None,
+        existing = find_matching_youtube_playlist_item(
+            playlist_items,
+            note=str(operation["note"]),
+            video_id=str(operation["video_id"]),
+            expected_position=int(operation["position"]),
         )
         inserted = existing or service.insert_playlist_item(
             str(operation["playlist_id"]),
@@ -4992,22 +5062,24 @@ def reconcile_karaoke_playlist() -> dict[str, object]:
     if not playlist_id:
         raise ValueError("Choose a YouTube event playlist first.")
     playlist_items = youtube_service().list_playlist_items(playlist_id)
-    items_by_note = {
-        str(item.get("note", "") or ""): item
-        for item in playlist_items
-        if str(item.get("note", "") or "").startswith(f"{YOUTUBE_PLAYLIST_NOTE_PREFIX}:")
-    }
-
     def reconcile_state() -> dict[str, object]:
         synced = 0
         missing = 0
         out_of_order = 0
         expected_entries = approved_karaoke_signups()
         expected_notes = set()
+        matched_item_ids: set[str] = set()
         for expected_position, signup in enumerate(expected_entries):
             note = youtube_playlist_note(signup)
             expected_notes.add(note)
-            item = items_by_note.get(note)
+            item = find_matching_youtube_playlist_item(
+                playlist_items,
+                playlist_item_id=str(signup.workflow.get("playlist_item_id", "") or ""),
+                note=note,
+                video_id=str(signup.youtube.get("video_id", "") or ""),
+                expected_position=expected_position,
+                excluded_item_ids=matched_item_ids,
+            )
             if not item:
                 signup.workflow["playlist_sync_status"] = "failed"
                 signup.workflow["last_sync_error_code"] = "playlist_item_missing"
@@ -5017,7 +5089,9 @@ def reconcile_karaoke_playlist() -> dict[str, object]:
                 signup.workflow["operation_started_at"] = ""
                 missing += 1
                 continue
-            signup.workflow["playlist_item_id"] = str(item.get("playlist_item_id", "") or "")
+            matched_item_id = str(item.get("playlist_item_id", "") or "")
+            signup.workflow["playlist_item_id"] = matched_item_id
+            matched_item_ids.add(matched_item_id)
             signup.workflow["operation_id"] = ""
             signup.workflow["operation_action"] = ""
             signup.workflow["operation_started_at"] = ""
@@ -5029,13 +5103,25 @@ def reconcile_karaoke_playlist() -> dict[str, object]:
                 signup.workflow["last_sync_error_code"] = ""
                 signup.workflow["last_sync_error_message"] = ""
                 synced += 1
-        orphan_count = sum(1 for note in items_by_note if note not in expected_notes)
+        unmatched_items = [
+            item
+            for item in playlist_items
+            if str(item.get("playlist_item_id", "") or "") not in matched_item_ids
+        ]
+        orphan_count = sum(
+            1
+            for item in unmatched_items
+            if str(item.get("note", "") or "").startswith(
+                f"{YOUTUBE_PLAYLIST_NOTE_PREFIX}:"
+            )
+            and str(item.get("note", "") or "") not in expected_notes
+        )
         summary = {
             "synced": synced,
             "missing": missing,
             "out_of_order": out_of_order,
             "orphan_app_items": orphan_count,
-            "foreign_items": max(0, len(playlist_items) - len(items_by_note)),
+            "foreign_items": max(0, len(unmatched_items) - orphan_count),
         }
         youtube_karaoke["last_reconciled_at"] = _utc_now_iso()
         youtube_karaoke["last_reconciliation_summary"] = summary
@@ -5079,7 +5165,8 @@ def admin_karaoke_sync_order():
         if (
             current_item
             and _safe_int(current_item.get("position"), -1) == position
-            and current_item.get("note") == youtube_playlist_note(signup)
+            and str(current_item.get("video_id", "") or "")
+            == str(signup.youtube.get("video_id", "") or "")
         ):
             continue
         try:
@@ -5106,7 +5193,8 @@ def admin_karaoke_sync_order():
                 if (
                     not confirmed
                     or _safe_int(confirmed.get("position"), -1) != position
-                    or confirmed.get("note") != youtube_playlist_note(signup)
+                    or str(confirmed.get("video_id", "") or "")
+                    != str(signup.youtube.get("video_id", "") or "")
                 ):
                     failures.append(
                         (

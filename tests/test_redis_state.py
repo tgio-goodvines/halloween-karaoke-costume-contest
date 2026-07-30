@@ -3714,6 +3714,30 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(1, len(fake_youtube.playlist_items))
         self.assertEqual("synced", main.find_karaoke_signup(entry_id).workflow["playlist_sync_status"])
 
+    def test_admin_retry_is_idempotent_when_youtube_omits_playlist_note(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            self.assertEqual(
+                200,
+                admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve").status_code,
+            )
+            fake_youtube.playlist_items[0]["note"] = ""
+            response = admin.post(f"/api/admin/karaoke/entries/{entry_id}/retry")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, len(fake_youtube.insert_calls))
+        self.assertEqual(1, len(fake_youtube.playlist_items))
+        self.assertEqual(
+            "synced",
+            main.find_karaoke_signup(entry_id).workflow["playlist_sync_status"],
+        )
+
     def test_age_restricted_video_is_rejected_during_server_side_verification(self):
         fake_youtube = self.enable_youtube_karaoke()
         fake_youtube.get_videos = lambda video_ids, client=None: [
@@ -3777,6 +3801,36 @@ class RedisStateTests(unittest.TestCase):
         recovered = main.find_karaoke_signup(signup.id)
         self.assertEqual("synced", recovered.workflow["playlist_sync_status"])
         self.assertEqual("playlist-item-recovered", recovered.workflow["playlist_item_id"])
+
+    def test_reconciliation_recovers_unique_video_when_youtube_omits_note(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        signup = main.karaoke_signups[0]
+        signup.workflow["approval_status"] = "approved"
+        signup.workflow["playlist_sync_status"] = "failed"
+        signup.workflow["last_sync_error_code"] = "operation_result_unknown"
+        fake_youtube.playlist_items.append(
+            {
+                "playlist_item_id": "playlist-item-no-note",
+                "video_id": signup.youtube["video_id"],
+                "position": 0,
+                "note": "",
+            }
+        )
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post("/api/admin/karaoke/reconcile")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, response.get_json()["summary"]["synced"])
+        self.assertEqual(0, response.get_json()["summary"]["foreign_items"])
+        recovered = main.find_karaoke_signup(signup.id)
+        self.assertEqual("synced", recovered.workflow["playlist_sync_status"])
+        self.assertEqual("playlist-item-no-note", recovered.workflow["playlist_item_id"])
 
     def test_attendee_cannot_cancel_another_users_pending_request(self):
         self.enable_youtube_karaoke()

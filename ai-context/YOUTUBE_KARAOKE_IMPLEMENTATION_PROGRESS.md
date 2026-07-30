@@ -9,18 +9,25 @@ remains in the official YouTube website; no embedded player is included.
 
 ## Current Status
 
-Repository implementation is merged and deployed to production behind
-`enabled=false`. Production Google/Vault configuration, host authorization,
-playlist rehearsal, and feature enablement remain in progress.
+Implementation, Google/Vault configuration, host authorization, playlist
+rehearsal, and production activation are complete as of 2026-07-30.
+`appsecrets/halloween_youtube.enabled` is `true`.
 
 Deployment record:
 
 - Pull request: `#57`
 - Feature commit: `a5c425da498f9857c946d2a5e01a443f521f5400`
 - Squash-merged/deployed commit: `84f1395280056ef8258511487c8bcdaa81ee8750`
-- GitHub Actions run: `30552734485`
+- Production activation fixes:
+  - `f41fa68` keeps YouTube setup available while the feature flag is off.
+  - `9be0c55` preserves the OAuth PKCE verifier through the callback.
+  - `ff38607` authenticates the Vault client with the EC2 instance role.
+  - `3d6a6f9` reconciles by stable playlist item ID/video/position when YouTube
+    does not return an item note.
+- Latest GitHub Actions run: `30556824163`
 - Workflow result: success
-- EC2 release: `/opt/halloween/releases/84f1395280056ef8258511487c8bcdaa81ee8750`
+- EC2 release:
+  `/opt/halloween/releases/3d6a6f92be81bf4aa7492917d13fb721d53ababe`
 - `halloween-party`: active
 - Halloween public health: healthy with Redis DB `1`, prefix `halloween`
 - GoodVines public health: `{"online":"true"}`
@@ -47,7 +54,8 @@ Deployment record:
   ordering, history, and sticky stage controls.
 - Added two-phase Redis mutations so no YouTube network request holds the
   shared state lock.
-- Added signup/revision markers in playlist-item notes for idempotent retry and
+- Added signup/revision markers in playlist-item notes plus stable ID and
+  conservative video/position matching for idempotent retry and
   uncertain-result reconciliation.
 - Added karaoke call/on-stage/completion display transitions without embedded
   playback state.
@@ -71,11 +79,22 @@ Deployment record:
 - The policy grants only `create`, `read`, and `update` on
   `appsecrets/halloween_youtube`. It does not change `goodvines-api`, GoodVines
   secret paths, or GoodVines services.
+- Provisioned `halloween-api-policy` and AWS auth role `halloween-api`, bound
+  to `arn:aws:iam::152923357640:role/GoodVinesEC2SSMRole`.
+- Google Cloud project: `partynmyhead` (`PartyNMyHead`).
+- OAuth application: `Halloween Karaoke Queue`, external/production, with
+  redirect
+  `https://tnq-halloween.com/admin/karaoke/youtube/callback`.
+- Authorized host channel: `Tony G`.
+- Selected event playlist: `Halloween Karaoke 2026`, private,
+  `PLZT-GM5JDYno`.
+- OAuth client credentials and offline refresh token are stored only in
+  `appsecrets/halloween_youtube`; no credential values are committed.
 
 ## Verification Completed
 
 - Python compile, shell syntax, and `git diff --check` passed.
-- Full pytest suite passed: 115 tests.
+- Full pytest suite passed: 119 tests plus 5 subtests.
 - Coverage includes schema 1-5 migration, cache/quota, URL and
   video safety, attendee ownership, approval/retry/failure/reconciliation,
   playlist setup, replacement/removal, ordering, stage/display state, OAuth
@@ -84,24 +103,31 @@ Deployment record:
 - Browser QA completed for `/party/karaoke` at `390x844`.
 - Browser findings for hidden pagination, empty selection layout, finder
   spacing, and admin result styling were fixed.
+- Production connection test refreshed channel `Tony G`.
+- Production admin search returned 8 verified results for a karaoke query.
+- Reversible playlist rehearsal passed insert, update/reorder, and delete; the
+  private playlist returned to its original zero-item baseline.
+- Production reconciliation completed with no approved items missing.
+- YouTube accepted `contentDetails.note` on writes but returned an empty note
+  on reads for this channel. Reconciliation was hardened before enablement to
+  prefer persisted playlist item IDs, then use unique video/position recovery.
+- `/admin/karaoke` shows the connected channel, private selected playlist,
+  workflow metrics, seven status steps, attention queue, host review, run of
+  show, and stage controls.
+- The pre-existing legacy manual request for Tony / “The One” is intentionally
+  retained and shown as needing a replacement video; no attendee data was
+  silently rewritten during activation.
 
-## Production Work Still Required
+## Event-Night Operations
 
-1. Obtain explicit user approval for the narrow Vault role/policy change.
-2. Run `deploy/configure_youtube_vault.sh` on services EC2 through SSM.
-3. Sign into Google Cloud, enable/verify YouTube Data API v3, configure the
-   OAuth consent screen, and create a web client with redirect
-   `https://tnq-halloween.com/admin/karaoke/youtube/callback`.
-4. Store the OAuth client ID/secret in the dedicated Vault path without
-   printing or committing them.
-5. Deploy with the feature disabled, authorize the host YouTube channel from
-   `/admin/karaoke`, choose/create a private test playlist, and verify channel
-   identity.
-6. Run production search and playlist insert/move/delete/reconcile smoke tests.
-7. Set `enabled=true`, restart only `halloween-party`, and repeat Halloween and
-   GoodVines health checks.
-8. After full production rehearsal, update this record with the selected
-   channel/playlist identifiers and final enablement result.
+- Use `/admin/karaoke` to resolve the retained legacy request, review incoming
+  exact-video requests, approve/synchronize entries, and control stage status.
+- Keep the official YouTube playlist open on the playback device; the app does
+  not embed or claim control of YouTube playback.
+- Use **Test Connection** and **Reconcile** before showtime. Reconciliation
+  never deletes unmatched/foreign YouTube playlist items.
+- The dedicated Vault `enabled` field remains the rollback switch. Changing it
+  requires restarting only `halloween-party.service`.
 
 ## Guardrails
 

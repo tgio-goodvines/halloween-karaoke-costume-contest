@@ -2250,6 +2250,10 @@ textarea:focus,
   padding: 0;
 }
 
+.karaoke-clear-progress[hidden] {
+  display: none;
+}
+
 .karaoke-clear-progress li {
   align-content: start;
   background: rgba(0, 0, 0, 0.24);

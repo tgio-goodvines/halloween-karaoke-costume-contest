@@ -123,6 +123,7 @@ class FakeYouTubeService:
         self.move_calls = []
         self.delete_calls = []
         self.fail_insert = None
+        self.fail_delete_ids = {}
         self.channel = {"channel_id": "channel-1", "channel_title": "Halloween Host"}
         self.playlists = [
             {"playlist_id": "playlist-1", "title": "Halloween Karaoke 2026", "privacy": "private"}
@@ -200,6 +201,9 @@ class FakeYouTubeService:
 
     def delete_playlist_item(self, playlist_item_id):
         self.delete_calls.append(playlist_item_id)
+        failure = self.fail_delete_ids.get(playlist_item_id)
+        if failure:
+            raise failure
         self.playlist_items = [
             item for item in self.playlist_items if item["playlist_item_id"] != playlist_item_id
         ]
@@ -3649,6 +3653,9 @@ class RedisStateTests(unittest.TestCase):
             'data-karaoke-query="Thriller Michael Jackson karaoke"',
             html,
         )
+        self.assertIn("Queue Management", html)
+        self.assertIn("Download Karaoke Backup", html)
+        self.assertIn("Clear Queue &amp; YouTube Playlist", html)
 
     def test_disabled_youtube_flag_preserves_manual_admin_lineup_and_stage_controls(self):
         main.app.config["YOUTUBE_CLIENT_ID"] = "setup-client-id"
@@ -4124,3 +4131,212 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("removed", signup.workflow["playlist_sync_status"])
         self.assertEqual([playlist_item_id], fake_youtube.delete_calls)
         self.assertEqual([], main.public_karaoke_signups())
+
+    def test_admin_bulk_clear_backs_up_and_removes_only_app_managed_items(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+            self.submit_youtube_karaoke_request(attendee, video_id="abc123DEF46")
+        entry_ids = [signup.id for signup in main.karaoke_signups]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            for entry_id in entry_ids:
+                self.assertEqual(
+                    200,
+                    admin.post(
+                        f"/api/admin/karaoke/entries/{entry_id}/approve"
+                    ).status_code,
+                )
+
+            managed_item_ids = [
+                signup.workflow["playlist_item_id"]
+                for signup in main.karaoke_signups
+            ]
+            fake_youtube.playlist_items.append(
+                {
+                    "playlist_item_id": "foreign-playlist-item",
+                    "video_id": "foreign12345",
+                    "position": 2,
+                    "note": "",
+                }
+            )
+            main.karaoke_signups[0].workflow["performance_status"] = "completed"
+            main.karaoke_state["party_started"] = True
+            main.karaoke_state["current_singer_id"] = entry_ids[1]
+            main.karaoke_state["stage_mode"] = "on_stage"
+            main.live_display_event_override = {
+                "type": "karaoke_on_stage",
+                "title": "Now Singing",
+            }
+            self.save_current_state()
+
+            response = admin.post(
+                "/api/admin/karaoke/reset",
+                data={
+                    "mode": "combined",
+                    "confirm_phrase": "CLEAR KARAOKE",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual([], main.karaoke_signups)
+        self.assertFalse(main.karaoke_state["party_started"])
+        self.assertIsNone(main.karaoke_state["current_singer_id"])
+        self.assertIsNone(main.live_display_event_override)
+        self.assertEqual(
+            sorted(managed_item_ids),
+            sorted(fake_youtube.delete_calls),
+        )
+        self.assertEqual(
+            ["foreign-playlist-item"],
+            [
+                item["playlist_item_id"]
+                for item in fake_youtube.playlist_items
+            ],
+        )
+        self.assertEqual("playlist-1", main.youtube_karaoke["playlist_id"])
+        clear_operation = main.normalized_karaoke_clear_operation()
+        self.assertEqual("completed", clear_operation["status"])
+        self.assertEqual(2, clear_operation["record_count"])
+        self.assertEqual(2, clear_operation["deleted_count"])
+        backup_keys = [
+            key
+            for key in self.fake_redis.store
+            if key.startswith(main.redis_key("state:backup:"))
+        ]
+        self.assertEqual(1, len(backup_keys))
+        backup = json.loads(self.fake_redis.store[backup_keys[0]])
+        self.assertEqual("karaoke-clear", backup["backup_reason"])
+        self.assertEqual(2, len(backup["karaoke_signups"]))
+
+    def test_admin_bulk_clear_requires_exact_confirmation_and_admin(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+            unauthorized = attendee.post(
+                "/api/admin/karaoke/reset",
+                data={
+                    "mode": "combined",
+                    "confirm_phrase": "CLEAR KARAOKE",
+                },
+            )
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            unconfirmed = admin.post(
+                "/api/admin/karaoke/reset",
+                data={"mode": "combined", "confirm_phrase": "clear"},
+            )
+
+        self.assertEqual(302, unauthorized.status_code)
+        self.assertEqual(400, unconfirmed.status_code)
+        self.assertEqual(1, len(main.karaoke_signups))
+
+    def test_admin_bulk_clear_partial_failure_is_retriable_and_idempotent(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+            self.submit_youtube_karaoke_request(attendee, video_id="abc123DEF46")
+        entry_ids = [signup.id for signup in main.karaoke_signups]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            for entry_id in entry_ids:
+                admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            failed_item_id = main.karaoke_signups[1].workflow[
+                "playlist_item_id"
+            ]
+            fake_youtube.fail_delete_ids[failed_item_id] = main.YouTubeApiError(
+                "quotaExceeded",
+                "The YouTube API quota is exhausted for today.",
+                http_status=403,
+            )
+            first = admin.post(
+                "/api/admin/karaoke/reset",
+                data={
+                    "mode": "combined",
+                    "confirm_phrase": "CLEAR KARAOKE",
+                },
+            )
+
+            self.assertEqual(502, first.status_code)
+            self.assertEqual(
+                "failed",
+                main.normalized_karaoke_clear_operation()["status"],
+            )
+            self.assertEqual(2, len(main.karaoke_signups))
+            self.assertEqual([], main.public_karaoke_signups())
+
+            fake_youtube.fail_delete_ids.clear()
+            retry = admin.post(
+                "/api/admin/karaoke/reset",
+                data={
+                    "mode": "combined",
+                    "confirm_phrase": "CLEAR KARAOKE",
+                },
+            )
+
+        self.assertEqual(200, retry.status_code)
+        self.assertEqual([], main.karaoke_signups)
+        self.assertEqual(
+            "completed",
+            main.normalized_karaoke_clear_operation()["status"],
+        )
+        backup_keys = [
+            key
+            for key in self.fake_redis.store
+            if key.startswith(main.redis_key("state:backup:"))
+        ]
+        self.assertEqual(1, len(backup_keys))
+
+    def test_admin_can_clear_local_lineup_after_youtube_failure(self):
+        fake_youtube = self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            playlist_item_id = main.karaoke_signups[0].workflow[
+                "playlist_item_id"
+            ]
+            fake_youtube.fail_delete_ids[playlist_item_id] = (
+                main.YouTubeApiError(
+                    "playlistItemsNotAccessible",
+                    "The selected playlist is not writable.",
+                    http_status=403,
+                )
+            )
+            failed = admin.post(
+                "/api/admin/karaoke/reset",
+                data={
+                    "mode": "combined",
+                    "confirm_phrase": "CLEAR KARAOKE",
+                },
+            )
+            local = admin.post(
+                "/api/admin/karaoke/reset",
+                data={
+                    "mode": "local",
+                    "confirm_phrase": "CLEAR LOCAL KARAOKE",
+                },
+            )
+
+        self.assertEqual(502, failed.status_code)
+        self.assertEqual(200, local.status_code)
+        self.assertEqual([], main.karaoke_signups)
+        clear_operation = main.normalized_karaoke_clear_operation()
+        self.assertEqual("local_only_completed", clear_operation["status"])
+        self.assertEqual([playlist_item_id], clear_operation["failed_item_ids"])
+        backup_keys = [
+            key
+            for key in self.fake_redis.store
+            if key.startswith(main.redis_key("state:backup:"))
+        ]
+        self.assertEqual(1, len(backup_keys))

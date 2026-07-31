@@ -52,6 +52,17 @@ Deployment record:
 - Added dedicated `/admin/karaoke` connection health, playlist controls,
   metrics, admin search, pending review, attention recovery, run of show,
   ordering, history, and sticky stage controls.
+- Added a dedicated Queue Management danger zone with a downloadable backup,
+  exact-phrase confirmation, five-step progress indicators, and an admin-only
+  bulk-clear operation. The normal clear removes only playlist item IDs stored
+  on app-managed karaoke records, then clears the lineup and stage state while
+  preserving the connected channel, selected playlist, and unmatched/manual
+  YouTube playlist items.
+- Bulk-clear progress is persisted in Redis. Partial YouTube failures leave the
+  operation in a visible attention state, block competing karaoke mutations,
+  and support idempotent retry of the original target IDs. A separately
+  confirmed local-only fallback clears app state while explicitly retaining
+  unresolved YouTube playlist items.
 - Added two-phase Redis mutations so no YouTube network request holds the
   shared state lock.
 - Added signup/revision markers in playlist-item notes plus stable ID and
@@ -126,6 +137,11 @@ Deployment record:
   not embed or claim control of YouTube playback.
 - Use **Test Connection** and **Reconcile** before showtime. Reconciliation
   never deletes unmatched/foreign YouTube playlist items.
+- Use **Queue Management** only for an event reset. Download the backup first,
+  type the displayed confirmation phrase, and leave the page open while the
+  five-step status advances. If YouTube reports a partial failure, use
+  **Retry Clear**; use the local-only fallback only when the remaining playlist
+  items will be cleaned up manually in YouTube.
 - The dedicated Vault `enabled` field remains the rollback switch. Changing it
   requires restarting only `halloween-party.service`.
 

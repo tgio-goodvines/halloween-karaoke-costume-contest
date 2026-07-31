@@ -331,9 +331,108 @@
       <p class="karaoke-stage__notice">Stage status tracks the party workflow only. Start and control playback in the official YouTube tab.</p>
     </aside>
   </div>
+
+  {% set clear = karaoke_admin.clear_operation %}
+  {% set clear_active = clear.status in ['preparing', 'deleting_youtube', 'finalizing'] %}
+  <details class="admin-section admin-danger-zone karaoke-clear-panel"{% if clear_active or clear.status == 'failed' %} open{% endif %}>
+    <summary>
+      <strong>Queue Management</strong>
+      <span>{{ karaoke_admin.record_count }} records · {{ karaoke_admin.managed_playlist_item_count }} managed playlist items</span>
+    </summary>
+    <p>
+      Start a fresh karaoke round by removing every app-managed video from the selected
+      YouTube playlist and clearing pending, active, completed, rejected, and cancelled
+      karaoke records. The connected channel, playlist itself, and foreign/manual
+      playlist items are preserved.
+    </p>
+    <a class="button" href="{{ url_for('export_karaoke_lineup') }}">Download Karaoke Backup</a>
+
+    <ol
+      class="karaoke-clear-progress"
+      aria-label="Karaoke queue clear progress"
+      data-karaoke-clear-progress
+      {% if clear.status == 'idle' %}hidden{% endif %}
+    >
+        <li class="is-complete" data-clear-step="backup"><span>1</span><strong>Backup created</strong></li>
+        <li class="is-complete" data-clear-step="stage"><span>2</span><strong>Stage stopped</strong></li>
+        <li
+          class="{% if clear.status == 'failed' %}has-error{% elif clear.status in ['completed', 'local_only_completed'] %}is-complete{% else %}is-current{% endif %}"
+          data-clear-step="youtube"
+        >
+          <span>3</span>
+          <strong data-clear-youtube-label>
+            {% if clear.status == 'failed' %}YouTube needs attention
+            {% elif clear.status == 'local_only_completed' %}YouTube intentionally unchanged
+            {% elif clear.status == 'completed' %}YouTube items removed
+            {% else %}Removing YouTube items{% endif %}
+          </strong>
+          <small data-clear-count>{{ clear.deleted_count }} of {{ clear.target_count }} removed</small>
+        </li>
+        <li
+          class="{% if clear.status in ['completed', 'local_only_completed'] %}is-complete{% else %}is-pending{% endif %}"
+          data-clear-step="local"
+        >
+          <span>4</span><strong>Local lineup cleared</strong>
+        </li>
+        <li
+          class="{% if clear.status in ['completed', 'local_only_completed'] %}is-complete{% else %}is-pending{% endif %}"
+          data-clear-step="complete"
+        >
+          <span>5</span><strong>Complete</strong>
+        </li>
+    </ol>
+
+    {% if clear.last_error %}
+      <p class="karaoke-inline-error">{{ clear.last_error }}</p>
+    {% endif %}
+
+    {% if clear.status == 'failed' %}
+      <div class="karaoke-clear-actions">
+        <form data-karaoke-api-form action="{{ url_for('admin_karaoke_reset') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="mode" value="combined">
+          <input type="hidden" name="confirm_phrase" value="CLEAR KARAOKE">
+          <button class="button button--primary" type="submit" data-reload-on-error>Retry Clear</button>
+        </form>
+        <form data-karaoke-api-form action="{{ url_for('admin_karaoke_reset') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="mode" value="local">
+          <label>
+            Type <strong>CLEAR LOCAL KARAOKE</strong> to clear the app while leaving failed YouTube items unchanged
+            <input name="confirm_phrase" required autocomplete="off" pattern="CLEAR LOCAL KARAOKE">
+          </label>
+          <button class="button button--danger" type="submit" data-reload-on-error>Clear Local Lineup Only</button>
+        </form>
+      </div>
+    {% elif clear_active %}
+      <p role="status">Queue clearing is in progress. Karaoke changes are temporarily paused.</p>
+    {% else %}
+      {% if clear.status in ['completed', 'local_only_completed'] %}
+        <p class="karaoke-clear-summary">
+          Last clear: {{ clear.record_count }} records · {{ clear.deleted_count }} YouTube items removed
+          {% if clear.completed_at %} · {{ clear.completed_at }}{% endif %}
+        </p>
+      {% endif %}
+      <form class="karaoke-clear-confirm" data-karaoke-api-form action="{{ url_for('admin_karaoke_reset') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="mode" value="combined">
+        <label>
+          Type <strong>CLEAR KARAOKE</strong> to confirm
+          <input name="confirm_phrase" required autocomplete="off" pattern="CLEAR KARAOKE">
+        </label>
+        <button
+          class="button button--danger"
+          type="submit"
+          data-reload-on-error
+          data-confirm="Clear the karaoke lineup and every app-managed item from the selected YouTube playlist?"
+          {% if karaoke_admin.record_count == 0 and karaoke_admin.managed_playlist_item_count == 0 %}disabled{% endif %}
+        >Clear Queue &amp; YouTube Playlist</button>
+      </form>
+    {% endif %}
+  </details>
 </section>
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='karaoke-admin.js', v='20260730-one-click-search') }}"></script>
+<script src="{{ url_for('static', filename='karaoke-admin.js', v='20260730-queue-clear') }}"></script>
 {% endblock %}

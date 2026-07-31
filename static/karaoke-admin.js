@@ -3,8 +3,42 @@
   if (!root) return;
 
   const messageContainer = root.querySelector('[data-karaoke-admin-message]');
+  const clearProgress = root.querySelector('[data-karaoke-clear-progress]');
   const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
   let actionInFlight = false;
+
+  const setClearStep = (name, state) => {
+    const step = clearProgress?.querySelector(`[data-clear-step="${name}"]`);
+    if (!step) return;
+    step.classList.remove('is-complete', 'is-current', 'has-error', 'is-pending');
+    step.classList.add(state);
+  };
+
+  const updateClearProgress = (clear = {}) => {
+    if (!clearProgress || !clear.status || clear.status === 'idle') return;
+    clearProgress.hidden = false;
+    setClearStep('backup', 'is-complete');
+    setClearStep('stage', 'is-complete');
+    const finished = ['completed', 'local_only_completed'].includes(clear.status);
+    setClearStep(
+      'youtube',
+      clear.status === 'failed' ? 'has-error' : (finished ? 'is-complete' : 'is-current'),
+    );
+    setClearStep('local', finished ? 'is-complete' : 'is-pending');
+    setClearStep('complete', finished ? 'is-complete' : 'is-pending');
+    const label = clearProgress.querySelector('[data-clear-youtube-label]');
+    if (label) {
+      label.textContent = clear.status === 'failed'
+        ? 'YouTube needs attention'
+        : (clear.status === 'local_only_completed'
+          ? 'YouTube intentionally unchanged'
+          : (clear.status === 'completed' ? 'YouTube items removed' : 'Removing YouTube items'));
+    }
+    const count = clearProgress.querySelector('[data-clear-count]');
+    if (count) {
+      count.textContent = `${clear.deleted_count || 0} of ${clear.target_count || 0} removed`;
+    }
+  };
 
   const showMessage = (message, isError = false) => {
     if (!messageContainer) return;
@@ -27,6 +61,9 @@
       trigger.dataset.originalLabel = trigger.textContent;
       trigger.textContent = 'Processing…';
     }
+    if (endpoint.endsWith('/api/admin/karaoke/reset')) {
+      updateClearProgress({ status: 'preparing', deleted_count: 0, target_count: 0 });
+    }
     const body = formData || new FormData();
     if (!body.has('csrf_token')) body.append('csrf_token', csrfToken);
     try {
@@ -45,6 +82,9 @@
       if (trigger) {
         trigger.disabled = false;
         trigger.textContent = trigger.dataset.originalLabel || 'Try Again';
+        if (trigger.dataset.reloadOnError !== undefined) {
+          window.setTimeout(() => window.location.reload(), 900);
+        }
       }
     } finally {
       actionInFlight = false;
@@ -197,27 +237,35 @@
   let lastVersion = null;
   const stateUrl = root.dataset.stateUrl;
   const refreshStateVersion = async () => {
-    if (!stateUrl || actionInFlight) return;
+    if (!stateUrl) return;
     try {
       const response = await fetch(stateUrl, { credentials: 'same-origin', cache: 'no-store' });
       if (!response.ok) return;
       const state = await response.json();
+      updateClearProgress(state.clear_operation);
       const signature = JSON.stringify({
         metrics: state.metrics,
         current: state.current?.id || '',
         next: state.next?.id || '',
         connection: state.youtube?.connection_status || '',
         reconciled: state.youtube?.last_reconciled_at || '',
+        clearStatus: state.clear_operation?.status || '',
+        clearDeleted: state.clear_operation?.deleted_count || 0,
+        clearFailed: state.clear_operation?.failed_count || 0,
       });
       if (lastVersion === null) {
         lastVersion = signature;
-      } else if (signature !== lastVersion && !root.querySelector('input:focus, select:focus, textarea:focus')) {
+      } else if (
+        signature !== lastVersion
+        && !actionInFlight
+        && !root.querySelector('input:focus, select:focus, textarea:focus')
+      ) {
         window.location.reload();
       }
     } catch (error) {
       console.error('Unable to refresh karaoke admin state', error);
     }
   };
-  window.setInterval(refreshStateVersion, 5000);
+  window.setInterval(refreshStateVersion, 2000);
   refreshStateVersion();
 })();

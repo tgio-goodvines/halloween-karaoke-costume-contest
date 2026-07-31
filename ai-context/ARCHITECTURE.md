@@ -105,6 +105,11 @@
 - `/api/admin/karaoke/*` -> admin-only search, approval, retry, replacement,
   rejection, removal, playlist setup/order synchronization, connection test,
   and reconciliation endpoints.
+- `POST /api/admin/karaoke/reset` -> exact-confirmation bulk reset. `combined`
+  mode backs up state, deletes only stored app-managed playlist item IDs
+  outside the Redis mutation lock, and clears the local lineup after all
+  deletions succeed. Partial failures persist retry targets and block competing
+  queue changes; `local` mode is the explicit manual-cleanup fallback.
 - `GET /admin/karaoke/youtube/connect|callback` and
   `POST /admin/karaoke/youtube/disconnect` -> OAuth authorization lifecycle
   with session state validation and dedicated Vault refresh-token persistence.
@@ -130,6 +135,12 @@ for the YouTube call, and a second short lock applies the result only if the
 operation still matches. Playlist-item notes contain a stable
 `halloween-karaoke:<signup-id>:<revision>` marker so retry and reconciliation
 do not duplicate an uncertain insert.
+
+Bulk karaoke clearing follows the same no-network-under-lock rule and stores
+its operation ID, target item IDs, counts, backup key, status, and failure
+details in `youtube_karaoke.clear_operation`. The clear target is derived only
+from each signup's persisted `workflow.playlist_item_id`; foreign/manual
+playlist items are intentionally outside its deletion scope.
 
 `main.py` is the entire backend. Its main responsibilities are:
 

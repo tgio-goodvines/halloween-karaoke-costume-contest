@@ -119,6 +119,12 @@
   playlist through idempotent signup/revision markers.
 - Admin can approve, reject, retry, replace, remove, reconcile, move
   top/up/down/end, and synchronize YouTube playlist order.
+- Admin Queue Management can download a lineup backup and clear the karaoke
+  lineup plus only app-managed YouTube playlist items behind exact-phrase
+  confirmation. Persistent progress reports backup, YouTube deletion, local
+  clearing, and completion; partial failures can be retried without deleting
+  unmatched/manual playlist items. A separate local-only fallback is available
+  for manual YouTube cleanup.
 - Playback stays in the official YouTube site. Stage controls update workflow
   and live-display singer cards but never claim remote playback confirmation.
 - The legacy name/title/artist/optional-link workflow remains intact when

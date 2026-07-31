@@ -2237,6 +2237,92 @@ textarea:focus,
   max-width: 68ch;
 }
 
+.karaoke-clear-panel {
+  margin-top: 1rem;
+}
+
+.karaoke-clear-progress {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+}
+
+.karaoke-clear-progress li {
+  align-content: start;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(155, 170, 190, 0.2);
+  display: grid;
+  gap: 0.35rem;
+  min-height: 6.4rem;
+  padding: 0.7rem;
+}
+
+.karaoke-clear-progress li > span {
+  align-items: center;
+  border: 1px solid currentColor;
+  display: inline-flex;
+  font-family: var(--font-mono);
+  height: 1.5rem;
+  justify-content: center;
+  width: 1.5rem;
+}
+
+.karaoke-clear-progress li > strong {
+  font-size: 0.8rem;
+}
+
+.karaoke-clear-progress li > small {
+  color: var(--muted);
+}
+
+.karaoke-clear-progress .is-complete {
+  border-color: rgba(95, 193, 131, 0.48);
+  color: #7ed79f;
+}
+
+.karaoke-clear-progress .is-current {
+  border-color: var(--accent);
+  color: var(--text-bright);
+  box-shadow: 0 0 14px rgba(225, 39, 84, 0.12);
+}
+
+.karaoke-clear-progress .has-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.karaoke-clear-progress .is-pending {
+  color: var(--muted);
+}
+
+.karaoke-clear-confirm,
+.karaoke-clear-actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  max-width: 48rem;
+}
+
+.karaoke-clear-actions form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.karaoke-clear-confirm label,
+.karaoke-clear-actions label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.karaoke-clear-summary {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 1rem;
+}
+
 .karaoke-playlist-settings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2667,6 +2753,19 @@ textarea:focus,
   .karaoke-playback-launch .button {
     justify-content: center;
     width: 100%;
+  }
+
+  .karaoke-clear-progress {
+    grid-template-columns: 1fr;
+  }
+
+  .karaoke-clear-progress li {
+    grid-template-columns: 1.8rem minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .karaoke-clear-progress li > small {
+    grid-column: 2;
   }
 
   .karaoke-connection__facts,

@@ -27,62 +27,127 @@
   {% endif %}
 
   {% if youtube_karaoke_enabled %}
-  <section class="karaoke-search">
-    <h3>1. Find your karaoke video</h3>
-    {% if youtube_search_configured %}
-      <div class="karaoke-search__controls">
-        <label for="youtube_query">Song title or artist</label>
-        <div><input type="search" id="youtube_query" minlength="2" maxlength="180" autocomplete="off" placeholder="Thriller Michael Jackson"><button type="button" class="button button--primary" data-karaoke-search>Search YouTube</button></div>
-      </div>
-      <p data-karaoke-search-message role="status" aria-live="polite">Search runs when you press the button so the party stays within YouTube's event quota.</p>
-      <div class="karaoke-search__results" data-karaoke-results></div>
-      <nav class="karaoke-search__pagination" data-karaoke-pagination hidden>
-        <button type="button" class="button" data-karaoke-previous>Previous</button>
-        <span data-karaoke-page>Page 1</span>
-        <button type="button" class="button" data-karaoke-next>Next</button>
-      </nav>
-    {% else %}
-      <div class="flash flash--error"><p>YouTube search is not configured yet. You can still paste a direct video link below.</p></div>
-    {% endif %}
-    <details class="karaoke-link-fallback">
-      <summary>Paste a YouTube link instead</summary>
-      <label for="youtube_link_fallback">YouTube video link</label>
-      <input type="url" id="youtube_link_fallback" placeholder="https://www.youtube.com/watch?v=..." inputmode="url" data-karaoke-link-fallback>
-      <button type="button" class="button" data-karaoke-use-link>Use This Link</button>
-    </details>
-  </section>
+    <form method="post" class="signup-form karaoke-request-builder" data-karaoke-selection-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="youtube_video_id" value="{{ selected_youtube.get('video_id', '') if selected_youtube else '' }}">
+      <input type="hidden" id="youtube_link" name="youtube_link" value="{{ selected_youtube.get('watch_url', '') if selected_youtube else '' }}" required>
+
+      <ol class="karaoke-request-builder__steps" aria-label="Karaoke request steps">
+        <li class="{% if selected_youtube %}is-complete{% else %}is-current{% endif %}" data-karaoke-builder-step="details"><span>1</span>Song details</li>
+        <li class="{% if selected_youtube %}is-complete{% else %}is-pending{% endif %}" data-karaoke-builder-step="video"><span>2</span>Choose video</li>
+        <li class="{% if selected_youtube %}is-current{% else %}is-pending{% endif %}" data-karaoke-builder-step="review"><span>3</span>Review</li>
+      </ol>
+
+      <section class="karaoke-request-builder__section" data-karaoke-details>
+        <div>
+          <p class="eyebrow">Step 1</p>
+          <h3>Tell us what you’re singing</h3>
+          <p>We’ll use the song and artist to find matching karaoke versions on YouTube.</p>
+        </div>
+
+        <label for="name">Singer name *</label>
+        <input type="text" id="name" name="name" value="{{ karaoke_form.name }}" maxlength="100" autocomplete="name" required>
+
+        <label for="song_title">Song title *</label>
+        <input type="text" id="song_title" name="song_title" value="{{ karaoke_form.song_title }}" maxlength="100" autocomplete="off" placeholder="Thriller" required>
+
+        <label for="artist">Artist *</label>
+        <input type="text" id="artist" name="artist" value="{{ karaoke_form.artist }}" maxlength="100" autocomplete="off" placeholder="Michael Jackson" required>
+
+        {% if youtube_search_configured %}
+          <button
+            type="button"
+            class="button button--primary karaoke-request-builder__find"
+            data-karaoke-search
+            {% if not karaoke_form.song_title or not karaoke_form.artist %}disabled{% endif %}
+          >Find Karaoke Versions</button>
+        {% endif %}
+      </section>
+
+      <section class="karaoke-search karaoke-request-builder__section">
+        <div>
+          <p class="eyebrow">Step 2</p>
+          <h3>Choose your YouTube version</h3>
+          <p>Preview any result, then choose the exact version you want the host to add.</p>
+        </div>
+        {% if youtube_search_configured %}
+          <p data-karaoke-search-message role="status" aria-live="polite">
+            Enter your song details above, then press Find Karaoke Versions.
+          </p>
+          <div data-karaoke-results-panel hidden>
+            <div class="karaoke-search__results" data-karaoke-results></div>
+            <nav class="karaoke-search__pagination" data-karaoke-pagination hidden>
+              <button type="button" class="button" data-karaoke-previous>Previous</button>
+              <span data-karaoke-page>Page 1</span>
+              <button type="button" class="button" data-karaoke-next>Next</button>
+            </nav>
+          </div>
+        {% else %}
+          <div class="flash flash--error"><p>YouTube search is not configured yet. You can still paste a direct video link below.</p></div>
+        {% endif %}
+        <details class="karaoke-link-fallback">
+          <summary>Paste a direct YouTube link instead</summary>
+          <label for="youtube_link_fallback">YouTube video link</label>
+          <input
+            type="url"
+            id="youtube_link_fallback"
+            value="{{ karaoke_form.youtube_link if not selected_youtube else '' }}"
+            placeholder="https://www.youtube.com/watch?v=..."
+            inputmode="url"
+            data-karaoke-link-fallback
+          >
+          <button type="button" class="button" data-karaoke-use-link>Use This Link</button>
+        </details>
+      </section>
+
+      <section
+        class="karaoke-request-builder__section karaoke-request-review"
+        data-karaoke-review
+        {% if not selected_youtube %}hidden{% endif %}
+      >
+        <div>
+          <p class="eyebrow">Step 3</p>
+          <h3>Review your request</h3>
+          <p data-karaoke-review-song>
+            <strong>{{ karaoke_form.name }}</strong> will sing “{{ karaoke_form.song_title }}” by {{ karaoke_form.artist }}.
+          </p>
+        </div>
+        <div class="karaoke-selection{% if selected_youtube %} is-selected{% endif %}" data-karaoke-selection>
+          {% if selected_youtube %}
+            {% if selected_youtube.get('thumbnail_url') %}<img src="{{ selected_youtube.thumbnail_url }}" alt="" loading="lazy">{% endif %}
+            <div>
+              <strong>{{ selected_youtube.title }}</strong>
+              <span>{{ selected_youtube.channel_title }}</span>
+            </div>
+            <a class="button" href="{{ selected_youtube.watch_url }}" target="_blank" rel="noopener">Preview on YouTube</a>
+          {% else %}
+            <p>Choose a search result or paste a direct YouTube link above.</p>
+          {% endif %}
+        </div>
+        <div class="karaoke-request-review__actions">
+          <button type="button" class="button" data-karaoke-change-video>Change Version</button>
+          <button type="button" class="button" data-karaoke-edit-details>Edit Song Details</button>
+        </div>
+        <button type="submit" class="button button--primary" data-karaoke-submit{% if not selected_youtube %} disabled{% endif %}>Send for Host Approval</button>
+      </section>
+    </form>
+  {% else %}
+    <form method="post" class="signup-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="name">Name *</label>
+      <input type="text" id="name" name="name" value="{{ karaoke_form.name }}" required>
+
+      <label for="song_title">Song Title *</label>
+      <input type="text" id="song_title" name="song_title" value="{{ karaoke_form.song_title }}" required>
+
+      <label for="artist">Artist *</label>
+      <input type="text" id="artist" name="artist" value="{{ karaoke_form.artist }}" required>
+
+      <label for="youtube_link">YouTube Link</label>
+      <input type="url" id="youtube_link" name="youtube_link" value="{{ karaoke_form.youtube_link }}" placeholder="https://www.youtube.com/watch?v=..." inputmode="url">
+      <button type="submit">Join Karaoke Lineup</button>
+    </form>
   {% endif %}
-
-  <form method="post" class="signup-form{% if youtube_karaoke_enabled %} karaoke-selection-form{% endif %}"{% if youtube_karaoke_enabled %} data-karaoke-selection-form{% endif %}>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="youtube_video_id">
-    {% if youtube_karaoke_enabled %}
-      <h3>2. Confirm your request</h3>
-      <div class="karaoke-selection" data-karaoke-selection>
-        <p>Choose a search result or paste a direct YouTube link above.</p>
-      </div>
-    {% endif %}
-    <label for="name">Name *</label>
-    <input type="text" id="name" name="name" value="{{ default_karaoke_name }}" required>
-
-    <label for="song_title">Song Title *</label>
-    <input type="text" id="song_title" name="song_title" required>
-
-    <label for="artist">Artist *</label>
-    <input type="text" id="artist" name="artist" required>
-
-    <label for="youtube_link"{% if youtube_karaoke_enabled %} class="visually-hidden"{% endif %}>YouTube Link</label>
-    <input
-      type="url"
-      id="youtube_link"
-      name="youtube_link"
-      placeholder="https://www.youtube.com/watch?v=..."
-      inputmode="url"
-      {% if youtube_karaoke_enabled %}hidden required{% endif %}
-    >
-
-    <button type="submit"{% if youtube_karaoke_enabled %} disabled data-karaoke-submit{% endif %}>Send for Host Approval</button>
-  </form>
 </section>
 
 {% if youtube_karaoke_enabled %}
@@ -150,5 +215,5 @@
 {% endblock %}
 
 {% block scripts %}
-  {% if youtube_karaoke_enabled %}<script src="{{ url_for('static', filename='karaoke.js') }}"></script>{% endif %}
+  {% if youtube_karaoke_enabled %}<script src="{{ url_for('static', filename='karaoke.js', v='20260730-song-details-search') }}"></script>{% endif %}
 {% endblock %}

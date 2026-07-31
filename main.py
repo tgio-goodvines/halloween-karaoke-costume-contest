@@ -3011,6 +3011,8 @@ def increment_youtube_search_budget(user_id: str) -> None:
 
 def search_youtube_karaoke(query: str, *, page_token: str, user_id: str) -> dict[str, object]:
     cleaned_query = " ".join(str(query or "").split())
+    if cleaned_query and "karaoke" not in cleaned_query.casefold().split():
+        cleaned_query = f"{cleaned_query} karaoke"
     if not cleaned_query or len(cleaned_query) > YOUTUBE_SEARCH_QUERY_MAX_LENGTH:
         raise YouTubeApiError(
             "invalid_query",
@@ -3030,7 +3032,7 @@ def search_youtube_karaoke(query: str, *, page_token: str, user_id: str) -> dict
 
     increment_youtube_search_budget(user_id)
     payload = youtube_service().search_videos(
-        f"{cleaned_query} karaoke lyrics",
+        cleaned_query,
         page_token=page_token,
         limit=YOUTUBE_SEARCH_PAGE_SIZE,
     )
@@ -3039,6 +3041,7 @@ def search_youtube_karaoke(query: str, *, page_token: str, user_id: str) -> dict
         "next_page_token": str(payload.get("next_page_token", "") or ""),
         "previous_page_token": str(payload.get("previous_page_token", "") or ""),
         "cached": False,
+        "query": cleaned_query,
     }
     if redis_state_available:
         redis_client.setex(
@@ -7648,12 +7651,29 @@ def party_karaoke():
     if not party_day_has_arrived():
         return redirect(url_for("party_dashboard"))
 
+    karaoke_form = {
+        "name": str(session.get("username", "") or "").strip(),
+        "song_title": "",
+        "artist": "",
+        "youtube_link": "",
+        "youtube_video_id": "",
+    }
+    selected_youtube: dict[str, object] | None = None
     if request.method == "POST":
         name = request.form.get("name", "").strip() or str(session.get("username", "") or "").strip()
         song_title = request.form.get("song_title", "").strip()
         artist = request.form.get("artist", "").strip()
         youtube_link = request.form.get("youtube_link", "").strip()
         youtube_video_id = request.form.get("youtube_video_id", "").strip()
+        karaoke_form.update(
+            {
+                "name": name,
+                "song_title": song_title,
+                "artist": artist,
+                "youtube_link": youtube_link,
+                "youtube_video_id": youtube_video_id,
+            }
+        )
 
         if not name:
             errors.append("Name is required.")
@@ -7663,11 +7683,15 @@ def party_karaoke():
             errors.append("Artist is required.")
 
         verified_video: dict[str, object] | None = None
-        if app.config.get("YOUTUBE_KARAOKE_ENABLED") and not errors:
-            try:
-                verified_video = verify_youtube_video(youtube_video_id or youtube_link)
-            except YouTubeApiError as exc:
-                errors.append(exc.message)
+        if app.config.get("YOUTUBE_KARAOKE_ENABLED"):
+            if youtube_video_id or youtube_link:
+                try:
+                    verified_video = verify_youtube_video(youtube_video_id or youtube_link)
+                    selected_youtube = normalize_karaoke_youtube(verified_video)
+                except YouTubeApiError as exc:
+                    errors.append(exc.message)
+            else:
+                errors.append("Choose a YouTube karaoke version before submitting.")
 
         if not errors:
             def add_signup() -> None:
@@ -7730,7 +7754,8 @@ def party_karaoke():
         youtube_karaoke_enabled=bool(app.config.get("YOUTUBE_KARAOKE_ENABLED")),
         youtube_search_configured=youtube_config().search_configured,
         youtube_search_url=url_for("party_karaoke_search"),
-        default_karaoke_name=str(session.get("username", "") or ""),
+        karaoke_form=karaoke_form,
+        selected_youtube=selected_youtube,
         show_admin_link=False,
     )
 
@@ -7739,7 +7764,18 @@ def party_karaoke():
 def party_karaoke_search():
     if not party_day_has_arrived():
         return jsonify({"error": "Karaoke requests are not open yet."}), 403
+    song_title = " ".join(request.args.get("song_title", "").split())
+    artist = " ".join(request.args.get("artist", "").split())
     query = request.args.get("q", "")
+    if song_title or artist:
+        if not song_title or not artist:
+            return jsonify(
+                {
+                    "error": "Enter both the song title and artist before searching.",
+                    "code": "invalid_query",
+                }
+            ), 400
+        query = f"{song_title} {artist}"
     page_token = request.args.get("page_token", "")
     if len(page_token) > 300:
         return jsonify({"error": "Invalid YouTube result page."}), 400
@@ -7750,7 +7786,13 @@ def party_karaoke_search():
             user_id=str(session.get("user_id", "") or request.remote_addr or "guest"),
         )
     except YouTubeApiError as exc:
-        return jsonify({"error": exc.message, "code": exc.code}), 429 if "limit" in exc.code or "budget" in exc.code else 503
+        if exc.code == "invalid_query":
+            status_code = 400
+        elif "limit" in exc.code or "budget" in exc.code:
+            status_code = 429
+        else:
+            status_code = 503
+        return jsonify({"error": exc.message, "code": exc.code}), status_code
     return jsonify(payload)
 
 

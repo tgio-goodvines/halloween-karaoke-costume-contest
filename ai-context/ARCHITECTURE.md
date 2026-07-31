@@ -94,10 +94,15 @@
   the party date and redirected to `/party` before then.
 - `GET|POST /party/karaoke` -> attendee karaoke signup form, available on the
   party date and redirected to `/party` before then. With YouTube karaoke
-  enabled, submission requires server-verified exact video metadata and creates
-  a pending workflow entry.
+  enabled, the three-step flow collects song-card metadata first, searches for
+  an exact version, preserves the user's song/artist independently from
+  YouTube metadata, requires server-verified video metadata, and creates a
+  pending workflow entry.
 - `GET /api/party/karaoke/search` -> deliberate, cached, quota-budgeted
-  normalized YouTube search for signed-in attendees.
+  normalized YouTube search for signed-in attendees. Structured
+  `song_title`/`artist` parameters become the canonical
+  `{song title} {artist} karaoke` query; the legacy `q` parameter remains
+  available for compatibility.
 - `POST /party/karaoke/<entry_id>/cancel|replace` -> requester-owned pending
   request recovery actions.
 - `GET|POST /admin/karaoke` -> dedicated host queue, run-of-show, and stage
@@ -295,12 +300,15 @@ locked winner.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
-- `karaoke_signup.html`: exact-video search/selection, direct-link fallback,
-  attendee workflow status, pending recovery, and synchronized public lineup.
+- `karaoke_signup.html`: song-details-first three-step exact-video
+  search/selection and review, direct-link fallback, attendee workflow status,
+  pending recovery, and synchronized public lineup.
 - `admin_karaoke.html`: dedicated YouTube connection, review, run-of-show,
   reconciliation/history, and stage-control workspace.
 - `_karaoke_workflow.html`: shared media and seven-step workflow macros.
-- `karaoke.js`: attendee search, pagination, result selection, and fallback.
+- `karaoke.js`: attendee song-detail validation, canonical search, pagination,
+  stale-result/selection invalidation, exact-video review, and direct-link
+  fallback.
 - `karaoke-admin.js`: asynchronous playlist mutations, admin replacement
   search, playlist loading, and background state refresh.
 - `costume_voting.html`: complete ballot form and post-vote state.

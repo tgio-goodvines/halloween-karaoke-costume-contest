@@ -49,6 +49,12 @@ Deployment record:
 - Added attendee search, pagination, exact result selection, direct-link
   validation, pending workflow, replacement, cancellation, personal status,
   and synchronized public lineup.
+- Refined attendee signup into a song-details-first three-step builder. The
+  attendee enters singer/song/artist once, the app constructs
+  `{song title} {artist} karaoke`, presents exact previewable versions, and
+  shows a consolidated review card before submission. YouTube titles/channels
+  no longer overwrite the attendee's song-card metadata, and editing the song
+  details invalidates stale results or selections.
 - Added dedicated `/admin/karaoke` connection health, playlist controls,
   metrics, admin search, pending review, attention recovery, run of show,
   ordering, history, and sticky stage controls.

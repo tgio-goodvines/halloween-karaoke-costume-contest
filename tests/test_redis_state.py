@@ -3603,6 +3603,87 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("1", self.fake_redis.store[budget_key])
         self.assertEqual("1", self.fake_redis.store[account_key])
 
+    def test_attendee_search_builds_query_from_song_details(self):
+        fake_youtube = self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.get(
+                "/api/party/karaoke/search",
+                query_string={
+                    "song_title": "  Thriller ",
+                    "artist": " Michael   Jackson ",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(
+            [("Thriller Michael Jackson karaoke", "", 8)],
+            fake_youtube.search_calls,
+        )
+        self.assertEqual(
+            "Thriller Michael Jackson karaoke",
+            response.get_json()["query"],
+        )
+
+    def test_attendee_structured_search_requires_song_and_artist(self):
+        fake_youtube = self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.get(
+                "/api/party/karaoke/search",
+                query_string={"song_title": "Thriller"},
+            )
+
+        self.assertEqual(400, response.status_code)
+        self.assertEqual("invalid_query", response.get_json()["code"])
+        self.assertEqual([], fake_youtube.search_calls)
+
+    def test_attendee_karaoke_page_starts_with_song_details_not_freeform_search(self):
+        self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.get("/party/karaoke")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Tell us what you’re singing", html)
+        self.assertIn("Find Karaoke Versions", html)
+        self.assertIn("Choose your YouTube version", html)
+        self.assertIn("Review your request", html)
+        self.assertNotIn('id="youtube_query"', html)
+        self.assertLess(html.index('id="song_title"'), html.index("Find Karaoke Versions"))
+        self.assertLess(
+            html.index("Find Karaoke Versions"),
+            html.index("Choose your YouTube version"),
+        )
+
+    def test_attendee_karaoke_validation_preserves_details_and_verified_video(self):
+        self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            response = client.post(
+                "/party/karaoke",
+                data={
+                    "name": "Tony",
+                    "song_title": "Thriller",
+                    "artist": "",
+                    "youtube_video_id": "abc123DEF45",
+                    "youtube_link": "https://www.youtube.com/watch?v=abc123DEF45",
+                },
+            )
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertEqual([], main.karaoke_signups)
+        self.assertIn("Artist is required.", html)
+        self.assertIn('value="Thriller"', html)
+        self.assertIn('value="abc123DEF45"', html)
+        self.assertIn("Thriller Karaoke", html)
+
     def test_youtube_karaoke_submission_is_pending_and_hidden_from_public_lineup(self):
         self.enable_youtube_karaoke()
 
@@ -3618,6 +3699,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("pending", signup.workflow["approval_status"])
         self.assertEqual("verified", signup.workflow["video_validation_status"])
         self.assertEqual("abc123DEF45", signup.youtube["video_id"])
+        self.assertEqual("Thriller", signup.song_title)
+        self.assertEqual("Michael Jackson", signup.artist)
         self.assertEqual([], main.public_karaoke_signups())
         html = page.get_data(as_text=True)
         self.assertIn("Your Karaoke Requests", html)

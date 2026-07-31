@@ -109,9 +109,15 @@
 
 ## Karaoke Features
 
-- Guests choose an exact YouTube karaoke video or paste a direct link, then
-  track Submitted, Video verified, Approved, Playlist synced, Ready, On stage,
-  and Complete.
+- Guests first enter the singer name, song title, and artist. The attendee flow
+  builds a quota-safe `{song title} {artist} karaoke` YouTube search, presents
+  exact versions with preview/select actions, and keeps the user-entered song
+  card metadata independent from the chosen video's YouTube title/channel.
+- Editing the song title or artist invalidates stale results and selections.
+  Guests review the completed song card plus selected version before sending it
+  for host approval; a direct-link fallback remains available.
+- Guests then track Submitted, Video verified, Approved, Playlist synced,
+  Ready, On stage, and Complete.
 - `/admin/karaoke` is the dedicated host operations workspace for YouTube
   connection health, playlist creation/selection, pending review, attention
   recovery, run-of-show order, history, and stage controls.

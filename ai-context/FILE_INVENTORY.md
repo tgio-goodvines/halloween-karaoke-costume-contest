@@ -24,7 +24,7 @@
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
 | `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal-path UI without reloading forms. |
 | `static/jukebox.js` | Attendee jukebox catalog search, request submission, and safe Now Playing/playlist polling. |
-| `static/karaoke.js` | Attendee YouTube search, pagination, exact-video selection, and direct-link fallback. |
+| `static/karaoke.js` | Attendee song-details-first YouTube search, pagination, stale-selection protection, exact-video review, and direct-link fallback. |
 | `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
@@ -48,7 +48,7 @@
 | `templates/email/password_reset.html` | Dark lab-terminal styled HTML email body for one-time password reset links. |
 | `templates/email/_components.html` | Shared inline-safe HTML email macros for the refined lab-terminal shell, buttons, and detail tables used by generated email templates. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
-| `templates/karaoke_signup.html` | Attendee exact-video karaoke request flow, personal workflow status/recovery, and synchronized public lineup. |
+| `templates/karaoke_signup.html` | Attendee three-step song details, exact-video selection, and review flow plus personal workflow status/recovery and synchronized public lineup. |
 | `templates/admin_karaoke.html` | Dedicated YouTube connection, review, attention, run-of-show, history, and stage operations workspace. |
 | `templates/_karaoke_workflow.html` | Shared karaoke media and seven-step workflow macros. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |

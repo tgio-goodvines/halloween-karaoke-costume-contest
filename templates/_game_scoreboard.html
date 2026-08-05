@@ -1,0 +1,5 @@
+<section class="game-results">
+  {% if winners %}<div class="game-winner-callout"><p class="admin-panel__eyebrow">Winner{% if winners|length != 1 %}s{% endif %}</p><h4>{% for winner in winners %}{{ winner.name if winner.name is defined else winner.alias }}{% if not loop.last %}, {% endif %}{% endfor %}</h4><p>{{ winners[0].correct if winners[0].correct is defined else winners[0].points }} points.</p></div>
+  {% else %}<div class="game-winner-callout"><h4>No winner this time</h4><p>No positive score was recorded.</p></div>{% endif %}
+  {% if results.scores %}<div class="table-wrapper"><table><thead><tr><th>Rank</th><th>Player</th><th>Score</th></tr></thead><tbody>{% for score in results.scores %}<tr><td>#{{ loop.index }}</td><td>{{ score.name if score.name is defined else score.alias }}</td><td>{{ score.correct if score.correct is defined else score.points }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</section>

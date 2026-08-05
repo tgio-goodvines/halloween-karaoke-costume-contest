@@ -91,16 +91,24 @@
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
 - `GET /admin/export/games` -> admin-only JSON export of the Redis-backed game
-  registry, raw guesses, and finalized results.
+  registry and finalized results. MMF account keys and individual ballots are
+  replaced with anonymous aliases/completion counts plus aggregate results.
 - `GET|POST /party/costumes` -> attendee costume signup form, available on
   the party date and redirected to `/party` before then.
 - `GET /party/games` -> party-day Games workspace for enabled games. The
-  selected `game` query activates the Two Truths and a Lie tab; signup, active
-  guessing, and final result views are server-selected from Redis state.
+  selected `game` query activates one of five catalog tabs; signup, active,
+  round, voting, and final-result views are server-selected from Redis state.
 - `POST /party/games/two-truths-and-a-lie/opt-in|submission` and
   `POST /party/games/two-truths-and-a-lie/guesses/<submission_id>` ->
   CSRF-protected, account-bound enrollment, clue submission/update, and guess
   upsert actions with phase and ownership checks.
+- `POST /party/games/<game_slug>/join` -> anonymous-alias opt-in for MMF and
+  the three prompt/vote games while signup is open.
+- `POST /party/games/murder-marry-fuck/answers` -> saves one validated
+  three-action MMF round ballot for an enrolled player while active.
+- `POST /party/games/<game_slug>/response|vote` -> upserts one anonymous
+  response or non-self vote for the current Fill in the Blank, Bad Advice, or
+  Wrong Answers round.
 - `GET|POST /party/karaoke` -> attendee karaoke signup form, available on the
   party date and redirected to `/party` before then. With YouTube karaoke
   enabled, the three-step flow collects song-card metadata first, searches for
@@ -245,10 +253,12 @@ network/password values come from Redis-backed
 `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank values are allowed so the live display
 can omit either row. Winner and scoreboard cards are appended when the relevant
 contest state is active. Enabled Two Truths and a Lie submissions are
-interleaved as anonymous three-statement cards. After finalization, tied-winner
-and generic scoreboard cards join rotation; account identity and truth/lie
-metadata never enter the pre-result display payload. Costume and karaoke
-entries are also interleaved. Admin
+interleaved as anonymous three-statement cards. Prompt-game responses join only
+after voting opens. After finalization, tied-winner and generic alias-only
+scoreboard cards join rotation. Host-controlled `game_presentation` overrides
+walk MMF aggregate action totals or revealed prompt winners with previous/next
+controls; account identity and individual MMF ballots never enter display
+payloads. Costume and karaoke entries are also interleaved. Admin
 stop/reset actions clear matching live-display event overrides without deleting
 signup lineups. Starting costume stops active karaoke event mode, and starting
 karaoke closes active costume voting so costume/karaoke do not compete for the

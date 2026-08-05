@@ -38,7 +38,7 @@
                     <a href="{{ url_for('party_jukebox') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Jukebox{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     <a href="{{ url_for('party_costumes') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Costume{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     {% if party_games_state.available %}
-                      <a href="{{ url_for('party_games', game='two-truths-and-a-lie') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Games{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
+                      <a href="{{ url_for('party_games', game=party_games_state.primary.slug) }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Games{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     {% endif %}
                     {% if costume_contest_state.voting_visible %}
                       <a href="{{ url_for('party_costume_voting') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Voting{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>

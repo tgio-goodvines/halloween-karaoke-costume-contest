@@ -5328,6 +5328,139 @@ textarea,
 .game-admin-actions { margin-block: 1rem; }
 .admin-subsection { margin-top: 1rem; }
 
+.game-content-notice {
+  margin-top: 1rem;
+  padding: 0.8rem 1rem;
+  border-left: 3px solid #ff5555;
+  background: rgba(255, 49, 49, 0.1);
+  color: #d4d4d8;
+}
+
+.mmf-rounds,
+.mmf-results,
+.game-registry-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.mmf-round,
+.game-admin-card,
+.response-result,
+.response-choice {
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(10, 10, 12, 0.78);
+}
+
+.mmf-round > header,
+.game-admin-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.mmf-round > header span,
+.mmf-round > header strong {
+  color: #ff7777;
+  font-family: "Outfit", sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mmf-people,
+.mmf-choices,
+.response-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
+
+.mmf-people article {
+  display: grid;
+  align-content: end;
+  min-height: 88px;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 49, 49, 0.28);
+  background: #151518;
+  overflow: hidden;
+}
+
+.mmf-people img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 0.65rem;
+  object-fit: cover;
+}
+
+.mmf-choices label,
+.game-round-controls form {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.response-choice {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.response-choice:has(input:checked),
+.response-result--winner {
+  border-color: #ff3131;
+  box-shadow: 0 0 18px rgba(255, 49, 49, 0.18);
+}
+
+.response-choice input { margin-top: 0.25rem; }
+.response-result p { margin-top: 0; }
+.response-result strong { color: #ff7777; }
+
+.game-registry-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.game-admin-card {
+  min-width: 0;
+}
+
+.game-admin-metrics--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mmf-admin-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.game-prompt-list {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+
+.game-prompt-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding-block: 0.6rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.game-prompt-list li > div { display: flex; gap: 0.4rem; }
+.game-prompt-list .is-disabled { color: #71717a; text-decoration: line-through; }
+.game-round-controls,
+.game-presentation-controls { margin-block: 1rem; padding-block: 1rem; border-block: 1px solid rgba(255,255,255,.12); }
+
 @media (max-width: 620px) {
   .game-panel__header,
   .games-admin__heading,
@@ -5338,4 +5471,10 @@ textarea,
 
   .games-overview .button { width: 100%; }
   .mystery-grid { grid-template-columns: 1fr; }
+  .mmf-people,
+  .mmf-choices,
+  .response-grid,
+  .mmf-admin-form fieldset { grid-template-columns: 1fr; }
+  .game-prompt-list li { align-items: stretch; flex-direction: column; }
+  .game-prompt-list li > div { flex-wrap: wrap; }
 }

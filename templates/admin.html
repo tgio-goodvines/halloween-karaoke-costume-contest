@@ -15,7 +15,7 @@
         {{ workspace.label }}
         {% if key == 'guests' %}<span>{{ rsvp_signups|length }}</span>{% endif %}
         {% if key == 'karaoke' and karaoke_admin.metrics.attention %}<span aria-label="{{ karaoke_admin.metrics.attention }} karaoke issues">{{ karaoke_admin.metrics.attention }}</span>{% elif key == 'karaoke' and karaoke_admin.metrics.pending %}<span>{{ karaoke_admin.metrics.pending }}</span>{% elif key == 'karaoke' and karaoke_admin.stage_mode == 'on_stage' %}<span>LIVE</span>{% endif %}
-        {% if key == 'games' and games_admin.phase == 'active' %}<span>LIVE</span>{% elif key == 'games' and games_admin.statistics.participant_count %}<span>{{ games_admin.statistics.participant_count }}</span>{% endif %}
+        {% if key == 'games' and games_admin.active_count %}<span>LIVE</span>{% elif key == 'games' and games_admin.participant_count %}<span>{{ games_admin.participant_count }}</span>{% endif %}
         {% if key == 'dj' and dj_song_requests %}<span>{{ dj_song_requests|length }}</span>{% endif %}
         {% if key == 'bar' and active_drink_order_count %}<span>{{ active_drink_order_count }}</span>{% endif %}
       </a>
@@ -72,8 +72,8 @@
         </a>
         <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='games') }}">
           <span class="admin-home__label">Party games</span>
-          <strong>{% if not games_admin.enabled %}Disabled{% elif games_admin.phase == 'active' %}Live{% elif games_admin.phase == 'ended' %}Ended{% else %}Signup{% endif %}</strong>
-          <span>{{ games_admin.statistics.participant_count }} participant{{ 's' if games_admin.statistics.participant_count != 1 else '' }} · {{ games_admin.statistics.submitted_guesses }} guesses</span>
+          <strong>{% if games_admin.active_count %}{{ games_admin.active_count }} Live{% elif games_admin.enabled_count %}{{ games_admin.enabled_count }} Enabled{% else %}Disabled{% endif %}</strong>
+          <span>{{ games_admin.participant_count }} total participation{{ 's' if games_admin.participant_count != 1 else '' }}</span>
         </a>
         <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='dj') }}">
           <span class="admin-home__label">DJ receiver</span>
@@ -185,6 +185,60 @@
         <button class="button button--danger" type="submit" name="action" value="reset_two_truths_game">Reset Game</button>
       </form>
     </details>
+
+    <section class="admin-subsection game-admin-registry">
+      <p class="admin-panel__eyebrow">Anonymous party games</p>
+      <h3>Additional Games</h3>
+      <p>Each game has independent enrollment, play data, scores, and display controls. New games remain disabled until you enable them.</p>
+      <div class="game-registry-grid">
+        {% for game_key in ['murder_marry_fuck', 'fill_in_the_blank', 'bad_advice_hotline', 'wrong_answers_only'] %}
+          {% set admin_game = games_admin.games[game_key] %}
+          <article class="game-admin-card" id="admin-game-{{ game_key }}">
+            <header><div><p class="admin-panel__eyebrow">{{ admin_game.metadata.engine|replace('_', ' ') }}</p><h4>{{ admin_game.metadata.title }}</h4></div><span class="game-phase game-phase--{{ admin_game.phase }}">{% if not admin_game.enabled %}Disabled{% else %}{{ admin_game.phase|title }}{% endif %}</span></header>
+            <p>{{ admin_game.metadata.description }}</p>
+            <div class="game-admin-metrics game-admin-metrics--compact">
+              <div><span>Players</span><strong>{{ admin_game.statistics.participant_count }}</strong></div>
+              {% if game_key == 'murder_marry_fuck' %}<div><span>Ballots</span><strong>{{ admin_game.statistics.completed_rounds }} / {{ admin_game.statistics.possible_rounds }}</strong></div><div><span>Complete</span><strong>{{ admin_game.statistics.completion_percent }}%</strong></div>
+              {% else %}<div><span>Rounds</span><strong>{{ admin_game.statistics.round_count }}</strong></div><div><span>Responses</span><strong>{{ admin_game.statistics.response_count }}</strong></div><div><span>Votes</span><strong>{{ admin_game.statistics.vote_count }}</strong></div>{% endif %}
+            </div>
+            <div class="contest-actions game-admin-actions">
+              {% if not admin_game.enabled %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="enable_game">Enable</button></form>
+              {% else %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="disable_game">Disable</button></form>{% endif %}
+              {% if admin_game.enabled and admin_game.phase == 'signup' %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="start_game">Start Game</button></form>
+              {% elif admin_game.phase == 'active' %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="end_game">End and Tally</button></form>{% endif %}
+            </div>
+
+            {% if game_key == 'murder_marry_fuck' %}
+              <details class="admin-entry"><summary><strong>Configure ten trios</strong><span>{{ admin_game.rounds|length }} rounds</span></summary>
+                <form method="post" class="admin-entry__form mmf-admin-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}">
+                  <label for="explicit-label">Third-choice display label</label><input id="explicit-label" name="explicit_label" value="{{ admin_game.explicit_label }}" maxlength="24">
+                  {% for round in admin_game.rounds %}{% set round_index = loop.index0 %}<fieldset><legend>Round {{ loop.index }}</legend>{% for person in round.people %}{% set person_index = loop.index0 %}<label>Person {{ loop.index }} name<input name="round_{{ round_index }}_person_{{ person_index }}_name" value="{{ person.name }}" maxlength="80" required></label><label>Optional image URL<input name="round_{{ round_index }}_person_{{ person_index }}_image_url" value="{{ person.image_url }}" maxlength="500"></label>{% endfor %}</fieldset>{% endfor %}
+                  <button class="button button--primary" name="action" value="update_mmf_rounds"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Save Ten Rounds</button>
+                </form>
+              </details>
+            {% else %}
+              {% if admin_game.phase == 'active' %}
+                <section class="game-round-controls"><h5>Current round</h5>
+                  {% if not admin_game.statistics.current_round or admin_game.statistics.current_round.status == 'revealed' %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><label>Select prompt<select name="prompt_id" required><option value="">Choose prompt</option>{% for prompt in admin_game.prompts if prompt.enabled %}<option value="{{ prompt.id }}">{{ prompt.text }}</option>{% endfor %}</select></label><button class="button button--primary" name="action" value="start_prompt_round">Open Responses</button></form>
+                  {% elif admin_game.statistics.current_round.status == 'submissions' %}<p>{{ admin_game.statistics.current_round.prompt_text }}</p><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="open_prompt_voting">Open Voting</button></form>
+                  {% elif admin_game.statistics.current_round.status == 'voting' %}<p>{{ admin_game.statistics.current_round.prompt_text }}</p><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="reveal_prompt_round">Reveal Round</button></form>{% endif %}
+                </section>
+              {% endif %}
+              <details class="admin-entry"><summary><strong>Prompt deck</strong><span>{{ admin_game.prompts|length }} prompts</span></summary><div class="admin-entry__form">
+                <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><label>Add prompt<textarea name="prompt_text" maxlength="240" required></textarea></label><button class="button button--primary" name="action" value="add_game_prompt"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Add Prompt</button></form>
+                <ul class="game-prompt-list">{% for prompt in admin_game.prompts %}<li><span{% if not prompt.enabled %} class="is-disabled"{% endif %}>{{ prompt.text }}</span><div><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><input type="hidden" name="prompt_id" value="{{ prompt.id }}"><button class="button" name="action" value="toggle_game_prompt"{% if admin_game.phase != 'signup' %} disabled{% endif %}>{{ 'Disable' if prompt.enabled else 'Enable' }}</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><input type="hidden" name="prompt_id" value="{{ prompt.id }}"><button class="button button--danger" name="action" value="delete_game_prompt"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Remove</button></form></div></li>{% endfor %}</ul>
+              </div></details>
+            {% endif %}
+
+            {% if admin_game.statistics.scores %}<details class="admin-entry"><summary><strong>{% if admin_game.phase == 'ended' %}Final{% else %}Provisional{% endif %} leaderboard</strong><span>{{ admin_game.statistics.scores|length }} players</span></summary><div class="admin-entry__form table-wrapper"><table><thead><tr><th>Rank</th><th>Alias</th><th>Points</th></tr></thead><tbody>{% for score in admin_game.statistics.scores %}<tr><td>#{{ loop.index }}</td><td>{{ score.alias }}</td><td>{{ score.points }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
+
+            {% if admin_game.phase == 'ended' %}<section class="game-presentation-controls"><h5>Announcer display</h5><div class="contest-actions"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="start_game_presentation">Start Presentation</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="previous_game_slide">Previous</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="next_game_slide">Next</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_results">Results</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_winner">Winner</button></form></div></section>{% endif %}
+
+            <details class="danger-zone"><summary>Reset {{ admin_game.metadata.title }}</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><p>Clears anonymous players, responses, votes, scores, and results after a Redis backup.</p><label>Type {{ admin_game.reset_phrase }}<input name="confirmation" autocomplete="off" required></label><button class="button button--danger" name="action" value="reset_game">Reset Game</button></form></details>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
   </section>
   {% endif %}
 

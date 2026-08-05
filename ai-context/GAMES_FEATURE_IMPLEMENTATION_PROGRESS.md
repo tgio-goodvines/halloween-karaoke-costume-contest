@@ -2,66 +2,119 @@
 
 ## Objective
 
-Add a reusable party Games surface with Two Truths and a Lie as the first game. Attendees enroll from the party-day portal, submit two truths and one lie, browse anonymous mystery cards after the host starts play, and enter free-text identity guesses. Admins control the lifecycle, inspect progress, finalize tied winners, export data, and control game result cards on the live display.
+Provide one Redis-backed Games area for opt-in attendee play, independent game
+lifecycles, anonymous submissions where appropriate, final scoring, admin
+operations, and host-controlled live-display results.
 
-## Lifecycle
+## Implemented Games
 
-- `disabled`: hidden and blocked for attendees while stored data remains intact.
-- `signup`: enabled enrollment; attendees may create or edit one mystery submission per account.
-- `active`: roster and statements are locked; enrolled participants can guess every other participant.
-- `ended`: guesses are locked and the finalized leaderboard, winner set, and participant results are stored.
-- `reset`: clears all game records and results while preserving the enabled setting.
+1. **Two Truths and a Lie** — account-named clue submissions, anonymous clue
+   rotation, identity guesses, tied winners, and final reveal.
+2. **Murder, Marry, F%$@** — anonymous aliases, ten configurable trios of
+   famous adults, one unique assignment per action and round, aggregate-only
+   results, plurality scoring, and announcer presentation.
+3. **Fill in the Blank: After Dark** — anonymous prompt responses and voting.
+4. **Bad Advice Hotline** — fictional dilemmas, anonymous bad advice, and
+   response voting.
+5. **Wrong Answers Only** — fictional/general questions, anonymous wrong
+   answers, and response voting.
 
-## Implementation Status
+All new games deploy disabled. Admin must enable each game before its tab,
+dashboard status, or enrollment flow appears to attendees.
 
-Application implementation and local verification are complete on branch
-`agent/games-two-truths-lie`. Publication and production deployment are in
-progress.
+## Shared Lifecycle
 
-Completed so far:
+- `disabled`: hidden and blocked while saved data remains intact.
+- `signup`: enabled enrollment; attendees may opt in. Two Truths submissions
+  remain editable in this phase.
+- `active`: enrollment locks and game-specific play opens.
+- `ended`: answers/votes lock and final scores/winners are snapshotted.
+- `reset`: creates a Redis backup, clears play data, restores configuration
+  defaults, and preserves the enabled flag.
 
-- Added `party_games.py` for defaults, normalization, statement presentation, scoring, ties, and statistics.
-- Advanced the Redis snapshot schema from version 6 to version 7.
-- Added Redis-backed `games_state` serialization and hydration.
-- Added role, read-refresh, and state-mutation endpoint registration for attendee game routes and admin export.
-- Added attendee Games page, opt-in transition, statement create/update, anonymous play cards, free-text guess upserts, and final results.
-- Added the party dashboard Games callout and shared Menu link.
-- Added a focused `/admin/games` workspace with lifecycle actions, live statistics, raw guess inspection, participant truth/lie data, JSON export, and confirmed reset.
-- Added anonymous live-display clue rotation entries, final winner/results entries, persistent game overrides, and manual resume.
-- Generalized live-display scoreboard row labels for both costume and game results.
+Prompt games add per-round phases: `submissions -> voting -> revealed`. The
+host must reveal the current round before opening another or ending the game.
 
-Completed verification:
+## Scoring
 
-- `python -m compileall main.py party_games.py` passed.
-- `python -m pytest -q` passed with 131 tests and 5 migration subtests.
-- Bundled Node `--check static/display.js` passed.
-- Browser QA covered `/party`, `/party/games`, `/admin/games`, and
-  `/live-display` at `390x844` and 1280px with no horizontal overflow.
-- Browser QA exercised enablement, opt-in, statement entry, persistence,
-  anonymous display payloads, participant statistics, and the minimum-player
-  start validation.
-- The live-display browser reported no console errors or warnings.
+### Two Truths and a Lie
 
-Remaining:
+- One point for every correctly identified mystery guest.
+- Ranking uses correct count, accuracy, then name.
+- Everyone tied at the top positive score wins.
 
-- Commit and push over SSH.
-- Open and merge the PR, observe the existing GitHub Actions deployment, and
-  verify Halloween plus GoodVines production health.
+### Murder, Marry, F%$@
 
-## Scoring Rules
+- Exactly ten rounds and three famous adults per round.
+- Every completed ballot uses Murder, Marry, and the configurable third label
+  exactly once.
+- One point when a player's assignment matches the party plurality for an
+  action; tied pluralities all count.
+- Maximum score is 30. Everyone tied at the top positive score wins.
 
-- Each correctly identified mystery guest is worth one point.
-- Guess matching trims and collapses whitespace and compares party-account names case-insensitively.
-- Ranking uses correct guesses, then accuracy, then display name for deterministic ordering.
-- Everyone tied at the highest positive score is a winner.
-- Zero correct guesses produces final results but no winner card.
-- Final results are snapshotted at game end so later account-profile changes cannot alter the outcome.
+### Prompt Games
 
-## Guardrails
+- One anonymous response and one editable vote per player per round.
+- Self-voting is rejected.
+- Each vote received is one cumulative point.
+- Tied round responses and tied final leaders are preserved.
 
-- Attendee and rotation payloads do not reveal names or truth/lie classifications before the game ends.
-- Only enrolled participants can guess, and self-guesses are rejected.
-- All POSTs use the existing CSRF and Redis mutation-lock flow.
-- Game display overrides do not alter costume, karaoke, DJ, or drink-notice state.
-- Reset writes a Redis backup before clearing game data.
-- No SQL, new infrastructure, new secret, or GoodVines service change is required.
+## Privacy And Content Guardrails
+
+- MMF and prompt-game players receive random aliases; account names never enter
+  their answers, scoreboards, result cards, or presentation slides.
+- MMF admin/export surfaces show aggregate selections only. The export removes
+  the account-keyed participant map and all individual ballots.
+- Active prompt responses rotate only after voting opens, preventing early
+  submissions from receiving extra exposure.
+- MMF choices are limited by product policy to famous/infamous adults. The UI
+  explicitly prohibits attendees, private people, minors, confessions, and
+  personal information.
+- The server retains opaque account association only for authorization,
+  duplicate prevention, score integrity, and returning a player to their alias.
+
+## Admin And Display
+
+- `/admin/games` retains detailed Two Truths operations and adds four
+  independent game control cards.
+- MMF includes a ten-trio editor, optional image URLs, and configurable third
+  action label.
+- Prompt games include independent prompt decks, enable/disable/remove prompt
+  controls, response/vote counts, round controls, and leaderboards.
+- Ended games provide Start, Previous, and Next announcer presentation controls,
+  direct winner/results cards, and normal-rotation resume.
+- MMF presentation walks through each trio and action total. Prompt presentation
+  walks through each revealed prompt and winning anonymous response.
+- Ended winner/scoreboard cards join normal live-display rotation. Prompt
+  responses join rotation only during voting/reveal.
+- Temporary drink-ready notices retain priority above game event overrides.
+
+## State And Routes
+
+- Redis schema version is `8`.
+- `games_state` contains all five independent game records.
+- Attendee hub: `GET /party/games?game=<slug>`.
+- Anonymous opt-in: `POST /party/games/<slug>/join`.
+- MMF ballot round: `POST /party/games/murder-marry-fuck/answers`.
+- Prompt response/vote: `POST /party/games/<slug>/response|vote`.
+- Admin operations continue through the focused `/admin/games` POST handler.
+- Aggregate/redacted download: `GET /admin/export/games`.
+
+## Verification
+
+- `python -m compileall -q main.py party_games.py` passed.
+- `python -m pytest -q` passed with 134 tests and 8 subtests.
+- Coverage includes schema migration, every game variant, MMF 30-point ties,
+  aggregate-only export, invalid assignments, prompt voting, self-vote
+  rejection, display anonymity, result presentation, and resets.
+- Browser QA exercised the dashboard, game tabs, adult-content notice,
+  anonymous opt-in, multi-game admin enable/start controls, prompt selection,
+  the 10-round configuration presence, and desktop overflow at 1280px.
+- Active MMF, prompt submission, and prompt voting templates have dedicated
+  authenticated route-render regression tests.
+
+## Publication Status
+
+Implementation, tests, and local browser QA are complete on
+`agent/add-remaining-party-games`. Commit, PR, merge, production deployment,
+and smoke verification are the remaining publication steps.

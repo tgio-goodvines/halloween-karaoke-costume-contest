@@ -77,6 +77,13 @@ in normal browser windows and on mobile phone browsers.
 - Verified the live display at `390x844` and 1280px after adding its game
   participant metric and anonymous clue cards; no console errors or horizontal
   overflow were present.
+- Expanded the same responsive Games shell with horizontally scrollable tabs,
+  single-column phone ballot/response grids, disclosure-based prompt/MMF admin
+  configuration, and touch-sized voting choices for four additional games.
+- Desktop browser QA at 1280px confirmed the expanded admin and attendee pages
+  match viewport width. Authenticated route-render tests cover active MMF,
+  prompt submission, and prompt voting branches that are otherwise expensive
+  to stage manually.
 
 ## 2026-07-26 Scrolling Performance Safeguards
 

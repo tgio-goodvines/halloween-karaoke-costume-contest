@@ -137,7 +137,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 7. The following globals in `main.py` are
+`halloween:state` with schema version 8. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -201,10 +201,12 @@ the process-local cache:
 - `dj_state`: Redis-persisted desired command, acknowledgement, live-display
   heartbeat, MusicKit/audio readiness, confirmed player state, current song,
   retained failure details, and the latest DJ reset acknowledgement.
-- `games_state`: game-registry state. Two Truths and a Lie stores its enabled
-  flag, signup/active/ended phase, account-bound anonymous clue submissions,
-  free-text identity guesses, finalized scores, tied winner IDs, and participant
-  results.
+- `games_state`: five-game registry state. Two Truths and a Lie stores clues and
+  identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
+  trios, anonymous aliases, ballots, aggregate results, and presentation state;
+  Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only store independent
+  prompt decks, submission/voting/reveal rounds, anonymous responses, votes,
+  cumulative scores, and presentation state.
 
 Drink orders move from `received` to `in_progress` to `complete`. Completed
 orders track prep duration from `started_at` when available, and drink-ready
@@ -286,8 +288,10 @@ This is intentionally a simple Flask/Jinja app:
 - `static/display.css` styles the TV/live-display experience.
 - `static/display.js` drives live-display rotation, override rendering, SSE updates, and polling.
 - `static/slides.js` rotates dashboard highlight slides.
-- `party_games.py` owns game defaults, normalization, scoring, ties, and
-  statistics while `main.py` keeps Flask routes and Redis integration.
+- `party_games.py` owns the game catalog, defaults, normalization, alias
+  generation, MMF plurality scoring, shared prompt-vote scoring, Two Truths
+  scoring, ties, and statistics while `main.py` keeps Flask routes, admin
+  operations, presentation slides, and Redis integration.
 
 The visual style is the dark lab-terminal Halloween system documented in
 `ai-context/UI_UX_DESIGN_SYSTEM.md`: near-black backgrounds, red/magenta/steel

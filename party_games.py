@@ -29,6 +29,9 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "short_title": "Two Truths",
         "engine": "identity",
         "description": "Submit two truths and a lie, then identify the mystery guests.",
+        "image": "images/games/two-truths-and-a-lie.jpg",
+        "personality": "Three stories enter the lab. Only one is fabricated.",
+        "solo_note": "Needs at least two mystery guests.",
     },
     MURDER_MARRY_FUCK_GAME_KEY: {
         "slug": "murder-marry-fuck",
@@ -36,6 +39,9 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "short_title": "Murder / Marry / F%$@",
         "engine": "choice",
         "description": "Assign three famous adults to three impossible choices across ten rounds.",
+        "image": "images/games/murder-marry-fuck.jpg",
+        "personality": "Ten infamous trios. Three irreversible decisions.",
+        "solo_note": "Solo play supported.",
     },
     FILL_BLANK_GAME_KEY: {
         "slug": "fill-in-the-blank",
@@ -43,6 +49,9 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "short_title": "Fill in the Blank",
         "engine": "prompt_vote",
         "description": "Complete an edgy prompt and vote for the funniest anonymous answer.",
+        "image": "images/games/fill-in-the-blank.jpg",
+        "personality": "Complete the sentence. Compromise your dignity.",
+        "solo_note": "Solo spotlight supported.",
     },
     BAD_ADVICE_GAME_KEY: {
         "slug": "bad-advice-hotline",
@@ -50,6 +59,9 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "short_title": "Bad Advice",
         "engine": "prompt_vote",
         "description": "Give the worst possible advice for a completely fictional dilemma.",
+        "image": "images/games/bad-advice-hotline.jpg",
+        "personality": "The hotline is open. Good judgment is not.",
+        "solo_note": "Solo spotlight supported.",
     },
     WRONG_ANSWERS_GAME_KEY: {
         "slug": "wrong-answers-only",
@@ -57,6 +69,9 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "short_title": "Wrong Answers",
         "engine": "prompt_vote",
         "description": "Answer a ridiculous question as incorrectly as possible.",
+        "image": "images/games/wrong-answers-only.jpg",
+        "personality": "Accuracy is suspicious. Confidence earns the applause.",
+        "solo_note": "Solo spotlight supported.",
     },
 }
 
@@ -469,8 +484,18 @@ def finalize_prompt_round(game_round: dict[str, Any]) -> dict[str, Any]:
         if response_id in counts:
             counts[response_id] += 1
     top = max(counts.values(), default=0)
-    winner_response_ids = sorted(response_id for response_id, count in counts.items() if top > 0 and count == top)
-    return {"vote_counts": counts, "winner_response_ids": winner_response_ids, "vote_count": sum(counts.values())}
+    solo_spotlight = len(responses) == 1 and not votes
+    winner_response_ids = (
+        list(responses)
+        if solo_spotlight
+        else sorted(response_id for response_id, count in counts.items() if top > 0 and count == top)
+    )
+    return {
+        "vote_counts": counts,
+        "winner_response_ids": winner_response_ids,
+        "vote_count": sum(counts.values()),
+        "solo_spotlight": solo_spotlight,
+    }
 
 
 def calculate_prompt_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
@@ -486,6 +511,13 @@ def calculate_prompt_results(game: dict[str, Any], *, finalized_at: str | None =
             player_id = str(response.get("player_id", ""))
             if player_id in scores_by_player:
                 scores_by_player[player_id] += _nonnegative_int(votes)
+        if results.get("solo_spotlight"):
+            winner_ids = results.get("winner_response_ids", [])
+            if winner_ids:
+                response = game_round.get("responses", {}).get(winner_ids[0], {})
+                player_id = str(response.get("player_id", ""))
+                if player_id in scores_by_player:
+                    scores_by_player[player_id] += 1
     scores = [{"player_id": player_id, "alias": aliases.get(player_id, "Player"), "points": points} for player_id, points in scores_by_player.items()]
     scores.sort(key=lambda entry: (-entry["points"], entry["alias"].casefold()))
     top = scores[0]["points"] if scores else 0

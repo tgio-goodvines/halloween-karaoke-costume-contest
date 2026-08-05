@@ -5240,6 +5240,151 @@ textarea,
   padding: clamp(1rem, 3vw, 1.4rem);
 }
 
+.games-showcase {
+  margin-block: 1.25rem;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  border: 1px solid rgba(255, 49, 49, 0.48);
+  border-top: 3px solid #ff3131;
+  border-radius: 14px;
+  background: linear-gradient(140deg, rgba(255, 49, 49, 0.09), transparent 36%), rgba(16, 16, 19, 0.94);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34), 0 -2px 22px rgba(255, 49, 49, 0.12);
+}
+
+.games-showcase__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.games-showcase__heading h2,
+.games-showcase__heading p { margin-bottom: 0; }
+
+.games-showcase__heading > span {
+  color: #a1a1aa;
+  font-family: "Outfit", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.games-showcase__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 0.9rem;
+}
+
+.game-showcase-card {
+  --game-accent: #ff3131;
+  position: relative;
+  display: grid;
+  min-height: clamp(260px, 30vw, 350px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--game-accent) 62%, transparent);
+  border-radius: 12px;
+  background: #09090b;
+  color: #fff;
+  text-decoration: none;
+  isolation: isolate;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.game-showcase-card--two-truths-and-a-lie { --game-accent: #5cc8ff; }
+.game-showcase-card--murder-marry-fuck { --game-accent: #ff4ac2; }
+.game-showcase-card--fill-in-the-blank { --game-accent: #b77cff; }
+.game-showcase-card--bad-advice-hotline { --game-accent: #ff493d; }
+.game-showcase-card--wrong-answers-only { --game-accent: #ff315b; }
+
+.game-showcase-card:hover,
+.game-showcase-card:focus-visible {
+  border-color: var(--game-accent);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.46), 0 0 22px color-mix(in srgb, var(--game-accent) 24%, transparent);
+  transform: translateY(-3px);
+}
+
+.game-showcase-card img,
+.game-showcase-card__veil,
+.game-showcase-card__body { grid-area: 1 / 1; }
+
+.game-showcase-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 500ms ease;
+}
+
+.game-showcase-card:hover img { transform: scale(1.035); }
+
+.game-showcase-card__veil {
+  z-index: 1;
+  background: linear-gradient(to bottom, rgba(4, 4, 7, 0.04) 18%, rgba(4, 4, 7, 0.92) 76%, #040407 100%);
+}
+
+.game-showcase-card__body {
+  z-index: 2;
+  display: grid;
+  align-content: end;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.game-showcase-card__body strong {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(1.45rem, 2.6vw, 2rem);
+  line-height: 0.96;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--game-accent) 42%, transparent);
+}
+
+.game-showcase-card__body > span:not(.game-showcase-card__status) { color: #e4e4e7; }
+.game-showcase-card__body small { color: #a1a1aa; }
+
+.game-showcase-card__status {
+  justify-self: start;
+  padding: 0.26rem 0.5rem;
+  border: 1px solid var(--game-accent);
+  border-radius: 999px;
+  background: rgba(4, 4, 7, 0.76);
+  color: #fff;
+  font-family: "Outfit", sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.game-panel__header--illustrated {
+  position: relative;
+  min-height: clamp(210px, 31vw, 330px);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  overflow: hidden;
+  align-items: end;
+  isolation: isolate;
+}
+
+.game-panel__header--illustrated::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(7, 7, 10, 0.96), rgba(7, 7, 10, 0.7) 54%, rgba(7, 7, 10, 0.15));
+}
+
+.game-panel__art {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.game-panel__header--illustrated > div {
+  max-width: 640px;
+  text-shadow: 0 2px 16px #000;
+}
+
 .game-opt-in,
 .game-instructions,
 .game-submission-form,
@@ -5427,6 +5572,10 @@ textarea,
   min-width: 0;
 }
 
+.game-admin-card--two-truths { grid-column: 1 / -1; }
+.game-admin-overview { margin-bottom: 0; }
+.game-admin-global-actions { justify-content: flex-end; margin-top: 0; }
+
 .game-admin-metrics--compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -5470,6 +5619,11 @@ textarea,
   }
 
   .games-overview .button { width: 100%; }
+  .games-showcase__heading { align-items: flex-start; flex-direction: column; }
+  .game-showcase-card { min-height: 285px; }
+  .game-showcase-card:hover { transform: none; }
+  .game-panel__header--illustrated { align-items: flex-start; flex-direction: column; }
+  .game-panel__header--illustrated::after { background: linear-gradient(to bottom, rgba(7, 7, 10, 0.18), rgba(7, 7, 10, 0.96) 78%); }
   .mystery-grid { grid-template-columns: 1fr; }
   .mmf-people,
   .mmf-choices,
@@ -5477,4 +5631,9 @@ textarea,
   .mmf-admin-form fieldset { grid-template-columns: 1fr; }
   .game-prompt-list li { align-items: stretch; flex-direction: column; }
   .game-prompt-list li > div { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-showcase-card,
+  .game-showcase-card img { transition: none; }
 }

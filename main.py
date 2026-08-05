@@ -4449,9 +4449,11 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             winning_ids = results.get("winner_response_ids", [])
             winners = [game_round.get("responses", {}).get(response_id, {}) for response_id in winning_ids]
             aliases_by_player = {entry.get("player_id"): entry.get("alias", "Anonymous") for entry in game.get("participants", {}).values()}
-            slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": game_round.get("prompt_text", ""), "message": "Anonymous answers are locked.", "details": [f"{len(game_round.get('responses', {}))} responses · {results.get('vote_count', 0)} votes"]})
+            round_detail = "Solo spotlight · 1 point" if results.get("solo_spotlight") else f"{len(game_round.get('responses', {}))} responses · {results.get('vote_count', 0)} votes"
+            slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": game_round.get("prompt_text", ""), "message": "Anonymous answers are locked.", "details": [round_detail]})
             for response in winners:
-                slides.append({"type": "game_presentation", "title": f"Round {index + 1} Winner", "highlight": response.get("text", ""), "message": aliases_by_player.get(response.get("player_id"), "Anonymous player"), "details": [f"{results.get('vote_counts', {}).get(response.get('id'), 0)} votes"]})
+                winner_detail = "Solo spotlight · 1 point" if results.get("solo_spotlight") else f"{results.get('vote_counts', {}).get(response.get('id'), 0)} votes"
+                slides.append({"type": "game_presentation", "title": f"Round {index + 1} Winner", "highlight": response.get("text", ""), "message": aliases_by_player.get(response.get("player_id"), "Anonymous player"), "details": [winner_detail]})
     scoreboard = game_scoreboard_entry(game_key)
     if scoreboard:
         slides.append({"type": "game_presentation", "title": title, "highlight": "Final leaderboard", "message": scoreboard.get("secondary", ""), "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]})
@@ -7329,8 +7331,8 @@ def admin_portal(admin_view: str):
                         errors.append(f"Enable {title} before starting it.")
                     elif game.get("phase") != "signup":
                         errors.append(f"{title} can only start from enrollment.")
-                    elif participant_count < 2:
-                        errors.append(f"At least two participants must join {title} before it starts.")
+                    elif participant_count < 1:
+                        errors.append(f"At least one participant must join {title} before it starts.")
                     elif game_key == MURDER_MARRY_FUCK_GAME_KEY and len(game.get("rounds", [])) != MMF_ROUND_COUNT:
                         errors.append(f"Configure exactly {MMF_ROUND_COUNT} complete rounds before starting {title}.")
                     else:
@@ -7467,8 +7469,14 @@ def admin_portal(admin_view: str):
                     current_round = prompt_round_for_game(game)
                     if not current_round or current_round.get("status") != "submissions":
                         errors.append("There is no response round ready for voting.")
-                    elif len(current_round.get("responses", {})) < 2:
-                        errors.append("At least two anonymous responses are required before voting opens.")
+                    elif not current_round.get("responses"):
+                        errors.append("At least one anonymous response is required before continuing.")
+                    elif len(current_round.get("responses", {})) == 1:
+                        current_round["status"] = "revealed"
+                        current_round["revealed_at"] = _utc_now_iso()
+                        current_round["results"] = finalize_prompt_round(current_round)
+                        messages.append(f"Revealed the solo {title} spotlight and awarded one point.")
+                        should_broadcast = True
                     else:
                         current_round["status"] = "voting"
                         messages.append(f"Voting is now open for {title}.")

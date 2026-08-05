@@ -29,7 +29,8 @@
   {% endif %}
 
   <section class="game-panel">
-    <header class="game-panel__header">
+    <header class="game-panel__header game-panel__header--illustrated">
+      <img class="game-panel__art" src="{{ url_for('static', filename=game_metadata.image) }}" alt="" loading="eager">
       <div>
         <p class="admin-panel__eyebrow">{{ '18+ anonymous game' if game_key != 'two_truths_and_a_lie' else 'Identity game' }}</p>
         <h3>{{ game_metadata.title }}</h3>
@@ -126,7 +127,7 @@
     {% else %}
       {% if game.phase == 'signup' %}
         {% if participant %}<div class="game-opt-in"><h4>You’re in as {{ participant.alias }}</h4><p>Responses and votes appear under your anonymous alias.</p></div>
-        {% else %}<div class="game-opt-in"><h4>Join anonymously</h4><p>Submit one response per round, then vote for someone else’s answer.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Opt In Anonymously</button></form></div>{% endif %}
+        {% else %}<div class="game-opt-in"><h4>Join anonymously</h4><p>Submit one response per round. With a crowd, vote for someone else’s answer; alone, your response becomes a one-point solo spotlight.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Opt In Anonymously</button></form></div>{% endif %}
       {% elif game.phase == 'active' %}
         {% if not participant %}<p class="empty-state">Anonymous enrollment closed when the hosts started the game.</p>
         {% elif not prompt_round %}<div class="game-opt-in"><h4>{{ participant.alias }}, stand by</h4><p>The hosts are choosing the next prompt.</p></div>
@@ -142,12 +143,12 @@
           </div><button class="button button--primary" type="submit">Save Anonymous Vote</button></form>{% if saved_response %}<p class="form-helper">Your response: {{ saved_response.text }}</p>{% endif %}</section>
         {% else %}
           <section class="game-results"><p class="admin-panel__eyebrow">Round revealed</p><h4>{{ prompt_round.prompt_text }}</h4><div class="response-grid">
-            {% for response in prompt_responses %}<article class="response-result{% if response.id in prompt_round.results.winner_response_ids %} response-result--winner{% endif %}"><p>{{ response.text }}</p><strong>{{ prompt_round.results.vote_counts.get(response.id, 0) }} votes{% if response.id in prompt_round.results.winner_response_ids %} · Winner: {{ alias_by_player.get(response.player_id, 'Anonymous') }}{% endif %}</strong></article>{% endfor %}
+            {% for response in prompt_responses %}<article class="response-result{% if response.id in prompt_round.results.winner_response_ids %} response-result--winner{% endif %}"><p>{{ response.text }}</p><strong>{% if prompt_round.results.solo_spotlight %}Solo spotlight · 1 point{% else %}{{ prompt_round.results.vote_counts.get(response.id, 0) }} votes{% if response.id in prompt_round.results.winner_response_ids %} · Winner: {{ alias_by_player.get(response.player_id, 'Anonymous') }}{% endif %}{% endif %}</strong></article>{% endfor %}
           </div><p>Stand by for the next prompt.</p></section>
         {% endif %}
       {% else %}
         {% include '_game_scoreboard.html' %}
-        {% for round in game.rounds if round.status == 'revealed' %}<details class="admin-entry"><summary><strong>{{ round.prompt_text }}</strong><span>{{ round.results.vote_count }} votes</span></summary><div class="admin-entry__form">{% for response_id, response in round.responses.items() %}<p{% if response_id in round.results.winner_response_ids %} class="is-winner"{% endif %}>{{ response.text }} — {{ round.results.vote_counts.get(response_id, 0) }} vote{{ 's' if round.results.vote_counts.get(response_id, 0) != 1 else '' }}</p>{% endfor %}</div></details>{% endfor %}
+        {% for round in game.rounds if round.status == 'revealed' %}<details class="admin-entry"><summary><strong>{{ round.prompt_text }}</strong><span>{% if round.results.solo_spotlight %}Solo spotlight{% else %}{{ round.results.vote_count }} votes{% endif %}</span></summary><div class="admin-entry__form">{% for response_id, response in round.responses.items() %}<p{% if response_id in round.results.winner_response_ids %} class="is-winner"{% endif %}>{{ response.text }} — {% if round.results.solo_spotlight %}1 point{% else %}{{ round.results.vote_counts.get(response_id, 0) }} vote{{ 's' if round.results.vote_counts.get(response_id, 0) != 1 else '' }}{% endif %}</p>{% endfor %}</div></details>{% endfor %}
       {% endif %}
     {% endif %}
   </section>

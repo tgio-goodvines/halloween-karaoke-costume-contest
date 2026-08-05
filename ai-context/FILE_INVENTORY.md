@@ -17,7 +17,9 @@
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
 | `.env.example` | Blank/local Redis, email, MusicKit, and YouTube karaoke environment examples. |
 | `tests/test_redis_state.py` | Redis/state/route/security tests plus fake-backed YouTube search, workflow, playlist, reconciliation, ordering, stage, OAuth-state, migration, and secret-exclusion coverage. |
-| `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, header menu, single logout action, menu cards, order cards, bartender tip disclosures, and bartender queue. |
+| `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, game-specific illustrated cards, header menu, menu cards, and bartender queue. |
+| `static/preserve-scroll.js` | Shared same-page POST scroll/disclosure restoration for attendee and admin forms. |
+| `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, event override cards, top-layer drink-ready notices, CTA layout, scoreboard layout, and karaoke display panels. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
@@ -29,7 +31,7 @@
 | `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
-| `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
+| `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, priority illustrated game gallery, ready drink/order cards, slides, costume and karaoke summaries. |
 | `templates/games.html` | Party-day five-game workspace with dynamic tabs, opt-in, MMF ten-round ballots, prompt responses/voting, Two Truths guessing, aggregate reveals, and final results. |
 | `templates/_game_scoreboard.html` | Shared attendee winner and final-score table for every game engine. |
 | `templates/jukebox.html` | Attendee party-day Jukebox page with confirmed Now Playing, playlist, catalog search, and personal pending requests. |

@@ -55,6 +55,33 @@
   </div>
 </section>
 
+{% if party_day_has_arrived and party_games_state.enabled %}
+  <section class="games-showcase" aria-labelledby="party-games-heading">
+    <div class="games-showcase__heading">
+      <div>
+        <p class="admin-panel__eyebrow">Tonight's experiments</p>
+        <h2 id="party-games-heading">Party Games</h2>
+        <p>{% if party_games_state.active_count %}{{ party_games_state.active_count }} game{{ 's are' if party_games_state.active_count != 1 else ' is' }} live now.{% else %}Choose a game and opt in before the hosts start play.{% endif %}</p>
+      </div>
+      <span>{{ party_games_state.participant_count }} anonymous signup{{ 's' if party_games_state.participant_count != 1 else '' }}</span>
+    </div>
+    <div class="games-showcase__grid">
+      {% for game in party_games_state.games %}
+        <a class="game-showcase-card game-showcase-card--{{ game.key|replace('_', '-') }}" href="{{ url_for('party_games', game=game.slug) }}">
+          <img src="{{ url_for('static', filename=game.image) }}" alt="" loading="lazy">
+          <span class="game-showcase-card__veil" aria-hidden="true"></span>
+          <span class="game-showcase-card__body">
+            <span class="game-showcase-card__status">{% if game.phase == 'active' %}Live now{% elif game.phase == 'ended' %}See results{% elif game.participating %}You're in{% else %}Enrollment open{% endif %}</span>
+            <strong>{{ game.title }}</strong>
+            <span>{{ game.personality }}</span>
+            <small>{{ game.solo_note }} · {{ game.participant_count }} player{{ 's' if game.participant_count != 1 else '' }}</small>
+          </span>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
 {% if party_day_has_arrived and drink_orders %}
   <section class="submitted-list">
     <h3>Your Recent Drink Orders</h3>
@@ -92,18 +119,6 @@
       </p>
     </div>
     <a class="button button--primary" href="{{ url_for('party_jukebox') }}">Open Jukebox{% if jukebox.pending_requests %} · {{ jukebox.pending_requests|length }} pending{% endif %}</a>
-  </section>
-{% endif %}
-
-{% if party_day_has_arrived and party_games_state.enabled %}
-  <section class="games-overview">
-    <div>
-      <p class="admin-panel__eyebrow">Party games</p>
-      <h2>{{ party_games_state.enabled_count }} Game{{ 's' if party_games_state.enabled_count != 1 else '' }} Available</h2>
-      <p>{% if party_games_state.active_count %}{{ party_games_state.active_count }} game{{ 's are' if party_games_state.active_count != 1 else ' is' }} live now.{% else %}Opt in before the hosts start play.{% endif %} {{ party_games_state.participant_count }} total participation{{ 's' if party_games_state.participant_count != 1 else '' }}.</p>
-      <div class="menu-card__badges">{% for game in party_games_state.games %}<span>{{ game.short_title }} · {{ game.phase|title }}</span>{% endfor %}</div>
-    </div>
-    <a class="button button--primary" href="{{ url_for('party_games', game=party_games_state.primary.slug) }}">Open Games</a>
   </section>
 {% endif %}
 

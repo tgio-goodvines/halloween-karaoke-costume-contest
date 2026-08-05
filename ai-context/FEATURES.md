@@ -77,6 +77,10 @@
   independent prompt decks over one shared anonymous response/voting engine.
   Each round moves through submissions, voting, and reveal; self-voting is
   rejected and received votes become cumulative game points.
+- MMF and all prompt games support a single opted-in player. Solo prompt rounds
+  become one-point spotlights without a self-vote; Two Truths retains its
+  two-player minimum. The dashboard gives every enabled game its own illustrated
+  card immediately below the welcome panel.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.
@@ -213,7 +217,7 @@
 - Admin mutations validate required fields.
 - Admin mutations broadcast live-display updates when they affect display content.
 - Admin can start, stop, and reset the costume contest; lock winner, show winner, restore display; and start, stop, and reset karaoke party state.
-- The focused `/admin/games` workspace can enable/disable enrollment, start,
+- The focused, unified `/admin/games` card registry can enable/disable enrollment, start,
   end, and confirmed-reset Two Truths and a Lie; inspect live participation,
   guess completion, provisional/final scores, truth/lie data, and raw guesses;
   export game JSON; and manually pause on game, winner, or results display
@@ -226,6 +230,8 @@
   and individual ballots, returning only aliases, completion counts, and
   aggregate results for that game.
 - Admin receives inline success/error messages.
+- Shared attendee/admin POST forms restore their prior scroll position and open
+  disclosure rows after the server response, avoiding repeated re-scrolling.
 - Admin JSON export routes are available for full Redis state, costume results,
   and karaoke lineup at `/admin/export/state`,
   `/admin/export/costume-results`, and `/admin/export/karaoke-lineup`.

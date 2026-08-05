@@ -13,11 +13,11 @@ Replace the previous single, very long `/admin` document with a compact control-
 - `/admin/public` contains landing-page selection, party-date experience mode, RSVP party code/hint, RSVP host notification recipient, and live-display WiFi values.
 - `/admin/program` contains costume contest controls and a compact link to the
   dedicated karaoke operations workspace.
-- `/admin/games` contains Two Truths and a Lie lifecycle controls, live
+- `/admin/games` contains one unified five-game card registry. Its Two Truths and a Lie card includes lifecycle controls, live
   participation/guess metrics, provisional or final standings, participant
   truth/lie inspection, raw guess data, export, display overrides, and a
   confirmed reset.
-- `/admin/games` also contains independent control cards for Murder/Marry/F%$@,
+- The same registry contains independent control cards for Murder/Marry/F%$@,
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only. The cards keep
   prompt decks and the ten-trio MMF editor in disclosure rows, expose only the
   current valid lifecycle actions, and add host-driven result presentation.
@@ -29,6 +29,9 @@ Replace the previous single, very long `/admin` document with a compact control-
 - `/admin/accounts` contains account creation, account updates, password resets, and bartender role assignment.
 
 The route continues to use the existing `admin_portal` POST action handler, so existing CSRF validation, Redis persistence, and mutation behavior are preserved. Each form posts to its focused URL automatically.
+
+Shared POST submissions now remember scroll position and expanded disclosure
+rows in session storage, then restore that view after the redirect/re-render.
 
 ### Responsive behavior
 

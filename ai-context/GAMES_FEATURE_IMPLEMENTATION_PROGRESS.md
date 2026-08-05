@@ -35,6 +35,12 @@ dashboard status, or enrollment flow appears to attendees.
 Prompt games add per-round phases: `submissions -> voting -> revealed`. The
 host must reveal the current round before opening another or ending the game.
 
+MMF and all three prompt games can start with one opted-in player. A solo MMF
+ballot is scored against its own round pluralities. A prompt round with one
+response skips the impossible self-vote step, reveals a solo spotlight, and
+awards one point. Two Truths still requires two mystery guests because its core
+interaction depends on guessing another attendee.
+
 ## Scoring
 
 ### Two Truths and a Lie
@@ -75,8 +81,8 @@ host must reveal the current round before opening another or ending the game.
 
 ## Admin And Display
 
-- `/admin/games` retains detailed Two Truths operations and adds four
-  independent game control cards.
+- `/admin/games` presents all five games in one unified control-card registry,
+  with shared aggregate status and display-resume controls.
 - MMF includes a ten-trio editor, optional image URLs, and configurable third
   action label.
 - Prompt games include independent prompt decks, enable/disable/remove prompt
@@ -103,7 +109,7 @@ host must reveal the current round before opening another or ending the game.
 ## Verification
 
 - `python -m compileall -q main.py party_games.py` passed.
-- `python -m pytest -q` passed with 134 tests and 8 subtests.
+- `python -m pytest -q` passed with 136 tests and 11 subtests.
 - Coverage includes schema migration, every game variant, MMF 30-point ties,
   aggregate-only export, invalid assignments, prompt voting, self-vote
   rejection, display anonymity, result presentation, and resets.
@@ -113,8 +119,15 @@ host must reveal the current round before opening another or ending the game.
 - Active MMF, prompt submission, and prompt voting templates have dedicated
   authenticated route-render regression tests.
 
-## Publication Status
+## Presentation And Navigation Refinement (2026-08-05)
 
-Implementation, tests, and local browser QA are complete on
-`agent/add-remaining-party-games`. Commit, PR, merge, production deployment,
-and smoke verification are the remaining publication steps.
+- Five generated, optimized game illustrations live under
+  `static/images/games/` and drive distinct dashboard cards and game-page hero
+  treatments. They were created with built-in ImageGen using text-free dark
+  lab-terminal prompts: sealed evidence cards, a three-person choice chamber,
+  a glowing sentence blank and pen, a devilish bad-advice hotline, and a
+  surreal wrong-answer buzzer.
+- The party-game gallery now sits directly below the party dashboard welcome
+  panel, ahead of drink history, jukebox, and event highlights.
+- `static/preserve-scroll.js` restores scroll position and open disclosure rows
+  after same-page POST actions throughout the shared attendee/admin shell.

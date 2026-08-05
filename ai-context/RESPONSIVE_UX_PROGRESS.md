@@ -70,6 +70,10 @@ in normal browser windows and on mobile phone browsers.
 
 ## Party Games Responsive Verification (2026-08-05)
 
+- Moved the game area directly below the party welcome panel and replaced the
+  compact status callout with responsive, illustrated, game-specific cards.
+- Added illustrated game-page heroes, one-column phone cards, reduced-motion
+  behavior, and a unified five-card admin registry.
 - Verified the party-day Games dashboard callout, opt-in prompt, statement
   form, confirmation state, and `/admin/games` workspace at `390x844`.
 - Verified document width equals the viewport for attendee and admin game

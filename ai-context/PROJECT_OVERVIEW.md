@@ -206,7 +206,9 @@ the process-local cache:
   trios, anonymous aliases, ballots, aggregate results, and presentation state;
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only store independent
   prompt decks, submission/voting/reveal rounds, anonymous responses, votes,
-  cumulative scores, and presentation state.
+  cumulative scores, and presentation state. MMF and prompt engines permit a
+  one-player session; a single prompt response becomes a one-point solo
+  spotlight while Two Truths retains its two-player minimum.
 
 Drink orders move from `received` to `in_progress` to `complete`. Completed
 orders track prep duration from `started_at` when available, and drink-ready

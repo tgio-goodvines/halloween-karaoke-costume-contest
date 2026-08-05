@@ -4613,6 +4613,91 @@ class RedisStateTests(unittest.TestCase):
                 self.assertTrue(all(score["points"] == 1 for score in game["results"]["scores"]))
                 self.assertEqual("game_presentation", main.live_display_event_override["type"])
 
+    def test_single_player_games_start_and_score_without_peer_votes(self):
+        game_key = main.MURDER_MARRY_FUCK_GAME_KEY
+        slug = main.GAME_CATALOG[game_key]["slug"]
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="solo-user", username="Solo")
+            attendee.post(f"/party/games/{slug}/join")
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            started = admin.post("/admin/games", data={"action": "start_game", "game_key": game_key})
+        self.assertEqual(200, started.status_code)
+        self.assertEqual("active", main.party_game_state(game_key)["phase"])
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="solo-user", username="Solo")
+            for game_round in main.party_game_state(game_key)["rounds"]:
+                people = [person["id"] for person in game_round["people"]]
+                attendee.post(
+                    "/party/games/murder-marry-fuck/answers",
+                    data={"round_id": game_round["id"], "murder": people[0], "marry": people[1], "fuck": people[2]},
+                )
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post("/admin/games", data={"action": "end_game", "game_key": game_key})
+        mmf_results = main.party_game_state(game_key)["results"]
+        self.assertEqual(30, mmf_results["scores"][0]["points"])
+        self.assertEqual(1, len(mmf_results["winner_player_ids"]))
+
+        for game_key in main.PROMPT_GAME_KEYS:
+            with self.subTest(game_key=game_key):
+                self.reset_state()
+                slug = main.GAME_CATALOG[game_key]["slug"]
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
+                with main.app.test_client() as attendee:
+                    self.login_regular(attendee, user_id="solo-user", username="Solo")
+                    attendee.post(f"/party/games/{slug}/join")
+                game = main.party_game_state(game_key)
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    admin.post("/admin/games", data={"action": "start_game", "game_key": game_key})
+                    admin.post("/admin/games", data={"action": "start_prompt_round", "game_key": game_key, "prompt_id": game["prompts"][0]["id"]})
+                with main.app.test_client() as attendee:
+                    self.login_regular(attendee, user_id="solo-user", username="Solo")
+                    attendee.post(f"/party/games/{slug}/response", data={"response": "A beautifully terrible solo answer"})
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    revealed = admin.post("/admin/games", data={"action": "open_prompt_voting", "game_key": game_key})
+                    admin.post("/admin/games", data={"action": "end_game", "game_key": game_key})
+                self.assertEqual(200, revealed.status_code)
+                game = main.party_game_state(game_key)
+                self.assertTrue(game["rounds"][0]["results"]["solo_spotlight"])
+                self.assertEqual(1, game["results"]["scores"][0]["points"])
+                self.assertEqual(1, len(game["results"]["winner_player_ids"]))
+                self.assertIn("Solo spotlight", json.dumps(main.build_game_presentation_slides(game_key)))
+
+    def test_two_truths_still_requires_two_players_and_game_ui_is_unified(self):
+        main.two_truths_game()["enabled"] = True
+        participant = main.empty_two_truths_game_state()["participants"]
+        main.two_truths_game()["participants"] = participant
+        main.two_truths_game()["participants"]["user-1"] = {
+            "user_id": "user-1", "submission_id": "solo", "answer_name": "Solo",
+            "truths": ["One", "Two"], "lie": "Three", "display_order": [0, 1, 2],
+            "created_at": "", "updated_at": "",
+        }
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post("/admin/games", data={"action": "start_two_truths_game"})
+            page = admin.get("/admin/games")
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("signup", main.two_truths_game()["phase"])
+        self.assertIn(b"All five games share one workspace", page.data)
+        self.assertNotIn(b"Additional Games", page.data)
+        self.assertEqual(5, page.data.count(b'id="admin-game-'))
+        self.assertIn(b"preserve-scroll.js", page.data)
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Solo")
+            dashboard = attendee.get("/party")
+        self.assertIn(b"/static/images/games/two-truths-and-a-lie.jpg", dashboard.data)
+        self.assertLess(dashboard.data.index(b"signup-callout"), dashboard.data.index(b"games-showcase"))
+        self.assertLess(dashboard.data.index(b"games-showcase"), dashboard.data.index(b"jukebox-overview"))
+
     def test_new_game_routes_reject_invalid_assignments_and_self_votes(self):
         mmf = main.party_game_state(main.MURDER_MARRY_FUCK_GAME_KEY)
         mmf["enabled"] = True

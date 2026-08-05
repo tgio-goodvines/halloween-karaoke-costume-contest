@@ -43,7 +43,7 @@
     {% if party_day_has_arrived %}
       <h2>Welcome to the Party Portal</h2>
       <p>
-        You're already connected—now use this hub to order drinks, join the costume contest, reserve a karaoke song, and
+        You're already connected—now use this hub to order drinks, join party games and the costume contest, reserve a karaoke song, and
         keep up with the latest signups.
       </p>
     {% else %}
@@ -92,6 +92,27 @@
       </p>
     </div>
     <a class="button button--primary" href="{{ url_for('party_jukebox') }}">Open Jukebox{% if jukebox.pending_requests %} · {{ jukebox.pending_requests|length }} pending{% endif %}</a>
+  </section>
+{% endif %}
+
+{% if party_day_has_arrived and party_games_state.enabled %}
+  <section class="games-overview">
+    <div>
+      <p class="admin-panel__eyebrow">Party games</p>
+      <h2>Two Truths and a Lie</h2>
+      <p>
+        {% if party_games_state.phase == 'signup' %}
+          Join {{ party_games_state.participant_count }} participant{{ 's' if party_games_state.participant_count != 1 else '' }} and submit your anonymous mystery card.
+        {% elif party_games_state.phase == 'active' %}
+          Guess which party guest wrote each anonymous set of statements.
+        {% else %}
+          The identities are revealed and the final scores are ready.
+        {% endif %}
+      </p>
+    </div>
+    <a class="button button--primary" href="{{ url_for('party_games', game='two-truths-and-a-lie') }}">
+      {% if party_games_state.phase == 'signup' %}{% if party_games_state.participating %}Update My Entry{% else %}Join the Game{% endif %}{% elif party_games_state.phase == 'active' and party_games_state.participating %}Play Now{% elif party_games_state.phase == 'ended' %}View Results{% else %}View Game{% endif %}
+    </a>
   </section>
 {% endif %}
 

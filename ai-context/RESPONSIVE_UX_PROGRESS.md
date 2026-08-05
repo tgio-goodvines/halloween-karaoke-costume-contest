@@ -68,6 +68,16 @@ in normal browser windows and on mobile phone browsers.
 - Corrected hidden pagination, empty-selection grid width, finder summary
   spacing, and mobile search-control stacking during browser QA.
 
+## Party Games Responsive Verification (2026-08-05)
+
+- Verified the party-day Games dashboard callout, opt-in prompt, statement
+  form, confirmation state, and `/admin/games` workspace at `390x844`.
+- Verified document width equals the viewport for attendee and admin game
+  pages.
+- Verified the live display at `390x844` and 1280px after adding its game
+  participant metric and anonymous clue cards; no console errors or horizontal
+  overflow were present.
+
 ## 2026-07-26 Scrolling Performance Safeguards
 
 - The shared attendee/admin pages use a distinct performance profile from the

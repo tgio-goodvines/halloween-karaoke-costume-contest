@@ -13,6 +13,10 @@ Replace the previous single, very long `/admin` document with a compact control-
 - `/admin/public` contains landing-page selection, party-date experience mode, RSVP party code/hint, RSVP host notification recipient, and live-display WiFi values.
 - `/admin/program` contains costume contest controls and a compact link to the
   dedicated karaoke operations workspace.
+- `/admin/games` contains Two Truths and a Lie lifecycle controls, live
+  participation/guess metrics, provisional or final standings, participant
+  truth/lie inspection, raw guess data, export, display overrides, and a
+  confirmed reset.
 - `/admin/karaoke` contains YouTube connection/playlist health, host review,
   attention recovery, approved run of show, synchronization/history, and
   sticky stage controls.
@@ -38,6 +42,18 @@ The route continues to use the existing `admin_portal` POST action handler, so e
 - Costume-voting submit remains visible at the bottom of the viewport while a guest works through a long ballot.
 
 ## Verification
+
+### Party Games verification (2026-08-05)
+
+- Browser-verified `/admin/games` at 1280px and `390x844` with no horizontal
+  overflow.
+- Browser-verified the enable control, participant count/status update, and
+  the minimum-two-participant start validation.
+- Browser-verified `/party` and `/party/games` enrollment/submission at
+  `390x844`, plus anonymous clue data and the third game count on
+  `/live-display` at phone and desktop widths.
+- Browser console reported no errors or warnings during the final live-display
+  check.
 
 ### YouTube karaoke workspace verification (2026-07-30)
 

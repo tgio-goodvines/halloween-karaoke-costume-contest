@@ -69,6 +69,14 @@
   enrollment, shows anonymous shuffled clue cards, accepts one editable
   free-text identity guess per other participant during active play, and
   reveals finalized results after the host ends the game.
+- Murder, Marry, F%$@ assigns opted-in players an anonymous alias and presents
+  ten configurable trios of famous adults. Players use each action once per
+  round, can edit ballots while active, and score one point for every assignment
+  matching the party plurality. Individual ballots are never exposed.
+- Fill in the Blank: After Dark, Bad Advice Hotline, and Wrong Answers Only use
+  independent prompt decks over one shared anonymous response/voting engine.
+  Each round moves through submissions, voting, and reveal; self-voting is
+  rejected and received votes become cumulative game points.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.
@@ -210,6 +218,13 @@
   guess completion, provisional/final scores, truth/lie data, and raw guesses;
   export game JSON; and manually pause on game, winner, or results display
   cards before resuming rotation.
+- The Games workspace independently operates the four anonymous adult games,
+  edits MMF's ten public-figure trios and optional images, manages three prompt
+  decks, advances prompt response/vote/reveal phases, shows aggregate progress,
+  and drives previous/next announcer presentation slides after game end.
+- Games export keeps Two Truths operational data but redacts MMF account keys
+  and individual ballots, returning only aliases, completion counts, and
+  aggregate results for that game.
 - Admin receives inline success/error messages.
 - Admin JSON export routes are available for full Redis state, costume results,
   and karaoke lineup at `/admin/export/state`,
@@ -259,6 +274,9 @@ app state.
   cards to rotation. Persistent `game_*` overrides let admins pause on game,
   winner, or result announcements while temporary drink-ready notices retain
   top-layer precedence.
+- Anonymous prompt responses rotate only after voting opens. Ended MMF and
+  prompt games add alias-only winner/scoreboard cards, while host-controlled
+  presentation overrides walk the display through each aggregate result.
 - Signup portal card includes admin-configurable WiFi network/password details
   and the party portal link.
 - Display entries rotate every 8 seconds with fade/slide transitions.

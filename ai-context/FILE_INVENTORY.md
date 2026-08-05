@@ -6,7 +6,7 @@
 | --- | --- |
 | `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, schema-v6 YouTube karaoke workflow/state/routes, admin stage controls, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
 | `youtube_karaoke.py` | YouTube URL/metadata normalization, Google API search and playlist client, bounded timeout/error translation, OAuth flow, and dedicated Vault refresh-token store. |
-| `party_games.py` | Party-game defaults, persisted-state normalization, anonymous statement presentation, Two Truths and a Lie scoring/ties, and live admin statistics. |
+| `party_games.py` | Five-game catalog, persisted-state normalization, anonymous alias generation, Two Truths scoring, MMF plurality scoring, shared prompt-response-voting results, ties, and statistics. |
 | `requirements.txt` | Python dependencies including Flask, Redis, AWS/SES, Google YouTube/OAuth clients, hvac, and gunicorn. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
@@ -30,7 +30,8 @@
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, ready drink notices, recent drink order cards, welcome callout, slides, costume and karaoke summaries. |
-| `templates/games.html` | Party-day Games workspace with tab navigation, Two Truths and a Lie opt-in/submission, anonymous guessing cards, and finalized results/reveals. |
+| `templates/games.html` | Party-day five-game workspace with dynamic tabs, opt-in, MMF ten-round ballots, prompt responses/voting, Two Truths guessing, aggregate reveals, and final results. |
+| `templates/_game_scoreboard.html` | Shared attendee winner and final-score table for every game engine. |
 | `templates/jukebox.html` | Attendee party-day Jukebox page with confirmed Now Playing, playlist, catalog search, and personal pending requests. |
 | `templates/menu.html` | Attendee food/drink menu for `/party/menu`, including menu images, availability, specialty/standard badges, drink ordering, and recent order statuses. |
 | `templates/drink_history.html` | Attendee full drink order history for `/party/drink-history`, including account-scoped order records, reorder controls, and per-order bartender tip QR/payment disclosure. |

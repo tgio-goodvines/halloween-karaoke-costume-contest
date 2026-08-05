@@ -17,6 +17,10 @@ Replace the previous single, very long `/admin` document with a compact control-
   participation/guess metrics, provisional or final standings, participant
   truth/lie inspection, raw guess data, export, display overrides, and a
   confirmed reset.
+- `/admin/games` also contains independent control cards for Murder/Marry/F%$@,
+  Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only. The cards keep
+  prompt decks and the ten-trio MMF editor in disclosure rows, expose only the
+  current valid lifecycle actions, and add host-driven result presentation.
 - `/admin/karaoke` contains YouTube connection/playlist health, host review,
   attention recovery, approved run of show, synchronization/history, and
   sticky stage controls.
@@ -54,6 +58,10 @@ The route continues to use the existing `admin_portal` POST action handler, so e
   `/live-display` at phone and desktop widths.
 - Browser console reported no errors or warnings during the final live-display
   check.
+- Re-verified the expanded five-game admin registry at 1280px with document
+  width matching the viewport and no browser errors. Browser QA exercised MMF
+  and prompt-game enablement, two anonymous attendee opt-ins, both game starts,
+  and opening a Fill in the Blank response round.
 
 ### YouTube karaoke workspace verification (2026-07-30)
 

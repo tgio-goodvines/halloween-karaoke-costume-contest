@@ -4308,8 +4308,18 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("signup", game["phase"])
         self.assertEqual({}, game["participants"])
         main.save_state_to_redis()
-        self.assertEqual(7, self.redis_state()["schema_version"])
+        self.assertEqual(8, self.redis_state()["schema_version"])
         self.assertIn("games_state", self.redis_state())
+        self.assertEqual(
+            {
+                "two_truths_and_a_lie",
+                "murder_marry_fuck",
+                "fill_in_the_blank",
+                "bad_advice_hotline",
+                "wrong_answers_only",
+            },
+            set(self.redis_state()["games_state"]),
+        )
 
     def test_two_truths_enrollment_is_persisted_and_live_display_is_anonymous(self):
         with main.app.test_client() as admin:
@@ -4458,6 +4468,179 @@ class RedisStateTests(unittest.TestCase):
             )
             self.assertEqual(302, blocked.status_code)
             self.assertEqual({}, main.two_truths_game()["guesses"])
+
+    def test_mmf_anonymous_lifecycle_scoring_presentation_export_and_reset(self):
+        game_key = main.MURDER_MARRY_FUCK_GAME_KEY
+        slug = main.GAME_CATALOG[game_key]["slug"]
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            enabled = admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
+        self.assertEqual(200, enabled.status_code)
+
+        aliases = {}
+        for user_id, username in (("user-1", "Jamie"), ("user-2", "Morgan")):
+            with main.app.test_client() as attendee:
+                self.login_regular(attendee, user_id=user_id, username=username)
+                joined = attendee.post(f"/party/games/{slug}/join")
+            self.assertEqual(302, joined.status_code)
+            aliases[user_id] = main.party_game_state(game_key)["participants"][user_id]["alias"]
+        self.assertNotEqual(aliases["user-1"], aliases["user-2"])
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            started = admin.post("/admin/games", data={"action": "start_game", "game_key": game_key})
+        self.assertEqual(200, started.status_code)
+        self.assertEqual("active", main.party_game_state(game_key)["phase"])
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            active_page = attendee.get(f"/party/games?game={slug}")
+        self.assertEqual(200, active_page.status_code)
+        self.assertIn(b"Round 10", active_page.data)
+
+        for user_id, username in (("user-1", "Jamie"), ("user-2", "Morgan")):
+            with main.app.test_client() as attendee:
+                self.login_regular(attendee, user_id=user_id, username=username)
+                for game_round in main.party_game_state(game_key)["rounds"]:
+                    person_ids = [person["id"] for person in game_round["people"]]
+                    saved = attendee.post(
+                        "/party/games/murder-marry-fuck/answers",
+                        data={
+                            "round_id": game_round["id"],
+                            "murder": person_ids[0],
+                            "marry": person_ids[1],
+                            "fuck": person_ids[2],
+                        },
+                    )
+                    self.assertEqual(302, saved.status_code)
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            ended = admin.post("/admin/games", data={"action": "end_game", "game_key": game_key})
+            presentation = admin.post("/admin/games", data={"action": "start_game_presentation", "game_key": game_key})
+            next_slide = admin.post("/admin/games", data={"action": "next_game_slide", "game_key": game_key})
+            exported = json.loads(admin.get("/admin/export/games").data)
+        self.assertEqual(200, ended.status_code)
+        self.assertEqual(200, presentation.status_code)
+        self.assertEqual(200, next_slide.status_code)
+        game = main.party_game_state(game_key)
+        self.assertEqual("ended", game["phase"])
+        self.assertEqual(2, len(game["results"]["winner_player_ids"]))
+        self.assertTrue(all(score["points"] == 30 for score in game["results"]["scores"]))
+        self.assertEqual("game_presentation", main.live_display_event_override["type"])
+        self.assertEqual(1, game["presentation"]["slide_index"])
+        exported_mmf = exported["games_state"][game_key]
+        self.assertIsInstance(exported_mmf["participants"], list)
+        self.assertNotIn("user-1", json.dumps(exported_mmf))
+        self.assertNotIn("Jamie", json.dumps(exported_mmf))
+        self.assertNotIn("answers", json.dumps(exported_mmf))
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            reset = admin.post("/admin/games", data={"action": "reset_game", "game_key": game_key, "confirmation": "RESET MURDER MARRY FUCK"})
+        self.assertEqual(200, reset.status_code)
+        self.assertTrue(main.party_game_state(game_key)["enabled"])
+        self.assertEqual({}, main.party_game_state(game_key)["participants"])
+        self.assertEqual(10, len(main.party_game_state(game_key)["rounds"]))
+
+    def test_prompt_games_share_anonymous_response_vote_and_result_engine(self):
+        for game_key in main.PROMPT_GAME_KEYS:
+            with self.subTest(game_key=game_key):
+                self.reset_state()
+                slug = main.GAME_CATALOG[game_key]["slug"]
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
+                for user_id, username in (("user-1", "Jamie"), ("user-2", "Morgan")):
+                    with main.app.test_client() as attendee:
+                        self.login_regular(attendee, user_id=user_id, username=username)
+                        self.assertEqual(302, attendee.post(f"/party/games/{slug}/join").status_code)
+                game = main.party_game_state(game_key)
+                prompt_id = game["prompts"][0]["id"]
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    admin.post("/admin/games", data={"action": "start_game", "game_key": game_key})
+                    opened = admin.post("/admin/games", data={"action": "start_prompt_round", "game_key": game_key, "prompt_id": prompt_id})
+                self.assertEqual(200, opened.status_code)
+
+                with main.app.test_client() as attendee:
+                    self.login_regular(attendee, user_id="user-1", username="Jamie")
+                    response_page = attendee.get(f"/party/games?game={slug}")
+                self.assertEqual(200, response_page.status_code)
+                self.assertIn(b"Responses open", response_page.data)
+
+                response_ids = {}
+                for user_id, username, answer in (("user-1", "Jamie", "A haunted fax machine"), ("user-2", "Morgan", "Three raccoons in a trench coat")):
+                    with main.app.test_client() as attendee:
+                        self.login_regular(attendee, user_id=user_id, username=username)
+                        submitted = attendee.post(f"/party/games/{slug}/response", data={"response": answer})
+                    self.assertEqual(302, submitted.status_code)
+                    player_id = main.party_game_state(game_key)["participants"][user_id]["player_id"]
+                    current = main.prompt_round_for_game(main.party_game_state(game_key))
+                    response_ids[user_id] = next(response_id for response_id, response in current["responses"].items() if response["player_id"] == player_id)
+
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    voting = admin.post("/admin/games", data={"action": "open_prompt_voting", "game_key": game_key})
+                    display_payload = admin.get("/api/display-data").get_json()
+                self.assertEqual(200, voting.status_code)
+                display_text = json.dumps(display_payload["entries"])
+                self.assertIn("A haunted fax machine", display_text)
+                self.assertNotIn("Jamie", display_text)
+                with main.app.test_client() as attendee:
+                    self.login_regular(attendee, user_id="user-1", username="Jamie")
+                    voting_page = attendee.get(f"/party/games?game={slug}")
+                self.assertEqual(200, voting_page.status_code)
+                self.assertIn(b"Voting open", voting_page.data)
+
+                for user_id, username, target_id in (("user-1", "Jamie", response_ids["user-2"]), ("user-2", "Morgan", response_ids["user-1"])):
+                    with main.app.test_client() as attendee:
+                        self.login_regular(attendee, user_id=user_id, username=username)
+                        voted = attendee.post(f"/party/games/{slug}/vote", data={"response_id": target_id})
+                    self.assertEqual(302, voted.status_code)
+
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    revealed = admin.post("/admin/games", data={"action": "reveal_prompt_round", "game_key": game_key})
+                    ended = admin.post("/admin/games", data={"action": "end_game", "game_key": game_key})
+                    presented = admin.post("/admin/games", data={"action": "start_game_presentation", "game_key": game_key})
+                self.assertEqual(200, revealed.status_code)
+                self.assertEqual(200, ended.status_code)
+                self.assertEqual(200, presented.status_code)
+                game = main.party_game_state(game_key)
+                self.assertEqual("ended", game["phase"])
+                self.assertEqual(2, len(game["results"]["winner_player_ids"]))
+                self.assertTrue(all(score["points"] == 1 for score in game["results"]["scores"]))
+                self.assertEqual("game_presentation", main.live_display_event_override["type"])
+
+    def test_new_game_routes_reject_invalid_assignments_and_self_votes(self):
+        mmf = main.party_game_state(main.MURDER_MARRY_FUCK_GAME_KEY)
+        mmf["enabled"] = True
+        mmf["phase"] = "active"
+        participant = main.add_alias_participant(mmf, "user-1")
+        self.save_current_state()
+        game_round = mmf["rounds"][0]
+        duplicate_person = game_round["people"][0]["id"]
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            invalid = attendee.post("/party/games/murder-marry-fuck/answers", data={"round_id": game_round["id"], "murder": duplicate_person, "marry": duplicate_person, "fuck": duplicate_person})
+        self.assertEqual(302, invalid.status_code)
+        self.assertEqual({}, main.party_game_state(main.MURDER_MARRY_FUCK_GAME_KEY)["participants"]["user-1"].get("answers", {}))
+
+        self.reset_state()
+        game = main.party_game_state(main.WRONG_ANSWERS_GAME_KEY)
+        game["enabled"] = True
+        game["phase"] = "active"
+        participant = main.add_alias_participant(game, "user-1")
+        game_round = {"id": "round-1", "prompt_id": "prompt-1", "prompt_text": "Wrong?", "status": "voting", "responses": {"response-1": {"id": "response-1", "player_id": participant["player_id"], "text": "Mine", "submitted_at": ""}}, "votes": {}, "results": {}, "created_at": "", "revealed_at": ""}
+        game["rounds"] = [game_round]
+        game["current_round_id"] = "round-1"
+        self.save_current_state()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            self_vote = attendee.post("/party/games/wrong-answers-only/vote", data={"response_id": "response-1"})
+        self.assertEqual(302, self_vote.status_code)
+        self.assertEqual({}, main.prompt_round_for_game(main.party_game_state(main.WRONG_ANSWERS_GAME_KEY))["votes"])
 
     def test_admin_bulk_clear_requires_exact_confirmation_and_admin(self):
         self.enable_youtube_karaoke()

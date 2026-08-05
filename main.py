@@ -47,6 +47,18 @@ from youtube_karaoke import (
     canonical_watch_url,
     parse_youtube_video_id,
 )
+from party_games import (
+    DEFAULT_GAMES_STATE,
+    GAME_STATEMENT_MAX_LENGTH,
+    TWO_TRUTHS_GAME_KEY,
+    calculate_two_truths_results,
+    empty_two_truths_game_state,
+    normalize_games_state,
+    normalize_guess_name,
+    normalize_statement,
+    participant_statements,
+    two_truths_statistics,
+)
 
 
 def _config_int(name: str, default: int) -> int:
@@ -285,7 +297,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 6
+STATE_SCHEMA_VERSION = 7
 
 
 @dataclass
@@ -538,6 +550,7 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "guests": {"label": "Guests", "description": "RSVPs, guest updates, and party details."},
     "public": {"label": "Public Info", "description": "Guest-facing access and display settings."},
     "program": {"label": "Program", "description": "Costume contest controls, voting, and results."},
+    "games": {"label": "Games", "description": "Enrollment, live play, scoring, and game results."},
     "karaoke": {"label": "Karaoke", "description": "YouTube requests, playlist workflow, and stage controls."},
     "dj": {"label": "DJ", "description": "Playlist, live-display receiver, and verified music controls."},
     "bar": {"label": "Bar", "description": "Drink operations and bartender tipping."},
@@ -587,6 +600,7 @@ youtube_karaoke: dict[str, object] = copy.deepcopy(DEFAULT_YOUTUBE_KARAOKE_STATE
 party_details: dict[str, str] = copy.deepcopy(DEFAULT_PARTY_DETAILS)
 display_settings: dict[str, str] = copy.deepcopy(DEFAULT_DISPLAY_SETTINGS)
 bartender_tip_settings: dict[str, object] = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
+games_state: dict[str, object] = copy.deepcopy(DEFAULT_GAMES_STATE)
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -603,6 +617,9 @@ STATE_MUTATION_ENDPOINTS = {
     "party_costumes",
     "party_costume_voting",
     "party_jukebox_request",
+    "party_game_opt_in",
+    "party_game_submission",
+    "party_game_guess",
     "dj_receiver_state",
 }
 STATE_REFRESH_ENDPOINTS = {
@@ -621,6 +638,7 @@ STATE_REFRESH_ENDPOINTS = {
     "party_karaoke_search",
     "party_karaoke_cancel",
     "party_karaoke_replace",
+    "party_games",
     "party_costume_voting",
     "party_jukebox",
     "party_jukebox_data",
@@ -639,6 +657,7 @@ ADMIN_ENDPOINTS = {
     "export_state",
     "export_costume_results",
     "export_karaoke_lineup",
+    "export_games",
     "admin_dj_song_request_queue",
     "admin_karaoke_state",
     "admin_karaoke_search",
@@ -678,6 +697,10 @@ REGULAR_USER_ENDPOINTS = {
     "party_jukebox_data",
     "party_jukebox_catalog_search",
     "party_jukebox_request",
+    "party_games",
+    "party_game_opt_in",
+    "party_game_submission",
+    "party_game_guess",
 }
 DISPLAY_ENDPOINTS = {
     "live_display",
@@ -3238,6 +3261,7 @@ def snapshot_state() -> dict[str, object]:
         "party_details": copy.deepcopy(party_details),
         "display_settings": copy.deepcopy(display_settings),
         "bartender_tip_settings": copy.deepcopy(bartender_tip_settings),
+        "games_state": copy.deepcopy(games_state),
         "live_display_event_override": copy.deepcopy(live_display_event_override),
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
         "live_display_override": copy.deepcopy(current_display_override()),
@@ -3256,7 +3280,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global user_accounts, costume_ballots, submitted_costume_votes
     global live_display_event_override, live_display_notice_override
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
-    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke
+    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke, games_state
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -3356,6 +3380,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     dj_state = normalize_dj_state(data.get("dj_state"))
 
     bartender_tip_settings = normalize_bartender_tip_settings(data.get("bartender_tip_settings", {}))
+    games_state = normalize_games_state(data.get("games_state", {}))
 
     raw_password_reset_tokens = data.get("password_reset_tokens", {})
     password_reset_tokens = {}
@@ -4089,6 +4114,105 @@ def costume_voting_is_visible() -> bool:
     )
 
 
+def two_truths_game() -> dict[str, object]:
+    game = games_state.get(TWO_TRUTHS_GAME_KEY)
+    if not isinstance(game, dict):
+        games_state[TWO_TRUTHS_GAME_KEY] = empty_two_truths_game_state()
+    return games_state[TWO_TRUTHS_GAME_KEY]
+
+
+def two_truths_participant_by_submission(submission_id: str) -> dict[str, object] | None:
+    for participant in two_truths_game().get("participants", {}).values():
+        if participant.get("submission_id") == submission_id:
+            return participant
+    return None
+
+
+def two_truths_winners(game: dict[str, object] | None = None) -> list[dict[str, object]]:
+    current_game = game or two_truths_game()
+    results = current_game.get("results", {})
+    winner_ids = set(results.get("winner_ids", [])) if isinstance(results, dict) else set()
+    scores = results.get("scores", []) if isinstance(results, dict) else []
+    return [entry for entry in scores if entry.get("user_id") in winner_ids]
+
+
+def build_two_truths_scoreboard_card(game: dict[str, object] | None = None) -> dict[str, object] | None:
+    current_game = game or two_truths_game()
+    results = current_game.get("results", {})
+    scores = results.get("scores", []) if isinstance(results, dict) else []
+    if not scores:
+        return None
+    rows = [
+        {
+            "rank": index + 1,
+            "name": entry.get("name", "Guest"),
+            "detail": f"{entry.get('correct', 0)} correct",
+            "value_label": f"{entry.get('correct', 0)} pts",
+            "meta_label": f"{entry.get('attempts', 0)} guesses · {entry.get('accuracy', 0):g}%",
+        }
+        for index, entry in enumerate(scores[:5])
+    ]
+    participant_names = [
+        entry.get("name", "Guest")
+        for entry in results.get("participant_results", [])
+        if isinstance(entry, dict)
+    ]
+    participant_note = ", ".join(participant_names[:8])
+    if len(participant_names) > 8:
+        participant_note = f"{participant_note}, and {len(participant_names) - 8} more"
+    return {
+        "category": "Two Truths and a Lie",
+        "primary": "Final Scores",
+        "secondary": f"{len(participant_names)} participant{'s' if len(participant_names) != 1 else ''}",
+        "tertiary": f"Players: {participant_note}" if participant_note else "Thanks for playing.",
+        "scoreboard": {"entries": rows},
+    }
+
+
+def build_two_truths_winner_entry(game: dict[str, object] | None = None) -> dict[str, object] | None:
+    winners = two_truths_winners(game)
+    if not winners:
+        return None
+    winner_names = [str(entry.get("name", "Guest")) for entry in winners]
+    top_score = int(winners[0].get("correct", 0) or 0)
+    return {
+        "category": "Two Truths and a Lie Winners" if len(winners) > 1 else "Two Truths and a Lie Winner",
+        "primary": ", ".join(winner_names),
+        "secondary": f"{top_score} correct guess{'es' if top_score != 1 else ''}",
+        "tertiary": "A tie at the top!" if len(winners) > 1 else "Master of the mystery guests.",
+    }
+
+
+def two_truths_admin_view() -> dict[str, object]:
+    game = two_truths_game()
+    statistics = two_truths_statistics(game)
+    participants = list(game.get("participants", {}).values())
+    participants.sort(key=lambda entry: str(entry.get("answer_name", "")).casefold())
+    raw_guesses = []
+    participants_by_id = game.get("participants", {})
+    for guesser_id, guesses in game.get("guesses", {}).items():
+        guesser = participants_by_id.get(guesser_id, {})
+        for submission_id, guess in guesses.items():
+            target = two_truths_participant_by_submission(submission_id) or {}
+            raw_guesses.append(
+                {
+                    "guesser_name": guesser.get("answer_name", "Guest"),
+                    "target_name": target.get("answer_name", "Unknown"),
+                    "guessed_name": guess.get("guessed_name", ""),
+                    "correct": guess.get("normalized_name") == normalize_guess_name(target.get("answer_name", "")),
+                    "submitted_at": guess.get("submitted_at", ""),
+                }
+            )
+    raw_guesses.sort(key=lambda entry: str(entry.get("submitted_at", "")), reverse=True)
+    return {
+        **copy.deepcopy(game),
+        "statistics": statistics,
+        "participants_list": participants,
+        "raw_guesses": raw_guesses,
+        "winners": two_truths_winners(game),
+    }
+
+
 PARTY_SITE_URL = "https://tnq-halloween.com"
 PARTY_PORTAL_URL = f"{PARTY_SITE_URL}/party"
 
@@ -4105,6 +4229,10 @@ PARTY_DAY_DASHBOARD_SLIDES = [
     {
         "title": "Karaoke Queue",
         "content": "Pick a song and reserve your spot. New karaoke signups appear in the live rotation.",
+    },
+    {
+        "title": "Party Games",
+        "content": "Join Two Truths and a Lie, submit your clues, and guess the mystery guests once play begins.",
     },
     {
         "title": "Event Drinks",
@@ -4206,6 +4334,18 @@ def build_rotation_entries() -> List[dict[str, object]]:
         },
     ]
 
+    game = two_truths_game()
+    if game.get("enabled"):
+        rotation_entries.insert(
+            3,
+            {
+                "category": "Party Games",
+                "primary": "Join Two Truths and a Lie.",
+                "secondary": "Open Games in the party portal and submit two true stories plus one convincing lie.",
+                "tertiary": "Mystery clue cards appear here without names.",
+            },
+        )
+
     costume_entries = [
         {
             "id": signup.id,
@@ -4228,6 +4368,22 @@ def build_rotation_entries() -> List[dict[str, object]]:
         for signup in public_karaoke_signups()
     ]
 
+    game_entries = []
+    if game.get("enabled"):
+        for participant in game.get("participants", {}).values():
+            statements = participant_statements(participant)
+            if len(statements) != 3:
+                continue
+            game_entries.append(
+                {
+                    "id": participant.get("submission_id", ""),
+                    "category": "Two Truths and a Lie",
+                    "primary": f"1. {statements[0]}",
+                    "secondary": f"2. {statements[1]}",
+                    "tertiary": f"3. {statements[2]} · Can you guess who? Open Games in the party portal.",
+                }
+            )
+
     winner_entry = build_winner_entry()
     if winner_entry:
         rotation_entries.append({
@@ -4238,12 +4394,22 @@ def build_rotation_entries() -> List[dict[str, object]]:
     if contest_state.get("show_scoreboard_card") and contest_state.get("scoreboard_card"):
         rotation_entries.append(copy.deepcopy(contest_state["scoreboard_card"]))
 
-    max_length = max(len(costume_entries), len(karaoke_entries))
+    if game.get("phase") == "ended":
+        game_winner_entry = build_two_truths_winner_entry(game)
+        if game_winner_entry:
+            rotation_entries.append(game_winner_entry)
+        game_scoreboard_entry = build_two_truths_scoreboard_card(game)
+        if game_scoreboard_entry:
+            rotation_entries.append(game_scoreboard_entry)
+
+    max_length = max(len(costume_entries), len(karaoke_entries), len(game_entries))
     for index in range(max_length):
         if index < len(costume_entries):
             rotation_entries.append(costume_entries[index])
         if index < len(karaoke_entries):
             rotation_entries.append(karaoke_entries[index])
+        if index < len(game_entries):
+            rotation_entries.append(game_entries[index])
 
     return rotation_entries
 
@@ -4269,6 +4435,7 @@ def live_display():
         entries=rotation_entries,
         costume_count=len(costume_signups),
         karaoke_count=len(public_karaoke_signups()),
+        game_count=len(two_truths_game().get("participants", {})),
         override=live_display_event_override,
         notice_override=live_display_notice_override,
         dj=dj_view_state(),
@@ -4314,6 +4481,7 @@ def display_data():
             "entries": rotation_entries,
             "costume_count": len(costume_signups),
             "karaoke_count": len(public_karaoke_signups()),
+            "game_count": len(two_truths_game().get("participants", {})),
             "override": live_display_event_override,
             "event_override": live_display_event_override,
             "notice_override": live_display_notice_override,
@@ -4416,6 +4584,8 @@ def inject_contest_state():
     active_roles = session_roles()
     effective_preview_roles = preview_roles()
     preview_key = role_preview_key()
+    game = two_truths_game()
+    game_user_id = str(session.get("user_id", "") or "")
     return {
         "costume_contest_state": {
             "contest_started": bool(contest_state.get("contest_started")),
@@ -4441,6 +4611,13 @@ def inject_contest_state():
         "drink_type_label": drink_type_label,
         "beverage_type_label": beverage_type_label,
         "party_day_has_arrived": party_day_has_arrived(),
+        "party_games_state": {
+            "available": party_day_has_arrived() and bool(game.get("enabled")),
+            "enabled": bool(game.get("enabled")),
+            "phase": str(game.get("phase", "signup")),
+            "participating": game_user_id in game.get("participants", {}),
+            "participant_count": len(game.get("participants", {})),
+        },
         "party_title": app.config["PARTY_TITLE"],
         "party_year": app.config["PARTY_YEAR"],
     }
@@ -6213,6 +6390,144 @@ def exit_role_preview():
     return redirect(url_for("admin_portal", admin_view="public"))
 
 
+@app.route("/party/games")
+def party_games():
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
+
+    game = two_truths_game()
+    if not game.get("enabled"):
+        return redirect(url_for("party_dashboard"))
+
+    user_id = str(session.get("user_id", "") or "")
+    if not user_id or not session.get("username"):
+        return redirect(url_for("party_login", next=url_for("party_games")))
+    participant = game.get("participants", {}).get(user_id)
+    phase = str(game.get("phase", "signup"))
+    submissions = []
+    if participant and phase in {"active", "ended"}:
+        own_submission_id = participant.get("submission_id")
+        user_guesses = game.get("guesses", {}).get(user_id, {})
+        for other in game.get("participants", {}).values():
+            submission_id = str(other.get("submission_id", "") or "")
+            if not submission_id or submission_id == own_submission_id:
+                continue
+            statements = participant_statements(other)
+            if len(statements) != 3:
+                continue
+            submissions.append(
+                {
+                    "submission_id": submission_id,
+                    "statements": statements,
+                    "saved_guess": user_guesses.get(submission_id, {}).get("guessed_name", ""),
+                    "answer_name": other.get("answer_name", "") if phase == "ended" else "",
+                    "lie": other.get("lie", "") if phase == "ended" else "",
+                }
+            )
+
+    return render_template(
+        "games.html",
+        game=game,
+        participant=participant,
+        submissions=submissions,
+        results=game.get("results", {}),
+        winners=two_truths_winners(game),
+        show_participation_form=request.args.get("participate") == "1",
+        success=request.args.get("success", ""),
+        error=request.args.get("error", ""),
+        statement_max_length=GAME_STATEMENT_MAX_LENGTH,
+        show_admin_link=False,
+    )
+
+
+@app.route("/party/games/two-truths-and-a-lie/opt-in", methods=["POST"])
+def party_game_opt_in():
+    game = two_truths_game()
+    if not party_day_has_arrived() or not game.get("enabled"):
+        return redirect(url_for("party_dashboard"))
+    if game.get("phase") != "signup":
+        return redirect(url_for("party_games", error="Enrollment has closed because the game has started."))
+    if not session.get("user_id") or not session.get("username"):
+        return redirect(url_for("party_login", next=url_for("party_games")))
+    return redirect(url_for("party_games", participate="1"))
+
+
+@app.route("/party/games/two-truths-and-a-lie/submission", methods=["POST"])
+def party_game_submission():
+    game = two_truths_game()
+    if not party_day_has_arrived() or not game.get("enabled"):
+        return redirect(url_for("party_dashboard"))
+    if game.get("phase") != "signup":
+        return redirect(url_for("party_games", error="Submissions are locked because the game has started."))
+    if not session.get("user_id") or not session.get("username"):
+        return redirect(url_for("party_login", next=url_for("party_games")))
+
+    raw_statements = [
+        request.form.get("truth_one", ""),
+        request.form.get("truth_two", ""),
+        request.form.get("lie", ""),
+    ]
+    if any(len(value.strip()) > GAME_STATEMENT_MAX_LENGTH for value in raw_statements):
+        return redirect(url_for("party_games", participate="1", error=f"Each statement must be {GAME_STATEMENT_MAX_LENGTH} characters or fewer."))
+    statements = [normalize_statement(value) for value in raw_statements]
+    if not all(statements):
+        return redirect(url_for("party_games", participate="1", error="Enter two truths and one lie."))
+    if len({normalize_guess_name(value) for value in statements}) != 3:
+        return redirect(url_for("party_games", participate="1", error="Each statement must be different."))
+
+    user_id = str(session.get("user_id", "") or "")
+    answer_name = re.sub(r"\s+", " ", str(session.get("username", "") or "Guest").strip())[:80]
+    existing = game.get("participants", {}).get(user_id)
+    timestamp = _utc_now_iso()
+    display_order = list(existing.get("display_order", [])) if existing else [0, 1, 2]
+    if not existing:
+        random.shuffle(display_order)
+    game["participants"][user_id] = {
+        "submission_id": existing.get("submission_id") if existing else uuid4().hex,
+        "user_id": user_id,
+        "answer_name": answer_name,
+        "truths": statements[:2],
+        "lie": statements[2],
+        "display_order": display_order,
+        "created_at": existing.get("created_at", timestamp) if existing else timestamp,
+        "updated_at": timestamp,
+    }
+    broadcast_display_update()
+    return redirect(url_for("party_games", success="submission"))
+
+
+@app.route("/party/games/two-truths-and-a-lie/guesses/<submission_id>", methods=["POST"])
+def party_game_guess(submission_id: str):
+    game = two_truths_game()
+    if not party_day_has_arrived() or not game.get("enabled"):
+        return redirect(url_for("party_dashboard"))
+    if game.get("phase") != "active":
+        return redirect(url_for("party_games", error="Guesses are only open while the game is active."))
+
+    user_id = str(session.get("user_id", "") or "")
+    if not user_id or not session.get("username"):
+        return redirect(url_for("party_login", next=url_for("party_games")))
+    guesser = game.get("participants", {}).get(user_id)
+    target = two_truths_participant_by_submission(submission_id)
+    if not guesser:
+        return redirect(url_for("party_games", error="Only enrolled participants can submit guesses."))
+    if not target:
+        return redirect(url_for("party_games", error="That mystery submission could not be found."))
+    if target.get("user_id") == user_id:
+        return redirect(url_for("party_games", error="You cannot guess your own mystery card."))
+
+    guessed_name = re.sub(r"\s+", " ", request.form.get("guessed_name", "").strip())
+    if not guessed_name or len(guessed_name) > 80:
+        return redirect(url_for("party_games", error="Enter a party-account name up to 80 characters."))
+    game.setdefault("guesses", {}).setdefault(user_id, {})[submission_id] = {
+        "guessed_name": guessed_name,
+        "normalized_name": normalize_guess_name(guessed_name),
+        "submitted_at": _utc_now_iso(),
+    }
+    broadcast_display_update()
+    return redirect(url_for("party_games", success="guess"))
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     errors: List[str] = []
@@ -7179,6 +7494,129 @@ def admin_portal(admin_view: str):
                     messages.append(f"Moved costume signup for {moved_signup.name} down.")
                     should_broadcast = True
 
+        elif action == "enable_two_truths_game":
+            game = two_truths_game()
+            game["enabled"] = True
+            messages.append("Two Truths and a Lie enrollment is enabled.")
+            should_broadcast = True
+
+        elif action == "disable_two_truths_game":
+            game = two_truths_game()
+            game["enabled"] = False
+            if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
+                live_display_event_override = None
+            messages.append("Two Truths and a Lie is hidden from attendees. Existing game data was preserved.")
+            should_broadcast = True
+
+        elif action == "start_two_truths_game":
+            game = two_truths_game()
+            participant_count = len(game.get("participants", {}))
+            if not game.get("enabled"):
+                errors.append("Enable Two Truths and a Lie before starting it.")
+            elif game.get("phase") != "signup":
+                errors.append("Two Truths and a Lie can only start from the signup phase.")
+            elif participant_count < 2:
+                errors.append("At least two participants must submit clues before the game can start.")
+            else:
+                game["phase"] = "active"
+                game["started_at"] = _utc_now_iso()
+                game["ended_at"] = ""
+                game["results"] = copy.deepcopy(empty_two_truths_game_state()["results"])
+                write_state_backup_if_available("two-truths-start")
+                messages.append(f"Two Truths and a Lie started with {participant_count} participants. Guesses are open.")
+                should_broadcast = True
+
+        elif action == "end_two_truths_game":
+            game = two_truths_game()
+            if game.get("phase") != "active":
+                errors.append("Start Two Truths and a Lie before ending it.")
+            else:
+                finalized_at = _utc_now_iso()
+                game["phase"] = "ended"
+                game["ended_at"] = finalized_at
+                game["results"] = calculate_two_truths_results(game, finalized_at=finalized_at)
+                winners = two_truths_winners(game)
+                write_state_backup_if_available("two-truths-ended")
+                if winners:
+                    messages.append(f"Two Truths and a Lie ended with {len(winners)} winner{'s' if len(winners) != 1 else ''}.")
+                else:
+                    messages.append("Two Truths and a Lie ended. No player recorded a correct guess.")
+                should_broadcast = True
+
+        elif action == "reset_two_truths_game":
+            confirmation = request.form.get("confirmation", "").strip()
+            if confirmation != "RESET TWO TRUTHS AND A LIE":
+                errors.append("Enter the exact reset confirmation phrase.")
+            else:
+                game = two_truths_game()
+                enabled = bool(game.get("enabled"))
+                write_state_backup_if_available("two-truths-reset")
+                games_state[TWO_TRUTHS_GAME_KEY] = empty_two_truths_game_state(enabled=enabled)
+                if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
+                    live_display_event_override = None
+                messages.append("Two Truths and a Lie was reset. Participants, guesses, scores, and winners were cleared.")
+                should_broadcast = True
+
+        elif action == "pause_game_display":
+            live_display_event_override = {
+                "type": "game_paused",
+                "title": "Two Truths and a Lie",
+                "highlight": "Game break",
+                "message": "The live rotation is paused while the hosts prepare the next game update.",
+                "details": ["Stay tuned for clues, scores, and results."],
+            }
+            messages.append("Live display paused on the Two Truths and a Lie game card.")
+            should_broadcast = True
+
+        elif action == "show_two_truths_winner":
+            game = two_truths_game()
+            winners = two_truths_winners(game)
+            if game.get("phase") != "ended":
+                errors.append("End the game before showing its winner.")
+            elif not winners:
+                errors.append("This game has no winner because nobody submitted a correct guess.")
+            else:
+                names = ", ".join(str(entry.get("name", "Guest")) for entry in winners)
+                top_score = int(winners[0].get("correct", 0) or 0)
+                live_display_event_override = {
+                    "type": "game_winner",
+                    "title": "Two Truths and a Lie",
+                    "highlight": names,
+                    "message": "Tonight's mystery-game winner!" if len(winners) == 1 else "Tonight's mystery-game winners!",
+                    "details": [f"{top_score} correct guess{'es' if top_score != 1 else ''}"],
+                }
+                messages.append("Live display paused on the game winner card.")
+                should_broadcast = True
+
+        elif action == "show_two_truths_results":
+            game = two_truths_game()
+            results = game.get("results", {})
+            scores = results.get("scores", []) if isinstance(results, dict) else []
+            if game.get("phase") != "ended":
+                errors.append("End the game before showing final results.")
+            else:
+                details = [
+                    f"#{index + 1} {entry.get('name', 'Guest')}: {entry.get('correct', 0)} correct of {entry.get('attempts', 0)}"
+                    for index, entry in enumerate(scores[:6])
+                ] or ["No completed guesses were submitted."]
+                live_display_event_override = {
+                    "type": "game_results",
+                    "title": "Two Truths and a Lie Results",
+                    "highlight": f"{len(game.get('participants', {}))} participants",
+                    "message": "Final mystery-game standings",
+                    "details": details,
+                }
+                messages.append("Live display paused on the final game results.")
+                should_broadcast = True
+
+        elif action == "resume_game_display":
+            if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
+                live_display_event_override = None
+                messages.append("Live display resumed its normal rotation.")
+                should_broadcast = True
+            else:
+                messages.append("The live display is not paused on a game card.")
+
         elif action == "start_costume_contest":
             voting_url = url_for("party_costume_voting", _external=True)
             live_display_event_override = {
@@ -7567,6 +8005,7 @@ def admin_portal(admin_view: str):
         karaoke_admin=karaoke_admin_view_state(),
         karaoke_admin_state_url=url_for("admin_karaoke_state"),
         karaoke_admin_search_url=url_for("admin_karaoke_search"),
+        games_admin=two_truths_admin_view(),
     )
 
 
@@ -7597,6 +8036,20 @@ def export_karaoke_lineup():
     return send_json_export(
         build_karaoke_lineup_export(),
         "halloween-karaoke-lineup.json",
+    )
+
+
+@app.route("/admin/export/games")
+def export_games():
+    if redis_state_available:
+        load_state_from_redis()
+    return send_json_export(
+        {
+            "schema_version": STATE_SCHEMA_VERSION,
+            "exported_at": _utc_now_iso(),
+            "games_state": copy.deepcopy(games_state),
+        },
+        "halloween-games.json",
     )
 
 

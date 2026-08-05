@@ -5162,3 +5162,180 @@ textarea,
     padding-inline: 0;
   }
 }
+/* Party games */
+.games-shell,
+.games-admin {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.games-hero,
+.game-panel,
+.games-overview,
+.game-winner-callout,
+.admin-subsection {
+  border: 1px solid rgba(255, 49, 49, 0.62);
+  border-top-width: 3px;
+  border-radius: 14px;
+  background: rgba(26, 26, 26, 0.92);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34), 0 -2px 22px rgba(255, 49, 49, 0.14);
+}
+
+.games-hero,
+.game-panel,
+.game-winner-callout,
+.admin-subsection {
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.games-tabs {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+}
+
+.games-tabs a,
+.game-phase {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: var(--text, #f4f4f5);
+  font-family: "Outfit", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.games-tabs a[aria-current="page"],
+.game-phase--active {
+  border-color: #ff3131;
+  background: rgba(255, 49, 49, 0.18);
+  box-shadow: 0 0 20px rgba(255, 49, 49, 0.18);
+}
+
+.game-phase {
+  min-height: auto;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.game-phase--signup { border-color: rgba(244, 244, 245, 0.34); }
+.game-phase--ended { border-color: #ff5555; background: rgba(255, 85, 85, 0.12); }
+
+.game-panel__header,
+.games-admin__heading,
+.games-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.games-overview {
+  margin-block: 1.25rem;
+  padding: clamp(1rem, 3vw, 1.4rem);
+}
+
+.game-opt-in,
+.game-instructions,
+.game-submission-form,
+.game-results {
+  margin-top: 1rem;
+}
+
+.game-submission-form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.game-submission-form textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.mystery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.mystery-card {
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 12px;
+  background: rgba(13, 13, 13, 0.76);
+}
+
+.mystery-card__number {
+  color: #ff5555;
+  font-family: "Outfit", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.mystery-card ol {
+  display: grid;
+  gap: 0.7rem;
+  padding-left: 1.4rem;
+}
+
+.mystery-card form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.mystery-card .is-lie {
+  color: #ff7777;
+}
+
+.game-winner-callout {
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.game-admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
+
+.game-admin-metrics > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(13, 13, 13, 0.72);
+}
+
+.game-admin-metrics span {
+  color: #a1a1aa;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.game-admin-metrics strong { font-size: 1.35rem; }
+.game-admin-actions { margin-block: 1rem; }
+.admin-subsection { margin-top: 1rem; }
+
+@media (max-width: 620px) {
+  .game-panel__header,
+  .games-admin__heading,
+  .games-overview {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .games-overview .button { width: 100%; }
+  .mystery-grid { grid-template-columns: 1fr; }
+}

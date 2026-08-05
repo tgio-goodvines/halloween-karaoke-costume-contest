@@ -16,6 +16,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/DJ_JUKEBOX_FEATURE.md` - DJ playlist, Redis command/acknowledgement state, MusicKit receiver setup, and operational recovery.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` - planned attendee YouTube search, host approval, playlist synchronization, dedicated karaoke admin workflow, stage controls, and manual two-tab playback.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
+- `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` - Redis-backed party Games framework, Two Truths and a Lie lifecycle, attendee/admin/display behavior, scoring, and verification.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
 - `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 2 details for automatic Halloween install on replacement API EC2 instances.
@@ -32,6 +33,7 @@ Important working notes:
 - Creating a party account sends a SES welcome email when email is enabled; failures must not block account creation. The welcome email should point to the party portal only, not direct menu/costume/karaoke signup links.
 - Party account users can reset forgotten passwords through `/party/password-reset`; reset emails use SES, reset tokens are hashed before storage, expire after 45 minutes, and are single-use.
 - Before the party date, `/party` shows pre-party RSVP details and host updates in Event Highlights and hides/blocks attendee menu, costume, karaoke, drink-order, and voting actions. On the party date, `/party` switches to the event-night dashboard.
+- On the party date, enabled games appear on `/party` and at `/party/games`. Two Truths and a Lie separates enrollment from active guessing, keeps clue cards anonymous until results, stores account-bound guesses in Redis, supports ties, and is operated from `/admin/games`.
 - `/party/menu` lets signed-in attendees view food/drink menu cards with images and order available drinks on the party date; food is currently view-only.
 - Admin can manage food/drink menu items, image URLs, availability, and drink recipes from `/admin`; bartender access is assigned to existing party accounts through account roles.
 - `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.
@@ -40,6 +42,7 @@ Important working notes:
 - Admin controls can set the root landing target, replace the RSVP submission party code, configure the host RSVP notification email, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
 - Before `HALLOWEEN_PARTY_START`, live-display rotation is limited to RSVP/static party info/update cards and should not show costume or karaoke signup entries.
 - Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`. Costume and karaoke event overrides are mutually exclusive; starting one stops the other static event mode.
+- Game clue, winner, and results cards join the normal live-display rotation. Game pause/winner/results controls use persistent `game_*` event overrides and can be cleared without changing costume, karaoke, DJ, or drink-notice state.
 - Header logout is a single button tucked inside the `Menu` disclosure; do not add separate regular/admin logout controls.
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.
 - Responsive UX updates are complete: live-display cards scale for normal browser windows, attendee/admin pages are mobile-oriented, and admin add/edit forms are collapsed disclosure rows by default.

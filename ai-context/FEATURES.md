@@ -64,6 +64,11 @@
   verification; roles remain admin-managed.
 - Costume contest signup at `/party/costumes` is attendee-accessible on the
   party date.
+- Enabled party games appear on the party-day dashboard and at `/party/games`.
+  Two Truths and a Lie lets each account submit two truths and one lie during
+  enrollment, shows anonymous shuffled clue cards, accepts one editable
+  free-text identity guess per other participant during active play, and
+  reveals finalized results after the host ends the game.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.
@@ -200,6 +205,11 @@
 - Admin mutations validate required fields.
 - Admin mutations broadcast live-display updates when they affect display content.
 - Admin can start, stop, and reset the costume contest; lock winner, show winner, restore display; and start, stop, and reset karaoke party state.
+- The focused `/admin/games` workspace can enable/disable enrollment, start,
+  end, and confirmed-reset Two Truths and a Lie; inspect live participation,
+  guess completion, provisional/final scores, truth/lie data, and raw guesses;
+  export game JSON; and manually pause on game, winner, or results display
+  cards before resuming rotation.
 - Admin receives inline success/error messages.
 - Admin JSON export routes are available for full Redis state, costume results,
   and karaoke lineup at `/admin/export/state`,
@@ -242,8 +252,13 @@ app state.
 - Live display always rotates party-night cards, even before
   `HALLOWEEN_PARTY_START`, so hosts can stage/test the TV experience.
 - Rotates through WiFi/app sign-in instructions, costume signup prompts, karaoke
-  signup prompts, drink-order promotion, live-update explanation cards,
-  winner/scoreboard cards, costume entries, and karaoke entries.
+  signup prompts, game signup and anonymous clue cards, drink-order promotion,
+  live-update explanation cards, winner/scoreboard cards, costume entries, and
+  karaoke entries.
+- Ended Two Truths and a Lie games add tied-winner and final-score/participant
+  cards to rotation. Persistent `game_*` overrides let admins pause on game,
+  winner, or result announcements while temporary drink-ready notices retain
+  top-layer precedence.
 - Signup portal card includes admin-configurable WiFi network/password details
   and the party portal link.
 - Display entries rotate every 8 seconds with fade/slide transitions.

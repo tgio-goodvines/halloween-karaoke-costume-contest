@@ -315,6 +315,7 @@ class RedisStateTests(unittest.TestCase):
         main.karaoke_state.clear()
         main.karaoke_state.update(main.copy.deepcopy(main.DEFAULT_KARAOKE_STATE))
         main.youtube_karaoke = main.copy.deepcopy(main.DEFAULT_YOUTUBE_KARAOKE_STATE)
+        main.games_state = main.copy.deepcopy(main.DEFAULT_GAMES_STATE)
         main.party_details = main.copy.deepcopy(main.DEFAULT_PARTY_DETAILS)
 
     def login_regular(self, client, user_id="user-1", username="Jamie"):
@@ -4123,7 +4124,7 @@ class RedisStateTests(unittest.TestCase):
                 self.assertEqual("pending", migrated.workflow["approval_status"])
                 self.assertEqual("not_started", migrated.workflow["playlist_sync_status"])
                 main.save_state_to_redis()
-                self.assertEqual(6, self.redis_state()["schema_version"])
+                self.assertEqual(main.STATE_SCHEMA_VERSION, self.redis_state()["schema_version"])
 
     def test_youtube_search_budget_blocks_new_uncached_queries_at_configured_limit(self):
         self.enable_youtube_karaoke()
@@ -4293,6 +4294,170 @@ class RedisStateTests(unittest.TestCase):
         backup = json.loads(self.fake_redis.store[backup_keys[0]])
         self.assertEqual("karaoke-clear", backup["backup_reason"])
         self.assertEqual(2, len(backup["karaoke_signups"]))
+
+    def test_schema_six_snapshot_migrates_to_disabled_games_state(self):
+        snapshot = main.snapshot_state()
+        snapshot["schema_version"] = 6
+        snapshot.pop("games_state", None)
+        self.fake_redis.set(main.redis_key("state"), json.dumps(snapshot))
+
+        self.assertTrue(main.load_state_from_redis())
+
+        game = main.two_truths_game()
+        self.assertFalse(game["enabled"])
+        self.assertEqual("signup", game["phase"])
+        self.assertEqual({}, game["participants"])
+        main.save_state_to_redis()
+        self.assertEqual(7, self.redis_state()["schema_version"])
+        self.assertIn("games_state", self.redis_state())
+
+    def test_two_truths_enrollment_is_persisted_and_live_display_is_anonymous(self):
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            enabled = admin.post("/admin/games", data={"action": "enable_two_truths_game"})
+        self.assertEqual(200, enabled.status_code)
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            page = attendee.get("/party/games")
+            submitted = attendee.post(
+                "/party/games/two-truths-and-a-lie/submission",
+                data={
+                    "truth_one": "I have climbed a volcano.",
+                    "truth_two": "I can juggle.",
+                    "lie": "I have never seen a horror movie.",
+                },
+            )
+
+        self.assertEqual(200, page.status_code)
+        self.assertEqual(302, submitted.status_code)
+        game = main.two_truths_game()
+        self.assertIn("user-1", game["participants"])
+        self.assertEqual("Jamie", game["participants"]["user-1"]["answer_name"])
+        self.assertEqual(
+            [0, 1, 2],
+            sorted(game["participants"]["user-1"]["display_order"]),
+        )
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            payload = admin.get("/api/display-data").get_json()
+        game_entry = next(entry for entry in payload["entries"] if entry["category"] == "Two Truths and a Lie")
+        self.assertNotIn("Jamie", json.dumps(game_entry))
+        self.assertNotIn("answer_name", json.dumps(game_entry))
+        self.assertNotIn('"lie":', json.dumps(game_entry).lower())
+        self.assertNotIn('"truths":', json.dumps(game_entry).lower())
+
+    def test_two_truths_lifecycle_guess_scoring_ties_overrides_export_and_reset(self):
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post("/admin/games", data={"action": "enable_two_truths_game"})
+
+        participants = [
+            ("user-1", "Jamie", "I own a kayak.", "I speak French.", "I dislike candy."),
+            ("user-2", "Morgan", "I met a president.", "I bake bread.", "I fear pumpkins."),
+        ]
+        submission_ids = {}
+        for user_id, username, truth_one, truth_two, lie in participants:
+            with main.app.test_client() as attendee:
+                self.login_regular(attendee, user_id=user_id, username=username)
+                response = attendee.post(
+                    "/party/games/two-truths-and-a-lie/submission",
+                    data={"truth_one": truth_one, "truth_two": truth_two, "lie": lie},
+                )
+                self.assertEqual(302, response.status_code)
+            submission_ids[user_id] = main.two_truths_game()["participants"][user_id]["submission_id"]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            started = admin.post("/admin/games", data={"action": "start_two_truths_game"})
+        self.assertEqual(200, started.status_code)
+        self.assertEqual("active", main.two_truths_game()["phase"])
+
+        with main.app.test_client() as jamie:
+            self.login_regular(jamie, user_id="user-1", username="Jamie")
+            active_page = jamie.get("/party/games")
+            self.assertNotIn(b"Morgan", active_page.data)
+            guessed = jamie.post(
+                f"/party/games/two-truths-and-a-lie/guesses/{submission_ids['user-2']}",
+                data={"guessed_name": "  MORGAN  "},
+            )
+            self.assertEqual(302, guessed.status_code)
+
+        with main.app.test_client() as morgan:
+            self.login_regular(morgan, user_id="user-2", username="Morgan")
+            guessed = morgan.post(
+                f"/party/games/two-truths-and-a-lie/guesses/{submission_ids['user-1']}",
+                data={"guessed_name": "jamie"},
+            )
+            self.assertEqual(302, guessed.status_code)
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            ended = admin.post("/admin/games", data={"action": "end_two_truths_game"})
+            exported = admin.get("/admin/export/games")
+            winner_override = admin.post("/admin/games", data={"action": "show_two_truths_winner"})
+            self.assertEqual("game_winner", main.live_display_event_override["type"])
+            results_override = admin.post("/admin/games", data={"action": "show_two_truths_results"})
+            self.assertEqual("game_results", main.live_display_event_override["type"])
+            resumed = admin.post("/admin/games", data={"action": "resume_game_display"})
+
+        self.assertEqual(200, ended.status_code)
+        self.assertEqual(200, exported.status_code)
+        self.assertEqual(200, winner_override.status_code)
+        self.assertEqual(200, results_override.status_code)
+        self.assertEqual(200, resumed.status_code)
+        self.assertIsNone(main.live_display_event_override)
+        game = main.two_truths_game()
+        self.assertEqual("ended", game["phase"])
+        self.assertEqual({"user-1", "user-2"}, set(game["results"]["winner_ids"]))
+        self.assertTrue(all(score["correct"] == 1 for score in game["results"]["scores"]))
+        self.assertIn(b'"games_state"', exported.data)
+
+        entries = main.build_rotation_entries()
+        self.assertTrue(any(entry["category"].startswith("Two Truths and a Lie Winner") for entry in entries))
+        self.assertTrue(any(entry.get("primary") == "Final Scores" for entry in entries))
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            reset = admin.post(
+                "/admin/games",
+                data={
+                    "action": "reset_two_truths_game",
+                    "confirmation": "RESET TWO TRUTHS AND A LIE",
+                },
+            )
+        self.assertEqual(200, reset.status_code)
+        self.assertTrue(main.two_truths_game()["enabled"])
+        self.assertEqual({}, main.two_truths_game()["participants"])
+        self.assertEqual({}, main.two_truths_game()["guesses"])
+
+    def test_two_truths_routes_require_role_phase_and_participation(self):
+        main.two_truths_game()["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as anonymous:
+            self.assertEqual(302, anonymous.get("/party/games").status_code)
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            self.assertEqual(
+                302,
+                attendee.post(
+                    "/party/games/two-truths-and-a-lie/submission",
+                    data={"truth_one": "Same", "truth_two": " same ", "lie": "Different"},
+                ).status_code,
+            )
+            game = main.two_truths_game()
+            self.assertEqual({}, game["participants"])
+            game["phase"] = "active"
+            self.save_current_state()
+            blocked = attendee.post(
+                "/party/games/two-truths-and-a-lie/guesses/not-found",
+                data={"guessed_name": "Morgan"},
+            )
+            self.assertEqual(302, blocked.status_code)
+            self.assertEqual({}, main.two_truths_game()["guesses"])
 
     def test_admin_bulk_clear_requires_exact_confirmation_and_admin(self):
         self.enable_youtube_karaoke()

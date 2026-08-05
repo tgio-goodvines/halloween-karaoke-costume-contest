@@ -15,6 +15,7 @@
         {{ workspace.label }}
         {% if key == 'guests' %}<span>{{ rsvp_signups|length }}</span>{% endif %}
         {% if key == 'karaoke' and karaoke_admin.metrics.attention %}<span aria-label="{{ karaoke_admin.metrics.attention }} karaoke issues">{{ karaoke_admin.metrics.attention }}</span>{% elif key == 'karaoke' and karaoke_admin.metrics.pending %}<span>{{ karaoke_admin.metrics.pending }}</span>{% elif key == 'karaoke' and karaoke_admin.stage_mode == 'on_stage' %}<span>LIVE</span>{% endif %}
+        {% if key == 'games' and games_admin.phase == 'active' %}<span>LIVE</span>{% elif key == 'games' and games_admin.statistics.participant_count %}<span>{{ games_admin.statistics.participant_count }}</span>{% endif %}
         {% if key == 'dj' and dj_song_requests %}<span>{{ dj_song_requests|length }}</span>{% endif %}
         {% if key == 'bar' and active_drink_order_count %}<span>{{ active_drink_order_count }}</span>{% endif %}
       </a>
@@ -69,6 +70,11 @@
           <strong>{% if karaoke_admin.stage_mode == 'on_stage' %}Live{% elif karaoke_admin.metrics.attention %}Attention{% elif karaoke_admin.metrics.pending %}Review{% else %}Standby{% endif %}</strong>
           <span>{{ karaoke_admin.metrics.pending }} pending · {{ karaoke_admin.metrics.ready }} ready</span>
         </a>
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='games') }}">
+          <span class="admin-home__label">Party games</span>
+          <strong>{% if not games_admin.enabled %}Disabled{% elif games_admin.phase == 'active' %}Live{% elif games_admin.phase == 'ended' %}Ended{% else %}Signup{% endif %}</strong>
+          <span>{{ games_admin.statistics.participant_count }} participant{{ 's' if games_admin.statistics.participant_count != 1 else '' }} · {{ games_admin.statistics.submitted_guesses }} guesses</span>
+        </a>
         <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='dj') }}">
           <span class="admin-home__label">DJ receiver</span>
           <strong>{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</strong>
@@ -81,6 +87,105 @@
         <a class="button" href="{{ url_for('admin_portal', admin_view='menu') }}">Manage Menu</a>
       </div>
     </section>
+  {% endif %}
+
+  {% if admin_view == 'games' %}
+  <section class="admin-section games-admin">
+    <div class="games-admin__heading">
+      <div>
+        <p class="admin-panel__eyebrow">Game control</p>
+        <h3>Two Truths and a Lie</h3>
+        <p>Control enrollment and play, inspect live progress, and choose when game cards take over the live display.</p>
+      </div>
+      <span class="game-phase game-phase--{{ games_admin.phase }}">
+        {% if not games_admin.enabled %}Disabled{% elif games_admin.phase == 'signup' %}Enrollment open{% elif games_admin.phase == 'active' %}Guessing live{% else %}Finalized{% endif %}
+      </span>
+    </div>
+
+    <div class="game-admin-metrics">
+      <div><span>Participants</span><strong>{{ games_admin.statistics.participant_count }}</strong></div>
+      <div><span>Active guessers</span><strong>{{ games_admin.statistics.guesser_count }}</strong></div>
+      <div><span>Guesses</span><strong>{{ games_admin.statistics.submitted_guesses }} / {{ games_admin.statistics.possible_guesses }}</strong></div>
+      <div><span>Completion</span><strong>{{ games_admin.statistics.completion_percent }}%</strong></div>
+      <div><span>Correct</span><strong>{{ games_admin.statistics.correct_guesses }}</strong></div>
+      <div><span>Incorrect</span><strong>{{ games_admin.statistics.incorrect_guesses }}</strong></div>
+    </div>
+
+    <div class="contest-actions game-admin-actions">
+      {% if not games_admin.enabled %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit" name="action" value="enable_two_truths_game">Enable Enrollment</button></form>
+      {% else %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit" name="action" value="disable_two_truths_game">Disable Game</button></form>
+      {% endif %}
+      {% if games_admin.enabled and games_admin.phase == 'signup' %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit" name="action" value="start_two_truths_game">Start Game</button></form>
+      {% elif games_admin.phase == 'active' %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit" name="action" value="end_two_truths_game">End and Tally Results</button></form>
+      {% endif %}
+      <a class="button" href="{{ url_for('export_games') }}">Download Game Data</a>
+    </div>
+
+    <section class="admin-subsection">
+      <h4>Live Display Controls</h4>
+      <p>These controls pause the normal rotation on a persistent game card until Resume Rotation is selected.</p>
+      <div class="contest-actions">
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit" name="action" value="pause_game_display">Pause on Game Card</button></form>
+        {% if games_admin.phase == 'ended' %}
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit" name="action" value="show_two_truths_winner"{% if not games_admin.winners %} disabled{% endif %}>Show Winner</button></form>
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit" name="action" value="show_two_truths_results">Show Results</button></form>
+        {% endif %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" type="submit" name="action" value="resume_game_display">Resume Rotation</button></form>
+      </div>
+    </section>
+
+    <section class="admin-subsection">
+      <h4>{% if games_admin.phase == 'ended' %}Final{% else %}Provisional{% endif %} Leaderboard</h4>
+      {% if games_admin.statistics.scores %}
+        <div class="table-wrapper">
+          <table><thead><tr><th>Rank</th><th>Player</th><th>Correct</th><th>Attempts</th><th>Accuracy</th></tr></thead><tbody>
+            {% for score in games_admin.statistics.scores %}<tr><td>#{{ loop.index }}</td><td>{{ score.name }}</td><td>{{ score.correct }}</td><td>{{ score.attempts }}</td><td>{{ score.accuracy }}%</td></tr>{% endfor %}
+          </tbody></table>
+        </div>
+      {% else %}<p class="empty-state">No guesses have been submitted yet.</p>{% endif %}
+    </section>
+
+    <section class="admin-subsection">
+      <h4>Participants and Statements</h4>
+      {% if games_admin.participants_list %}
+        <div class="admin-game-participants">
+          {% for participant in games_admin.participants_list %}
+            <details class="admin-entry"><summary><strong>{{ participant.answer_name }}</strong><span>{{ participant.submission_id }}</span></summary>
+              <div class="admin-entry__form">
+                <p><strong>Truth:</strong> {{ participant.truths[0] }}</p>
+                <p><strong>Truth:</strong> {{ participant.truths[1] }}</p>
+                <p><strong>Lie:</strong> {{ participant.lie }}</p>
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+      {% else %}<p class="empty-state">No participants have submitted a mystery card.</p>{% endif %}
+    </section>
+
+    <section class="admin-subsection">
+      <h4>Guess Data</h4>
+      {% if games_admin.raw_guesses %}
+        <div class="table-wrapper"><table><thead><tr><th>Guesser</th><th>Target</th><th>Entered</th><th>Result</th></tr></thead><tbody>
+          {% for guess in games_admin.raw_guesses %}<tr><td>{{ guess.guesser_name }}</td><td>{{ guess.target_name }}</td><td>{{ guess.guessed_name }}</td><td>{{ 'Correct' if guess.correct else 'Incorrect' }}</td></tr>{% endfor %}
+        </tbody></table></div>
+      {% else %}<p class="empty-state">No raw guesses are available yet.</p>{% endif %}
+    </section>
+
+    <details class="danger-zone">
+      <summary>Reset Two Truths and a Lie</summary>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p>This permanently clears participants, statements, guesses, scores, and winners after creating a Redis backup.</p>
+        <label for="two-truths-reset-confirmation">Type RESET TWO TRUTHS AND A LIE</label>
+        <input id="two-truths-reset-confirmation" name="confirmation" autocomplete="off" required>
+        <button class="button button--danger" type="submit" name="action" value="reset_two_truths_game">Reset Game</button>
+      </form>
+    </details>
+  </section>
   {% endif %}
 
   {% if admin_view == 'public' %}

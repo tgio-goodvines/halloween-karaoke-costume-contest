@@ -90,8 +90,17 @@
 - `GET /admin/export/state` -> JSON export of current Redis-backed app state.
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
+- `GET /admin/export/games` -> admin-only JSON export of the Redis-backed game
+  registry, raw guesses, and finalized results.
 - `GET|POST /party/costumes` -> attendee costume signup form, available on
   the party date and redirected to `/party` before then.
+- `GET /party/games` -> party-day Games workspace for enabled games. The
+  selected `game` query activates the Two Truths and a Lie tab; signup, active
+  guessing, and final result views are server-selected from Redis state.
+- `POST /party/games/two-truths-and-a-lie/opt-in|submission` and
+  `POST /party/games/two-truths-and-a-lie/guesses/<submission_id>` ->
+  CSRF-protected, account-bound enrollment, clue submission/update, and guess
+  upsert actions with phase and ownership checks.
 - `GET|POST /party/karaoke` -> attendee karaoke signup form, available on the
   party date and redirected to `/party` before then. With YouTube karaoke
   enabled, the three-step flow collects song-card metadata first, searches for
@@ -146,6 +155,12 @@ its operation ID, target item IDs, counts, backup key, status, and failure
 details in `youtube_karaoke.clear_operation`. The clear target is derived only
 from each signup's persisted `workflow.playlist_item_id`; foreign/manual
 playlist items are intentionally outside its deletion scope.
+
+`party_games.py` is the pure game-domain boundary: default registry state,
+normalization of persisted submissions/guesses/results, anonymous statement
+ordering, identity scoring, tied winner calculation, and admin statistics.
+`main.py` retains route authorization, Redis locking/persistence, backups, and
+display-update broadcasts.
 
 `main.py` is the entire backend. Its main responsibilities are:
 
@@ -229,7 +244,11 @@ network/password values come from Redis-backed
 `display_settings`, defaulting to `HALLOWEEN_DISPLAY_WIFI_NETWORK` and
 `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank values are allowed so the live display
 can omit either row. Winner and scoreboard cards are appended when the relevant
-contest state is active. Costume and karaoke entries are then interleaved. Admin
+contest state is active. Enabled Two Truths and a Lie submissions are
+interleaved as anonymous three-statement cards. After finalization, tied-winner
+and generic scoreboard cards join rotation; account identity and truth/lie
+metadata never enter the pre-result display payload. Costume and karaoke
+entries are also interleaved. Admin
 stop/reset actions clear matching live-display event overrides without deleting
 signup lineups. Starting costume stops active karaoke event mode, and starting
 karaoke closes active costume voting so costume/karaoke do not compete for the

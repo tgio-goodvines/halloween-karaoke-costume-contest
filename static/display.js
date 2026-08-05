@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     : null;
   const costumeCountElement = document.querySelector('[data-costume-count]');
   const karaokeCountElement = document.querySelector('[data-karaoke-count]');
+  const gameCountElement = document.querySelector('[data-game-count]');
   let hasRefreshedDisplayStylesheet = false;
   const bodyDataset = (document.body && document.body.dataset) || {};
   const dataEndpoint = bodyDataset.displayApi || '/api/display-data';
@@ -488,7 +489,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'display-override__card--karaoke',
         'display-override__card--contest',
         'display-override__card--winner',
-        'display-override__card--drink'
+        'display-override__card--drink',
+        'display-override__card--game'
       );
     }
 
@@ -501,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isContestStartOverride = overrideType === 'contest_start';
     const isContestWinnerOverride = overrideType === 'winner';
     const isDrinkReadyOverride = overrideType === 'drink_ready';
+    const isGameOverride = overrideType.startsWith('game_');
 
     if (overrideTitleElement) {
       overrideTitleElement.textContent = titleText;
@@ -640,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       updateKaraokeLineup([]);
 
-      if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride || isDrinkReadyOverride)) {
+      if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride || isDrinkReadyOverride || isGameOverride)) {
         overrideCardElement.classList.add('display-override__card--inferno');
         if (isContestStartOverride) {
           overrideCardElement.classList.add('display-override__card--contest');
@@ -650,6 +653,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (isDrinkReadyOverride) {
           overrideCardElement.classList.add('display-override__card--drink');
+        }
+        if (isGameOverride) {
+          overrideCardElement.classList.add('display-override__card--game');
         }
       }
     }
@@ -851,7 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const costumeElement = document.createElement('span');
           costumeElement.className = 'display-scoreboard__costume';
-          costumeElement.textContent = row.costume ? `as ${row.costume}` : '';
+          costumeElement.textContent = row.detail || (row.costume ? `as ${row.costume}` : '');
 
           infoElement.appendChild(nameElement);
           infoElement.appendChild(costumeElement);
@@ -861,13 +867,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const averageElement = document.createElement('span');
           averageElement.className = 'display-scoreboard__average';
-          averageElement.textContent = formatAverageScore(row.average);
+          averageElement.textContent = row.value_label || formatAverageScore(row.average);
 
           const votesElement = document.createElement('span');
           votesElement.className = 'display-scoreboard__votes';
           const voteCount = Number(row.count);
           const safeCount = Number.isFinite(voteCount) ? voteCount : 0;
-          votesElement.textContent = `${safeCount} ${safeCount === 1 ? 'vote' : 'votes'}`;
+          votesElement.textContent = row.meta_label || `${safeCount} ${safeCount === 1 ? 'vote' : 'votes'}`;
 
           metricsElement.appendChild(averageElement);
           metricsElement.appendChild(votesElement);
@@ -1086,13 +1092,17 @@ document.addEventListener('DOMContentLoaded', () => {
   setOverrideState(initialOverrideState ?? null, { force: true });
   setNoticeOverrideState(initialNoticeOverrideState ?? null, { force: true });
 
-  const updateCounts = (costumeCount, karaokeCount) => {
+  const updateCounts = (costumeCount, karaokeCount, gameCount) => {
     if (costumeCountElement && Number.isFinite(costumeCount)) {
       costumeCountElement.textContent = costumeCount;
     }
 
     if (karaokeCountElement && Number.isFinite(karaokeCount)) {
       karaokeCountElement.textContent = karaokeCount;
+    }
+
+    if (gameCountElement && Number.isFinite(gameCount)) {
+      gameCountElement.textContent = gameCount;
     }
   };
 
@@ -1111,12 +1121,13 @@ document.addEventListener('DOMContentLoaded', () => {
         entries: newEntries,
         costume_count: costumeCount,
         karaoke_count: karaokeCount,
+        game_count: gameCount,
         override: newOverride,
         event_override: newEventOverride,
         notice_override: newNoticeOverride,
       } = payload;
 
-      updateCounts(costumeCount, karaokeCount);
+      updateCounts(costumeCount, karaokeCount, gameCount);
       setOverrideState(newEventOverride || newOverride || null);
       setNoticeOverrideState(newNoticeOverride || null);
 

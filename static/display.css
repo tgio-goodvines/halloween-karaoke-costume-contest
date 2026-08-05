@@ -1599,3 +1599,12 @@ body.display-mode {
   color: #ff8a8a;
   box-shadow: 0 0 16px rgba(255, 49, 49, 0.2);
 }
+/* Two Truths and a Lie display states */
+.display-override__card--game {
+  border-color: rgba(255, 85, 85, 0.92);
+  box-shadow: 0 0 44px rgba(255, 49, 49, 0.3), 0 28px 80px rgba(0, 0, 0, 0.62);
+}
+
+.display-override__card--game .display-override__highlight {
+  color: #ff5555;
+}

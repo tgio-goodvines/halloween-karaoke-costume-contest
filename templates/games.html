@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% set title = "Party Games" %}
+
+{% block content %}
+<section class="games-shell">
+  <header class="games-hero">
+    <p class="admin-panel__eyebrow">Party games</p>
+    <h2>Games</h2>
+    <p>Join a game, submit your setup, and play from your phone once the hosts begin.</p>
+  </header>
+
+  <nav class="games-tabs" aria-label="Available party games">
+    <a href="{{ url_for('party_games', game='two-truths-and-a-lie') }}" aria-current="page">Two Truths and a Lie</a>
+  </nav>
+
+  {% if error %}
+    <div class="flash flash--error"><p>{{ error }}</p></div>
+  {% endif %}
+  {% if success == 'submission' %}
+    <div class="flash flash--success"><p>Your mystery statements were saved and added to the live-display rotation.</p></div>
+  {% elif success == 'guess' %}
+    <div class="flash flash--success"><p>Your guess was saved. You can update it until the hosts end the game.</p></div>
+  {% endif %}
+
+  <section class="game-panel">
+    <header class="game-panel__header">
+      <div>
+        <p class="admin-panel__eyebrow">Identity game</p>
+        <h3>Two Truths and a Lie</h3>
+      </div>
+      <span class="game-phase game-phase--{{ game.phase }}">
+        {% if game.phase == 'signup' %}Enrollment open{% elif game.phase == 'active' %}Guessing live{% else %}Final results{% endif %}
+      </span>
+    </header>
+
+    {% if game.phase == 'signup' %}
+      {% if not participant and not show_participation_form %}
+        <div class="game-opt-in">
+          <h4>Would you like to participate?</h4>
+          <p>Give everyone two true facts and one believable lie. Your name stays hidden until the game ends.</p>
+          <div class="contest-actions">
+            <form method="post" action="{{ url_for('party_game_opt_in') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="button button--primary" type="submit">Yes, I’ll Play</button>
+            </form>
+            <a class="button" href="{{ url_for('party_dashboard') }}">Not Now</a>
+          </div>
+        </div>
+      {% else %}
+        <form method="post" action="{{ url_for('party_game_submission') }}" class="game-submission-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <h4>{% if participant %}Update your mystery card{% else %}Create your mystery card{% endif %}</h4>
+          <p>All three statements appear anonymously and in a shuffled order. Other players will guess which party guest wrote them.</p>
+
+          <label for="truth_one">Truth one</label>
+          <textarea id="truth_one" name="truth_one" maxlength="{{ statement_max_length }}" required>{{ participant.truths[0] if participant else '' }}</textarea>
+
+          <label for="truth_two">Truth two</label>
+          <textarea id="truth_two" name="truth_two" maxlength="{{ statement_max_length }}" required>{{ participant.truths[1] if participant else '' }}</textarea>
+
+          <label for="lie">The lie</label>
+          <textarea id="lie" name="lie" maxlength="{{ statement_max_length }}" required>{{ participant.lie if participant else '' }}</textarea>
+
+          <p class="form-helper">Your answer name will be <strong>{{ session.username }}</strong>. Players should enter that party-account name when they guess.</p>
+          <button class="button button--primary" type="submit">{% if participant %}Update Submission{% else %}Save and Join{% endif %}</button>
+        </form>
+      {% endif %}
+    {% elif game.phase == 'active' %}
+      {% if participant %}
+        <div class="game-instructions">
+          <h4>Guess the mystery guests</h4>
+          <p>Read each set of statements and enter the party-account name you think belongs to that person. Your latest guess is the one that counts.</p>
+        </div>
+        {% if submissions %}
+          <div class="mystery-grid">
+            {% for submission in submissions %}
+              <article class="mystery-card">
+                <p class="mystery-card__number">Mystery guest {{ loop.index }}</p>
+                <ol>
+                  {% for statement in submission.statements %}<li>{{ statement }}</li>{% endfor %}
+                </ol>
+                <form method="post" action="{{ url_for('party_game_guess', submission_id=submission.submission_id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label for="guess-{{ submission.submission_id }}">Who is this?</label>
+                  <input id="guess-{{ submission.submission_id }}" name="guessed_name" maxlength="80" value="{{ submission.saved_guess }}" placeholder="Enter a party-account name" required>
+                  <button class="button{% if not submission.saved_guess %} button--primary{% endif %}" type="submit">{% if submission.saved_guess %}Update Guess{% else %}Save Guess{% endif %}</button>
+                </form>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="empty-state">There are no other mystery guests to guess yet.</p>
+        {% endif %}
+      {% else %}
+        <div class="game-opt-in">
+          <h4>The game is underway</h4>
+          <p>Enrollment closed when the hosts started the game. Watch the live display and join the next round.</p>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="game-results">
+        {% if winners %}
+          <div class="game-winner-callout">
+            <p class="admin-panel__eyebrow">Winner{% if winners|length != 1 %}s{% endif %}</p>
+            <h4>{% for winner in winners %}{{ winner.name }}{% if not loop.last %}, {% endif %}{% endfor %}</h4>
+            <p>{{ winners[0].correct }} correct guess{{ 'es' if winners[0].correct != 1 else '' }}.</p>
+          </div>
+        {% else %}
+          <div class="game-winner-callout"><h4>No mystery solved tonight</h4><p>No player submitted a correct identity guess.</p></div>
+        {% endif %}
+
+        {% if results.scores %}
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Rank</th><th>Player</th><th>Correct</th><th>Attempts</th><th>Accuracy</th></tr></thead>
+              <tbody>
+                {% for score in results.scores %}
+                  <tr><td>#{{ loop.index }}</td><td>{{ score.name }}</td><td>{{ score.correct }}</td><td>{{ score.attempts }}</td><td>{{ score.accuracy }}%</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+
+        {% if participant and submissions %}
+          <h4>Mysteries revealed</h4>
+          <div class="mystery-grid">
+            {% for submission in submissions %}
+              <article class="mystery-card mystery-card--revealed">
+                <p class="mystery-card__number">{{ submission.answer_name }}</p>
+                <ol>{% for statement in submission.statements %}<li{% if statement == submission.lie %} class="is-lie"{% endif %}>{{ statement }}{% if statement == submission.lie %} <strong>— Lie</strong>{% endif %}</li>{% endfor %}</ol>
+                {% if submission.saved_guess %}<p>Your guess: <strong>{{ submission.saved_guess }}</strong></p>{% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

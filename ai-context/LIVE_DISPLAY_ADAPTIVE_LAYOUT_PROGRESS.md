@@ -2,10 +2,9 @@
 
 ## Status
 
-Implemented and verified locally on August 10, 2026. The live display now uses
-a single fixed viewport with no page scrolling and a focused `/admin/display`
-control room. Production deployment status should be updated in the release
-section after the GitHub Actions run completes.
+Implemented, verified, and deployed on August 10, 2026 (August 11 UTC). The
+live display now uses a single fixed viewport with no page scrolling and a
+focused `/admin/display` control room.
 
 ## TV Layout
 
@@ -86,6 +85,11 @@ consumers. SSE continues to trigger immediate full-layout refreshes and the
 ## Release
 
 - Branch: `codex/adaptive-live-display`
-- Commit: pending
-- GitHub Actions deployment: pending
-- Production health and authenticated-route checks: pending
+- Implementation commit: `f783aa69f6039d5ee1d74a193bba0f26004860c1`
+- GitHub Actions deployment run `31450359365` completed successfully.
+- `https://tnq-halloween.com/health` and the `www` hostname returned
+  `status="ok"` with Redis DB 1 available.
+- `https://appg-v.com/health` remained online after deployment.
+- Production served the new adaptive `static/display.js` markers.
+- Anonymous requests to `/live-display` and `/admin/display` returned the
+  expected `302` redirect to `/admin/login`.

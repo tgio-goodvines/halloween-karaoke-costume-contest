@@ -80,6 +80,11 @@
           <strong>{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</strong>
           <span>{% if dj_song_requests %}{{ dj_song_requests|length }} request{{ 's' if dj_song_requests|length != 1 else '' }} waiting · {% endif %}{% if dj_state.current_song %}{{ dj_state.current_song.title }}{% else %}{{ dj_playlist|length }} song{{ 's' if dj_playlist|length != 1 else '' }} in playlist{% endif %}</span>
         </a>
+        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='display') }}">
+          <span class="admin-home__label">Live display</span>
+          <strong>{% if display_runtime.center_paused or live_override %}Paused{% else %}Rotating{% endif %}</strong>
+          <span>{{ display_layout.center.entries|length }} center cards · {{ display_layout.games.entries|length }} game panels</span>
+        </a>
       </div>
       <div class="admin-home__next-actions">
         <a class="button button--primary" href="{{ url_for('bartender_portal') }}">Open Bartender Queue</a>
@@ -87,6 +92,155 @@
         <a class="button" href="{{ url_for('admin_portal', admin_view='menu') }}">Manage Menu</a>
       </div>
     </section>
+  {% endif %}
+
+  {% if admin_view == 'display' %}
+  <section class="admin-section display-admin">
+    <div class="display-admin__heading">
+      <div>
+        <p class="admin-panel__eyebrow">TV control room</p>
+        <h3>Live Display</h3>
+        <p>Control center-stage cards, game rotation, the active bar queue, drink-ready alerts, and the jukebox footer.</p>
+      </div>
+      <a class="button button--primary" href="{{ url_for('live_display') }}" target="_blank" rel="noopener">Open Live Display</a>
+    </div>
+
+    <div class="display-admin__status-grid">
+      <article><span>Center stage</span><strong>{% if live_override %}Spotlight{% elif display_runtime.pinned_card_id %}Pinned{% elif display_runtime.center_paused %}Paused{% else %}Rotating{% endif %}</strong><small>{{ display_layout.center.entries|length }} available cards</small></article>
+      <article><span>Left stage</span><strong>{% if display_layout.games.visible %}{{ display_layout.games.entries|length }} Game{{ 's' if display_layout.games.entries|length != 1 else '' }}{% else %}Collapsed{% endif %}</strong><small>{% if display_config.pinned_game_key %}Pinned{% else %}Automatic rotation{% endif %}</small></article>
+      <article><span>Right stage</span><strong>{% if display_layout.bar.visible %}{{ display_layout.bar.active_count }} Active{% else %}Collapsed{% endif %}</strong><small>{% if display_layout.bar.notice %}Ready alert showing{% else %}Drink queue{% endif %}</small></article>
+      <article><span>Music footer</span><strong>{% if display_layout.music.visible %}Visible{% else %}Collapsed{% endif %}</strong><small>{{ display_config.music_mode|title }} mode</small></article>
+    </div>
+
+    <section class="admin-subsection">
+      <h4>Run of Show</h4>
+      <p>Host spotlights occupy center stage without hiding the title, games, bar queue, or music footer.</p>
+      <div class="contest-actions">
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="previous_display_card">Previous Card</button></form>
+        {% if display_runtime.center_paused or display_runtime.pinned_card_id or live_override %}
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" name="action" value="resume_display_rotation">Resume Rotation</button></form>
+        {% else %}
+          <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="pause_display_rotation">Pause Rotation</button></form>
+        {% endif %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="next_display_card">Next Card</button></form>
+        {% if display_layout.bar.notice %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="dismiss_display_notice">Dismiss Ready Alert</button></form>{% endif %}
+        {% if live_override %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--outline" name="action" value="clear_display_override">Clear All Overrides</button></form>{% endif %}
+      </div>
+      {% if display_layout.center.entries %}
+        <form method="post" class="display-admin__spotlight-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>Spotlight a current card
+            <select name="entry_id">
+              {% for entry in display_layout.center.entries %}<option value="{{ entry.id }}"{% if display_runtime.pinned_card_id == entry.id %} selected{% endif %}>{{ entry.category }} — {{ entry.primary }}</option>{% endfor %}
+            </select>
+          </label>
+          <button class="button" name="action" value="pin_display_entry">Show Now</button>
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="admin-subsection">
+      <h4>Regions and Timing</h4>
+      <form method="post" class="display-admin__settings-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="display-admin__settings-grid">
+          <label>Center rotation seconds<input type="number" name="center_interval_seconds" min="4" max="30" value="{{ display_config.center_interval_seconds }}"></label>
+          <label>Game rotation seconds<input type="number" name="game_interval_seconds" min="5" max="30" value="{{ display_config.game_interval_seconds }}"></label>
+          <label>Left game stage<select name="game_mode"><option value="auto"{% if display_config.game_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.game_mode == 'always' %} selected{% endif %}>Always when games exist</option><option value="hidden"{% if display_config.game_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
+          <label>Right bar stage<select name="bar_mode"><option value="auto"{% if display_config.bar_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.bar_mode == 'always' %} selected{% endif %}>Always</option><option value="hidden"{% if display_config.bar_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
+          <label>Music footer<select name="music_mode"><option value="auto"{% if display_config.music_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.music_mode == 'always' %} selected{% endif %}>Always</option><option value="hidden"{% if display_config.music_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
+          <label>Display density<select name="density"><option value="compact"{% if display_config.density == 'compact' %} selected{% endif %}>Compact</option><option value="standard"{% if display_config.density == 'standard' %} selected{% endif %}>Standard</option><option value="large"{% if display_config.density == 'large' %} selected{% endif %}>Large</option></select></label>
+          <label>Visible bar orders<input type="number" name="max_bar_orders" min="1" max="8" value="{{ display_config.max_bar_orders }}"></label>
+          <label>Ready alert seconds<input type="number" name="notice_duration_seconds" min="5" max="30" value="{{ display_config.notice_duration_seconds }}"></label>
+        </div>
+        <fieldset class="display-admin__source-toggles"><legend>Center-stage sources</legend>{% for source in display_config.source_order %}<label><input type="checkbox" name="source_enabled" value="{{ source }}"{% if display_config.source_enabled[source] %} checked{% endif %}> {{ display_source_labels[source] }}</label>{% endfor %}</fieldset>
+        <button class="button button--primary" name="action" value="update_display_layout">Save Display Settings</button>
+      </form>
+    </section>
+
+    <section class="admin-subsection">
+      <h4>Center Rotation Order</h4>
+      <div class="display-admin__source-order">
+        {% for source in display_config.source_order %}
+          <article>
+            <span class="display-admin__source-rank">{{ loop.index }}</span>
+            <div><strong>{{ display_source_labels[source] }}</strong><small>{% if display_config.source_enabled[source] %}Enabled{% else %}Hidden{% endif %}</small></div>
+            <div class="contest-actions">
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="source" value="{{ source }}"><button class="button button--small" name="action" value="move_display_source_up"{% if loop.first %} disabled{% endif %}>Up</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="source" value="{{ source }}"><button class="button button--small" name="action" value="move_display_source_down"{% if loop.last %} disabled{% endif %}>Down</button></form>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="admin-subsection">
+      <h4>Left-Stage Game Rotation</h4>
+      {% if display_layout.games.entries %}
+        <div class="display-admin__game-list">
+          {% for game in display_layout.games.entries %}
+            <article><div><strong>{{ game.title }}</strong><small>{{ game.status_label }}</small></div><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game.game_key }}"><button class="button button--small" name="action" value="pin_display_game">{% if display_config.pinned_game_key == game.game_key %}Pinned{% else %}Pin{% endif %}</button></form></article>
+          {% endfor %}
+        </div>
+        {% if display_config.pinned_game_key %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="clear_display_game_pin">Resume Automatic Game Rotation</button></form>{% endif %}
+      {% else %}<p class="empty-state">No enabled games currently have display data. The left stage will collapse.</p>{% endif %}
+    </section>
+
+    <section class="admin-subsection">
+      <h4>Custom Card Library</h4>
+      <details class="admin-entry admin-entry--new">
+        <summary class="admin-entry__summary"><span class="admin-entry__rank">+</span><span class="admin-entry__summary-text"><strong>Build a custom card</strong><span>Create a scheduled announcement or host callout</span></span></summary>
+        <form method="post" class="admin-entry__form display-card-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="admin-entry__fields">
+            <label>Category<input name="category" maxlength="80" value="Announcement"></label>
+            <label>Headline<input name="primary" maxlength="180" required></label>
+            <label>Supporting text<textarea name="secondary" maxlength="500"></textarea></label>
+            <label>Detail text<textarea name="tertiary" maxlength="300"></textarea></label>
+            <label>Image URL<input type="url" name="image_url" maxlength="500"></label>
+            <label>CTA link<input name="link" maxlength="500" placeholder="https://… or /party"></label>
+            <label>CTA label<input name="link_label" maxlength="80"></label>
+            <label>Seconds<input type="number" name="duration_seconds" min="4" max="30" value="8"></label>
+            <label>Starts<input type="datetime-local" name="starts_at"></label>
+            <label>Ends<input type="datetime-local" name="ends_at"></label>
+            <label class="checkbox-field"><input type="checkbox" name="enabled" value="yes" checked> Enabled</label>
+          </div>
+          <button class="button button--primary" name="action" value="add_display_card">Add Card</button>
+        </form>
+      </details>
+
+      {% if display_custom_cards %}<div class="admin-entry-list">
+        {% for card in display_custom_cards %}
+          <details class="admin-entry admin-entry--editable">
+            <summary class="admin-entry__summary"><span class="admin-entry__rank">{{ loop.index }}</span><span class="admin-entry__summary-text"><strong>{{ card.primary }}</strong><span>{{ card.category }} · {% if card.enabled %}Enabled{% else %}Hidden{% endif %}</span></span></summary>
+            <form method="post" class="admin-entry__form display-card-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="card_id" value="{{ card.id }}">
+              <div class="admin-entry__fields">
+                <label>Category<input name="category" maxlength="80" value="{{ card.category }}"></label>
+                <label>Headline<input name="primary" maxlength="180" value="{{ card.primary }}" required></label>
+                <label>Supporting text<textarea name="secondary" maxlength="500">{{ card.secondary }}</textarea></label>
+                <label>Detail text<textarea name="tertiary" maxlength="300">{{ card.tertiary }}</textarea></label>
+                <label>Image URL<input name="image_url" maxlength="500" value="{{ card.image_url }}"></label>
+                <label>CTA link<input name="link" maxlength="500" value="{{ card.link }}"></label>
+                <label>CTA label<input name="link_label" maxlength="80" value="{{ card.link_label }}"></label>
+                <label>Seconds<input type="number" name="duration_seconds" min="4" max="30" value="{{ card.duration_seconds }}"></label>
+                <label>Starts<input type="datetime-local" name="starts_at" value="{{ display_form_datetime_value(card.starts_at) }}"></label>
+                <label>Ends<input type="datetime-local" name="ends_at" value="{{ display_form_datetime_value(card.ends_at) }}"></label>
+                <label class="checkbox-field"><input type="checkbox" name="enabled" value="yes"{% if card.enabled %} checked{% endif %}> Enabled</label>
+              </div>
+              <div class="contest-actions">
+                <button class="button button--primary" name="action" value="update_display_card">Save</button>
+                <button class="button" name="action" value="pin_display_card">Show Now</button>
+                <button class="button" name="action" value="move_display_card_up"{% if loop.first %} disabled{% endif %}>Up</button>
+                <button class="button" name="action" value="move_display_card_down"{% if loop.last %} disabled{% endif %}>Down</button>
+                <button class="button button--danger" name="action" value="delete_display_card" formnovalidate onclick="return confirm('Remove this custom display card?');">Delete</button>
+              </div>
+            </form>
+          </details>
+        {% endfor %}
+      </div>{% else %}<p class="empty-state">No custom display cards have been created.</p>{% endif %}
+    </section>
+  </section>
   {% endif %}
 
   {% if admin_view == 'games' %}

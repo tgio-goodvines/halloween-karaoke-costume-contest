@@ -77,7 +77,13 @@ Do not alter GoodVines SES identities or sender addresses.
 
 ## Live Display
 
-Completing a drink creates `live_display_notice_override` with `type="drink_ready"`, attendee name, drink name, `image_url`, and an `expires_at` timestamp 10 seconds in the future. `/live-display` and `/api/display-data` clean up expired notices. `static/display.js` renders the image in a top-layer notice card above either normal rotation or the current contest/karaoke/winner event override.
+Completing a drink creates a `drink_ready` notice with attendee name, drink
+name, `image_url`, and a configurable expiration (default 10 seconds). The
+current notice lives in `live_display_notice_override`; subsequent notices use
+the bounded `live_display_notice_queue` and advance sequentially. The adaptive
+display renders the current notice in the right stage above the remaining
+active-order count without replacing the center rotation or an event spotlight.
+When no active orders or notices remain, the right stage collapses.
 
 ## Templates And Styling
 

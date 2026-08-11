@@ -44,9 +44,11 @@ bounded numeric `offset` to the browser. It never accepts or follows an
 Apple-provided next URL from a client request. This keeps the developer-token
 request server-side and prevents the search endpoint from becoming a URL proxy.
 
-`/api/display-data` contains a `dj` object. `templates/display.html` renders a
-persistent Now Playing dock that stays visible below the display header while
-normal rotation, karaoke/costume overrides, and drink-ready notices continue.
+`/api/display-data` contains the compatibility `dj` object plus an adaptive
+`layout.music` region. `templates/display.html` renders Now Playing, playback
+progress, receiver/audio state, and Up Next in the footer. In automatic mode
+the footer collapses when it has no meaningful playback/receiver state, letting
+the center stage reclaim its height.
 
 ## Redis State
 

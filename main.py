@@ -321,7 +321,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 8
+STATE_SCHEMA_VERSION = 9
 
 
 @dataclass
@@ -488,6 +488,7 @@ DEFAULT_DJ_STATE: dict[str, object] = {
 
 DEFAULT_DRINK_ESTIMATE_SECONDS = 8 * 60
 DRINK_READY_OVERRIDE_SECONDS = 10
+DISPLAY_NOTICE_QUEUE_LIMIT = 12
 DRINK_READY_DASHBOARD_SECONDS = 5 * 60
 SPECIALTY_DRINK_INCLUDED_LIMIT = 3
 SPECIALTY_EXTRA_ORDER_HOUR = 23
@@ -509,6 +510,36 @@ DEFAULT_PARTY_DETAILS: dict[str, str] = {
 DEFAULT_DISPLAY_SETTINGS: dict[str, str] = {
     "wifi_network": app.config["DISPLAY_WIFI_NETWORK"],
     "wifi_password": app.config["DISPLAY_WIFI_PASSWORD"],
+}
+DISPLAY_SOURCE_KEYS = ("portal", "custom", "costume", "karaoke", "games", "bar", "updates")
+DISPLAY_SOURCE_LABELS = {
+    "portal": "Portal and WiFi",
+    "custom": "Custom cards",
+    "costume": "Costume contest",
+    "karaoke": "Karaoke",
+    "games": "Party games",
+    "bar": "Drink ordering",
+    "updates": "Live updates",
+}
+DISPLAY_VISIBILITY_MODES = {"auto", "always", "hidden"}
+DEFAULT_DISPLAY_CONFIG: dict[str, object] = {
+    "source_order": list(DISPLAY_SOURCE_KEYS),
+    "source_enabled": {source: True for source in DISPLAY_SOURCE_KEYS},
+    "center_interval_seconds": 8,
+    "game_interval_seconds": 10,
+    "game_mode": "auto",
+    "pinned_game_key": "",
+    "bar_mode": "auto",
+    "music_mode": "auto",
+    "max_bar_orders": 4,
+    "notice_duration_seconds": DRINK_READY_OVERRIDE_SECONDS,
+    "density": "standard",
+}
+DEFAULT_DISPLAY_RUNTIME: dict[str, object] = {
+    "center_index": 0,
+    "center_paused": False,
+    "pinned_card_id": "",
+    "center_revision": 0,
 }
 DEFAULT_BARTENDER_TIP_SETTINGS: dict[str, object] = {
     "enabled": False,
@@ -573,6 +604,7 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "home": {"label": "Tonight", "description": "Live party status and next actions."},
     "guests": {"label": "Guests", "description": "RSVPs, guest updates, and party details."},
     "public": {"label": "Public Info", "description": "Guest-facing access and display settings."},
+    "display": {"label": "Display", "description": "Live TV layout, cards, regions, and run-of-show controls."},
     "program": {"label": "Program", "description": "Costume contest controls, voting, and results."},
     "games": {"label": "Games", "description": "Enrollment, live play, scoring, and game results."},
     "karaoke": {"label": "Karaoke", "description": "YouTube requests, playlist workflow, and stage controls."},
@@ -608,6 +640,7 @@ rsvp_updates: List[RSVPUpdate] = []
 submitted_costume_votes: set[str] = set()
 live_display_event_override: dict[str, object] | None = None
 live_display_notice_override: dict[str, object] | None = None
+live_display_notice_queue: list[dict[str, object]] = []
 landing_page_target = DEFAULT_LANDING_PAGE_TARGET
 event_experience_mode = DEFAULT_EVENT_EXPERIENCE_MODE
 party_code_hash = generate_password_hash(app.config["PARTY_CODE"]) if app.config["PARTY_CODE"] else ""
@@ -623,6 +656,9 @@ karaoke_state: dict[str, object] = copy.deepcopy(DEFAULT_KARAOKE_STATE)
 youtube_karaoke: dict[str, object] = copy.deepcopy(DEFAULT_YOUTUBE_KARAOKE_STATE)
 party_details: dict[str, str] = copy.deepcopy(DEFAULT_PARTY_DETAILS)
 display_settings: dict[str, str] = copy.deepcopy(DEFAULT_DISPLAY_SETTINGS)
+display_config: dict[str, object] = copy.deepcopy(DEFAULT_DISPLAY_CONFIG)
+display_runtime: dict[str, object] = copy.deepcopy(DEFAULT_DISPLAY_RUNTIME)
+display_custom_cards: list[dict[str, object]] = []
 bartender_tip_settings: dict[str, object] = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
 games_state: dict[str, object] = copy.deepcopy(DEFAULT_GAMES_STATE)
 redis_state_available = False
@@ -1887,10 +1923,148 @@ def find_drink_order(order_id: str) -> dict[str, object] | None:
     return next((order for order in drink_orders if str(order.get("id", "")) == order_id), None)
 
 
+def _bounded_int(value: object, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return min(maximum, max(minimum, parsed))
+
+
+def normalize_display_config(raw_config: object) -> dict[str, object]:
+    normalized = copy.deepcopy(DEFAULT_DISPLAY_CONFIG)
+    if not isinstance(raw_config, dict):
+        return normalized
+
+    raw_order = raw_config.get("source_order", [])
+    order = []
+    if isinstance(raw_order, list):
+        for source in raw_order:
+            source_key = str(source)
+            if source_key in DISPLAY_SOURCE_KEYS and source_key not in order:
+                order.append(source_key)
+    normalized["source_order"] = order + [source for source in DISPLAY_SOURCE_KEYS if source not in order]
+
+    raw_enabled = raw_config.get("source_enabled", {})
+    if isinstance(raw_enabled, dict):
+        normalized["source_enabled"] = {
+            source: bool(raw_enabled.get(source, True)) for source in DISPLAY_SOURCE_KEYS
+        }
+
+    normalized["center_interval_seconds"] = _bounded_int(
+        raw_config.get("center_interval_seconds"), 8, 4, 30
+    )
+    normalized["game_interval_seconds"] = _bounded_int(
+        raw_config.get("game_interval_seconds"), 10, 5, 30
+    )
+    normalized["max_bar_orders"] = _bounded_int(raw_config.get("max_bar_orders"), 4, 1, 8)
+    normalized["notice_duration_seconds"] = _bounded_int(
+        raw_config.get("notice_duration_seconds"), DRINK_READY_OVERRIDE_SECONDS, 5, 30
+    )
+
+    for key in ("game_mode", "bar_mode", "music_mode"):
+        value = str(raw_config.get(key, normalized[key]) or "auto")
+        normalized[key] = value if value in DISPLAY_VISIBILITY_MODES else "auto"
+
+    pinned_game_key = str(raw_config.get("pinned_game_key", "") or "")
+    normalized["pinned_game_key"] = pinned_game_key if pinned_game_key in GAME_CATALOG else ""
+    density = str(raw_config.get("density", "standard") or "standard")
+    normalized["density"] = density if density in {"compact", "standard", "large"} else "standard"
+    return normalized
+
+
+def normalize_display_runtime(raw_runtime: object) -> dict[str, object]:
+    normalized = copy.deepcopy(DEFAULT_DISPLAY_RUNTIME)
+    if not isinstance(raw_runtime, dict):
+        return normalized
+    normalized["center_index"] = max(0, _bounded_int(raw_runtime.get("center_index"), 0, 0, 100000))
+    normalized["center_paused"] = bool(raw_runtime.get("center_paused", False))
+    normalized["pinned_card_id"] = str(raw_runtime.get("pinned_card_id", "") or "")[:80]
+    normalized["center_revision"] = max(0, _bounded_int(raw_runtime.get("center_revision"), 0, 0, 1000000000))
+    return normalized
+
+
+def normalize_display_custom_card(raw_card: object) -> dict[str, object] | None:
+    if not isinstance(raw_card, dict):
+        return None
+    category = str(raw_card.get("category", "Announcement") or "Announcement").strip()[:80]
+    primary = str(raw_card.get("primary", "") or "").strip()[:180]
+    if not primary:
+        return None
+    starts_at = str(raw_card.get("starts_at", "") or "").strip()
+    ends_at = str(raw_card.get("ends_at", "") or "").strip()
+    if starts_at and not parse_utc_iso(starts_at):
+        starts_at = ""
+    if ends_at and not parse_utc_iso(ends_at):
+        ends_at = ""
+    return {
+        "id": str(raw_card.get("id", "") or uuid4().hex),
+        "category": category,
+        "primary": primary,
+        "secondary": str(raw_card.get("secondary", "") or "").strip()[:500],
+        "tertiary": str(raw_card.get("tertiary", "") or "").strip()[:300],
+        "image_url": safe_image_url(str(raw_card.get("image_url", "") or "")),
+        "link": safe_display_link(str(raw_card.get("link", "") or "")),
+        "link_label": str(raw_card.get("link_label", "") or "").strip()[:80],
+        "enabled": bool(raw_card.get("enabled", True)),
+        "duration_seconds": _bounded_int(raw_card.get("duration_seconds"), 8, 4, 30),
+        "starts_at": starts_at,
+        "ends_at": ends_at,
+        "created_at": str(raw_card.get("created_at", "") or _utc_now_iso()),
+    }
+
+
+def safe_display_link(raw_url: str) -> str:
+    link = raw_url.strip()
+    if not link or len(link) > 500:
+        return ""
+    parsed = urlparse(link)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return link
+    if link.startswith("/") and not link.startswith("//"):
+        return link
+    return ""
+
+
+def display_custom_card_is_active(card: dict[str, object], now: datetime | None = None) -> bool:
+    if not card.get("enabled"):
+        return False
+    current = now or datetime.now(timezone.utc)
+    starts_at = parse_utc_iso(card.get("starts_at"))
+    ends_at = parse_utc_iso(card.get("ends_at"))
+    return (not starts_at or starts_at <= current) and (not ends_at or ends_at > current)
+
+
+def normalize_display_form_datetime(raw_value: object) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        party_tz = parse_party_start().tzinfo or timezone(timedelta(hours=-6))
+        parsed = parsed.replace(tzinfo=party_tz)
+    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def display_form_datetime_value(raw_value: object) -> str:
+    parsed = parse_utc_iso(raw_value)
+    if not parsed:
+        return ""
+    party_tz = parse_party_start().tzinfo or timezone(timedelta(hours=-6))
+    return parsed.astimezone(party_tz).strftime("%Y-%m-%dT%H:%M")
+
+
 def build_drink_ready_override(order: dict[str, object]) -> dict[str, object]:
     attendee_name = str(order.get("username", "") or "Guest")
     item_name = str(order.get("item_name", "") or "your drink")
+    duration_seconds = _bounded_int(
+        display_config.get("notice_duration_seconds"), DRINK_READY_OVERRIDE_SECONDS, 5, 30
+    )
     return {
+        "id": uuid4().hex,
         "type": "drink_ready",
         "title": "Drink Ready",
         "highlight": attendee_name,
@@ -1900,10 +2074,36 @@ def build_drink_ready_override(order: dict[str, object]) -> dict[str, object]:
             item_name,
             "Pick it up while the spirits are still lively.",
         ],
-        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=DRINK_READY_OVERRIDE_SECONDS))
+        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=duration_seconds))
         .isoformat()
         .replace("+00:00", "Z"),
     }
+
+
+def enqueue_display_notice(notice: dict[str, object]) -> None:
+    global live_display_notice_override
+    if not live_display_notice_override:
+        live_display_notice_override = copy.deepcopy(notice)
+        return
+    queued_notice = copy.deepcopy(notice)
+    queued_notice["expires_at"] = ""
+    live_display_notice_queue.append(queued_notice)
+    del live_display_notice_queue[:-DISPLAY_NOTICE_QUEUE_LIMIT]
+
+
+def activate_next_display_notice() -> None:
+    global live_display_notice_override
+    if not live_display_notice_queue:
+        live_display_notice_override = None
+        return
+    next_notice = live_display_notice_queue.pop(0)
+    duration_seconds = _bounded_int(
+        display_config.get("notice_duration_seconds"), DRINK_READY_OVERRIDE_SECONDS, 5, 30
+    )
+    next_notice["expires_at"] = (
+        datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
+    ).isoformat().replace("+00:00", "Z")
+    live_display_notice_override = next_notice
 
 
 def cleanup_expired_display_notices() -> bool:
@@ -1912,7 +2112,7 @@ def cleanup_expired_display_notices() -> bool:
         return False
     expires_at = parse_utc_iso(live_display_notice_override.get("expires_at"))
     if expires_at and expires_at <= datetime.now(timezone.utc):
-        live_display_notice_override = None
+        activate_next_display_notice()
         persist_state_if_available()
         return True
     return False
@@ -3292,10 +3492,14 @@ def snapshot_state() -> dict[str, object]:
         "youtube_karaoke": copy.deepcopy(youtube_karaoke),
         "party_details": copy.deepcopy(party_details),
         "display_settings": copy.deepcopy(display_settings),
+        "display_config": copy.deepcopy(display_config),
+        "display_runtime": copy.deepcopy(display_runtime),
+        "display_custom_cards": copy.deepcopy(display_custom_cards),
         "bartender_tip_settings": copy.deepcopy(bartender_tip_settings),
         "games_state": copy.deepcopy(games_state),
         "live_display_event_override": copy.deepcopy(live_display_event_override),
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
+        "live_display_notice_queue": copy.deepcopy(live_display_notice_queue),
         "live_display_override": copy.deepcopy(current_display_override()),
         "landing_page_target": normalize_landing_page_target(landing_page_target),
         "event_experience_mode": normalize_event_experience_mode(event_experience_mode),
@@ -3310,8 +3514,8 @@ def snapshot_state() -> dict[str, object]:
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
     global user_accounts, costume_ballots, submitted_costume_votes
-    global live_display_event_override, live_display_notice_override
-    global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_update_version
+    global live_display_event_override, live_display_notice_override, live_display_notice_queue
+    global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, display_custom_cards, display_update_version
     global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke, games_state
 
     raw_costume_signups = data.get("costume_signups", [])
@@ -3497,6 +3701,16 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         for key in DEFAULT_DISPLAY_SETTINGS:
             display_settings[key] = str(raw_display_settings.get(key, display_settings[key]) or "").strip()
 
+    display_config = normalize_display_config(data.get("display_config", {}))
+    display_runtime = normalize_display_runtime(data.get("display_runtime", {}))
+    display_custom_cards = []
+    raw_custom_cards = data.get("display_custom_cards", [])
+    if isinstance(raw_custom_cards, list):
+        for raw_card in raw_custom_cards:
+            normalized_card = normalize_display_custom_card(raw_card)
+            if normalized_card:
+                display_custom_cards.append(normalized_card)
+
     raw_event_override = data.get("live_display_event_override")
     raw_notice_override = data.get("live_display_notice_override")
     if isinstance(raw_event_override, dict) or isinstance(raw_notice_override, dict):
@@ -3511,6 +3725,12 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         live_display_event_override, live_display_notice_override = split_legacy_display_override(
             copy.deepcopy(raw_override) if isinstance(raw_override, dict) else None
         )
+    live_display_notice_queue = []
+    raw_notice_queue = data.get("live_display_notice_queue", [])
+    if isinstance(raw_notice_queue, list):
+        for raw_notice in raw_notice_queue[-DISPLAY_NOTICE_QUEUE_LIMIT:]:
+            if isinstance(raw_notice, dict) and str(raw_notice.get("type", "")) in display_notice_types():
+                live_display_notice_queue.append(copy.deepcopy(raw_notice))
     cleanup_expired_display_notices()
     landing_page_target = normalize_landing_page_target(data.get("landing_page_target"))
     event_experience_mode = normalize_event_experience_mode(data.get("event_experience_mode"))
@@ -4558,148 +4778,354 @@ def build_pre_party_dashboard_slides() -> list[dict[str, str]]:
     return slides
 
 
+def _display_entry(source: str, entry_id: str, **content: object) -> dict[str, object]:
+    return {
+        "id": f"{source}:{entry_id}",
+        "source": source,
+        "duration_seconds": int(display_config.get("center_interval_seconds", 8) or 8),
+        **content,
+    }
+
+
+def display_source_is_enabled(source: str) -> bool:
+    enabled = display_config.get("source_enabled", {})
+    return bool(isinstance(enabled, dict) and enabled.get(source, True))
+
+
 def build_rotation_entries() -> List[dict[str, object]]:
     ensure_costume_votes_alignment()
     wifi_network = display_settings.get("wifi_network", DEFAULT_DISPLAY_SETTINGS["wifi_network"])
     wifi_password = display_settings.get("wifi_password", DEFAULT_DISPLAY_SETTINGS["wifi_password"])
+    enabled_games = enabled_game_keys()
+    grouped: dict[str, list[dict[str, object]]] = {source: [] for source in DISPLAY_SOURCE_KEYS}
 
-    rotation_entries: List[dict[str, object]] = [
-        {
-            "category": "Signup Portal",
-            "primary": "Connect to the party WiFi.",
-            "secondary": f"After you connect, browse to {PARTY_SITE_URL} to start the party experience.",
-            "cta": True,
-            "cta_details": {
+    grouped["portal"].append(
+        _display_entry(
+            "portal",
+            "wifi",
+            category="Signup Portal",
+            primary="Connect to the party WiFi.",
+            secondary=f"After you connect, browse to {PARTY_SITE_URL} to start the party experience.",
+            cta=True,
+            cta_details={
                 "lede": "Get your phone connected, then open the party site.",
                 "wifi_network": wifi_network,
                 "wifi_password": wifi_password,
                 "site_url": PARTY_SITE_URL,
             },
-        },
-        {
-            "category": "Costume Contest",
-            "primary": "Add your costume to the live lineup.",
-            "secondary": "Use the party portal to enter your name plus costume before judging starts.",
-            "tertiary": "New costume signups appear here automatically.",
-        },
-        {
-            "category": "Karaoke Stage",
-            "primary": "Reserve your karaoke song.",
-            "secondary": "Use the party portal to queue the song you want to perform.",
-        },
-        {
-            "category": "Bar Queue",
-            "primary": "Order event drinks from your phone.",
-            "secondary": "Browse the drink menu in the app, send available drinks to the bar, and watch for the ready email.",
-            "tertiary": "Completed drinks also pop up on this display.",
-        },
-        {
-            "category": "Live Updates",
-            "primary": "Watch the party build in real time.",
-            "secondary": "Costumes, karaoke songs, winners, drink-ready cards, and announcements rotate here all night.",
-            "tertiary": "Keep an eye on this screen after each signup.",
-        },
-    ]
-
-    game = two_truths_game()
-    enabled_games = enabled_game_keys()
-    if enabled_games:
-        enabled_titles = [GAME_CATALOG[game_key]["short_title"] for game_key in enabled_games]
-        rotation_entries.insert(
-            3,
-            {
-                "category": "Party Games",
-                "primary": "Join tonight's party games.",
-                "secondary": "Open Games in the party portal to opt in and play anonymously.",
-                "tertiary": "Available: " + " · ".join(enabled_titles),
-            },
         )
+    )
 
-    costume_entries = [
-        {
-            "id": signup.id,
-            "category": "Costume Contest",
-            "primary": signup.name,
-            "secondary": f"Dressed as {signup.costume}",
-            "tertiary": f"Contact: {signup.contact}" if signup.contact else "",
-        }
-        for signup in costume_signups
-    ]
-
-    karaoke_entries = [
-        {
-            "id": signup.id,
-            "category": "Karaoke Stage",
-            "primary": signup.name,
-            "secondary": f'Performing "{signup.song_title}"',
-            "tertiary": f"by {signup.artist}" if signup.artist else "",
-        }
-        for signup in public_karaoke_signups()
-    ]
-
-    game_entries = []
-    if game.get("enabled"):
-        for participant in game.get("participants", {}).values():
-            statements = participant_statements(participant)
-            if len(statements) != 3:
-                continue
-            game_entries.append(
-                {
-                    "id": participant.get("submission_id", ""),
-                    "category": "Two Truths and a Lie",
-                    "primary": f"1. {statements[0]}",
-                    "secondary": f"2. {statements[1]}",
-                    "tertiary": f"3. {statements[2]} · Can you guess who? Open Games in the party portal.",
-                }
-            )
-
-    for prompt_game_key in PROMPT_GAME_KEYS:
-        prompt_game = party_game_state(prompt_game_key)
-        current_round = prompt_round_for_game(prompt_game)
-        if not prompt_game.get("enabled") or not current_round or current_round.get("status") not in {"voting", "revealed"}:
-            continue
-        for response in current_round.get("responses", {}).values():
-            game_entries.append(
-                {
-                    "id": response.get("id", ""),
-                    "category": GAME_CATALOG[prompt_game_key]["title"],
-                    "primary": current_round.get("prompt_text", ""),
-                    "secondary": response.get("text", ""),
-                    "tertiary": "Vote anonymously in Games on the party portal." if current_round.get("status") == "voting" else "Round results are ready.",
-                }
-            )
-
+    grouped["costume"].append(
+        _display_entry(
+            "costume",
+            "signup",
+            category="Costume Contest",
+            primary="Add your costume to the live lineup.",
+            secondary="Use the party portal to enter your name and costume before judging starts.",
+            tertiary="New costume signups appear here automatically.",
+        )
+    )
     winner_entry = build_winner_entry()
     if winner_entry:
-        rotation_entries.append({
-            **winner_entry,
-            "cta": False,
-        })
-
+        grouped["costume"].append(_display_entry("costume", "winner", **winner_entry))
     if contest_state.get("show_scoreboard_card") and contest_state.get("scoreboard_card"):
-        rotation_entries.append(copy.deepcopy(contest_state["scoreboard_card"]))
+        grouped["costume"].append(
+            _display_entry("costume", "scoreboard", **copy.deepcopy(contest_state["scoreboard_card"]))
+        )
+    grouped["costume"].extend(
+        _display_entry(
+            "costume",
+            signup.id,
+            category="Costume Contest",
+            primary=signup.name,
+            secondary=f"Dressed as {signup.costume}",
+            tertiary="Tonight's live costume lineup",
+        )
+        for signup in costume_signups
+    )
 
-    for game_key in enabled_games:
-        ended_game = party_game_state(game_key)
-        if ended_game.get("phase") != "ended":
+    grouped["karaoke"].append(
+        _display_entry(
+            "karaoke",
+            "signup",
+            category="Karaoke Stage",
+            primary="Reserve your karaoke song.",
+            secondary="Use the party portal to queue the song you want to perform.",
+        )
+    )
+    grouped["karaoke"].extend(
+        _display_entry(
+            "karaoke",
+            signup.id,
+            category="Karaoke Stage",
+            primary=signup.name,
+            secondary=f'Performing "{signup.song_title}"',
+            tertiary=f"by {signup.artist}" if signup.artist else "",
+            image_url=str(signup.youtube.get("thumbnail_url", "") or ""),
+        )
+        for signup in public_karaoke_signups()
+    )
+
+    if enabled_games:
+        grouped["games"].append(
+            _display_entry(
+                "games",
+                "join",
+                category="Party Games",
+                primary="Join tonight's party games.",
+                secondary="Open Games in the party portal to opt in, answer, and vote.",
+                tertiary="Available: " + " · ".join(GAME_CATALOG[key]["short_title"] for key in enabled_games),
+            )
+        )
+        for game_key in enabled_games:
+            if party_game_state(game_key).get("phase") != "ended":
+                continue
+            winner_card = game_winner_entry(game_key)
+            scoreboard_card = game_scoreboard_entry(game_key)
+            if winner_card:
+                grouped["games"].append(_display_entry("games", f"{game_key}-winner", **winner_card))
+            if scoreboard_card:
+                grouped["games"].append(_display_entry("games", f"{game_key}-scores", **scoreboard_card))
+
+    grouped["bar"].append(
+        _display_entry(
+            "bar",
+            "ordering",
+            category="Bar Queue",
+            primary="Order event drinks from your phone.",
+            secondary="Browse the menu, send available drinks to the bar, and watch the right stage for status.",
+            tertiary="Completed drinks receive a ready alert here and by email.",
+        )
+    )
+    grouped["updates"].append(
+        _display_entry(
+            "updates",
+            "live",
+            category="Live Updates",
+            primary="Watch the party build in real time.",
+            secondary="Costumes, karaoke, game results, drink status, and announcements update all night.",
+            tertiary="Keep an eye on every stage after each signup.",
+        )
+    )
+
+    for card in display_custom_cards:
+        if not display_custom_card_is_active(card):
             continue
-        winner_card = game_winner_entry(game_key)
-        if winner_card:
-            rotation_entries.append(winner_card)
-        scoreboard_card = game_scoreboard_entry(game_key)
-        if scoreboard_card:
-            rotation_entries.append(scoreboard_card)
+        grouped["custom"].append(
+            _display_entry(
+                "custom",
+                str(card.get("id", "")),
+                category=card.get("category", "Announcement"),
+                primary=card.get("primary", ""),
+                secondary=card.get("secondary", ""),
+                tertiary=card.get("tertiary", ""),
+                image_url=card.get("image_url", ""),
+                link=card.get("link", ""),
+                link_label=card.get("link_label", ""),
+                duration_seconds=card.get("duration_seconds", display_config.get("center_interval_seconds", 8)),
+                custom=True,
+            )
+        )
 
-    max_length = max(len(costume_entries), len(karaoke_entries), len(game_entries))
-    for index in range(max_length):
-        if index < len(costume_entries):
-            rotation_entries.append(costume_entries[index])
-        if index < len(karaoke_entries):
-            rotation_entries.append(karaoke_entries[index])
-        if index < len(game_entries):
-            rotation_entries.append(game_entries[index])
-
+    ordered_sources = display_config.get("source_order", list(DISPLAY_SOURCE_KEYS))
+    rotation_entries: list[dict[str, object]] = []
+    for source in ordered_sources if isinstance(ordered_sources, list) else DISPLAY_SOURCE_KEYS:
+        if source in grouped and display_source_is_enabled(source):
+            rotation_entries.extend(grouped[source])
     return rotation_entries
+
+
+def build_game_stage_entries() -> list[dict[str, object]]:
+    if display_config.get("game_mode") == "hidden":
+        return []
+    entries: list[dict[str, object]] = []
+    for game_key in enabled_game_keys():
+        game = party_game_state(game_key)
+        phase = str(game.get("phase", "signup") or "signup")
+        participants = game.get("participants", {}) if isinstance(game.get("participants"), dict) else {}
+        title = GAME_CATALOG[game_key]["title"]
+        entry: dict[str, object] = {
+            "id": game_key,
+            "game_key": game_key,
+            "title": title,
+            "phase": phase,
+            "status_label": phase.replace("_", " ").title(),
+            "primary": GAME_CATALOG[game_key]["description"],
+            "secondary": "Open Games in the party portal to join.",
+            "metrics": [{"label": "Players", "value": len(participants)}],
+            "priority": 2 if phase == "active" else (1 if phase == "ended" else 0),
+        }
+
+        detail_entries: list[dict[str, object]] = []
+        if game_key == TWO_TRUTHS_GAME_KEY:
+            stats = two_truths_statistics(game)
+            entry["primary"] = "Identify the mystery guests behind the clues."
+            entry["metrics"] = [
+                {"label": "Players", "value": stats.get("participant_count", 0)},
+                {"label": "Guesses", "value": f"{stats.get('submitted_guesses', 0)}/{stats.get('possible_guesses', 0)}"},
+            ]
+            if phase == "ended":
+                winners = two_truths_winners(game)
+                entry["primary"] = ", ".join(str(winner.get("name", "Guest")) for winner in winners) or "Final results ready"
+                entry["secondary"] = "Two Truths and a Lie winner" if len(winners) == 1 else "Two Truths and a Lie winners"
+            else:
+                for participant in participants.values():
+                    statements = participant_statements(participant)
+                    if len(statements) != 3:
+                        continue
+                    detail_entries.append(
+                        {
+                            **entry,
+                            "id": f"{game_key}:{participant.get('submission_id', 'clue')}",
+                            "status_label": "Mystery clue",
+                            "primary": f"1. {statements[0]} · 2. {statements[1]} · 3. {statements[2]}",
+                            "secondary": "Can you identify the mystery guest?",
+                            "metrics": [],
+                            "priority": 3 if phase == "active" else 1,
+                        }
+                    )
+        elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
+            completed = sum(1 for participant in participants.values() if len(participant.get("answers", {})) >= 10)
+            entry["primary"] = "Ten rounds · three choices · one anonymous ballot."
+            entry["metrics"] = [
+                {"label": "Players", "value": len(participants)},
+                {"label": "Complete", "value": f"{completed}/{len(participants)}"},
+            ]
+            if phase == "ended":
+                winners = game_winners(game_key, game)
+                entry["primary"] = ", ".join(str(winner.get("alias", "Anonymous")) for winner in winners) or "Final results ready"
+                entry["secondary"] = "Anonymous champions"
+        elif game_key in PROMPT_GAME_KEYS:
+            current_round = prompt_round_for_game(game)
+            if current_round:
+                round_status = str(current_round.get("status", "submissions"))
+                responses = current_round.get("responses", {}) if isinstance(current_round.get("responses"), dict) else {}
+                votes = current_round.get("votes", {}) if isinstance(current_round.get("votes"), dict) else {}
+                entry["status_label"] = f"Round {int(game.get('current_round_index', 0) or 0) + 1} · {round_status.title()}"
+                entry["primary"] = str(current_round.get("prompt_text", "") or "Responses are open.")
+                entry["secondary"] = "Vote anonymously in Games." if round_status == "voting" else "Submit anonymously in Games."
+                entry["metrics"] = [
+                    {"label": "Answers", "value": len(responses)},
+                    {"label": "Votes", "value": len(votes)},
+                ]
+                entry["priority"] = 3 if round_status in {"voting", "revealed"} else 2
+                if round_status in {"voting", "revealed"}:
+                    for response in responses.values():
+                        detail_entries.append(
+                            {
+                                **entry,
+                                "id": f"{game_key}:{response.get('id', 'response')}",
+                                "status_label": f"Round {int(game.get('current_round_index', 0) or 0) + 1} · {round_status.title()}",
+                                "primary": str(current_round.get("prompt_text", "") or "Prompt"),
+                                "secondary": str(response.get("text", "") or "Anonymous response"),
+                                "metrics": [
+                                    {"label": "Answers", "value": len(responses)},
+                                    {"label": "Votes", "value": len(votes)},
+                                ],
+                                "priority": 4,
+                            }
+                        )
+            if phase == "ended":
+                winners = game_winners(game_key, game)
+                entry["primary"] = ", ".join(str(winner.get("alias", "Anonymous")) for winner in winners) or "Final results ready"
+                entry["secondary"] = "Anonymous champions"
+
+        entries.append(entry)
+        entries.extend(detail_entries)
+
+    pinned_game_key = str(display_config.get("pinned_game_key", "") or "")
+    if pinned_game_key:
+        pinned = [entry for entry in entries if entry["game_key"] == pinned_game_key]
+        if pinned:
+            return pinned
+    entries.sort(key=lambda entry: (-int(entry.get("priority", 0)), str(entry.get("title", ""))))
+    return entries
+
+
+def build_bar_stage() -> dict[str, object]:
+    orders = sorted(
+        active_drink_orders(),
+        key=lambda order: (drink_order_priority_bucket(order), str(order.get("created_at", ""))),
+    )
+    maximum = _bounded_int(display_config.get("max_bar_orders"), 4, 1, 8)
+    public_orders = [
+        {
+            "id": str(order.get("id", "")),
+            "name": str(order.get("username", "") or "Guest"),
+            "drink": str(order.get("item_name", "") or "Drink"),
+            "status": str(order.get("status", "received")),
+            "status_label": "Mixing" if order.get("status") == "in_progress" else "Received",
+            "estimated_ready_label": format_time_label(order.get("estimated_ready_at")),
+        }
+        for order in orders[:maximum]
+    ]
+    mode = str(display_config.get("bar_mode", "auto"))
+    visible = mode != "hidden" and (mode == "always" or bool(public_orders) or bool(live_display_notice_override))
+    return {
+        "visible": visible,
+        "orders": public_orders,
+        "active_count": len(orders),
+        "overflow_count": max(0, len(orders) - len(public_orders)),
+        "notice": copy.deepcopy(live_display_notice_override),
+        "queued_notice_count": len(live_display_notice_queue),
+    }
+
+
+def build_music_footer() -> dict[str, object]:
+    dj = dj_view_state()
+    receiver = dj.get("receiver", {}) if isinstance(dj.get("receiver"), dict) else {}
+    current_song = dj.get("current_song") or dj.get("desired_song")
+    enabled_playlist = [song for song in dj.get("playlist", []) if song.get("enabled", True)]
+    next_song = None
+    if current_song and enabled_playlist:
+        current_id = str(current_song.get("id", ""))
+        current_index = next((index for index, song in enumerate(enabled_playlist) if str(song.get("id", "")) == current_id), -1)
+        if current_index >= 0 and len(enabled_playlist) > 1:
+            next_song = enabled_playlist[(current_index + 1) % len(enabled_playlist)]
+    mode = str(display_config.get("music_mode", "auto"))
+    needs_attention = bool(apple_music_is_configured() and (not receiver.get("audio_enabled") or receiver.get("last_error")))
+    visible = mode != "hidden" and (mode == "always" or bool(current_song) or needs_attention)
+    return {
+        "visible": visible,
+        "state": dj,
+        "current_song": copy.deepcopy(current_song),
+        "next_song": copy.deepcopy(next_song),
+        "needs_attention": needs_attention,
+    }
+
+
+def build_display_layout() -> dict[str, object]:
+    entries = build_rotation_entries()
+    game_entries = build_game_stage_entries()
+    pinned_card_id = str(display_runtime.get("pinned_card_id", "") or "")
+    if pinned_card_id and not any(str(entry.get("id", "")) == pinned_card_id for entry in entries):
+        pinned_card_id = ""
+    return {
+        "header": {
+            "costume_count": len(costume_signups),
+            "karaoke_count": len(public_karaoke_signups()),
+            "game_count": total_game_participations(),
+        },
+        "center": {
+            "entries": entries,
+            "override": copy.deepcopy(live_display_event_override),
+            "paused": bool(display_runtime.get("center_paused")),
+            "index": int(display_runtime.get("center_index", 0) or 0),
+            "revision": int(display_runtime.get("center_revision", 0) or 0),
+            "pinned_card_id": pinned_card_id,
+            "interval_seconds": int(display_config.get("center_interval_seconds", 8) or 8),
+        },
+        "games": {
+            "visible": display_config.get("game_mode") != "hidden" and bool(game_entries),
+            "entries": game_entries,
+            "interval_seconds": int(display_config.get("game_interval_seconds", 10) or 10),
+            "pinned_game_key": str(display_config.get("pinned_game_key", "") or ""),
+        },
+        "bar": build_bar_stage(),
+        "music": build_music_footer(),
+        "density": str(display_config.get("density", "standard") or "standard"),
+    }
 
 
 @app.route("/")
@@ -4716,10 +5142,12 @@ def health():
 @app.route("/live-display")
 def live_display():
     cleanup_expired_display_notices()
-    rotation_entries = build_rotation_entries()
+    layout = build_display_layout()
+    rotation_entries = layout["center"]["entries"]
 
     return render_template(
         "display.html",
+        layout=layout,
         entries=rotation_entries,
         costume_count=len(costume_signups),
         karaoke_count=len(public_karaoke_signups()),
@@ -4762,7 +5190,8 @@ def display_updates():
 @app.route("/api/display-data")
 def display_data():
     cleanup_expired_display_notices()
-    rotation_entries = build_rotation_entries()
+    layout = build_display_layout()
+    rotation_entries = layout["center"]["entries"]
 
     return jsonify(
         {
@@ -4774,6 +5203,7 @@ def display_data():
             "event_override": live_display_event_override,
             "notice_override": live_display_notice_override,
             "dj": dj_view_state(),
+            "layout": layout,
             "display_update_version": display_update_version,
         }
     )
@@ -6600,7 +7030,6 @@ def bartender_queue_context() -> dict[str, object]:
 
 @app.route("/bartender", methods=["GET", "POST"])
 def bartender_portal():
-    global live_display_notice_override
     errors: List[str] = []
     messages: List[str] = []
 
@@ -6637,7 +7066,7 @@ def bartender_portal():
                     int((datetime.now(timezone.utc) - started_or_created_at).total_seconds()),
                 )
                 send_drink_ready_email(order)
-                live_display_notice_override = build_drink_ready_override(order)
+                enqueue_display_notice(build_drink_ready_override(order))
                 messages.append(f"Marked {order.get('item_name')} ready for {order.get('username')}.")
                 broadcast_display_update()
             persist_state_if_available()
@@ -6995,9 +7424,9 @@ def admin_portal(admin_view: str):
 
     errors: List[str] = []
     messages: List[str] = []
-    global live_display_event_override, live_display_notice_override
+    global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global submitted_costume_votes, costume_ballots, karaoke_state
-    global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, rsvp_notification_email
+    global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, rsvp_notification_email
     global bartender_tip_settings, dj_song_requests
 
     ensure_costume_votes_alignment()
@@ -7237,6 +7666,49 @@ def admin_portal(admin_view: str):
             email_updates_acknowledged=True,
         )
 
+    def display_custom_card_from_form(
+        existing_id: str | None = None,
+        existing_created_at: str | None = None,
+    ) -> dict[str, object] | None:
+        raw_image_url = request.form.get("image_url", "").strip()
+        raw_link = request.form.get("link", "").strip()
+        image_url = safe_image_url(raw_image_url)
+        link = safe_display_link(raw_link)
+        primary = request.form.get("primary", "").strip()
+        starts_at = normalize_display_form_datetime(request.form.get("starts_at", ""))
+        ends_at = normalize_display_form_datetime(request.form.get("ends_at", ""))
+        if not primary:
+            errors.append("Custom display card headline is required.")
+        if raw_image_url and not image_url:
+            errors.append("Display card image URL must be http, https, or a /static/ path.")
+        if raw_link and not link:
+            errors.append("Display card link must be http, https, or an internal path.")
+        if request.form.get("starts_at") and not starts_at:
+            errors.append("Enter a valid custom card start time.")
+        if request.form.get("ends_at") and not ends_at:
+            errors.append("Enter a valid custom card end time.")
+        if starts_at and ends_at and parse_utc_iso(starts_at) >= parse_utc_iso(ends_at):
+            errors.append("Custom card end time must be after its start time.")
+        if errors:
+            return None
+        return normalize_display_custom_card(
+            {
+                "id": existing_id or uuid4().hex,
+                "category": request.form.get("category", "Announcement"),
+                "primary": primary,
+                "secondary": request.form.get("secondary", ""),
+                "tertiary": request.form.get("tertiary", ""),
+                "image_url": image_url,
+                "link": link,
+                "link_label": request.form.get("link_label", ""),
+                "enabled": request.form.get("enabled") == "yes",
+                "duration_seconds": request.form.get("duration_seconds", "8"),
+                "starts_at": starts_at,
+                "ends_at": ends_at,
+                "created_at": existing_created_at or _utc_now_iso(),
+            }
+        )
+
     def selected_update_recipient_ids() -> set[str]:
         return {
             recipient_id.strip()
@@ -7302,7 +7774,163 @@ def admin_portal(admin_view: str):
             "show_game_results",
         }
 
-        if action in generic_game_actions:
+        display_actions = {
+            "update_display_layout",
+            "move_display_source_up",
+            "move_display_source_down",
+            "add_display_card",
+            "update_display_card",
+            "delete_display_card",
+            "move_display_card_up",
+            "move_display_card_down",
+            "pause_display_rotation",
+            "resume_display_rotation",
+            "previous_display_card",
+            "next_display_card",
+            "pin_display_entry",
+            "pin_display_card",
+            "clear_display_pin",
+            "pin_display_game",
+            "clear_display_game_pin",
+            "dismiss_display_notice",
+        }
+
+        if action in display_actions:
+            if action == "update_display_layout":
+                enabled_sources = set(request.form.getlist("source_enabled"))
+                requested = {
+                    **display_config,
+                    "source_enabled": {
+                        source: source in enabled_sources for source in DISPLAY_SOURCE_KEYS
+                    },
+                    "center_interval_seconds": request.form.get("center_interval_seconds", "8"),
+                    "game_interval_seconds": request.form.get("game_interval_seconds", "10"),
+                    "game_mode": request.form.get("game_mode", "auto"),
+                    "bar_mode": request.form.get("bar_mode", "auto"),
+                    "music_mode": request.form.get("music_mode", "auto"),
+                    "max_bar_orders": request.form.get("max_bar_orders", "4"),
+                    "notice_duration_seconds": request.form.get("notice_duration_seconds", "10"),
+                    "density": request.form.get("density", "standard"),
+                }
+                display_config = normalize_display_config(requested)
+                messages.append("Live display layout settings updated.")
+                should_broadcast = True
+
+            elif action in {"move_display_source_up", "move_display_source_down"}:
+                source = str(request.form.get("source", "") or "")
+                order = list(display_config.get("source_order", DISPLAY_SOURCE_KEYS))
+                if source not in order:
+                    errors.append("That display source could not be found.")
+                else:
+                    index = order.index(source)
+                    target = index + (-1 if action.endswith("_up") else 1)
+                    if 0 <= target < len(order):
+                        order[index], order[target] = order[target], order[index]
+                        display_config["source_order"] = order
+                        display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
+                        messages.append(f"Moved {DISPLAY_SOURCE_LABELS[source]} in the display rotation.")
+                        should_broadcast = True
+
+            elif action == "add_display_card":
+                card = display_custom_card_from_form()
+                if card:
+                    display_custom_cards.append(card)
+                    messages.append(f"Added custom display card: {card['primary']}.")
+                    should_broadcast = True
+
+            elif action in {"update_display_card", "delete_display_card", "move_display_card_up", "move_display_card_down", "pin_display_card"}:
+                card_id = str(request.form.get("card_id", "") or "")
+                card_index = next(
+                    (index for index, card in enumerate(display_custom_cards) if str(card.get("id", "")) == card_id),
+                    None,
+                )
+                if card_index is None:
+                    errors.append("That custom display card could not be found.")
+                elif action == "update_display_card":
+                    existing = display_custom_cards[card_index]
+                    card = display_custom_card_from_form(card_id, str(existing.get("created_at", "") or ""))
+                    if card:
+                        display_custom_cards[card_index] = card
+                        messages.append(f"Updated custom display card: {card['primary']}.")
+                        should_broadcast = True
+                elif action == "delete_display_card":
+                    removed = display_custom_cards.pop(card_index)
+                    if display_runtime.get("pinned_card_id") == f"custom:{card_id}":
+                        display_runtime["pinned_card_id"] = ""
+                    messages.append(f"Removed custom display card: {removed.get('primary', 'Announcement')}.")
+                    should_broadcast = True
+                elif action in {"move_display_card_up", "move_display_card_down"}:
+                    target = card_index + (-1 if action.endswith("_up") else 1)
+                    if 0 <= target < len(display_custom_cards):
+                        display_custom_cards[card_index], display_custom_cards[target] = display_custom_cards[target], display_custom_cards[card_index]
+                        messages.append("Moved the custom display card.")
+                        should_broadcast = True
+                else:
+                    display_runtime["pinned_card_id"] = f"custom:{card_id}"
+                    display_runtime["center_paused"] = True
+                    display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
+                    messages.append("Pinned the custom card to center stage.")
+                    should_broadcast = True
+
+            elif action == "pin_display_entry":
+                entry_id = str(request.form.get("entry_id", "") or "")
+                entries = build_rotation_entries()
+                entry = next((item for item in entries if str(item.get("id", "")) == entry_id), None)
+                if entry is None:
+                    errors.append("That center-stage card is no longer available.")
+                else:
+                    display_runtime["pinned_card_id"] = entry_id
+                    display_runtime["center_paused"] = True
+                    display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
+                    messages.append(f"Pinned {entry.get('primary', 'the selected card')} to center stage.")
+                    should_broadcast = True
+
+            elif action in {"pause_display_rotation", "resume_display_rotation", "previous_display_card", "next_display_card", "clear_display_pin"}:
+                entries = build_rotation_entries()
+                current_index = int(display_runtime.get("center_index", 0) or 0)
+                if action == "pause_display_rotation":
+                    display_runtime["center_paused"] = True
+                    messages.append("Center-stage rotation paused.")
+                elif action == "resume_display_rotation":
+                    display_runtime["center_paused"] = False
+                    display_runtime["pinned_card_id"] = ""
+                    live_display_event_override = None
+                    messages.append("Center-stage automatic rotation resumed.")
+                elif action == "clear_display_pin":
+                    display_runtime["pinned_card_id"] = ""
+                    display_runtime["center_paused"] = False
+                    messages.append("Center-stage pin cleared.")
+                elif entries:
+                    delta = -1 if action == "previous_display_card" else 1
+                    display_runtime["center_index"] = (current_index + delta) % len(entries)
+                    display_runtime["center_paused"] = True
+                    display_runtime["pinned_card_id"] = ""
+                    messages.append("Moved center stage to the previous card." if delta < 0 else "Moved center stage to the next card.")
+                display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
+                should_broadcast = True
+
+            elif action == "pin_display_game":
+                game_key = str(request.form.get("game_key", "") or "")
+                if game_key not in GAME_CATALOG or not party_game_state(game_key).get("enabled"):
+                    errors.append("Choose an enabled game to pin on the left stage.")
+                else:
+                    display_config["game_mode"] = "always"
+                    display_config["pinned_game_key"] = game_key
+                    messages.append(f"Pinned {GAME_CATALOG[game_key]['title']} on the left stage.")
+                    should_broadcast = True
+
+            elif action == "clear_display_game_pin":
+                display_config["pinned_game_key"] = ""
+                display_config["game_mode"] = "auto"
+                messages.append("Left-stage automatic game rotation resumed.")
+                should_broadcast = True
+
+            elif action == "dismiss_display_notice":
+                activate_next_display_notice()
+                messages.append("Dismissed the current drink-ready notice.")
+                should_broadcast = True
+
+        elif action in generic_game_actions:
             game_key = str(request.form.get("game_key", "") or "")
             if game_key not in GAME_CATALOG:
                 errors.append("Select a valid party game.")
@@ -8369,6 +8997,10 @@ def admin_portal(admin_view: str):
         elif action == "clear_display_override":
             live_display_event_override = None
             live_display_notice_override = None
+            live_display_notice_queue.clear()
+            display_runtime["pinned_card_id"] = ""
+            display_runtime["center_paused"] = False
+            display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
             messages.append("Live display has been restored to the rotating schedule.")
             if contest_state.get("winner_locked") and contest_state.get("scoreboard_card"):
                 contest_state["show_scoreboard_card"] = True
@@ -8652,6 +9284,12 @@ def admin_portal(admin_view: str):
         party_code_hint=party_code_hint,
         rsvp_notification_email=rsvp_notification_email,
         display_settings=display_settings,
+        display_config=display_config,
+        display_runtime=display_runtime,
+        display_custom_cards=display_custom_cards,
+        display_source_labels=DISPLAY_SOURCE_LABELS,
+        display_layout=build_display_layout(),
+        display_form_datetime_value=display_form_datetime_value,
         party_details=party_details,
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),

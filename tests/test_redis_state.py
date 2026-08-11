@@ -302,12 +302,16 @@ class RedisStateTests(unittest.TestCase):
         main.submitted_costume_votes = set()
         main.live_display_event_override = None
         main.live_display_notice_override = None
+        main.live_display_notice_queue = []
         main.landing_page_target = main.DEFAULT_LANDING_PAGE_TARGET
         main.event_experience_mode = main.DEFAULT_EVENT_EXPERIENCE_MODE
         main.party_code_hash = main.generate_password_hash("invite-code")
         main.party_code_hint = ""
         main.rsvp_notification_email = main.DEFAULT_RSVP_NOTIFICATION_EMAIL
         main.display_settings = main.copy.deepcopy(main.DEFAULT_DISPLAY_SETTINGS)
+        main.display_config = main.copy.deepcopy(main.DEFAULT_DISPLAY_CONFIG)
+        main.display_runtime = main.copy.deepcopy(main.DEFAULT_DISPLAY_RUNTIME)
+        main.display_custom_cards = []
         main.bartender_tip_settings = main.copy.deepcopy(main.DEFAULT_BARTENDER_TIP_SETTINGS)
         main.display_update_version = 0
         main.contest_state.clear()
@@ -522,6 +526,31 @@ class RedisStateTests(unittest.TestCase):
             "wifi_network": "Upside Down LAN",
             "wifi_password": "friends-dont-lie",
         }
+        main.display_config = main.normalize_display_config(
+            {
+                "center_interval_seconds": 12,
+                "game_interval_seconds": 9,
+                "music_mode": "always",
+                "source_order": ["custom", "portal"],
+            }
+        )
+        main.display_runtime = main.normalize_display_runtime(
+            {"center_index": 3, "center_paused": True, "pinned_card_id": "custom:card-1", "center_revision": 4}
+        )
+        main.display_custom_cards = [
+            main.normalize_display_custom_card(
+                {
+                    "id": "card-1",
+                    "category": "Host Update",
+                    "primary": "Costume voting starts soon",
+                    "enabled": True,
+                    "duration_seconds": 12,
+                }
+            )
+        ]
+        main.live_display_notice_queue = [
+            {"id": "notice-2", "type": "drink_ready", "title": "Drink Ready", "highlight": "Morgan"}
+        ]
         main.bartender_tip_settings = {
             "enabled": True,
             "display_name": "Casey",
@@ -588,6 +617,12 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Bring a costume.", main.party_details["overview"])
         self.assertEqual("Upside Down LAN", main.display_settings["wifi_network"])
         self.assertEqual("friends-dont-lie", main.display_settings["wifi_password"])
+        self.assertEqual(12, main.display_config["center_interval_seconds"])
+        self.assertEqual("always", main.display_config["music_mode"])
+        self.assertTrue(main.display_runtime["center_paused"])
+        self.assertEqual("custom:card-1", main.display_runtime["pinned_card_id"])
+        self.assertEqual("Costume voting starts soon", main.display_custom_cards[0]["primary"])
+        self.assertEqual("Morgan", main.live_display_notice_queue[0]["highlight"])
         self.assertEqual(7, main.display_update_version)
 
     def test_load_state_from_redis_initializes_missing_state_and_hydrates_existing_state(self):
@@ -1956,6 +1991,118 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("friends-dont-lie", first_entry["cta_details"]["wifi_password"])
         self.assertEqual("https://tnq-halloween.com", first_entry["cta_details"]["site_url"])
         self.assertIn("browse to https://tnq-halloween.com", first_entry["secondary"])
+
+    def test_admin_display_workspace_manages_layout_custom_cards_and_center_controls(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            workspace = client.get("/admin/display")
+            settings_response = client.post(
+                "/admin/display",
+                data={
+                    "action": "update_display_layout",
+                    "source_enabled": ["portal", "custom", "costume"],
+                    "center_interval_seconds": "12",
+                    "game_interval_seconds": "9",
+                    "game_mode": "auto",
+                    "bar_mode": "auto",
+                    "music_mode": "always",
+                    "max_bar_orders": "5",
+                    "notice_duration_seconds": "14",
+                    "density": "compact",
+                },
+            )
+            card_response = client.post(
+                "/admin/display",
+                data={
+                    "action": "add_display_card",
+                    "category": "Host Update",
+                    "primary": "Costume voting starts at ten",
+                    "secondary": "Finish your signup now.",
+                    "tertiary": "Open the party portal.",
+                    "link": "/party",
+                    "link_label": "Party portal",
+                    "duration_seconds": "11",
+                    "enabled": "yes",
+                },
+            )
+            display_payload = client.get("/api/display-data").get_json()
+            portal_entry = next(entry for entry in display_payload["entries"] if entry["source"] == "portal")
+            pin_response = client.post(
+                "/admin/display",
+                data={"action": "pin_display_entry", "entry_id": portal_entry["id"]},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, workspace.status_code)
+        self.assertIn("Live Display", workspace.get_data(as_text=True))
+        self.assertEqual(200, settings_response.status_code)
+        self.assertEqual(200, card_response.status_code)
+        self.assertEqual(200, pin_response.status_code)
+        self.assertEqual(12, state["display_config"]["center_interval_seconds"])
+        self.assertEqual("always", state["display_config"]["music_mode"])
+        self.assertEqual("compact", display_payload["layout"]["density"])
+        custom_entry = next(entry for entry in display_payload["entries"] if entry["source"] == "custom")
+        self.assertEqual("Costume voting starts at ten", custom_entry["primary"])
+        self.assertEqual("/party", custom_entry["link"])
+        self.assertFalse(any(entry["source"] == "karaoke" for entry in display_payload["entries"]))
+        self.assertEqual(portal_entry["id"], state["display_runtime"]["pinned_card_id"])
+        self.assertTrue(state["display_runtime"]["center_paused"])
+
+    def test_display_layout_rotates_multiple_games_on_left_stage_and_removes_private_costume_contact(self):
+        main.costume_signups = [
+            main.CostumeSignup("Jamie", "Vampire", "private@example.com", "costume-1")
+        ]
+        for game_key in (main.TWO_TRUTHS_GAME_KEY, main.FILL_BLANK_GAME_KEY):
+            main.party_game_state(game_key)["enabled"] = True
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            payload = client.get("/api/display-data").get_json()
+
+        game_keys = {entry["game_key"] for entry in payload["layout"]["games"]["entries"]}
+        self.assertEqual(
+            {main.TWO_TRUTHS_GAME_KEY, main.FILL_BLANK_GAME_KEY},
+            game_keys,
+        )
+        self.assertTrue(payload["layout"]["games"]["visible"])
+        self.assertNotIn("private@example.com", json.dumps(payload))
+
+    def test_bar_stage_hides_when_empty_and_ready_notices_advance_sequentially(self):
+        order = {
+            "id": "order-1",
+            "user_id": "user-1",
+            "username": "Jamie",
+            "email": "private@example.com",
+            "menu_item_id": "drink-1",
+            "item_name": "Witch Margarita",
+            "item_image_url": "https://example.test/witch.jpg",
+            "recipe": "Private bartender recipe",
+            "status": "received",
+            "estimated_ready_at": main._utc_now_iso(),
+            "created_at": main._utc_now_iso(),
+            "started_at": "",
+            "completed_at": "",
+            "completed_seconds": None,
+        }
+        empty_bar = main.build_bar_stage()
+        main.drink_orders = [order]
+        active_bar = main.build_bar_stage()
+        first = main.build_drink_ready_override(order)
+        second = {**main.build_drink_ready_override({**order, "username": "Morgan"}), "expires_at": ""}
+        main.enqueue_display_notice(first)
+        main.enqueue_display_notice(second)
+        main.live_display_notice_override["expires_at"] = "2000-01-01T00:00:00Z"
+        main.cleanup_expired_display_notices()
+
+        self.assertFalse(empty_bar["visible"])
+        self.assertTrue(active_bar["visible"])
+        self.assertEqual("Jamie", active_bar["orders"][0]["name"])
+        self.assertNotIn("email", active_bar["orders"][0])
+        self.assertNotIn("recipe", active_bar["orders"][0])
+        self.assertEqual("Morgan", main.live_display_notice_override["highlight"])
+        self.assertEqual([], main.live_display_notice_queue)
 
     def test_admin_page_shows_rsvp_list(self):
         main.rsvp_signups = [
@@ -4308,7 +4455,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("signup", game["phase"])
         self.assertEqual({}, game["participants"])
         main.save_state_to_redis()
-        self.assertEqual(8, self.redis_state()["schema_version"])
+        self.assertEqual(9, self.redis_state()["schema_version"])
         self.assertIn("games_state", self.redis_state())
         self.assertEqual(
             {
@@ -4352,7 +4499,11 @@ class RedisStateTests(unittest.TestCase):
         with main.app.test_client() as admin:
             self.login_admin(admin)
             payload = admin.get("/api/display-data").get_json()
-        game_entry = next(entry for entry in payload["entries"] if entry["category"] == "Two Truths and a Lie")
+        game_entry = next(
+            entry
+            for entry in payload["layout"]["games"]["entries"]
+            if entry["game_key"] == main.TWO_TRUTHS_GAME_KEY and entry["status_label"] == "Mystery clue"
+        )
         self.assertNotIn("Jamie", json.dumps(game_entry))
         self.assertNotIn("answer_name", json.dumps(game_entry))
         self.assertNotIn('"lie":', json.dumps(game_entry).lower())
@@ -4584,7 +4735,7 @@ class RedisStateTests(unittest.TestCase):
                     voting = admin.post("/admin/games", data={"action": "open_prompt_voting", "game_key": game_key})
                     display_payload = admin.get("/api/display-data").get_json()
                 self.assertEqual(200, voting.status_code)
-                display_text = json.dumps(display_payload["entries"])
+                display_text = json.dumps(display_payload["layout"]["games"]["entries"])
                 self.assertIn("A haunted fax machine", display_text)
                 self.assertNotIn("Jamie", display_text)
                 with main.app.test_client() as attendee:

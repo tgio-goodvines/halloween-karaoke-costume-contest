@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Live Signup Display</title>
+    <title>Live Party Display</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='display.css') }}">
   </head>
   <body
-    class="display-mode"
+    class="display-mode display-density--{{ layout.density }}"
     data-display-api="{{ url_for('display_data') }}"
     data-display-updates="{{ url_for('display_updates') }}"
     data-dj-receiver-api="{{ url_for('dj_receiver_state') }}"
@@ -16,191 +16,105 @@
     data-dj-apple-music-configured="{{ 'true' if apple_music_configured else 'false' }}"
     data-csrf-token="{{ csrf_token() }}"
   >
-    {% set first_entry = entries[0] if entries else None %}
-    {% set cta_details = first_entry.get('cta_details', {}) if first_entry else {} %}
-    {% set cta_lede = cta_details.get('lede', '') %}
-    {% set cta_wifi_network = cta_details.get('wifi_network', '') %}
-    {% set cta_wifi_password = cta_details.get('wifi_password', '') %}
-    {% set cta_site_url = cta_details.get('site_url', '') %}
-    <div class="display-wrapper">
+    <div class="display-shell" data-display-shell>
       <header class="display-header">
         <h1>{{ party_title }}</h1>
-        <div class="display-metrics">
-          <div class="display-count">
-            <span class="display-count__number" data-costume-count>{{ costume_count }}</span>
-            <span class="display-count__label">Costume contest signups</span>
-          </div>
-          <div class="display-count">
-            <span class="display-count__number" data-karaoke-count>{{ karaoke_count }}</span>
-            <span class="display-count__label">Karaoke signups</span>
-          </div>
-          <div class="display-count">
-            <span class="display-count__number" data-game-count>{{ game_count }}</span>
-            <span class="display-count__label">Game participants</span>
-          </div>
+        <div class="display-metrics" aria-label="Live participation counts">
+          <span><strong data-costume-count>{{ costume_count }}</strong> costumes</span>
+          <span><strong data-karaoke-count>{{ karaoke_count }}</strong> karaoke</span>
+          <span><strong data-game-count>{{ game_count }}</strong> gamers</span>
         </div>
       </header>
 
-      <section class="display-now-playing" data-dj-now-playing>
-        <div class="display-now-playing__artwork" data-dj-artwork-wrap hidden>
-          <img data-dj-artwork alt="">
-        </div>
+      <main class="display-stage" data-display-stage>
+        <aside class="display-side display-game-stage" data-game-stage hidden>
+          <header class="display-region-header">
+            <span>Left stage</span>
+            <strong>Games</strong>
+          </header>
+          <div class="display-game-stage__content">
+            <p class="display-game-stage__status" data-game-status></p>
+            <h2 data-game-title></h2>
+            <p class="display-game-stage__primary" data-game-primary></p>
+            <p class="display-game-stage__secondary" data-game-secondary></p>
+            <div class="display-game-stage__metrics" data-game-metrics></div>
+          </div>
+          <footer class="display-region-footer">
+            <span data-game-position></span>
+            <span data-game-progress></span>
+          </footer>
+        </aside>
+
+        <section class="display-center-stage" data-center-stage>
+          <header class="display-region-header display-center-stage__header">
+            <span data-center-mode>Live rotation</span>
+            <strong data-center-position></strong>
+          </header>
+
+          <article class="display-center-card" data-center-card>
+            <div class="display-center-card__media" data-center-image-wrap hidden>
+              <img data-center-image alt="">
+            </div>
+            <div class="display-center-card__body">
+              <span class="display-pill" data-center-category></span>
+              <h2 data-center-primary></h2>
+              <p class="display-center-card__secondary" data-center-secondary></p>
+              <p class="display-center-card__tertiary" data-center-tertiary hidden></p>
+              <div class="display-center-card__cta" data-center-cta hidden>
+                <dl>
+                  <div data-cta-wifi-network-item hidden><dt>Network</dt><dd data-cta-wifi-network></dd></div>
+                  <div data-cta-wifi-password-item hidden><dt>Password</dt><dd data-cta-wifi-password></dd></div>
+                  <div data-cta-site-url-item hidden><dt>Browse to</dt><dd data-cta-site-url></dd></div>
+                </dl>
+              </div>
+              <ol class="display-scoreboard" data-center-scoreboard hidden></ol>
+              <p class="display-center-card__link" data-center-link hidden></p>
+              <section class="display-karaoke-extra" data-karaoke-extra hidden>
+                <p class="display-karaoke-extra__countdown" data-karaoke-countdown></p>
+                <ol data-karaoke-lineup></ol>
+              </section>
+            </div>
+          </article>
+          <div class="display-center-progress"><span data-center-progress></span></div>
+        </section>
+
+        <aside class="display-side display-bar-stage" data-bar-stage hidden>
+          <div class="display-bar-queue" data-bar-queue>
+            <header class="display-region-header">
+              <span>Right stage</span>
+              <strong data-bar-heading>Bar queue</strong>
+            </header>
+            <ol data-bar-orders></ol>
+            <p class="display-bar-stage__overflow" data-bar-overflow hidden></p>
+          </div>
+          <div class="display-ready-notice" data-ready-notice hidden>
+            <span class="display-pill">Drink ready</span>
+            <div class="display-ready-notice__image" data-ready-image-wrap hidden><img data-ready-image alt=""></div>
+            <h2 data-ready-name></h2>
+            <p data-ready-message></p>
+            <small data-ready-queue></small>
+          </div>
+        </aside>
+      </main>
+
+      <footer class="display-now-playing" data-dj-now-playing hidden>
+        <div class="display-now-playing__artwork" data-dj-artwork-wrap hidden><img data-dj-artwork alt=""></div>
         <div class="display-now-playing__copy">
           <span class="display-now-playing__label" data-dj-status>DJ standby</span>
           <strong data-dj-title>No confirmed song</strong>
           <span data-dj-artist>Open DJ controls from the admin console.</span>
         </div>
+        <div class="display-now-playing__progress" data-dj-progress-wrap hidden><span data-dj-progress></span></div>
+        <span class="display-now-playing__time" data-dj-time></span>
+        <div class="display-now-playing__next" data-dj-next hidden><span>Up next</span><strong data-dj-next-title></strong></div>
         <div class="display-now-playing__actions">
           <button type="button" class="display-now-playing__enable" data-dj-enable{% if not apple_music_configured %} hidden{% endif %}>Enable DJ Audio</button>
           <span class="display-now-playing__detail" data-dj-detail>{% if apple_music_configured %}Connect Apple Music on this display once.{% else %}Apple Music is not configured yet.{% endif %}</span>
         </div>
-      </section>
-
-      <main class="display-main">
-        <section class="display-card{% if first_entry and not override %} active{% endif %}{% if first_entry and first_entry.get('cta') %} cta{% endif %}" data-display-card{% if not first_entry or override %} hidden{% endif %}>
-          <div class="display-card__default" data-entry-default{% if first_entry and first_entry.get('cta_details') %} hidden{% endif %}>
-            <div class="display-category" data-entry-type>{{ first_entry['category'] if first_entry else '' }}</div>
-            <div class="display-primary" data-entry-primary>{{ first_entry['primary'] if first_entry else '' }}</div>
-            <div class="display-secondary" data-entry-secondary>{{ first_entry['secondary'] if first_entry else '' }}</div>
-            <div class="display-tertiary" data-entry-tertiary{% if not first_entry or not first_entry['tertiary'] %} hidden{% endif %}>{{ first_entry['tertiary'] if first_entry and first_entry['tertiary'] else '' }}</div>
-          </div>
-          <div class="display-cta-layout" data-cta-layout{% if not first_entry or not first_entry.get('cta_details') %} hidden{% endif %}>
-            <p class="display-cta-lede" data-cta-lede>{{ cta_lede }}</p>
-            <section class="display-cta-wifi">
-              <h3 class="display-cta-heading">WiFi access</h3>
-              <dl class="display-cta-list">
-                <div class="display-cta-list__item" data-cta-wifi-network-item{% if not cta_wifi_network %} hidden{% endif %}>
-                  <dt>Network</dt>
-                  <dd data-cta-wifi-network>{{ cta_wifi_network }}</dd>
-                </div>
-                <div class="display-cta-list__item" data-cta-wifi-password-item{% if not cta_wifi_password %} hidden{% endif %}>
-                  <dt>Password</dt>
-                  <dd data-cta-wifi-password>{{ cta_wifi_password }}</dd>
-                </div>
-                <div class="display-cta-list__item" data-cta-site-url-item{% if not cta_site_url %} hidden{% endif %}>
-                  <dt>Then browse to</dt>
-                  <dd data-cta-site-url>{{ cta_site_url }}</dd>
-                </div>
-              </dl>
-            </section>
-          </div>
-          <div class="display-scoreboard" data-scoreboard-layout hidden>
-            <header class="display-scoreboard__header">
-              <h2 class="display-scoreboard__title" data-scoreboard-title></h2>
-              <p class="display-scoreboard__subtitle" data-scoreboard-subtitle hidden></p>
-            </header>
-            <ol class="display-scoreboard__list" data-scoreboard-list></ol>
-            <p class="display-scoreboard__note" data-scoreboard-note hidden></p>
-          </div>
-        </section>
-
-        <section class="display-empty{% if not entries and not override %} is-visible{% endif %}" data-empty-state{% if override %} hidden{% endif %}>
-          <div class="instruction-card">
-            <div class="instruction-card__badge" aria-hidden="true">👻</div>
-            <h2 class="instruction-card__title">Guide guests onto the signup hub</h2>
-            <p class="instruction-card__subtitle">
-              Walk them through these quick steps to get costumes and karaoke songs into the rotation.
-            </p>
-            <ol class="instruction-steps">
-              <li class="instruction-step">
-                <h3 class="instruction-step__heading">Connect to the party WiFi</h3>
-                <p class="instruction-step__body">Open WiFi settings and join our dedicated network.</p>
-                <div class="instruction-callout" role="group" aria-label="WiFi credentials">
-                  <div class="instruction-callout__item">
-                    <span class="instruction-callout__label">Network</span>
-                    <strong class="instruction-callout__value">Halloween Party WiFi</strong>
-                  </div>
-                  <div class="instruction-callout__item">
-                    <span class="instruction-callout__label">Password</span>
-                    <strong class="instruction-callout__value">halloween</strong>
-                  </div>
-                </div>
-              </li>
-              <li class="instruction-step">
-                <h3 class="instruction-step__heading">Add their picks to the lineup</h3>
-                <p class="instruction-step__body">
-                  Use the forms on the page to submit their costume and queue a karaoke song so it appears on this screen.
-                </p>
-                <ul class="instruction-substeps">
-                  <li>Tap the <strong>Costume</strong> form for outfit entries.</li>
-                  <li>Tap the <strong>Karaoke</strong> form to reserve a song.</li>
-                </ul>
-              </li>
-            </ol>
-          </div>
-        </section>
-        <section class="display-override" data-override-state{% if not override %} hidden{% endif %}>
-          <div class="display-override__card">
-            <div class="display-override__general" data-override-general>
-              <h2 class="display-override__title" data-override-title>{{ override.title if override else '' }}</h2>
-              <p class="display-override__highlight" data-override-highlight{% if not override or not override.get('highlight') %} hidden{% endif %}>{{ override.highlight if override and override.get('highlight') else '' }}</p>
-              <img
-                class="display-override__image"
-                data-override-image
-                {% if override and override.get('image_url') %}src="{{ override.image_url }}" alt="{{ override.highlight if override.get('highlight') else override.title }}"{% else %}hidden alt=""{% endif %}
-              >
-              <p class="display-override__message" data-override-message>{{ override.message if override else '' }}</p>
-              <ul class="display-override__details" data-override-details{% if not override or not override.get('details') %} hidden{% endif %}>
-                {% if override and override.get('details') %}
-                  {% for detail in override.details %}
-                    <li>{{ detail }}</li>
-                  {% endfor %}
-                {% endif %}
-              </ul>
-            </div>
-            <div class="display-override__karaoke" data-override-karaoke hidden>
-              <h2 class="karaoke-card__title" data-karaoke-title></h2>
-              <p class="karaoke-card__subtitle" data-karaoke-subtitle></p>
-              <p class="karaoke-card__message" data-karaoke-message></p>
-              <div class="karaoke-card__content">
-                <div class="karaoke-card__rotator" data-karaoke-rotator>
-                  <section
-                    class="karaoke-card__panel karaoke-card__countdown is-active"
-                    data-karaoke-panel="countdown"
-                  >
-                    <p class="karaoke-card__label">Countdown to showtime</p>
-                    <p class="karaoke-card__timer" data-karaoke-countdown>--:--:--</p>
-                    <p class="karaoke-card__note" data-karaoke-countdown-note hidden></p>
-                  </section>
-                  <section
-                    class="karaoke-card__panel karaoke-card__upcoming"
-                    data-karaoke-panel="lineup"
-                    aria-hidden="true"
-                  >
-                    <p class="karaoke-card__label">Upcoming singers</p>
-                    <ol class="karaoke-card__list" data-karaoke-lineup hidden></ol>
-                    <p class="karaoke-card__empty" data-karaoke-empty hidden>Lineup coming soon.</p>
-                  </section>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section class="display-notice" data-notice-state{% if not notice_override %} hidden{% endif %}>
-          <div class="display-notice__card">
-            <h2 class="display-notice__title" data-notice-title>{{ notice_override.title if notice_override else '' }}</h2>
-            <p class="display-notice__highlight" data-notice-highlight{% if not notice_override or not notice_override.get('highlight') %} hidden{% endif %}>{{ notice_override.highlight if notice_override and notice_override.get('highlight') else '' }}</p>
-            <img
-              class="display-notice__image"
-              data-notice-image
-              {% if notice_override and notice_override.get('image_url') %}src="{{ notice_override.image_url }}" alt="{{ notice_override.highlight if notice_override.get('highlight') else notice_override.title }}"{% else %}hidden alt=""{% endif %}
-            >
-            <p class="display-notice__message" data-notice-message>{{ notice_override.message if notice_override else '' }}</p>
-            <ul class="display-notice__details" data-notice-details{% if not notice_override or not notice_override.get('details') %} hidden{% endif %}>
-              {% if notice_override and notice_override.get('details') %}
-                {% for detail in notice_override.details %}
-                  <li>{{ detail }}</li>
-                {% endfor %}
-              {% endif %}
-            </ul>
-          </div>
-        </section>
-      </main>
+      </footer>
     </div>
 
-    <script id="entries-data" type="application/json">{{ entries | tojson }}</script>
-    <script id="override-data" type="application/json">{{ override | tojson }}</script>
-    <script id="notice-override-data" type="application/json">{{ notice_override | tojson }}</script>
+    <script id="display-layout-data" type="application/json">{{ layout | tojson }}</script>
     <script id="dj-data" type="application/json">{{ dj | tojson }}</script>
     <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" defer></script>
     <script src="{{ url_for('static', filename='display.js') }}" defer></script>

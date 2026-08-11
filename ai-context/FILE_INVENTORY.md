@@ -4,7 +4,7 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, schema-v6 YouTube karaoke workflow/state/routes, admin stage controls, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, YouTube karaoke workflow/state/routes, schema-v9 adaptive-display state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
 | `youtube_karaoke.py` | YouTube URL/metadata normalization, Google API search and playlist client, bounded timeout/error translation, OAuth flow, and dedicated Vault refresh-token store. |
 | `party_games.py` | Five-game catalog, persisted-state normalization, anonymous alias generation, Two Truths scoring, MMF plurality scoring, shared prompt-response-voting results, ties, and statistics. |
 | `requirements.txt` | Python dependencies including Flask, Redis, AWS/SES, Google YouTube/OAuth clients, hvac, and gunicorn. |
@@ -21,7 +21,7 @@
 | `static/preserve-scroll.js` | Shared same-page POST scroll/disclosure restoration for attendee and admin forms. |
 | `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
-| `static/display.css` | Dedicated large-format live-display styles aligned with the dark lab-terminal design system, including square display cards, event override cards, top-layer drink-ready notices, CTA layout, scoreboard layout, and karaoke display panels. |
+| `static/display.css` | Fixed-viewport adaptive TV grid with title header, independent game/bar rails, dominant center cards, conditional music footer, density fitting, event spotlights, ready alerts, CTA, scoreboard, and karaoke layouts. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, retained authorization diagnostics, reset handling, Redis-command execution, heartbeat/acknowledgement reporting, and Now Playing dock updates. |
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
@@ -59,7 +59,7 @@
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
 | `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, preserving existing CSRF-protected admin actions. |
-| `templates/display.html` | Standalone full-screen live-display page and initial JSON bootstrap, including event override markup and top-layer notice image markup for drink-ready cards. |
+| `templates/display.html` | Standalone no-scroll live-display shell and layout JSON bootstrap for title, left games, center cards/spotlights, right bar/ready alerts, and music footer. |
 | `ai-context/DJ_JUKEBOX_FEATURE.md` | Durable DJ feature state model, routes, MusicKit/Vault setup, visual acknowledgement flow, and recovery procedure. |
 | `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` | Durable Two Truths and a Lie lifecycle, Redis model, scoring, attendee/admin/display behavior, verification, and rollout progress. |
 | `ai-context/ACCOUNT_MANAGEMENT_FEATURE.md` | Attendee account workspace behavior, access boundaries, persistence rules, and verification coverage. |
@@ -107,6 +107,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` | Planned YouTube karaoke search, exact-video request workflow, host approval, playlist synchronization, dedicated admin workspace, stage controls, manual official-YouTube playback, security, migration, rollout, and acceptance criteria. |
 | `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` | Current YouTube karaoke implementation, verification, production prerequisites, guardrails, and rollout progress. |
 | `ai-context/STYLING_REFINEMENT_PROGRESS.md` | Progress and implementation notes for the attached-wireframe styling refinement across pages, live display, and generated emails. |
+| `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` | Adaptive live-display and admin-control-room implementation, state/payload contract, verification matrix, and rollout notes. |
 | `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` | Active GitHub Actions plan for deploying merged `main` commits to the existing EC2 ASG through AWS CLI and SSM, without S3 or GoodVines disruption. |
 | `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` | Durable progress tracker for the GitHub Actions deployment implementation, validation status, and external setup requirements. |
 | `ai-context/GITLAB_AWS_DEPLOYMENT_DESIGN.md` | Legacy GitLab CI/CD design; superseded by the GitHub Actions deployment plan. |

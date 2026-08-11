@@ -269,31 +269,45 @@ app state.
   signed-in admin session from `/admin/login`.
 - `/health` returns JSON service and Redis readiness for production health
   checks.
-- Shows event title and live counts for costume and karaoke signups.
+- Keeps the event title fixed at the top with compact costume, karaoke, and game
+  counts; the document and every TV region forbid scrolling.
 - Live display always rotates party-night cards, even before
   `HALLOWEEN_PARTY_START`, so hosts can stage/test the TV experience.
-- Rotates through WiFi/app sign-in instructions, costume signup prompts, karaoke
-  signup prompts, game signup and anonymous clue cards, drink-order promotion,
+- Uses an adaptive title/header, left game rail, dominant center stage, right
+  bar rail, and music footer. Empty side/footer regions collapse and the center
+  stage expands to use the reclaimed viewport.
+- Center stage rotates through WiFi/app sign-in instructions, costume signup
+  prompts, karaoke signup prompts, game signup/results cards, drink-order promotion,
   live-update explanation cards, winner/scoreboard cards, costume entries, and
   karaoke entries.
-- Ended Two Truths and a Lie games add tied-winner and final-score/participant
-  cards to rotation. Persistent `game_*` overrides let admins pause on game,
-  winner, or result announcements while temporary drink-ready notices retain
-  top-layer precedence.
-- Anonymous prompt responses rotate only after voting opens. Ended MMF and
-  prompt games add alias-only winner/scoreboard cards, while host-controlled
+- Ended Two Truths and a Lie games add tied-winner and final-score cards to the
+  center rotation. Persistent `game_*` overrides let admins pause center stage
+  on game, winner, or result announcements while ready notices remain isolated
+  to the right rail.
+- Anonymous prompt responses join the left stage only after voting opens. Ended
+  MMF and prompt games add alias-only winner/scoreboard cards, while host-controlled
   presentation overrides walk the display through each aggregate result.
 - Signup portal card includes admin-configurable WiFi network/password details
   and the party portal link.
-- Display entries rotate every 8 seconds with fade/slide transitions.
+- Multiple enabled games rotate independently on the left stage; admins may pin
+  one game without pausing center-stage cards.
+- The right stage appears only for active drink orders or ready alerts in auto
+  mode. It exposes only guest display name, drink, public status, and estimate.
+- Drink-ready alerts temporarily replace the right-stage queue and queued alerts
+  play sequentially; center/event spotlights continue independently.
+- DJ Now Playing, progress, connection/audio state, and Up Next live in the
+  conditional footer.
+- Center and game intervals are configurable, while custom cards can set their
+  own duration and optional schedule.
 - Display data refreshes every 30 seconds via `/api/display-data`.
 - Display also updates immediately through server-sent events from `/api/display-updates`.
 - SSE endpoint sends keep-alive comments on idle intervals.
 - Display supports full-screen event override cards for contest start, winner announcement, and karaoke start. Costume and karaoke event modes are mutually exclusive.
-- Display supports temporary 10-second drink-ready notice cards with drink images. Drink notices render above the active event override or normal rotation without replacing the event card.
-- Persistent Now Playing dock shows the display receiver's confirmed DJ status,
-  song artwork/title/artist, and one-time Enable DJ Audio action for MusicKit;
-  it does not replace rotation, event overrides, or drink-ready notices.
+- Display supports configurable temporary drink-ready notice cards with drink
+  images in the right rail; notices do not replace center-stage event cards.
+- `/admin/display` provides live region status, previous/pause/resume/next,
+  spotlight-any-card, source enable/order controls, region modes and timing,
+  game pinning, alert dismissal, and a scheduled custom-card library.
 - The display waits for MusicKit before pairing, retains a meaningful
   authorization error across heartbeats, and has a receiver-ID fallback for
   browsers without `crypto.randomUUID`.

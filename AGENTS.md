@@ -17,6 +17,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` - planned attendee YouTube search, host approval, playlist synchronization, dedicated karaoke admin workflow, stage controls, and manual two-tab playback.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
 - `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` - Redis-backed party Games framework, Two Truths and a Lie lifecycle, attendee/admin/display behavior, scoring, and verification.
+- `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` - adaptive TV layout, independent region rotations, admin control room, schema-v9 state, verification, and rollout notes.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
 - `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 2 details for automatic Halloween install on replacement API EC2 instances.
@@ -44,12 +45,16 @@ Important working notes:
 - Completing a drink order sends the ready email and creates a temporary 10-second live-display `drink_ready` notice with the drink image; attendees also see ready drink cards on `/party`. Drink-ready notices render above any active contest/karaoke/winner event override without replacing it.
 - Halloween outbound email uses the separate `tnq-halloween.com` SES identity and sender `no-reply@tnq-halloween.com`; do not change existing GoodVines SES identities or sender addresses for `appg-v.com` or `goodvines.app`.
 - Admin controls can set the root landing target, replace the RSVP submission party code, configure the host RSVP notification email, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
-- Before `HALLOWEEN_PARTY_START`, live-display rotation is limited to RSVP/static party info/update cards and should not show costume or karaoke signup entries.
+- The live display remains party-night oriented before `HALLOWEEN_PARTY_START` so hosts can stage and test the full TV experience.
 - Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`. Costume and karaoke event overrides are mutually exclusive; starting one stops the other static event mode.
 - Game clue, anonymous response, winner, and results cards join the normal
   live-display rotation. Ended anonymous games support host-controlled
   previous/next result presentations. Game `game_*` event overrides can be
   cleared without changing costume, karaoke, DJ, or drink-notice state.
+- The live display uses a fixed no-scroll viewport: title header, independently
+  rotating game rail on the left, dominant center-card rotation, conditional
+  bar queue/ready alerts on the right, and conditional DJ footer. Empty regions
+  collapse and the center stage expands. Configure it from `/admin/display`.
 - Header logout is a single button tucked inside the `Menu` disclosure; do not add separate regular/admin logout controls.
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.
 - Responsive UX updates are complete: live-display cards scale for normal browser windows, attendee/admin pages are mobile-oriented, and admin add/edit forms are collapsed disclosure rows by default.

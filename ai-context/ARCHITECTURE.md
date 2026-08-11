@@ -6,7 +6,7 @@
   to `/rsvp`.
 - `GET /health` -> JSON health API for service and Redis readiness; returns
   `503` in production if Redis cannot be reached.
-- `GET /live-display` -> renders `templates/display.html` with rotation entries, counts, and override state; requires an `admin` role session.
+- `GET /live-display` -> renders `templates/display.html` with the adaptive region layout bootstrap; requires an `admin` role session.
 - `GET /api/display-updates` -> server-sent events stream keyed by `display_update_version`; requires an `admin` role session.
 - `GET /api/display-data` -> JSON payload for live-display refreshes; requires an `admin` role session.
 - `GET|POST /rsvp` -> public RSVP landing page; shows party details, an
@@ -227,13 +227,17 @@ Admin and voting actions that alter display-relevant state call `broadcast_displ
 
 That function increments `display_update_version` and notifies `display_update_condition`.
 
-`/api/display-updates` streams the current version to connected browsers, then waits for changes. The browser does not use the version value semantically; every SSE message triggers `fetchLatestEntries()` in `static/display.js`.
+`/api/display-updates` streams the current version to connected browsers, then waits for changes. The browser does not use the version value semantically; every SSE message triggers a full layout refresh in `static/display.js`.
 
 `static/display.js` also polls `/api/display-data` every 30 seconds as a fallback.
 
 ## Rotation Entry Model
 
-`build_rotation_entries()` returns a list of dictionaries. Display entries can contain:
+`build_display_layout()` returns `header`, `center`, `games`, `bar`, `music`, and
+`density` regions. `/api/display-data` also retains the legacy top-level
+`entries`, `override`, counts, and `dj` fields for compatibility.
+
+`build_rotation_entries()` produces the ordered center-card list. Display entries can contain:
 
 - `category`: small heading.
 - `primary`: main card text.
@@ -243,28 +247,32 @@ That function increments `display_update_version` and notifies `display_update_c
 - `link` and `link_label`: optional external link.
 - `cta_details`: admin-configurable WiFi and signup portal details.
 - `scoreboard`: structured top-score rows.
+- `id`, `source`, and `duration_seconds`: stable operator pin target, source
+  grouping, and optional per-card rotation duration.
 
-The base rotation always starts with WiFi/app sign-in instructions, costume and
-karaoke signup prompts, drink-order promotion, and live-update explanation
-cards. The WiFi card tells guests to connect to the configured network and then
-browse to `tnq-halloween.com` to start the party experience. The WiFi
-network/password values come from Redis-backed
-`display_settings`, defaulting to `HALLOWEEN_DISPLAY_WIFI_NETWORK` and
-`HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank values are allowed so the live display
-can omit either row. Winner and scoreboard cards are appended when the relevant
-contest state is active. Enabled Two Truths and a Lie submissions are
-interleaved as anonymous three-statement cards. Prompt-game responses join only
-after voting opens. After finalization, tied-winner and generic alias-only
-scoreboard cards join rotation. Host-controlled `game_presentation` overrides
-walk MMF aggregate action totals or revealed prompt winners with previous/next
-controls; account identity and individual MMF ballots never enter display
-payloads. Costume and karaoke entries are also interleaved. Admin
+`build_game_stage_entries()` produces privacy-safe per-game summaries, current
+clues/prompts/responses, and ended results for an independent left-stage
+rotation. `build_bar_stage()` exposes only public active-order fields plus the
+current/queued ready alerts. `build_music_footer()` provides receiver-confirmed
+Now Playing and Up Next data. Region modes are `auto`, `always`, or `hidden`;
+the client toggles layout classes so unused tracks disappear and center grows.
+
+The center rotation is grouped and ordered by `display_config.source_order`;
+each source may be disabled independently. Its defaults include WiFi/app sign-in,
+costume and karaoke signup/entries, game signup/final results, drink-order
+promotion, and live-update explanation cards. The WiFi values come from
+Redis-backed `display_settings`, defaulting to
+`HALLOWEEN_DISPLAY_WIFI_NETWORK` and `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank
+values hide either row. Current game data, clues/prompts, voting responses, and
+phase metrics instead rotate independently in `layout.games`. Host-controlled
+`game_presentation` overrides walk MMF aggregate action totals or revealed
+prompt winners with previous/next center-stage controls; account identity and
+individual MMF ballots never enter display payloads. Admin
 stop/reset actions clear matching live-display event overrides without deleting
 signup lineups. Starting costume stops active karaoke event mode, and starting
 karaoke closes active costume voting so costume/karaoke do not compete for the
-static event card. Drink-ready notices are a separate temporary
-`notice_override` layer and can render over an active contest/karaoke/winner
-event card without replacing it. `build_rotation_entries()` intentionally
+static event card. Drink-ready notices are a separate right-stage queue and do
+not replace an active contest/karaoke/winner center card. `build_rotation_entries()` intentionally
 returns party-night cards even before `HALLOWEEN_PARTY_START` so hosts can
 stage and test the live display ahead of the event.
 
@@ -348,12 +356,14 @@ locked winner.
 - `admin.html`: workspace-based admin control room. `/admin` provides
   tonight-at-a-glance cards and next actions; focused guest, public-info,
   program, bar, menu, and account workspaces selectively render the existing
-  management controls and POST actions. Individual add/edit records remain
+  management controls and POST actions. `/admin/display` contains adaptive
+  region/timing/source controls, run-of-show actions, game pinning, notice
+  dismissal, and scheduled custom-card CRUD. Individual add/edit records remain
   disclosure rows to keep mobile scanning manageable.
 - `dj-admin.js`: Apple Music catalog search and add-song form hydration.
-- `display.html`: standalone live-display page without `base.html`; includes
-  default card, CTA, scoreboard, override, karaoke countdown, and karaoke lineup
-  panel markup plus a persistent DJ Now Playing dock.
+- `display.html`: standalone live-display page without `base.html`; includes the
+  fixed title/header, independent left/center/right stages, CTA/scoreboard/
+  karaoke markup, and conditional DJ footer.
 - `dj-display.js`: display-side MusicKit receiver, load-safe pairing,
   persistent error reporting, reset acknowledgement, command acknowledgements,
   heartbeats, and Now Playing dock updates.
@@ -389,7 +399,8 @@ locked winner.
 - Keep small changes in the existing single-file Flask style unless asked to refactor.
 - If adding durable event data, introduce a clear persistence layer before expanding globals further.
 - If changing contest voting, protect vote/index alignment carefully.
-- If changing live-display payloads, update both `build_rotation_entries()`/override payloads and `static/display.js`.
+- If changing live-display payloads, update the relevant region builder,
+  `build_display_layout()`, `templates/display.html`, and `static/display.js`.
 - Drink-ready live-display overrides are temporary and include `expires_at`; keep
   server-side cleanup in `/live-display` and `/api/display-data` if adding more
   temporary override types.

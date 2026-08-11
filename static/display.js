@@ -1,1202 +1,485 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const dataElement = document.getElementById('entries-data');
-  const overrideElement = document.getElementById('override-data');
-  const noticeOverrideElement = document.getElementById('notice-override-data');
-  const card = document.querySelector('[data-display-card]');
-  const emptyState = document.querySelector('[data-empty-state]');
-  const overrideContainer = document.querySelector('[data-override-state]');
-  const overrideCardElement = overrideContainer
-    ? overrideContainer.querySelector('.display-override__card')
-    : null;
-  const generalOverrideElement = overrideContainer
-    ? overrideContainer.querySelector('[data-override-general]')
-    : null;
-  const karaokeOverrideElement = overrideContainer
-    ? overrideContainer.querySelector('[data-override-karaoke]')
-    : null;
-  const overrideTitleElement = overrideContainer ? overrideContainer.querySelector('[data-override-title]') : null;
-  const overrideHighlightElement = overrideContainer ? overrideContainer.querySelector('[data-override-highlight]') : null;
-  const overrideMessageElement = overrideContainer ? overrideContainer.querySelector('[data-override-message]') : null;
-  const overrideDetailsElement = overrideContainer ? overrideContainer.querySelector('[data-override-details]') : null;
-  const overrideImageElement = overrideContainer ? overrideContainer.querySelector('[data-override-image]') : null;
-  const noticeContainer = document.querySelector('[data-notice-state]');
-  const noticeTitleElement = noticeContainer ? noticeContainer.querySelector('[data-notice-title]') : null;
-  const noticeHighlightElement = noticeContainer ? noticeContainer.querySelector('[data-notice-highlight]') : null;
-  const noticeMessageElement = noticeContainer ? noticeContainer.querySelector('[data-notice-message]') : null;
-  const noticeDetailsElement = noticeContainer ? noticeContainer.querySelector('[data-notice-details]') : null;
-  const noticeImageElement = noticeContainer ? noticeContainer.querySelector('[data-notice-image]') : null;
-  const karaokeTitleElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-title]')
-    : null;
-  const karaokeSubtitleElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-subtitle]')
-    : null;
-  const karaokeMessageElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-message]')
-    : null;
-  const karaokeCountdownElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-countdown]')
-    : null;
-  const karaokeCountdownNoteElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-countdown-note]')
-    : null;
-  const karaokeLineupElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-lineup]')
-    : null;
-  const karaokeEmptyElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-empty]')
-    : null;
-  const karaokeRotatorElement = karaokeOverrideElement
-    ? karaokeOverrideElement.querySelector('[data-karaoke-rotator]')
-    : null;
-  const costumeCountElement = document.querySelector('[data-costume-count]');
-  const karaokeCountElement = document.querySelector('[data-karaoke-count]');
-  const gameCountElement = document.querySelector('[data-game-count]');
-  let hasRefreshedDisplayStylesheet = false;
-  const bodyDataset = (document.body && document.body.dataset) || {};
-  const dataEndpoint = bodyDataset.displayApi || '/api/display-data';
-  const updatesEndpoint = bodyDataset.displayUpdates || null;
+  const body = document.body;
+  const shell = document.querySelector('[data-display-shell]');
+  const bootstrap = document.getElementById('display-layout-data');
+  if (!body || !shell || !bootstrap) return;
 
-  if (!dataElement || !card || !emptyState) {
-    return;
-  }
-
-  let entries = [];
-  try {
-    entries = JSON.parse(dataElement.textContent || '[]');
-    if (!Array.isArray(entries)) {
-      entries = [];
-    }
-  } catch (error) {
-    console.error('Unable to parse display entries', error);
-    entries = [];
-  }
-
-  let entriesSignature;
-  try {
-    entriesSignature = JSON.stringify(entries);
-  } catch (error) {
-    entriesSignature = '[]';
-  }
-
-  let initialOverrideState = null;
-  if (overrideElement) {
-    try {
-      const parsed = JSON.parse(overrideElement.textContent || 'null');
-      if (parsed && typeof parsed === 'object') {
-        initialOverrideState = parsed;
-      }
-    } catch (error) {
-      console.error('Unable to parse override state', error);
-    }
-  }
-
-  let initialNoticeOverrideState = null;
-  if (noticeOverrideElement) {
-    try {
-      const parsed = JSON.parse(noticeOverrideElement.textContent || 'null');
-      if (parsed && typeof parsed === 'object') {
-        initialNoticeOverrideState = parsed;
-      }
-    } catch (error) {
-      console.error('Unable to parse notice override state', error);
-    }
-  }
-
-  let overrideState = null;
-  let overrideSignature = 'null';
-  let noticeOverrideState = null;
-  let noticeOverrideSignature = 'null';
-
-  const defaultContent = card.querySelector('[data-entry-default]');
-  const ctaLayout = card.querySelector('[data-cta-layout]');
-  const ctaLedeElement = card.querySelector('[data-cta-lede]');
-  const ctaWifiNetworkElement = card.querySelector('[data-cta-wifi-network]');
-  const ctaWifiNetworkItemElement = card.querySelector('[data-cta-wifi-network-item]');
-  const ctaWifiPasswordElement = card.querySelector('[data-cta-wifi-password]');
-  const ctaWifiPasswordItemElement = card.querySelector('[data-cta-wifi-password-item]');
-  const ctaSiteUrlElement = card.querySelector('[data-cta-site-url]');
-  const ctaSiteUrlItemElement = card.querySelector('[data-cta-site-url-item]');
-  const scoreboardLayout = card.querySelector('[data-scoreboard-layout]');
-  const scoreboardTitleElement = scoreboardLayout
-    ? scoreboardLayout.querySelector('[data-scoreboard-title]')
-    : null;
-  const scoreboardSubtitleElement = scoreboardLayout
-    ? scoreboardLayout.querySelector('[data-scoreboard-subtitle]')
-    : null;
-  const scoreboardListElement = scoreboardLayout
-    ? scoreboardLayout.querySelector('[data-scoreboard-list]')
-    : null;
-  const scoreboardNoteElement = scoreboardLayout
-    ? scoreboardLayout.querySelector('[data-scoreboard-note]')
-    : null;
-  const typeElement = card.querySelector('[data-entry-type]');
-  const primaryElement = card.querySelector('[data-entry-primary]');
-  const secondaryElement = card.querySelector('[data-entry-secondary]');
-  const tertiaryElement = card.querySelector('[data-entry-tertiary]');
-
-  const formatAverageScore = (value) => {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      return numeric.toFixed(2);
-    }
-    return '0.00';
+  const apiUrl = body.dataset.displayApi || '/api/display-data';
+  const updatesUrl = body.dataset.displayUpdates || '';
+  const elements = {
+    costumeCount: document.querySelector('[data-costume-count]'),
+    karaokeCount: document.querySelector('[data-karaoke-count]'),
+    gameCount: document.querySelector('[data-game-count]'),
+    gameStage: document.querySelector('[data-game-stage]'),
+    gameStatus: document.querySelector('[data-game-status]'),
+    gameTitle: document.querySelector('[data-game-title]'),
+    gamePrimary: document.querySelector('[data-game-primary]'),
+    gameSecondary: document.querySelector('[data-game-secondary]'),
+    gameMetrics: document.querySelector('[data-game-metrics]'),
+    gamePosition: document.querySelector('[data-game-position]'),
+    gameProgress: document.querySelector('[data-game-progress]'),
+    centerStage: document.querySelector('[data-center-stage]'),
+    centerCard: document.querySelector('[data-center-card]'),
+    centerMode: document.querySelector('[data-center-mode]'),
+    centerPosition: document.querySelector('[data-center-position]'),
+    centerCategory: document.querySelector('[data-center-category]'),
+    centerPrimary: document.querySelector('[data-center-primary]'),
+    centerSecondary: document.querySelector('[data-center-secondary]'),
+    centerTertiary: document.querySelector('[data-center-tertiary]'),
+    centerImageWrap: document.querySelector('[data-center-image-wrap]'),
+    centerImage: document.querySelector('[data-center-image]'),
+    centerCta: document.querySelector('[data-center-cta]'),
+    centerScoreboard: document.querySelector('[data-center-scoreboard]'),
+    centerLink: document.querySelector('[data-center-link]'),
+    centerProgress: document.querySelector('[data-center-progress]'),
+    ctaNetworkItem: document.querySelector('[data-cta-wifi-network-item]'),
+    ctaNetwork: document.querySelector('[data-cta-wifi-network]'),
+    ctaPasswordItem: document.querySelector('[data-cta-wifi-password-item]'),
+    ctaPassword: document.querySelector('[data-cta-wifi-password]'),
+    ctaSiteItem: document.querySelector('[data-cta-site-url-item]'),
+    ctaSite: document.querySelector('[data-cta-site-url]'),
+    karaokeExtra: document.querySelector('[data-karaoke-extra]'),
+    karaokeCountdown: document.querySelector('[data-karaoke-countdown]'),
+    karaokeLineup: document.querySelector('[data-karaoke-lineup]'),
+    barStage: document.querySelector('[data-bar-stage]'),
+    barQueue: document.querySelector('[data-bar-queue]'),
+    barHeading: document.querySelector('[data-bar-heading]'),
+    barOrders: document.querySelector('[data-bar-orders]'),
+    barOverflow: document.querySelector('[data-bar-overflow]'),
+    readyNotice: document.querySelector('[data-ready-notice]'),
+    readyImageWrap: document.querySelector('[data-ready-image-wrap]'),
+    readyImage: document.querySelector('[data-ready-image]'),
+    readyName: document.querySelector('[data-ready-name]'),
+    readyMessage: document.querySelector('[data-ready-message]'),
+    readyQueue: document.querySelector('[data-ready-queue]'),
+    music: document.querySelector('[data-dj-now-playing]'),
+    djProgressWrap: document.querySelector('[data-dj-progress-wrap]'),
+    djProgress: document.querySelector('[data-dj-progress]'),
+    djTime: document.querySelector('[data-dj-time]'),
+    djNext: document.querySelector('[data-dj-next]'),
+    djNextTitle: document.querySelector('[data-dj-next-title]'),
   };
 
-  const getEntryTextLength = (entry) => {
-    if (!entry || typeof entry !== 'object') {
-      return 0;
-    }
+  let layout = {};
+  try { layout = JSON.parse(bootstrap.textContent || '{}'); } catch (error) { console.error('Unable to parse display layout', error); }
+  let centerIndex = 0;
+  let centerEntryId = '';
+  let centerRevision = -1;
+  let centerTimer = null;
+  let centerTransitionTimer = null;
+  let gameIndex = 0;
+  let gameEntryId = '';
+  let gameTimer = null;
+  let noticeTimer = null;
+  let karaokeTimer = null;
 
-    return ['category', 'primary', 'secondary', 'tertiary']
-      .map((key) => (entry[key] ? String(entry[key]) : ''))
-      .join(' ')
-      .length;
+  const safeArray = (value) => (Array.isArray(value) ? value : []);
+  const asObject = (value) => (value && typeof value === 'object' ? value : {});
+  const setHidden = (element, hidden) => {
+    if (!element) return;
+    if (hidden) element.setAttribute('hidden', '');
+    else element.removeAttribute('hidden');
+  };
+  const setOptionalText = (element, value) => {
+    if (!element) return;
+    const text = value == null ? '' : String(value);
+    element.textContent = text;
+    setHidden(element, !text);
+  };
+  const boundedSeconds = (value, fallback = 8) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.min(30, Math.max(4, parsed)) : fallback;
+  };
+  const formatDuration = (seconds) => {
+    const value = Math.max(0, Math.floor(Number(seconds) || 0));
+    return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
   };
 
-  let karaokeCountdownTimerId = null;
-  let karaokeCountdownTarget = null;
-  let karaokeRotatorPanels = [];
-  let karaokeRotatorIndex = 0;
-  let karaokeRotatorTimerId = null;
-  let karaokeRotatorResizeHandler = null;
-  const KARAOKE_ROTATOR_INTERVAL = 8000;
+  const fitPanel = (panel) => {
+    if (!panel || panel.hasAttribute('hidden')) return;
+    panel.classList.remove('is-dense', 'is-ultra-dense');
+    if (panel.scrollHeight > panel.clientHeight + 2) panel.classList.add('is-dense');
+    if (panel.scrollHeight > panel.clientHeight + 2) panel.classList.add('is-ultra-dense');
+  };
+  const fitAll = () => requestAnimationFrame(() => {
+    fitPanel(elements.gameStage);
+    fitPanel(elements.centerStage);
+    fitPanel(elements.barStage);
+    fitPanel(elements.music);
+  });
 
-  const refreshDisplayStylesheet = () => {
-    if (hasRefreshedDisplayStylesheet) {
-      return;
-    }
-
-    let displayStylesheetLink = null;
-
-    document.querySelectorAll('link[rel~="stylesheet"]').forEach((link) => {
-      if (displayStylesheetLink) {
-        return;
-      }
-
-      const href = link.getAttribute('href') || '';
-      if (href.includes('display.css')) {
-        displayStylesheetLink = link;
-      }
-    });
-
-    if (!displayStylesheetLink) {
-      return;
-    }
-
-    try {
-      const cacheBustingUrl = new URL(displayStylesheetLink.href, window.location.href);
-      cacheBustingUrl.searchParams.set('_', Date.now().toString());
-      displayStylesheetLink.href = cacheBustingUrl.toString();
-      hasRefreshedDisplayStylesheet = true;
-    } catch (error) {
-      console.error('Unable to refresh display stylesheet', error);
-    }
+  const startProgress = (element, seconds) => {
+    if (!element) return;
+    element.style.animation = 'none';
+    element.offsetWidth;
+    element.style.animation = `display-progress ${seconds}s linear forwards`;
   };
 
-  const stopKaraokeRotator = () => {
-    if (karaokeRotatorTimerId) {
-      window.clearInterval(karaokeRotatorTimerId);
-      karaokeRotatorTimerId = null;
-    }
-
-    if (karaokeRotatorResizeHandler) {
-      window.removeEventListener('resize', karaokeRotatorResizeHandler);
-      karaokeRotatorResizeHandler = null;
-    }
+  const clearCenterExtras = () => {
+    setHidden(elements.centerCta, true);
+    setHidden(elements.centerScoreboard, true);
+    setHidden(elements.centerLink, true);
+    setHidden(elements.karaokeExtra, true);
+    if (elements.centerScoreboard) elements.centerScoreboard.innerHTML = '';
+    if (elements.karaokeLineup) elements.karaokeLineup.innerHTML = '';
+    if (karaokeTimer) window.clearInterval(karaokeTimer);
+    karaokeTimer = null;
   };
 
-  const collectKaraokeRotatorPanels = () => {
-    if (!karaokeRotatorElement) {
-      karaokeRotatorPanels = [];
-      return;
-    }
-
-    karaokeRotatorPanels = Array.from(
-      karaokeRotatorElement.querySelectorAll('[data-karaoke-panel]')
-    ).filter((panel) => panel instanceof HTMLElement);
-  };
-
-  const applyKaraokeRotatorIndex = () => {
-    if (!karaokeRotatorPanels.length) {
-      return;
-    }
-
-    karaokeRotatorPanels.forEach((panel, panelIndex) => {
-      if (panelIndex === karaokeRotatorIndex) {
-        panel.classList.add('is-active');
-        panel.setAttribute('aria-hidden', 'false');
-      } else {
-        panel.classList.remove('is-active');
-        panel.setAttribute('aria-hidden', 'true');
-      }
-    });
-  };
-
-  const measureKaraokeRotatorHeight = () => {
-    if (!karaokeRotatorElement || !karaokeRotatorPanels.length) {
-      if (karaokeRotatorElement) {
-        karaokeRotatorElement.style.height = '';
-      }
-      return;
-    }
-
-    let maxHeight = 0;
-
-    karaokeRotatorPanels.forEach((panel) => {
-      panel.classList.add('is-measuring');
-      const panelHeight = panel.offsetHeight;
-      if (panelHeight > maxHeight) {
-        maxHeight = panelHeight;
-      }
-      panel.classList.remove('is-measuring');
-    });
-
-    if (maxHeight > 0) {
-      karaokeRotatorElement.style.height = `${Math.ceil(maxHeight)}px`;
-    } else {
-      karaokeRotatorElement.style.height = '';
-    }
-  };
-
-  const refreshKaraokeRotator = ({ resetIndex = false } = {}) => {
-    if (!karaokeRotatorElement) {
-      stopKaraokeRotator();
-      return;
-    }
-
-    collectKaraokeRotatorPanels();
-
-    if (!karaokeRotatorPanels.length) {
-      karaokeRotatorElement.style.height = '';
-      stopKaraokeRotator();
-      return;
-    }
-
-    if (resetIndex || karaokeRotatorIndex >= karaokeRotatorPanels.length) {
-      karaokeRotatorIndex = 0;
-    }
-
-    measureKaraokeRotatorHeight();
-    applyKaraokeRotatorIndex();
-  };
-
-  const queueKaraokeRotatorRefresh = ({ resetIndex = false } = {}) => {
-    if (!karaokeRotatorElement) {
-      return;
-    }
-
-    if (karaokeOverrideElement && karaokeOverrideElement.hasAttribute('hidden')) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      refreshKaraokeRotator({ resetIndex });
-    });
-  };
-
-  const startKaraokeRotator = () => {
-    if (!karaokeRotatorElement) {
-      return;
-    }
-
-    stopKaraokeRotator();
-    refreshKaraokeRotator({ resetIndex: true });
-
-    if (!karaokeRotatorPanels.length) {
-      return;
-    }
-
-    if (!karaokeRotatorResizeHandler) {
-      karaokeRotatorResizeHandler = () => {
-        queueKaraokeRotatorRefresh({ resetIndex: false });
-      };
-      window.addEventListener('resize', karaokeRotatorResizeHandler);
-    }
-
-    if (karaokeRotatorPanels.length <= 1) {
-      return;
-    }
-
-    karaokeRotatorTimerId = window.setInterval(() => {
-      karaokeRotatorIndex = (karaokeRotatorIndex + 1) % karaokeRotatorPanels.length;
-      applyKaraokeRotatorIndex();
-    }, KARAOKE_ROTATOR_INTERVAL);
-  };
-
-  const stopKaraokeCountdown = () => {
-    if (karaokeCountdownTimerId) {
-      window.clearInterval(karaokeCountdownTimerId);
-      karaokeCountdownTimerId = null;
-    }
-    karaokeCountdownTarget = null;
-  };
-
-  const formatPerformerSong = (entry) => {
-    if (!entry || typeof entry !== 'object') {
-      return '';
-    }
-
-    const songTitle = entry.song_title ? String(entry.song_title).trim() : '';
-    const artist = entry.artist ? String(entry.artist).trim() : '';
-
-    if (songTitle && artist) {
-      return `“${songTitle}” by ${artist}`;
-    }
-    if (songTitle) {
-      return `“${songTitle}”`;
-    }
-    if (artist) {
-      return artist;
-    }
-
-    return '';
-  };
-
-  const updateKaraokeLineup = (entries) => {
-    if (!karaokeLineupElement) {
-      return;
-    }
-
-    karaokeLineupElement.innerHTML = '';
-    const lineup = Array.isArray(entries) ? entries.filter((entry) => entry && typeof entry === 'object') : [];
-
-    if (!lineup.length) {
-      karaokeLineupElement.setAttribute('hidden', '');
-      if (karaokeEmptyElement) {
-        karaokeEmptyElement.removeAttribute('hidden');
-      }
-      queueKaraokeRotatorRefresh({ resetIndex: false });
-      return;
-    }
-
-    lineup.slice(0, 6).forEach((entry, index) => {
+  const renderScoreboard = (scoreboard) => {
+    const rows = safeArray(asObject(scoreboard).entries).slice(0, 6);
+    if (!elements.centerScoreboard || !rows.length) return false;
+    elements.centerScoreboard.innerHTML = '';
+    rows.forEach((row, index) => {
       const item = document.createElement('li');
-      item.className = 'karaoke-card__list-item';
-
-      const rankElement = document.createElement('span');
-      rankElement.className = 'karaoke-card__list-rank';
-      rankElement.textContent = `#${index + 1}`;
-
-      const infoElement = document.createElement('div');
-      infoElement.className = 'karaoke-card__list-info';
-
-      const nameElement = document.createElement('span');
-      nameElement.className = 'karaoke-card__list-name';
-      nameElement.textContent = entry.name ? String(entry.name).trim() || 'TBA' : 'TBA';
-
-      infoElement.appendChild(nameElement);
-
-      const songLine = formatPerformerSong(entry);
-      if (songLine) {
-        const songElement = document.createElement('span');
-        songElement.className = 'karaoke-card__list-song';
-        songElement.textContent = songLine;
-        infoElement.appendChild(songElement);
-      }
-
-      item.appendChild(rankElement);
-      item.appendChild(infoElement);
-
-      karaokeLineupElement.appendChild(item);
+      const rank = document.createElement('span');
+      const copy = document.createElement('div');
+      const value = document.createElement('strong');
+      rank.textContent = `#${row.rank || index + 1}`;
+      copy.innerHTML = `<strong></strong><small></small>`;
+      copy.querySelector('strong').textContent = row.name || '';
+      copy.querySelector('small').textContent = row.detail || row.meta_label || '';
+      value.textContent = row.value_label || '';
+      item.append(rank, copy, value);
+      elements.centerScoreboard.appendChild(item);
     });
-
-    karaokeLineupElement.removeAttribute('hidden');
-    if (karaokeEmptyElement) {
-      karaokeEmptyElement.setAttribute('hidden', '');
-    }
-
-    queueKaraokeRotatorRefresh({ resetIndex: false });
+    setHidden(elements.centerScoreboard, false);
+    return true;
   };
 
-  const startKaraokeCountdown = (targetIso, labelText = '') => {
-    if (!karaokeCountdownElement) {
-      return;
+  const renderCta = (entry) => {
+    const details = asObject(entry.cta_details);
+    const rows = [
+      [elements.ctaNetworkItem, elements.ctaNetwork, details.wifi_network],
+      [elements.ctaPasswordItem, elements.ctaPassword, details.wifi_password],
+      [elements.ctaSiteItem, elements.ctaSite, details.site_url],
+    ];
+    let visible = false;
+    rows.forEach(([item, valueElement, value]) => {
+      if (valueElement) valueElement.textContent = value || '';
+      setHidden(item, !value);
+      visible = visible || Boolean(value);
+    });
+    setHidden(elements.centerCta, !visible);
+  };
+
+  const renderKaraokeExtra = (entry) => {
+    const karaoke = asObject(entry.karaoke);
+    const target = karaoke.countdown_target ? new Date(karaoke.countdown_target) : null;
+    const lineup = safeArray(karaoke.lineup).slice(0, 4);
+    if ((!target || Number.isNaN(target.getTime())) && !lineup.length) return;
+    setHidden(elements.karaokeExtra, false);
+    if (elements.karaokeLineup) {
+      elements.karaokeLineup.innerHTML = '';
+      lineup.forEach((singer, index) => {
+        const item = document.createElement('li');
+        item.textContent = `${index + 1}. ${singer.name || 'TBA'} · ${singer.song_title || 'Song TBA'}`;
+        elements.karaokeLineup.appendChild(item);
+      });
     }
+    if (target && !Number.isNaN(target.getTime()) && elements.karaokeCountdown) {
+      const tick = () => {
+        const remaining = Math.max(0, Math.floor((target.getTime() - Date.now()) / 1000));
+        const hours = Math.floor(remaining / 3600);
+        const minutes = Math.floor((remaining % 3600) / 60);
+        const seconds = remaining % 60;
+        elements.karaokeCountdown.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      };
+      tick();
+      karaokeTimer = window.setInterval(tick, 1000);
+    }
+  };
 
-    stopKaraokeCountdown();
+  const overrideAsEntry = (override) => ({
+    category: override.title || String(override.type || 'Spotlight').replaceAll('_', ' '),
+    primary: override.highlight || override.title || 'Live spotlight',
+    secondary: override.message || '',
+    tertiary: safeArray(override.details).join(' · '),
+    image_url: override.image_url || '',
+    karaoke: override.karaoke,
+    duration_seconds: 8,
+    override_type: override.type || '',
+  });
 
-    if (karaokeCountdownNoteElement) {
-      if (labelText) {
-        karaokeCountdownNoteElement.textContent = `Until ${labelText}`;
-        karaokeCountdownNoteElement.removeAttribute('hidden');
+  const renderCenterEntry = (entry, { spotlight = false } = {}) => {
+    const safeEntry = asObject(entry);
+    clearCenterExtras();
+    elements.centerStage?.classList.toggle('is-spotlight', spotlight);
+    elements.centerStage?.classList.toggle('is-scoreboard', Boolean(asObject(safeEntry.scoreboard).entries));
+    elements.centerStage?.classList.toggle('has-media', Boolean(safeEntry.image_url));
+    elements.centerStage?.classList.remove('is-transitioning');
+    if (elements.centerCategory) elements.centerCategory.textContent = safeEntry.category || 'Live display';
+    if (elements.centerPrimary) elements.centerPrimary.textContent = safeEntry.primary || 'Display standby';
+    if (elements.centerSecondary) elements.centerSecondary.textContent = safeEntry.secondary || '';
+    setOptionalText(elements.centerTertiary, safeEntry.tertiary || '');
+    if (elements.centerImage && elements.centerImageWrap) {
+      if (safeEntry.image_url) {
+        elements.centerImage.src = safeEntry.image_url;
+        elements.centerImage.alt = safeEntry.primary ? `${safeEntry.primary} image` : 'Display image';
+        setHidden(elements.centerImageWrap, false);
       } else {
-        karaokeCountdownNoteElement.textContent = '';
-        karaokeCountdownNoteElement.setAttribute('hidden', '');
+        elements.centerImage.removeAttribute('src');
+        elements.centerImage.alt = '';
+        setHidden(elements.centerImageWrap, true);
       }
     }
+    if (safeEntry.cta) renderCta(safeEntry);
+    renderScoreboard(safeEntry.scoreboard);
+    if (safeEntry.link) {
+      elements.centerLink.textContent = safeEntry.link_label ? `${safeEntry.link_label}: ${safeEntry.link}` : safeEntry.link;
+      setHidden(elements.centerLink, false);
+    }
+    if (safeEntry.karaoke) renderKaraokeExtra(safeEntry);
+    fitAll();
+  };
 
-    if (!targetIso) {
-      karaokeCountdownElement.textContent = '—';
-      queueKaraokeRotatorRefresh({ resetIndex: false });
+  const selectCenterIndex = (center) => {
+    const entries = safeArray(center.entries);
+    if (!entries.length) return 0;
+    const pinnedId = center.pinned_card_id || '';
+    if (pinnedId) {
+      const pinnedIndex = entries.findIndex((entry) => String(entry.id || '') === String(pinnedId));
+      if (pinnedIndex >= 0) return pinnedIndex;
+    }
+    if (Number(center.revision) !== centerRevision) {
+      centerRevision = Number(center.revision) || 0;
+      return Math.abs(Number(center.index) || 0) % entries.length;
+    }
+    const preserved = entries.findIndex((entry) => String(entry.id || '') === centerEntryId);
+    return preserved >= 0 ? preserved : Math.min(centerIndex, entries.length - 1);
+  };
+
+  const scheduleCenterRotation = () => {
+    if (centerTimer) window.clearTimeout(centerTimer);
+    centerTimer = null;
+    const center = asObject(layout.center);
+    const entries = safeArray(center.entries);
+    if (center.override || center.paused || center.pinned_card_id || entries.length <= 1) {
+      if (elements.centerProgress) elements.centerProgress.style.animation = 'none';
       return;
     }
+    const entry = entries[centerIndex] || {};
+    const seconds = boundedSeconds(entry.duration_seconds, boundedSeconds(center.interval_seconds));
+    startProgress(elements.centerProgress, seconds);
+    centerTimer = window.setTimeout(() => {
+      centerIndex = (centerIndex + 1) % entries.length;
+      elements.centerStage?.classList.add('is-transitioning');
+      centerTransitionTimer = window.setTimeout(() => {
+        centerEntryId = String(entries[centerIndex]?.id || '');
+        renderCenterEntry(entries[centerIndex]);
+        if (elements.centerPosition) elements.centerPosition.textContent = `${centerIndex + 1} of ${entries.length}`;
+        scheduleCenterRotation();
+      }, 280);
+    }, seconds * 1000);
+  };
 
-    const parsedTarget = new Date(targetIso);
-    if (Number.isNaN(parsedTarget.getTime())) {
-      karaokeCountdownElement.textContent = '—';
-      queueKaraokeRotatorRefresh({ resetIndex: false });
+  const renderCenter = () => {
+    if (centerTransitionTimer) window.clearTimeout(centerTransitionTimer);
+    const center = asObject(layout.center);
+    const entries = safeArray(center.entries);
+    const override = asObject(center.override);
+    if (Object.keys(override).length) {
+      if (elements.centerMode) elements.centerMode.textContent = 'Host spotlight';
+      if (elements.centerPosition) elements.centerPosition.textContent = '';
+      renderCenterEntry(overrideAsEntry(override), { spotlight: true });
+      if (centerTimer) window.clearTimeout(centerTimer);
       return;
     }
+    centerIndex = selectCenterIndex(center);
+    const entry = entries[centerIndex] || { category: 'Standby', primary: 'The live display is ready.' };
+    centerEntryId = String(entry.id || '');
+    if (elements.centerMode) elements.centerMode.textContent = center.pinned_card_id ? 'Pinned card' : (center.paused ? 'Rotation paused' : 'Live rotation');
+    if (elements.centerPosition) elements.centerPosition.textContent = entries.length ? `${centerIndex + 1} of ${entries.length}` : '';
+    renderCenterEntry(entry);
+    scheduleCenterRotation();
+  };
 
-    karaokeCountdownTarget = parsedTarget;
+  const renderGameEntry = (entry, count) => {
+    const game = asObject(entry);
+    if (elements.gameStatus) elements.gameStatus.textContent = game.status_label || game.phase || '';
+    if (elements.gameTitle) elements.gameTitle.textContent = game.title || 'Party Games';
+    if (elements.gamePrimary) elements.gamePrimary.textContent = game.primary || '';
+    if (elements.gameSecondary) elements.gameSecondary.textContent = game.secondary || '';
+    if (elements.gameMetrics) {
+      elements.gameMetrics.innerHTML = '';
+      safeArray(game.metrics).slice(0, 3).forEach((metric) => {
+        const item = document.createElement('div');
+        const value = document.createElement('strong');
+        const label = document.createElement('span');
+        value.textContent = metric.value == null ? '' : String(metric.value);
+        label.textContent = metric.label || '';
+        item.append(value, label);
+        elements.gameMetrics.appendChild(item);
+      });
+    }
+    if (elements.gamePosition) elements.gamePosition.textContent = count > 1 ? `Game ${gameIndex + 1} of ${count}` : 'Game live';
+    if (elements.gameProgress) elements.gameProgress.textContent = count > 1 ? 'Rotating' : 'Pinned';
+    gameEntryId = String(game.id || '');
+    fitAll();
+  };
 
-    const updateDisplay = () => {
-      if (!karaokeCountdownTarget) {
-        return;
+  const renderGames = () => {
+    if (gameTimer) window.clearTimeout(gameTimer);
+    gameTimer = null;
+    const games = asObject(layout.games);
+    const entries = safeArray(games.entries);
+    const visible = Boolean(games.visible && entries.length);
+    setHidden(elements.gameStage, !visible);
+    shell.classList.toggle('has-games', visible);
+    if (!visible) return;
+    const preserved = entries.findIndex((entry) => String(entry.id || '') === gameEntryId);
+    if (preserved >= 0) gameIndex = preserved;
+    gameIndex %= entries.length;
+    renderGameEntry(entries[gameIndex], entries.length);
+    if (entries.length > 1 && !games.pinned_game_key) {
+      const seconds = boundedSeconds(games.interval_seconds, 10);
+      gameTimer = window.setTimeout(() => {
+        gameIndex = (gameIndex + 1) % entries.length;
+        renderGameEntry(entries[gameIndex], entries.length);
+        renderGames();
+      }, seconds * 1000);
+    }
+  };
+
+  const scheduleNoticeRefresh = (notice) => {
+    if (noticeTimer) window.clearTimeout(noticeTimer);
+    noticeTimer = null;
+    const expiresAt = notice?.expires_at ? new Date(notice.expires_at).getTime() : 0;
+    if (expiresAt > Date.now()) noticeTimer = window.setTimeout(fetchLatest, Math.max(100, expiresAt - Date.now() + 100));
+  };
+
+  const renderBar = () => {
+    const bar = asObject(layout.bar);
+    const notice = asObject(bar.notice);
+    const visible = Boolean(bar.visible);
+    setHidden(elements.barStage, !visible);
+    shell.classList.toggle('has-bar', visible);
+    if (!visible) return;
+    const hasNotice = Object.keys(notice).length > 0;
+    setHidden(elements.readyNotice, !hasNotice);
+    setHidden(elements.barQueue, hasNotice);
+    if (hasNotice) {
+      if (elements.readyName) elements.readyName.textContent = notice.highlight || 'Guest';
+      if (elements.readyMessage) elements.readyMessage.textContent = notice.message || 'Your drink is ready at the bar.';
+      if (elements.readyQueue) {
+        const remaining = Number(bar.active_count) || 0;
+        const queued = Number(bar.queued_notice_count) || 0;
+        elements.readyQueue.textContent = `${remaining} active order${remaining === 1 ? '' : 's'}${queued ? ` · ${queued} more ready` : ''}`;
       }
-
-      const diff = karaokeCountdownTarget.getTime() - Date.now();
-
-      if (diff <= 0) {
-        karaokeCountdownElement.textContent = '00:00:00';
-        if (karaokeCountdownNoteElement) {
-          karaokeCountdownNoteElement.textContent = labelText
-            ? `${labelText} has arrived!`
-            : 'It\'s showtime!';
-          karaokeCountdownNoteElement.removeAttribute('hidden');
+      if (elements.readyImage && elements.readyImageWrap) {
+        if (notice.image_url) {
+          elements.readyImage.src = notice.image_url;
+          elements.readyImage.alt = `${notice.highlight || 'Guest'} drink`;
+          setHidden(elements.readyImageWrap, false);
+        } else {
+          elements.readyImage.removeAttribute('src');
+          setHidden(elements.readyImageWrap, true);
         }
-        stopKaraokeCountdown();
-        queueKaraokeRotatorRefresh({ resetIndex: false });
-        return;
       }
-
-      const totalSeconds = Math.floor(diff / 1000);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-
-      const formattedHours = hours.toString().padStart(2, '0');
-      const formattedMinutes = minutes.toString().padStart(2, '0');
-      const formattedSeconds = seconds.toString().padStart(2, '0');
-
-      karaokeCountdownElement.textContent = `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
-    };
-
-    updateDisplay();
-    karaokeCountdownTimerId = window.setInterval(updateDisplay, 1000);
-    queueKaraokeRotatorRefresh({ resetIndex: false });
-  };
-
-  const updateOverrideContent = () => {
-    if (!overrideContainer) {
-      return;
-    }
-
-    if (overrideCardElement) {
-      overrideCardElement.classList.remove(
-        'display-override__card--inferno',
-        'display-override__card--karaoke',
-        'display-override__card--contest',
-        'display-override__card--winner',
-        'display-override__card--drink',
-        'display-override__card--game'
-      );
-    }
-
-    const titleText = overrideState && overrideState.title ? overrideState.title : '';
-    const highlightText = overrideState && overrideState.highlight ? overrideState.highlight : '';
-    const messageText = overrideState && overrideState.message ? overrideState.message : '';
-    const details = overrideState && Array.isArray(overrideState.details) ? overrideState.details : [];
-    const overrideType = overrideState && overrideState.type ? String(overrideState.type) : '';
-    const isKaraokeOverride = Boolean(overrideType === 'karaoke_start' && karaokeOverrideElement);
-    const isContestStartOverride = overrideType === 'contest_start';
-    const isContestWinnerOverride = overrideType === 'winner';
-    const isDrinkReadyOverride = overrideType === 'drink_ready';
-    const isGameOverride = overrideType.startsWith('game_');
-
-    if (overrideTitleElement) {
-      overrideTitleElement.textContent = titleText;
-    }
-
-    if (overrideHighlightElement) {
-      if (highlightText) {
-        overrideHighlightElement.textContent = highlightText;
-        overrideHighlightElement.removeAttribute('hidden');
-      } else {
-        overrideHighlightElement.textContent = '';
-        overrideHighlightElement.setAttribute('hidden', '');
-      }
-    }
-
-    if (overrideMessageElement) {
-      overrideMessageElement.textContent = messageText;
-    }
-
-    if (overrideDetailsElement) {
-      overrideDetailsElement.innerHTML = '';
-      if (details.length) {
-        details.forEach((detail) => {
+      scheduleNoticeRefresh(notice);
+    } else {
+      if (elements.barHeading) elements.barHeading.textContent = `Bar queue · ${Number(bar.active_count) || 0}`;
+      if (elements.barOrders) {
+        elements.barOrders.innerHTML = '';
+        safeArray(bar.orders).forEach((order) => {
           const item = document.createElement('li');
-          item.textContent = detail;
-          overrideDetailsElement.appendChild(item);
-        });
-        overrideDetailsElement.removeAttribute('hidden');
-      } else {
-        overrideDetailsElement.setAttribute('hidden', '');
-      }
-    }
-
-    if (overrideImageElement) {
-      const imageUrl = overrideState && overrideState.image_url ? String(overrideState.image_url) : '';
-      if (imageUrl) {
-        overrideImageElement.src = imageUrl;
-        overrideImageElement.alt = highlightText || titleText || 'Drink image';
-        overrideImageElement.removeAttribute('hidden');
-      } else {
-        overrideImageElement.removeAttribute('src');
-        overrideImageElement.alt = '';
-        overrideImageElement.setAttribute('hidden', '');
-      }
-    }
-
-    if (isKaraokeOverride) {
-      if (generalOverrideElement) {
-        generalOverrideElement.setAttribute('hidden', '');
-      }
-      karaokeOverrideElement.removeAttribute('hidden');
-
-      if (overrideCardElement) {
-        overrideCardElement.classList.add(
-          'display-override__card--inferno',
-          'display-override__card--karaoke'
-        );
-      }
-
-      if (karaokeTitleElement) {
-        karaokeTitleElement.textContent = titleText || 'Halloween Karaoke Party';
-      }
-
-      if (karaokeSubtitleElement) {
-        if (highlightText) {
-          karaokeSubtitleElement.textContent = highlightText;
-          karaokeSubtitleElement.removeAttribute('hidden');
-        } else {
-          karaokeSubtitleElement.textContent = '';
-          karaokeSubtitleElement.setAttribute('hidden', '');
-        }
-      }
-
-      if (karaokeMessageElement) {
-        if (messageText) {
-          karaokeMessageElement.textContent = messageText;
-          karaokeMessageElement.removeAttribute('hidden');
-        } else {
-          karaokeMessageElement.textContent = '';
-          karaokeMessageElement.setAttribute('hidden', '');
-        }
-      }
-
-      const karaokeData =
-        overrideState && overrideState.karaoke && typeof overrideState.karaoke === 'object'
-          ? overrideState.karaoke
-          : {};
-
-      const lineup = Array.isArray(karaokeData.lineup) ? karaokeData.lineup : [];
-      const countdownTarget =
-        karaokeData.countdown_target && typeof karaokeData.countdown_target === 'string'
-          ? karaokeData.countdown_target
-          : '';
-      const countdownLabel =
-        karaokeData.countdown_label && typeof karaokeData.countdown_label === 'string'
-          ? karaokeData.countdown_label
-          : '';
-
-      updateKaraokeLineup(lineup);
-      startKaraokeCountdown(countdownTarget, countdownLabel);
-      startKaraokeRotator();
-    } else {
-      if (generalOverrideElement) {
-        generalOverrideElement.removeAttribute('hidden');
-      }
-
-      if (karaokeOverrideElement) {
-        karaokeOverrideElement.setAttribute('hidden', '');
-      }
-
-      stopKaraokeRotator();
-      if (karaokeRotatorElement) {
-        karaokeRotatorElement.style.height = '';
-      }
-
-      if (karaokeTitleElement) {
-        karaokeTitleElement.textContent = '';
-      }
-
-      if (karaokeSubtitleElement) {
-        karaokeSubtitleElement.textContent = '';
-        karaokeSubtitleElement.setAttribute('hidden', '');
-      }
-
-      if (karaokeMessageElement) {
-        karaokeMessageElement.textContent = '';
-        karaokeMessageElement.setAttribute('hidden', '');
-      }
-
-      stopKaraokeCountdown();
-      if (karaokeCountdownElement) {
-        karaokeCountdownElement.textContent = '--:--:--';
-      }
-      if (karaokeCountdownNoteElement) {
-        karaokeCountdownNoteElement.textContent = '';
-        karaokeCountdownNoteElement.setAttribute('hidden', '');
-      }
-      updateKaraokeLineup([]);
-
-      if (overrideCardElement && (isContestStartOverride || isContestWinnerOverride || isDrinkReadyOverride || isGameOverride)) {
-        overrideCardElement.classList.add('display-override__card--inferno');
-        if (isContestStartOverride) {
-          overrideCardElement.classList.add('display-override__card--contest');
-        }
-        if (isContestWinnerOverride) {
-          overrideCardElement.classList.add('display-override__card--winner');
-        }
-        if (isDrinkReadyOverride) {
-          overrideCardElement.classList.add('display-override__card--drink');
-        }
-        if (isGameOverride) {
-          overrideCardElement.classList.add('display-override__card--game');
-        }
-      }
-    }
-  };
-
-  const updateOverrideDisplay = () => {
-    if (!overrideContainer) {
-      return;
-    }
-
-    if (overrideState) {
-      refreshDisplayStylesheet();
-      overrideContainer.removeAttribute('hidden');
-      if (card) {
-        card.classList.remove('active');
-        card.setAttribute('hidden', '');
-      }
-      if (emptyState) {
-        emptyState.classList.remove('is-visible');
-        emptyState.setAttribute('hidden', '');
-      }
-    } else {
-      overrideContainer.setAttribute('hidden', '');
-      if (emptyState) {
-        emptyState.removeAttribute('hidden');
-      }
-      if (card) {
-        card.removeAttribute('hidden');
-      }
-    }
-  };
-
-  const updateNoticeOverrideContent = () => {
-    if (!noticeContainer) {
-      return;
-    }
-
-    const titleText = noticeOverrideState && noticeOverrideState.title ? noticeOverrideState.title : '';
-    const highlightText =
-      noticeOverrideState && noticeOverrideState.highlight ? noticeOverrideState.highlight : '';
-    const messageText = noticeOverrideState && noticeOverrideState.message ? noticeOverrideState.message : '';
-    const details =
-      noticeOverrideState && Array.isArray(noticeOverrideState.details)
-        ? noticeOverrideState.details
-        : [];
-
-    if (noticeTitleElement) {
-      noticeTitleElement.textContent = titleText;
-    }
-
-    if (noticeHighlightElement) {
-      if (highlightText) {
-        noticeHighlightElement.textContent = highlightText;
-        noticeHighlightElement.removeAttribute('hidden');
-      } else {
-        noticeHighlightElement.textContent = '';
-        noticeHighlightElement.setAttribute('hidden', '');
-      }
-    }
-
-    if (noticeMessageElement) {
-      noticeMessageElement.textContent = messageText;
-    }
-
-    if (noticeDetailsElement) {
-      noticeDetailsElement.innerHTML = '';
-      if (details.length) {
-        details.forEach((detail) => {
-          const item = document.createElement('li');
-          item.textContent = detail;
-          noticeDetailsElement.appendChild(item);
-        });
-        noticeDetailsElement.removeAttribute('hidden');
-      } else {
-        noticeDetailsElement.setAttribute('hidden', '');
-      }
-    }
-
-    if (noticeImageElement) {
-      const imageUrl =
-        noticeOverrideState && noticeOverrideState.image_url
-          ? String(noticeOverrideState.image_url)
-          : '';
-      if (imageUrl) {
-        noticeImageElement.src = imageUrl;
-        noticeImageElement.alt = highlightText || titleText || 'Drink image';
-        noticeImageElement.removeAttribute('hidden');
-      } else {
-        noticeImageElement.removeAttribute('src');
-        noticeImageElement.alt = '';
-        noticeImageElement.setAttribute('hidden', '');
-      }
-    }
-  };
-
-  const updateNoticeOverrideDisplay = () => {
-    if (!noticeContainer) {
-      return;
-    }
-
-    if (noticeOverrideState) {
-      refreshDisplayStylesheet();
-      noticeContainer.removeAttribute('hidden');
-    } else {
-      noticeContainer.setAttribute('hidden', '');
-    }
-  };
-
-  const applyEntry = (entry) => {
-    typeElement.textContent = entry.category || '';
-    primaryElement.textContent = entry.primary || '';
-    secondaryElement.textContent = entry.secondary || '';
-
-    if (entry.tertiary) {
-      tertiaryElement.textContent = entry.tertiary;
-      tertiaryElement.removeAttribute('hidden');
-    } else {
-      tertiaryElement.textContent = '';
-      tertiaryElement.setAttribute('hidden', '');
-    }
-
-    const ctaDetails = entry.cta_details || {};
-    const hasScoreboard = Boolean(
-      scoreboardLayout && entry.scoreboard && Array.isArray(entry.scoreboard.entries) && entry.scoreboard.entries.length
-    );
-    const shouldShowCtaLayout = Boolean(entry.cta && ctaLayout && defaultContent && !hasScoreboard);
-
-    card.classList.remove(
-      'display-card--inferno',
-      'display-card--costume',
-      'display-card--winner',
-      'display-card--long',
-      'display-card--dense'
-    );
-
-    const entryTextLength = getEntryTextLength(entry);
-    if (entryTextLength > 150) {
-      card.classList.add('display-card--dense');
-    } else if (entryTextLength > 95) {
-      card.classList.add('display-card--long');
-    }
-
-    if (hasScoreboard) {
-      if (defaultContent) {
-        defaultContent.setAttribute('hidden', '');
-      }
-      if (ctaLayout) {
-        ctaLayout.setAttribute('hidden', '');
-      }
-      scoreboardLayout.removeAttribute('hidden');
-      card.classList.add('scoreboard');
-      card.classList.remove('cta');
-
-      if (scoreboardTitleElement) {
-        scoreboardTitleElement.textContent = entry.primary || 'Top Costume Scores';
-      }
-
-      if (scoreboardSubtitleElement) {
-        const subtitle = entry.secondary || '';
-        if (subtitle) {
-          scoreboardSubtitleElement.textContent = subtitle;
-          scoreboardSubtitleElement.removeAttribute('hidden');
-        } else {
-          scoreboardSubtitleElement.textContent = '';
-          scoreboardSubtitleElement.setAttribute('hidden', '');
-        }
-      }
-
-      if (scoreboardNoteElement) {
-        const note = entry.tertiary || '';
-        if (note) {
-          scoreboardNoteElement.textContent = note;
-          scoreboardNoteElement.removeAttribute('hidden');
-        } else {
-          scoreboardNoteElement.textContent = '';
-          scoreboardNoteElement.setAttribute('hidden', '');
-        }
-      }
-
-      if (scoreboardListElement) {
-        scoreboardListElement.innerHTML = '';
-        const rows = entry.scoreboard.entries || [];
-        rows.forEach((row, index) => {
-          const item = document.createElement('li');
-          item.className = 'display-scoreboard__item';
-
-          const rankElement = document.createElement('span');
-          rankElement.className = 'display-scoreboard__rank';
-          const rankValue = Number(row.rank);
-          const safeRank = Number.isFinite(rankValue) ? rankValue : index + 1;
-          rankElement.textContent = `#${safeRank}`;
-
-          const infoElement = document.createElement('div');
-          infoElement.className = 'display-scoreboard__info';
-
-          const nameElement = document.createElement('span');
-          nameElement.className = 'display-scoreboard__name';
-          nameElement.textContent = row.name || '';
-
-          const costumeElement = document.createElement('span');
-          costumeElement.className = 'display-scoreboard__costume';
-          costumeElement.textContent = row.detail || (row.costume ? `as ${row.costume}` : '');
-
-          infoElement.appendChild(nameElement);
-          infoElement.appendChild(costumeElement);
-
-          const metricsElement = document.createElement('div');
-          metricsElement.className = 'display-scoreboard__metrics';
-
-          const averageElement = document.createElement('span');
-          averageElement.className = 'display-scoreboard__average';
-          averageElement.textContent = row.value_label || formatAverageScore(row.average);
-
-          const votesElement = document.createElement('span');
-          votesElement.className = 'display-scoreboard__votes';
-          const voteCount = Number(row.count);
-          const safeCount = Number.isFinite(voteCount) ? voteCount : 0;
-          votesElement.textContent = row.meta_label || `${safeCount} ${safeCount === 1 ? 'vote' : 'votes'}`;
-
-          metricsElement.appendChild(averageElement);
-          metricsElement.appendChild(votesElement);
-
-          item.appendChild(rankElement);
-          item.appendChild(infoElement);
-          item.appendChild(metricsElement);
-
-          scoreboardListElement.appendChild(item);
+          item.className = order.status === 'in_progress' ? 'is-mixing' : '';
+          const dot = document.createElement('span');
+          const copy = document.createElement('div');
+          const status = document.createElement('em');
+          copy.innerHTML = '<strong></strong><small></small>';
+          copy.querySelector('strong').textContent = order.name || 'Guest';
+          copy.querySelector('small').textContent = order.drink || 'Drink';
+          status.textContent = order.estimated_ready_label ? `${order.status_label} · ${order.estimated_ready_label}` : order.status_label || '';
+          item.append(dot, copy, status);
+          elements.barOrders.appendChild(item);
         });
       }
-    } else if (shouldShowCtaLayout) {
-      defaultContent.setAttribute('hidden', '');
-      ctaLayout.removeAttribute('hidden');
+      const overflow = Number(bar.overflow_count) || 0;
+      setOptionalText(elements.barOverflow, overflow ? `+${overflow} more active order${overflow === 1 ? '' : 's'}` : '');
+    }
+    fitAll();
+  };
 
-      if (ctaLedeElement) {
-        ctaLedeElement.textContent = ctaDetails.lede || entry.secondary || entry.primary || '';
-      }
-
-      if (ctaWifiNetworkElement) {
-        ctaWifiNetworkElement.textContent = ctaDetails.wifi_network || '';
-      }
-      if (ctaWifiNetworkItemElement) {
-        if (ctaDetails.wifi_network) {
-          ctaWifiNetworkItemElement.removeAttribute('hidden');
-        } else {
-          ctaWifiNetworkItemElement.setAttribute('hidden', '');
-        }
-      }
-
-      if (ctaWifiPasswordElement) {
-        ctaWifiPasswordElement.textContent = ctaDetails.wifi_password || '';
-      }
-      if (ctaWifiPasswordItemElement) {
-        if (ctaDetails.wifi_password) {
-          ctaWifiPasswordItemElement.removeAttribute('hidden');
-        } else {
-          ctaWifiPasswordItemElement.setAttribute('hidden', '');
-        }
-      }
-
-      if (ctaSiteUrlElement) {
-        ctaSiteUrlElement.textContent = ctaDetails.site_url || '';
-      }
-      if (ctaSiteUrlItemElement) {
-        if (ctaDetails.site_url) {
-          ctaSiteUrlItemElement.removeAttribute('hidden');
-        } else {
-          ctaSiteUrlItemElement.setAttribute('hidden', '');
-        }
-      }
-
-      if (scoreboardLayout) {
-        scoreboardLayout.setAttribute('hidden', '');
-        if (scoreboardListElement) {
-          scoreboardListElement.innerHTML = '';
-        }
-      }
-
-      card.classList.remove('scoreboard');
+  const renderMusic = () => {
+    const music = asObject(layout.music);
+    const visible = Boolean(music.visible);
+    setHidden(elements.music, !visible);
+    shell.classList.toggle('has-music', visible);
+    if (!visible) return;
+    const dj = asObject(music.state);
+    const receiver = asObject(dj.receiver);
+    const song = asObject(music.current_song);
+    const durationSeconds = Math.max(0, Math.floor((Number(song.duration_ms) || 0) / 1000));
+    const position = Math.max(0, Number(receiver.playback_position_seconds) || 0);
+    if (durationSeconds && elements.djProgress && elements.djProgressWrap) {
+      elements.djProgress.style.width = `${Math.min(100, (position / durationSeconds) * 100)}%`;
+      elements.djTime.textContent = `${formatDuration(position)} / ${formatDuration(durationSeconds)}`;
+      setHidden(elements.djProgressWrap, false);
     } else {
-      if (defaultContent) {
-        defaultContent.removeAttribute('hidden');
-      }
-      if (ctaLayout) {
-        ctaLayout.setAttribute('hidden', '');
-      }
-      if (ctaLedeElement) {
-        ctaLedeElement.textContent = '';
-      }
-      if (ctaWifiNetworkElement) {
-        ctaWifiNetworkElement.textContent = '';
-      }
-      if (ctaWifiNetworkItemElement) {
-        ctaWifiNetworkItemElement.setAttribute('hidden', '');
-      }
-      if (ctaWifiPasswordElement) {
-        ctaWifiPasswordElement.textContent = '';
-      }
-      if (ctaWifiPasswordItemElement) {
-        ctaWifiPasswordItemElement.setAttribute('hidden', '');
-      }
-      if (scoreboardLayout) {
-        scoreboardLayout.setAttribute('hidden', '');
-        if (scoreboardListElement) {
-          scoreboardListElement.innerHTML = '';
-        }
-      }
-
-      card.classList.remove('scoreboard');
+      setHidden(elements.djProgressWrap, true);
+      if (elements.djTime) elements.djTime.textContent = '';
     }
-
-    if (!hasScoreboard && entry.cta) {
-      card.classList.add('cta');
-    } else if (!entry.cta || hasScoreboard) {
-      card.classList.remove('cta');
-    }
-
-    const categoryText = (entry.category || '').toLowerCase();
-    const isWinnerCard = categoryText.includes('champion');
-    const isCostumeCard = categoryText.includes('costume contest') && !hasScoreboard;
-
-    if (isCostumeCard || isWinnerCard) {
-      card.classList.add('display-card--inferno');
-      if (isCostumeCard) {
-        card.classList.add('display-card--costume');
-      }
-      if (isWinnerCard) {
-        card.classList.add('display-card--winner');
-      }
-    }
+    const nextSong = asObject(music.next_song);
+    if (nextSong.title && elements.djNext && elements.djNextTitle) {
+      elements.djNextTitle.textContent = `${nextSong.title}${nextSong.artist ? ` · ${nextSong.artist}` : ''}`;
+      setHidden(elements.djNext, false);
+    } else setHidden(elements.djNext, true);
+    fitAll();
   };
 
-  const cycleDelay = 8000;
-  const transitionDelay = 450;
-  let currentIndex = 0;
-  let rotationTimerId = null;
-
-  const stopRotation = () => {
-    if (rotationTimerId) {
-      window.clearInterval(rotationTimerId);
-      rotationTimerId = null;
-    }
+  const renderLayout = () => {
+    const header = asObject(layout.header);
+    if (elements.costumeCount) elements.costumeCount.textContent = Number(header.costume_count) || 0;
+    if (elements.karaokeCount) elements.karaokeCount.textContent = Number(header.karaoke_count) || 0;
+    if (elements.gameCount) elements.gameCount.textContent = Number(header.game_count) || 0;
+    body.classList.remove('display-density--compact', 'display-density--standard', 'display-density--large');
+    body.classList.add(`display-density--${['compact', 'standard', 'large'].includes(layout.density) ? layout.density : 'standard'}`);
+    renderGames();
+    renderBar();
+    renderMusic();
+    renderCenter();
+    fitAll();
   };
 
-  const swapEntry = (useTransition) => {
-    if (!entries.length) {
-      return;
-    }
-
-    const show = () => {
-      applyEntry(entries[currentIndex]);
-      card.classList.add('active');
-    };
-
-    if (useTransition) {
-      card.classList.remove('active');
-      window.setTimeout(show, transitionDelay);
-    } else {
-      show();
-    }
-  };
-
-  const renderEntries = ({ resetIndex = false, animate = false } = {}) => {
-    updateOverrideDisplay();
-
-    if (overrideState) {
-      stopRotation();
-      return;
-    }
-
-    if (entries.length === 0) {
-      stopRotation();
-      emptyState.classList.add('is-visible');
-      card.classList.remove('active');
-      card.setAttribute('hidden', '');
-      return;
-    }
-
-    if (resetIndex) {
-      currentIndex = 0;
-    } else {
-      currentIndex = currentIndex % entries.length;
-    }
-
-    emptyState.classList.remove('is-visible');
-    card.removeAttribute('hidden');
-
-    stopRotation();
-    swapEntry(animate);
-
-    if (entries.length > 1) {
-      rotationTimerId = window.setInterval(() => {
-        currentIndex = (currentIndex + 1) % entries.length;
-        swapEntry(true);
-      }, cycleDelay);
-    }
-  };
-
-  const setOverrideState = (state, { force = false } = {}) => {
-    let signature = 'null';
+  const fetchLatest = async () => {
     try {
-      signature = JSON.stringify(state ?? null);
-    } catch (error) {
-      signature = 'null';
-    }
-
-    if (!force && signature === overrideSignature) {
-      return;
-    }
-
-    overrideSignature = signature;
-    overrideState = state && typeof state === 'object' ? state : null;
-    updateOverrideContent();
-    renderEntries({ resetIndex: true });
-  };
-
-  const setNoticeOverrideState = (state, { force = false } = {}) => {
-    let signature = 'null';
-    try {
-      signature = JSON.stringify(state ?? null);
-    } catch (error) {
-      signature = 'null';
-    }
-
-    if (!force && signature === noticeOverrideSignature) {
-      return;
-    }
-
-    noticeOverrideSignature = signature;
-    noticeOverrideState = state && typeof state === 'object' ? state : null;
-    updateNoticeOverrideContent();
-    updateNoticeOverrideDisplay();
-  };
-
-  setOverrideState(initialOverrideState ?? null, { force: true });
-  setNoticeOverrideState(initialNoticeOverrideState ?? null, { force: true });
-
-  const updateCounts = (costumeCount, karaokeCount, gameCount) => {
-    if (costumeCountElement && Number.isFinite(costumeCount)) {
-      costumeCountElement.textContent = costumeCount;
-    }
-
-    if (karaokeCountElement && Number.isFinite(karaokeCount)) {
-      karaokeCountElement.textContent = karaokeCount;
-    }
-
-    if (gameCountElement && Number.isFinite(gameCount)) {
-      gameCountElement.textContent = gameCount;
-    }
-  };
-
-  const refreshInterval = 30000;
-
-  const fetchLatestEntries = async () => {
-    try {
-      const response = await fetch(dataEndpoint, { cache: 'no-store' });
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
-      }
-
+      const response = await fetch(apiUrl, { cache: 'no-store', credentials: 'same-origin' });
+      if (!response.ok) throw new Error(`Display refresh failed (${response.status})`);
       const payload = await response.json();
-      const {
-        entries: newEntries,
-        costume_count: costumeCount,
-        karaoke_count: karaokeCount,
-        game_count: gameCount,
-        override: newOverride,
-        event_override: newEventOverride,
-        notice_override: newNoticeOverride,
-      } = payload;
-
-      updateCounts(costumeCount, karaokeCount, gameCount);
-      setOverrideState(newEventOverride || newOverride || null);
-      setNoticeOverrideState(newNoticeOverride || null);
-
-      if (Array.isArray(newEntries)) {
-        const newSignature = JSON.stringify(newEntries);
-        if (newSignature !== entriesSignature) {
-          entries = newEntries;
-          entriesSignature = newSignature;
-          renderEntries({ resetIndex: true, animate: true });
-        }
+      if (payload.layout && typeof payload.layout === 'object') {
+        layout = payload.layout;
+        renderLayout();
       }
-    } catch (error) {
-      console.error('Unable to refresh display data', error);
-    }
+    } catch (error) { console.error('Unable to refresh live display', error); }
   };
-
-  fetchLatestEntries();
-  window.setInterval(fetchLatestEntries, refreshInterval);
 
   const startEventStream = () => {
-    if (!updatesEndpoint || typeof window.EventSource !== 'function') {
-      return;
-    }
-
-    let reconnectTimer = null;
+    if (!updatesUrl || typeof EventSource !== 'function') return;
+    let retryTimer = null;
     let retryDelay = 2000;
-    let eventSource;
-
-    const cleanup = () => {
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      if (eventSource) {
-        try {
-          eventSource.close();
-        } catch (error) {
-          // Ignore close errors.
-        }
-        eventSource = null;
-      }
-    };
-
+    let source = null;
     const connect = () => {
-      cleanup();
-      eventSource = new EventSource(updatesEndpoint, { withCredentials: false });
-
-      eventSource.onmessage = () => {
-        fetchLatestEntries();
-      };
-
-      eventSource.onopen = () => {
-        retryDelay = 2000;
-      };
-
-      eventSource.onerror = () => {
-        cleanup();
-        const delay = retryDelay;
-        reconnectTimer = window.setTimeout(() => {
-          retryDelay = Math.min(Math.max(delay * 1.5, 4000), 30000);
-          connect();
-        }, delay);
+      if (source) source.close();
+      source = new EventSource(updatesUrl);
+      source.onopen = () => { retryDelay = 2000; };
+      source.onmessage = fetchLatest;
+      source.onerror = () => {
+        source.close();
+        retryTimer = window.setTimeout(connect, retryDelay);
+        retryDelay = Math.min(30000, Math.max(4000, retryDelay * 1.5));
       };
     };
-
     connect();
-
-    window.addEventListener('beforeunload', cleanup);
+    window.addEventListener('beforeunload', () => {
+      if (retryTimer) window.clearTimeout(retryTimer);
+      if (source) source.close();
+    });
   };
 
+  if (typeof ResizeObserver === 'function') new ResizeObserver(fitAll).observe(shell);
+  renderLayout();
+  fetchLatest();
+  window.setInterval(fetchLatest, 30000);
   startEventStream();
 });

@@ -94,10 +94,13 @@ interaction depends on guessing another attendee.
 - Ended winner/scoreboard cards join normal live-display rotation. Prompt
   responses join rotation only during voting/reveal.
 - Temporary drink-ready notices retain priority above game event overrides.
+- Every enabled game contributes privacy-safe left-stage data to an independent
+  rotation, so multiple live games can cycle without interrupting center cards.
+  The display admin can pin one game or resume automatic game rotation.
 
 ## State And Routes
 
-- Redis schema version is `8`.
+- Redis schema version is `9`.
 - `games_state` contains all five independent game records.
 - Attendee hub: `GET /party/games?game=<slug>`.
 - Anonymous opt-in: `POST /party/games/<slug>/join`.

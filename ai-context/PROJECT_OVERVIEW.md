@@ -84,11 +84,12 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
   notification recipient, defaulting to `tgio1129@gmail.com`, when email is
   enabled.
 4. `/live-display` redirects to `/admin/login` until the browser session has
-   the `admin` role, then shows rotating party-night cards and current signup
-   counts. The live display always rotates app usage, WiFi/sign-in, costume,
-   karaoke, drink-order, and signup/live-update prompts regardless of whether
-   `HALLOWEEN_PARTY_START` has passed, so hosts can stage and test the TV
-   experience ahead of the party.
+   the `admin` role, then renders a fixed no-scroll TV shell. The title stays at
+   the top, games rotate independently on the left, rotating cards retain the
+   dominant center stage, active bar orders and temporary ready alerts occupy
+   the right, and DJ information lives in the footer. Empty regions collapse
+   and center stage grows automatically. The party-night experience remains
+   available before `HALLOWEEN_PARTY_START` for host staging and testing.
 5. Attendees visit `/party`, are redirected to `/party/login` if not
    signed in, can create an account at `/party/register`, or recover a
    forgotten account password through `/party/password-reset`, then see the
@@ -137,7 +138,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 8. The following globals in `main.py` are
+`halloween:state` with schema version 9. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -175,12 +176,20 @@ the process-local cache:
   network and password for the signup portal card. Defaults come from
   `HALLOWEEN_DISPLAY_WIFI_NETWORK` and `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank
   values are allowed so the display can hide either row.
+- `display_config`: source visibility/order, center/game intervals, region
+  visibility modes, queue size, alert duration, density, and pinned game.
+- `display_runtime`: center index, pause/pin state, and revision used to push
+  host run-of-show changes to connected displays.
+- `display_custom_cards`: ordered, scheduled host-authored cards with optional
+  image, CTA, start/end window, and per-card duration.
 - `submitted_costume_votes`: set of `user_id` values that already voted.
 - `live_display_event_override`: current full-screen event override card
   (`contest_start`, `winner`, or `karaoke_start`), or `None`.
 - `live_display_notice_override`: current temporary notice card, currently
   `drink_ready`, or `None`. The legacy `live_display_override` snapshot field
   remains as the effective override for compatibility.
+- `live_display_notice_queue`: bounded FIFO queue of subsequent drink-ready
+  notices, shown sequentially instead of replacing an active pickup alert.
 - `landing_page_target`: admin-selected root redirect target, defaulting to
   `/rsvp`.
 - `event_experience_mode`: admin-selected attendee experience override,

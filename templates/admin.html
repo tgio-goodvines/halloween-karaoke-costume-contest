@@ -188,6 +188,7 @@
 
     <section class="admin-subsection">
       <h4>Custom Card Library</h4>
+      <p>Create announcements here, then use <strong>Edit Card</strong> on any saved card to change its text, image, link, timing, schedule, or visibility. System-generated cards are controlled by the source settings above.</p>
       <details class="admin-entry admin-entry--new">
         <summary class="admin-entry__summary"><span class="admin-entry__rank">+</span><span class="admin-entry__summary-text"><strong>Build a custom card</strong><span>Create a scheduled announcement or host callout</span></span></summary>
         <form method="post" class="admin-entry__form display-card-form">
@@ -211,8 +212,8 @@
 
       {% if display_custom_cards %}<div class="admin-entry-list">
         {% for card in display_custom_cards %}
-          <details class="admin-entry admin-entry--editable">
-            <summary class="admin-entry__summary"><span class="admin-entry__rank">{{ loop.index }}</span><span class="admin-entry__summary-text"><strong>{{ card.primary }}</strong><span>{{ card.category }} · {% if card.enabled %}Enabled{% else %}Hidden{% endif %}</span></span></summary>
+          <details class="admin-entry admin-entry--editable display-admin__card-editor" id="display-card-{{ card.id }}">
+            <summary class="admin-entry__summary display-admin__card-summary"><span class="admin-entry__rank">{{ loop.index }}</span><span class="admin-entry__summary-text"><strong>{{ card.primary }}</strong><span>{{ card.category }} · {% if card.enabled %}Enabled{% else %}Hidden{% endif %} · {{ card.duration_seconds }} seconds</span></span><span class="display-admin__edit-label">Edit Card</span></summary>
             <form method="post" class="admin-entry__form display-card-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="card_id" value="{{ card.id }}">
               <div class="admin-entry__fields">
@@ -229,7 +230,7 @@
                 <label class="checkbox-field"><input type="checkbox" name="enabled" value="yes"{% if card.enabled %} checked{% endif %}> Enabled</label>
               </div>
               <div class="contest-actions">
-                <button class="button button--primary" name="action" value="update_display_card">Save</button>
+                <button class="button button--primary" name="action" value="update_display_card">Save Card Changes</button>
                 <button class="button" name="action" value="pin_display_card">Show Now</button>
                 <button class="button" name="action" value="move_display_card_up"{% if loop.first %} disabled{% endif %}>Up</button>
                 <button class="button" name="action" value="move_display_card_down"{% if loop.last %} disabled{% endif %}>Down</button>

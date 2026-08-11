@@ -2028,6 +2028,25 @@ class RedisStateTests(unittest.TestCase):
                 },
             )
             display_payload = client.get("/api/display-data").get_json()
+            custom_entry = next(entry for entry in display_payload["entries"] if entry["source"] == "custom")
+            card_id = custom_entry["id"].split(":", 1)[1]
+            update_response = client.post(
+                "/admin/display",
+                data={
+                    "action": "update_display_card",
+                    "card_id": card_id,
+                    "category": "Schedule Update",
+                    "primary": "Costume voting starts at eleven",
+                    "secondary": "The card editor saved this change.",
+                    "tertiary": "Open the party portal.",
+                    "link": "/party",
+                    "link_label": "Party portal",
+                    "duration_seconds": "13",
+                    "enabled": "yes",
+                },
+            )
+            updated_workspace = client.get("/admin/display")
+            display_payload = client.get("/api/display-data").get_json()
             portal_entry = next(entry for entry in display_payload["entries"] if entry["source"] == "portal")
             pin_response = client.post(
                 "/admin/display",
@@ -2039,13 +2058,17 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Live Display", workspace.get_data(as_text=True))
         self.assertEqual(200, settings_response.status_code)
         self.assertEqual(200, card_response.status_code)
+        self.assertEqual(200, update_response.status_code)
         self.assertEqual(200, pin_response.status_code)
         self.assertEqual(12, state["display_config"]["center_interval_seconds"])
         self.assertEqual("always", state["display_config"]["music_mode"])
         self.assertEqual("compact", display_payload["layout"]["density"])
         custom_entry = next(entry for entry in display_payload["entries"] if entry["source"] == "custom")
-        self.assertEqual("Costume voting starts at ten", custom_entry["primary"])
+        self.assertEqual("Costume voting starts at eleven", custom_entry["primary"])
+        self.assertEqual(13, custom_entry["duration_seconds"])
         self.assertEqual("/party", custom_entry["link"])
+        self.assertIn("Edit Card", updated_workspace.get_data(as_text=True))
+        self.assertIn("Save Card Changes", updated_workspace.get_data(as_text=True))
         self.assertFalse(any(entry["source"] == "karaoke" for entry in display_payload["entries"]))
         self.assertEqual(portal_entry["id"], state["display_runtime"]["pinned_card_id"])
         self.assertTrue(state["display_runtime"]["center_paused"])

@@ -93,3 +93,23 @@ consumers. SSE continues to trigger immediate full-layout refreshes and the
 - Production served the new adaptive `static/display.js` markers.
 - Anonymous requests to `/live-display` and `/admin/display` returned the
   expected `302` redirect to `/admin/login`.
+
+## Rotation Follow-up
+
+On August 10, 2026, a production follow-up found that DJ receiver heartbeats
+could refresh the layout more frequently than the configured center/game
+intervals. Each refresh cleared and restarted both client timers, so displays
+with an active receiver could appear permanently stuck on one card and game.
+
+`static/display.js` now binds each timer to its current entry and preserves the
+deadline across SSE/poll refreshes. Pause, pin, spotlight, hidden-region, and
+entry-change states still cancel or replace the relevant timer immediately.
+Browser verification with five-second receiver heartbeats confirmed that a
+four-second center rotation advanced through four cards while a five-second
+game rotation cycled all three enabled games over fourteen seconds.
+
+The custom-card library now exposes an explicit `Edit Card` affordance on every
+saved card. Opening it reveals all text, media, CTA, duration, schedule, and
+visibility fields plus a clearly labeled `Save Card Changes` action. A browser
+save test confirmed the updated headline persisted and appeared back in the
+library.

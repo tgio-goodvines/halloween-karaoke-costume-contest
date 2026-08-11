@@ -66,10 +66,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let centerEntryId = '';
   let centerRevision = -1;
   let centerTimer = null;
+  let centerTimerEntryId = '';
   let centerTransitionTimer = null;
   let gameIndex = 0;
   let gameEntryId = '';
   let gameTimer = null;
+  let gameTimerEntryId = '';
   let noticeTimer = null;
   let karaokeTimer = null;
 
@@ -113,6 +115,18 @@ document.addEventListener('DOMContentLoaded', () => {
     element.style.animation = 'none';
     element.offsetWidth;
     element.style.animation = `display-progress ${seconds}s linear forwards`;
+  };
+
+  const clearCenterRotationTimer = () => {
+    if (centerTimer) window.clearTimeout(centerTimer);
+    centerTimer = null;
+    centerTimerEntryId = '';
+  };
+
+  const clearGameRotationTimer = () => {
+    if (gameTimer) window.clearTimeout(gameTimer);
+    gameTimer = null;
+    gameTimerEntryId = '';
   };
 
   const clearCenterExtras = () => {
@@ -250,39 +264,63 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const scheduleCenterRotation = () => {
-    if (centerTimer) window.clearTimeout(centerTimer);
-    centerTimer = null;
     const center = asObject(layout.center);
     const entries = safeArray(center.entries);
     if (center.override || center.paused || center.pinned_card_id || entries.length <= 1) {
+      clearCenterRotationTimer();
       if (elements.centerProgress) elements.centerProgress.style.animation = 'none';
       return;
     }
     const entry = entries[centerIndex] || {};
+    const entryId = String(entry.id || '');
+    if (centerTimer && centerTimerEntryId === entryId) return;
+    clearCenterRotationTimer();
     const seconds = boundedSeconds(entry.duration_seconds, boundedSeconds(center.interval_seconds));
     startProgress(elements.centerProgress, seconds);
+    centerTimerEntryId = entryId;
     centerTimer = window.setTimeout(() => {
-      centerIndex = (centerIndex + 1) % entries.length;
+      centerTimer = null;
+      centerTimerEntryId = '';
+      const currentEntries = safeArray(asObject(layout.center).entries);
+      if (currentEntries.length <= 1) {
+        renderCenter();
+        return;
+      }
+      const currentIndex = currentEntries.findIndex((item) => String(item.id || '') === centerEntryId);
+      centerIndex = ((currentIndex >= 0 ? currentIndex : centerIndex) + 1) % currentEntries.length;
       elements.centerStage?.classList.add('is-transitioning');
       centerTransitionTimer = window.setTimeout(() => {
-        centerEntryId = String(entries[centerIndex]?.id || '');
-        renderCenterEntry(entries[centerIndex]);
-        if (elements.centerPosition) elements.centerPosition.textContent = `${centerIndex + 1} of ${entries.length}`;
+        centerTransitionTimer = null;
+        const latestEntries = safeArray(asObject(layout.center).entries);
+        if (!latestEntries.length) {
+          renderCenter();
+          return;
+        }
+        centerIndex %= latestEntries.length;
+        centerEntryId = String(latestEntries[centerIndex]?.id || '');
+        renderCenterEntry(latestEntries[centerIndex]);
+        if (elements.centerPosition) elements.centerPosition.textContent = `${centerIndex + 1} of ${latestEntries.length}`;
         scheduleCenterRotation();
       }, 280);
     }, seconds * 1000);
   };
 
   const renderCenter = () => {
-    if (centerTransitionTimer) window.clearTimeout(centerTransitionTimer);
     const center = asObject(layout.center);
     const entries = safeArray(center.entries);
     const override = asObject(center.override);
+    const revisionChanged = Number(center.revision) !== centerRevision;
+    if (centerTransitionTimer && !Object.keys(override).length && !center.paused && !center.pinned_card_id && !revisionChanged) return;
+    if (centerTransitionTimer) {
+      window.clearTimeout(centerTransitionTimer);
+      centerTransitionTimer = null;
+      elements.centerStage?.classList.remove('is-transitioning');
+    }
     if (Object.keys(override).length) {
       if (elements.centerMode) elements.centerMode.textContent = 'Host spotlight';
       if (elements.centerPosition) elements.centerPosition.textContent = '';
       renderCenterEntry(overrideAsEntry(override), { spotlight: true });
-      if (centerTimer) window.clearTimeout(centerTimer);
+      clearCenterRotationTimer();
       return;
     }
     centerIndex = selectCenterIndex(center);
@@ -319,26 +357,39 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const renderGames = () => {
-    if (gameTimer) window.clearTimeout(gameTimer);
-    gameTimer = null;
     const games = asObject(layout.games);
     const entries = safeArray(games.entries);
     const visible = Boolean(games.visible && entries.length);
     setHidden(elements.gameStage, !visible);
     shell.classList.toggle('has-games', visible);
-    if (!visible) return;
+    if (!visible) {
+      clearGameRotationTimer();
+      return;
+    }
     const preserved = entries.findIndex((entry) => String(entry.id || '') === gameEntryId);
     if (preserved >= 0) gameIndex = preserved;
     gameIndex %= entries.length;
     renderGameEntry(entries[gameIndex], entries.length);
     if (entries.length > 1 && !games.pinned_game_key) {
+      const entryId = String(entries[gameIndex]?.id || '');
+      if (gameTimer && gameTimerEntryId === entryId) return;
+      clearGameRotationTimer();
       const seconds = boundedSeconds(games.interval_seconds, 10);
+      gameTimerEntryId = entryId;
       gameTimer = window.setTimeout(() => {
-        gameIndex = (gameIndex + 1) % entries.length;
-        renderGameEntry(entries[gameIndex], entries.length);
+        gameTimer = null;
+        gameTimerEntryId = '';
+        const latestEntries = safeArray(asObject(layout.games).entries);
+        if (!latestEntries.length) {
+          renderGames();
+          return;
+        }
+        const currentIndex = latestEntries.findIndex((entry) => String(entry.id || '') === gameEntryId);
+        gameIndex = ((currentIndex >= 0 ? currentIndex : gameIndex) + 1) % latestEntries.length;
+        gameEntryId = String(latestEntries[gameIndex]?.id || '');
         renderGames();
       }, seconds * 1000);
-    }
+    } else clearGameRotationTimer();
   };
 
   const scheduleNoticeRefresh = (notice) => {

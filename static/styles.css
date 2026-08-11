@@ -5680,6 +5680,9 @@ textarea,
 .display-admin__source-order small,
 .display-admin__game-list small { color: #a1a1aa; }
 .display-admin__source-rank { display: grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid rgba(255, 49, 49, 0.55); border-radius: 50%; color: #ff7777; font-weight: 800; }
+.display-admin__card-summary { grid-template-columns: auto minmax(0, 1fr) auto; }
+.display-admin__edit-label { align-self: center; padding: 0.4rem 0.65rem; border: 1px solid rgba(255, 49, 49, 0.48); border-radius: 999px; color: #ff8a8a; font-size: 0.76rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; }
+.display-admin__card-editor[open] .display-admin__edit-label { background: rgba(255, 49, 49, 0.16); color: #fff; }
 .display-card-form textarea { min-height: 6rem; }
 
 @media (max-width: 980px) {
@@ -5698,4 +5701,6 @@ textarea,
   .display-admin__game-list article { grid-template-columns: auto minmax(0, 1fr); }
   .display-admin__source-order article .contest-actions,
   .display-admin__game-list article form { grid-column: 1 / -1; }
+  .display-admin__card-summary { grid-template-columns: auto minmax(0, 1fr); }
+  .display-admin__edit-label { grid-column: 1 / -1; justify-self: stretch; text-align: center; }
 }

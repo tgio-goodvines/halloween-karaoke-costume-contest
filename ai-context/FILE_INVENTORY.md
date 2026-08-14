@@ -18,7 +18,7 @@
 | `.env.example` | Blank/local Redis, email, MusicKit, and YouTube karaoke environment examples. |
 | `tests/test_redis_state.py` | Redis/state/route/security tests plus fake-backed YouTube search, workflow, playlist, reconciliation, ordering, stage, OAuth-state, migration, and secret-exclusion coverage. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, game-specific illustrated cards, header menu, menu cards, and bartender queue. |
-| `static/preserve-scroll.js` | Shared same-page POST scroll/disclosure restoration for attendee and admin forms. |
+| `static/preserve-scroll.js` | Stable view-state restoration plus progressive same-origin admin POST handling that replaces the returned workspace in place and preserves anchor, disclosure, query, and focus state. |
 | `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Fixed-viewport adaptive TV grid with title header, independent game/bar rails, dominant center cards, conditional music footer, density fitting, event spotlights, ready alerts, CTA, scoreboard, and karaoke layouts. |
@@ -34,6 +34,7 @@
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, priority illustrated game gallery, ready drink/order cards, slides, costume and karaoke summaries. |
 | `templates/games.html` | Party-day five-game workspace with dynamic tabs, opt-in, MMF ten-round ballots, prompt responses/voting, Two Truths guessing, aggregate reveals, and final results. |
 | `templates/_game_scoreboard.html` | Shared attendee winner and final-score table for every game engine. |
+| `templates/_admin_games.html` | Selected-game admin selector and operational console for lifecycle, progress, results/display, configuration, data, simulation, and reset. |
 | `templates/jukebox.html` | Attendee party-day Jukebox page with confirmed Now Playing, playlist, catalog search, and personal pending requests. |
 | `templates/menu.html` | Attendee food/drink menu for `/party/menu`, including menu images, availability, specialty/standard badges, drink ordering, and recent order statuses. |
 | `templates/drink_history.html` | Attendee full drink order history for `/party/drink-history`, including account-scoped order records, reorder controls, and per-order bartender tip QR/payment disclosure. |
@@ -104,6 +105,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/REDIS_ENHANCEMENT_IMPLEMENTATION_PLAN.md` | Durable progress tracker for schema v2, ID-keyed ballots, auth/CSRF, and Redis interaction enhancements. |
 | `ai-context/RESPONSIVE_UX_PROGRESS.md` | Completed responsive UX implementation tracker for live display browser scaling, attendee mobile optimization, admin mobile disclosure forms, and verification results. |
 | `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` | Admin workspace information architecture, responsive behavior, attendee list-compaction refinements, verification, and extension rules. |
+| `ai-context/ADMIN_GAMES_WORKSPACE_REORGANIZATION.md` | Selected-game Games admin architecture, lightweight summary construction, in-place admin actions, stable view-state rules, and verification. |
 | `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` | Planned YouTube karaoke search, exact-video request workflow, host approval, playlist synchronization, dedicated admin workspace, stage controls, manual official-YouTube playback, security, migration, rollout, and acceptance criteria. |
 | `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` | Current YouTube karaoke implementation, verification, production prerequisites, guardrails, and rollout progress. |
 | `ai-context/STYLING_REFINEMENT_PROGRESS.md` | Progress and implementation notes for the attached-wireframe styling refinement across pages, live display, and generated emails. |

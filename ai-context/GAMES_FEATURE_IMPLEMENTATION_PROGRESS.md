@@ -81,8 +81,9 @@ interaction depends on guessing another attendee.
 
 ## Admin And Display
 
-- `/admin/games` presents all five games in one unified control-card registry,
-  with shared aggregate status and display-resume controls.
+- `/admin/games?game=<game-key>` presents a compact five-game status selector
+  and one detailed operational console, with shared aggregate status. Detailed
+  data is constructed only for the selected game.
 - MMF includes a ten-trio editor, optional image URLs, and configurable third
   action label.
 - Prompt games include independent prompt decks, enable/disable/remove prompt
@@ -93,7 +94,7 @@ interaction depends on guessing another attendee.
   walks through each revealed prompt and winning anonymous response.
 - Ended winner/scoreboard cards join normal live-display rotation. Prompt
   responses join rotation only during voting/reveal.
-- Each game card provides a deterministic completed-game simulator for 2-20
+- Each selected game console provides a deterministic completed-game simulator for 2-20
   test players. It preserves game configuration, creates no party accounts,
   backs up Redis before mutation, and refuses to replace real participants.
 - Ended games always contribute a winner or No Winner outcome card. Generated
@@ -159,3 +160,15 @@ interaction depends on guessing another attendee.
   panel, ahead of drink history, jukebox, and event highlights.
 - `static/preserve-scroll.js` restores scroll position and open disclosure rows
   after same-page POST actions throughout the shared attendee/admin shell.
+
+## Selected-Game Admin And No-Jump Actions (2026-08-14)
+
+- The Games admin now renders one selected console at a time and retains all
+  five game phases/player counts in a desktop grid or sticky mobile rail.
+- Large score, participant, and guess views are bounded in the browser; complete
+  data remains available through the redacted aggregate export.
+- Standard admin actions fetch the existing Flask response and replace the
+  workspace in place. Stable view keys retain disclosures, anchor position, and
+  logical focus, with ordinary forms preserved as the fallback.
+- Detailed design and verification live in
+  `ai-context/ADMIN_GAMES_WORKSPACE_REORGANIZATION.md`.

@@ -217,8 +217,10 @@
 - Admin mutations validate required fields.
 - Admin mutations broadcast live-display updates when they affect display content.
 - Admin can start, stop, and reset the costume contest; lock winner, show winner, restore display; and start, stop, and reset karaoke party state.
-- The focused, unified `/admin/games` card registry can enable/disable enrollment, start,
-  end, and confirmed-reset Two Truths and a Lie; inspect live participation,
+- The focused `/admin/games?game=<game-key>` workspace shows a compact status
+  selector for all five games and renders one detailed game console at a time.
+  It can enable/disable enrollment, start, end, and confirmed-reset Two Truths
+  and a Lie; inspect live participation,
   guess completion, provisional/final scores, truth/lie data, and raw guesses;
   export game JSON; and manually pause on game, winner, or results display
   cards before resuming rotation.
@@ -226,7 +228,7 @@
   edits MMF's ten public-figure trios and optional images, manages three prompt
   decks, advances prompt response/vote/reveal phases, shows aggregate progress,
   and drives previous/next announcer presentation slides after game end.
-- Every game card includes a test-tool action that can generate a deterministic
+- Every selected game console includes a test-tool action that can generate a deterministic
   completed game with 2-20 synthetic players. Simulation never creates party
   accounts, preserves MMF/prompt configuration, creates a Redis backup, and
   refuses to replace real participant data.
@@ -234,8 +236,10 @@
   and individual ballots, returning only aliases, completion counts, and
   aggregate results for that game.
 - Admin receives inline success/error messages.
-- Shared attendee/admin POST forms restore their prior scroll position and open
-  disclosure rows after the server response, avoiding repeated re-scrolling.
+- Standard admin POST forms update their workspace in place while preserving the
+  selected query, action-relative viewport position, open disclosures, and
+  logical keyboard focus. Non-enhanced shared forms retain stable view-state
+  restoration after a server navigation.
 - Admin JSON export routes are available for full Redis state, costume results,
   and karaoke lineup at `/admin/export/state`,
   `/admin/export/costume-results`, and `/admin/export/karaoke-lineup`.

@@ -1,5 +1,5 @@
 (() => {
-  const root = document.querySelector('[data-dj-status-root]');
+  let root = document.querySelector('[data-dj-status-root]');
   if (!root) return;
 
   const displayApi = root.dataset.djDisplayApi;
@@ -8,10 +8,6 @@
   const titleize = (value) => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   const songLabel = (song, fallback) => song ? [song.title, song.artist].filter(Boolean).join(' — ') : fallback;
   const stateClass = (value) => String(value || 'idle').replaceAll('_', '-');
-  const flowSteps = [...root.querySelectorAll('[data-dj-flow-step]')];
-  const commandState = root.querySelector('[data-dj-command-state]');
-  const receiverError = root.querySelector('[data-dj-receiver-error]');
-  const requestQueue = root.querySelector('[data-dj-song-request-queue]');
 
   const setText = (selector, value) => {
     const element = root.querySelector(selector);
@@ -19,6 +15,7 @@
   };
 
   const renderCommand = (dj) => {
+    const commandState = root?.querySelector('[data-dj-command-state]');
     if (!commandState) return;
     const command = dj.current_command || dj.last_command;
     if (!command) {
@@ -32,7 +29,10 @@
   };
 
   const render = (dj) => {
-    if (!dj || typeof dj !== 'object') return;
+    root = document.querySelector('[data-dj-status-root]');
+    if (!root || !dj || typeof dj !== 'object') return;
+    const flowSteps = [...root.querySelectorAll('[data-dj-flow-step]')];
+    const receiverError = root.querySelector('[data-dj-receiver-error]');
     const receiver = dj.receiver || {};
     const desired = dj.desired || {};
     const effectiveStatus = receiver.effective_status || receiver.status || 'offline';
@@ -75,6 +75,7 @@
 
   let refreshing = false;
   const refreshRequestQueue = async () => {
+    const requestQueue = document.querySelector('[data-dj-song-request-queue]');
     if (!requestQueueApi || !requestQueue) return;
     try {
       const response = await fetch(requestQueueApi, { credentials: 'same-origin', cache: 'no-store' });
@@ -103,6 +104,10 @@
   };
 
   window.setInterval(refresh, 5000);
+  document.addEventListener('admin:panel-updated', () => {
+    root = document.querySelector('[data-dj-status-root]');
+    refresh();
+  });
   if (updatesApi && typeof window.EventSource === 'function') {
     const stream = new EventSource(updatesApi);
     stream.onmessage = refresh;

@@ -1,9 +1,10 @@
 (() => {
-  const searchRoot = document.querySelector('[data-dj-catalog-search]');
-  const songForm = document.querySelector('[data-dj-song-form]');
-  if (!searchRoot || !songForm) {
-    return;
-  }
+  const initializedRoots = new WeakSet();
+  const initialize = () => {
+    const searchRoot = document.querySelector('[data-dj-catalog-search]');
+    const songForm = document.querySelector('[data-dj-song-form]');
+    if (!searchRoot || !songForm || initializedRoots.has(searchRoot)) return;
+    initializedRoots.add(searchRoot);
 
   const queryInput = searchRoot.querySelector('#dj_catalog_query');
   const searchButton = searchRoot.querySelector('[data-dj-catalog-search-button]');
@@ -136,10 +137,14 @@
   nextButton?.addEventListener('click', () => {
     if (nextOffset !== null) search(nextOffset);
   });
-  queryInput?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      search();
-    }
-  });
+    queryInput?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        search();
+      }
+    });
+  };
+
+  initialize();
+  document.addEventListener('admin:panel-updated', initialize);
 })();

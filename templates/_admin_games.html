@@ -131,8 +131,8 @@
       </div>
 
       {% if admin_game.statistics.scores %}
-        <div class="table-wrapper"><table><thead><tr><th>Rank</th><th>{% if game_key == 'two_truths_and_a_lie' %}Player{% else %}Alias{% endif %}</th><th>{% if game_key == 'two_truths_and_a_lie' %}Correct{% else %}Points{% endif %}</th>{% if game_key == 'two_truths_and_a_lie' %}<th>Attempts</th><th>Accuracy</th>{% endif %}</tr></thead><tbody>
-          {% for score in admin_game.statistics.scores[:20] %}<tr><td>#{{ loop.index }}</td><td>{{ score.name if game_key == 'two_truths_and_a_lie' else score.alias }}</td><td>{{ score.correct if game_key == 'two_truths_and_a_lie' else score.points }}</td>{% if game_key == 'two_truths_and_a_lie' %}<td>{{ score.attempts }}</td><td>{{ score.accuracy }}%</td>{% endif %}</tr>{% endfor %}
+        <div class="table-wrapper"><table><thead><tr><th>Rank</th><th>Player</th><th>{% if game_key == 'two_truths_and_a_lie' %}Correct{% else %}Points{% endif %}</th>{% if game_key == 'two_truths_and_a_lie' %}<th>Attempts</th><th>Accuracy</th>{% endif %}</tr></thead><tbody>
+          {% for score in admin_game.statistics.scores[:20] %}<tr><td>#{{ loop.index }}</td><td>{{ score.name }}</td><td>{{ score.correct if game_key == 'two_truths_and_a_lie' else score.points }}</td>{% if game_key == 'two_truths_and_a_lie' %}<td>{{ score.attempts }}</td><td>{{ score.accuracy }}%</td>{% endif %}</tr>{% endfor %}
         </tbody></table></div>
         {% if admin_game.statistics.scores|length > 20 %}<p class="contest-status">Showing the top 20 of {{ admin_game.statistics.scores|length }} players. The complete result set is included in the game export.</p>{% endif %}
       {% else %}<p class="empty-state">No score data is available yet.</p>{% endif %}

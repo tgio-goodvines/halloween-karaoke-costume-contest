@@ -79,6 +79,7 @@ from party_games import (
     normalize_prompt,
     normalize_response,
     normalize_statement,
+    participant_public_name,
     participant_statements,
     prompt_game_statistics,
     prompt_round_for_game,
@@ -322,7 +323,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 10
+STATE_SCHEMA_VERSION = 11
 
 
 @dataclass
@@ -4523,9 +4524,19 @@ def game_alias_participant(game: dict[str, object], user_id: str) -> dict[str, o
     return participant if isinstance(participant, dict) else None
 
 
-def add_alias_participant(game: dict[str, object], user_id: str) -> dict[str, object]:
+def add_alias_participant(
+    game: dict[str, object],
+    user_id: str,
+    *,
+    display_name: str = "",
+    anonymous: bool = False,
+) -> dict[str, object]:
     existing = game_alias_participant(game, user_id)
     if existing:
+        normalized_name = re.sub(r"\s+", " ", str(display_name or "").strip())[:80]
+        existing["display_name"] = normalized_name
+        existing["anonymous"] = bool(anonymous or not normalized_name)
+        existing["updated_at"] = _utc_now_iso()
         return existing
     existing_aliases = {
         str(entry.get("alias", ""))
@@ -4535,6 +4546,8 @@ def add_alias_participant(game: dict[str, object], user_id: str) -> dict[str, ob
     timestamp = _utc_now_iso()
     participant = {
         "player_id": uuid4().hex,
+        "display_name": re.sub(r"\s+", " ", str(display_name or "").strip())[:80],
+        "anonymous": bool(anonymous or not str(display_name or "").strip()),
         "alias": generate_game_alias(existing_aliases),
         "answers": {},
         "created_at": timestamp,
@@ -4629,17 +4642,17 @@ def game_scoreboard_entry(game_key: str) -> dict[str, object] | None:
     rows = [
         {
             "rank": index + 1,
-            "name": entry.get("alias", "Anonymous player"),
+            "name": entry.get("name", entry.get("alias", "Player")),
             "detail": f"{entry.get('points', 0)} points",
             "value_label": f"{entry.get('points', 0)} pts",
-            "meta_label": "Anonymous game alias",
+            "meta_label": "Anonymous alias" if entry.get("anonymous") else "Party account name",
         }
         for index, entry in enumerate(scores[:6])
     ]
     return {
         "category": GAME_CATALOG[game_key]["title"],
         "primary": "Final Scores",
-        "secondary": f"{len(game.get('participants', {}))} anonymous players",
+        "secondary": f"{len(game.get('participants', {}))} players",
         "tertiary": "Thanks for playing.",
         "scoreboard": {"entries": rows},
     }
@@ -4654,13 +4667,13 @@ def game_winner_entry(game_key: str) -> dict[str, object] | None:
     winners = game_winners(game_key, game)
     if not winners:
         return None
-    aliases = [str(entry.get("alias", "Anonymous player")) for entry in winners]
+    names = [str(entry.get("name", entry.get("alias", "Player"))) for entry in winners]
     points = int(winners[0].get("points", 0) or 0)
     return {
         "category": f"{GAME_CATALOG[game_key]['title']} Winner{'s' if len(winners) != 1 else ''}",
-        "primary": ", ".join(aliases),
+        "primary": ", ".join(names),
         "secondary": f"{points} point{'s' if points != 1 else ''}",
-        "tertiary": "A tie at the top!" if len(winners) > 1 else "Tonight's anonymous champion.",
+        "tertiary": "A tie at the top!" if len(winners) > 1 else "Tonight's champion.",
     }
 
 
@@ -4694,7 +4707,7 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             "type": "game_presentation",
             "title": title,
             "highlight": "Results are in",
-            "message": "The host is revealing tonight's anonymous answers.",
+            "message": "The host is revealing tonight's blind responses.",
             "details": [f"{len(game.get('participants', {}))} players"],
         }
     ]
@@ -4718,12 +4731,15 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             results = game_round.get("results", {})
             winning_ids = results.get("winner_response_ids", [])
             winners = [game_round.get("responses", {}).get(response_id, {}) for response_id in winning_ids]
-            aliases_by_player = {entry.get("player_id"): entry.get("alias", "Anonymous") for entry in game.get("participants", {}).values()}
+            identities_by_player = {
+                entry.get("player_id"): participant_public_name(entry)
+                for entry in game.get("participants", {}).values()
+            }
             round_detail = "Solo spotlight · 1 point" if results.get("solo_spotlight") else f"{len(game_round.get('responses', {}))} responses · {results.get('vote_count', 0)} votes"
-            slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": game_round.get("prompt_text", ""), "message": "Anonymous answers are locked.", "details": [round_detail]})
+            slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": game_round.get("prompt_text", ""), "message": "Blind responses are locked.", "details": [round_detail]})
             for response in winners:
                 winner_detail = "Solo spotlight · 1 point" if results.get("solo_spotlight") else f"{results.get('vote_counts', {}).get(response.get('id'), 0)} votes"
-                slides.append({"type": "game_presentation", "title": f"Round {index + 1} Winner", "highlight": response.get("text", ""), "message": aliases_by_player.get(response.get("player_id"), "Anonymous player"), "details": [winner_detail]})
+                slides.append({"type": "game_presentation", "title": f"Round {index + 1} Winner", "highlight": response.get("text", ""), "message": identities_by_player.get(response.get("player_id"), "Player"), "details": [winner_detail]})
     scoreboard = game_scoreboard_entry(game_key)
     if scoreboard:
         slides.append({"type": "game_presentation", "title": title, "highlight": "Final leaderboard", "message": scoreboard.get("secondary", ""), "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]})
@@ -4769,7 +4785,7 @@ PARTY_DAY_DASHBOARD_SLIDES = [
     },
     {
         "title": "Party Games",
-        "content": "Open Games to join tonight's enabled anonymous challenges, submit answers, vote, and follow the host-led results.",
+        "content": "Open Games to join tonight's enabled challenges, choose how your name appears, submit answers, vote, and follow the host-led results.",
     },
     {
         "title": "Event Drinks",
@@ -5188,7 +5204,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                     )
         elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
             completed = sum(1 for participant in participants.values() if len(participant.get("answers", {})) >= 10)
-            entry["primary"] = "Ten rounds · three choices · one anonymous ballot."
+            entry["primary"] = "Ten rounds · three choices · one private ballot."
             entry["metrics"] = [
                 {"label": "Players", "value": len(participants)},
                 {"label": "Complete", "value": f"{completed}/{len(participants)}"},
@@ -5196,8 +5212,8 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             ]
             if phase == "ended":
                 winners = game_winners(game_key, game)
-                entry["primary"] = ", ".join(str(winner.get("alias", "Anonymous")) for winner in winners) or "Final results ready"
-                entry["secondary"] = "Anonymous champions"
+                entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
+                entry["secondary"] = "Game champions"
         elif game_key in PROMPT_GAME_KEYS:
             current_round = prompt_round_for_game(game)
             if current_round:
@@ -5206,7 +5222,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 votes = current_round.get("votes", {}) if isinstance(current_round.get("votes"), dict) else {}
                 entry["status_label"] = f"Round {int(game.get('current_round_index', 0) or 0) + 1} · {round_status.title()}"
                 entry["primary"] = str(current_round.get("prompt_text", "") or "Responses are open.")
-                entry["secondary"] = "Vote anonymously in Games." if round_status == "voting" else "Submit anonymously in Games."
+                entry["secondary"] = "Blind voting is open in Games." if round_status == "voting" else "Submit your response in Games."
                 entry["metrics"] = [
                     {"label": "Answers", "value": len(responses)},
                     {"label": "Votes", "value": len(votes)},
@@ -5214,7 +5230,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 ]
                 entry["steps"] = [
                     "Read the current prompt",
-                    "Submit anonymously" if round_status == "submissions" else "Vote for another response",
+                    "Submit your response" if round_status == "submissions" else "Vote for another response",
                     "Watch for the reveal",
                 ]
                 entry["action_label"] = "Respond in Party Games" if round_status == "submissions" else "Vote now in Party Games"
@@ -5235,17 +5251,17 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                                 ],
                                 "steps": [
                                     "Open Party Games",
-                                    "Read every anonymous answer",
+                                    "Read every blind response",
                                     "Vote for your favorite",
                                 ],
-                                "action_label": "Vote anonymously in Party Games",
+                                "action_label": "Vote in Party Games",
                                 "priority": 4,
                             }
                         )
             if phase == "ended":
                 winners = game_winners(game_key, game)
-                entry["primary"] = ", ".join(str(winner.get("alias", "Anonymous")) for winner in winners) or "Final results ready"
-                entry["secondary"] = "Anonymous champions"
+                entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
+                entry["secondary"] = "Game champions"
 
         entries.append(entry)
         entries.extend(detail_entries)
@@ -7403,8 +7419,8 @@ def party_games():
         saved_vote = str(prompt_round.get("votes", {}).get(player_id, ""))
         random.Random(str(prompt_round.get("id", ""))).shuffle(prompt_responses)
 
-    alias_by_player = {
-        str(entry.get("player_id", "")): str(entry.get("alias", "Anonymous player"))
+    identity_by_player = {
+        str(entry.get("player_id", "")): participant_public_name(entry)
         for entry in game.get("participants", {}).values()
         if isinstance(entry, dict)
     }
@@ -7423,7 +7439,9 @@ def party_games():
         prompt_responses=prompt_responses,
         saved_response=saved_response,
         saved_vote=saved_vote,
-        alias_by_player=alias_by_player,
+        participant_identity=participant_public_name(participant) if participant else "",
+        identity_by_player=identity_by_player,
+        signed_in_name=re.sub(r"\s+", " ", str(session.get("username", "") or "").strip())[:80],
         show_participation_form=request.args.get("participate") == "1",
         success=request.args.get("success", ""),
         error=request.args.get("error", ""),
@@ -7535,9 +7553,16 @@ def party_game_join(game_slug: str):
     user_id = str(session.get("user_id", "") or "")
     if not user_id or not session.get("username"):
         return redirect(url_for("party_login", next=url_for("party_games", game=game_slug)))
-    participant = add_alias_participant(game, user_id)
+    display_name = re.sub(r"\s+", " ", str(session.get("username", "") or "").strip())[:80]
+    anonymous = request.form.get("play_anonymously") == "yes"
+    participant = add_alias_participant(
+        game,
+        user_id,
+        display_name=display_name,
+        anonymous=anonymous,
+    )
     broadcast_display_update()
-    return redirect(url_for("party_games", game=game_slug, success="joined", alias=participant.get("alias", "")))
+    return redirect(url_for("party_games", game=game_slug, success="joined"))
 
 
 @app.route("/party/games/murder-marry-fuck/answers", methods=["POST"])
@@ -7551,7 +7576,7 @@ def party_mmf_answers():
     user_id = str(session.get("user_id", "") or "")
     participant = game_alias_participant(game, user_id)
     if not participant:
-        return redirect(url_for("party_games", game=slug, error="Only enrolled anonymous players can submit answers."))
+        return redirect(url_for("party_games", game=slug, error="Only enrolled players can submit answers."))
     round_id = str(request.form.get("round_id", "") or "")
     game_round = next((entry for entry in game.get("rounds", []) if entry.get("id") == round_id), None)
     if not game_round:
@@ -7580,7 +7605,7 @@ def party_prompt_response(game_slug: str):
     if game.get("phase") != "active" or not game_round or game_round.get("status") != "submissions":
         return redirect(url_for("party_games", game=game_slug, error="Responses are not open right now."))
     if not participant:
-        return redirect(url_for("party_games", game=game_slug, error="Only enrolled anonymous players can respond."))
+        return redirect(url_for("party_games", game=game_slug, error="Only enrolled players can respond."))
     raw_text = request.form.get("response", "")
     text = normalize_response(raw_text)
     if not text or len(raw_text.strip()) > GAME_RESPONSE_MAX_LENGTH:
@@ -7608,7 +7633,7 @@ def party_prompt_vote(game_slug: str):
     if game.get("phase") != "active" or not game_round or game_round.get("status") != "voting":
         return redirect(url_for("party_games", game=game_slug, error="Voting is not open right now."))
     if not participant:
-        return redirect(url_for("party_games", game=game_slug, error="Only enrolled anonymous players can vote."))
+        return redirect(url_for("party_games", game=game_slug, error="Only enrolled players can vote."))
     response_id = str(request.form.get("response_id", "") or "")
     response = game_round.get("responses", {}).get(response_id)
     player_id = str(participant.get("player_id", ""))
@@ -8263,7 +8288,7 @@ def admin_portal(admin_view: str):
                         else:
                             game["results"] = copy.deepcopy(empty_prompt_game_state(game_key)["results"])
                         write_state_backup_if_available(f"game-{game_key}-start")
-                        messages.append(f"{title} started with {participant_count} anonymous players.")
+                        messages.append(f"{title} started with {participant_count} players.")
                         should_broadcast = True
 
                 elif action == "end_game":
@@ -8281,7 +8306,7 @@ def admin_portal(admin_view: str):
                         game["ended_at"] = finalized_at
                         game["results"] = calculate_mmf_results(game, finalized_at=finalized_at) if game_key == MURDER_MARRY_FUCK_GAME_KEY else calculate_prompt_results(game, finalized_at=finalized_at)
                         write_state_backup_if_available(f"game-{game_key}-ended")
-                        messages.append(f"{title} ended and its anonymous scores were finalized.")
+                        messages.append(f"{title} ended and its scores were finalized.")
                         should_broadcast = True
 
                 elif action == "reset_game":
@@ -8388,7 +8413,7 @@ def admin_portal(admin_view: str):
                     if not current_round or current_round.get("status") != "submissions":
                         errors.append("There is no response round ready for voting.")
                     elif not current_round.get("responses"):
-                        errors.append("At least one anonymous response is required before continuing.")
+                        errors.append("At least one response is required before continuing.")
                     elif len(current_round.get("responses", {})) == 1:
                         current_round["status"] = "revealed"
                         current_round["revealed_at"] = _utc_now_iso()
@@ -8443,7 +8468,7 @@ def admin_portal(admin_view: str):
                     elif not scoreboard:
                         errors.append("No final scores are available.")
                     else:
-                        live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final anonymous standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]}
+                        live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]}
                         messages.append(f"Live display paused on the {title} results.")
                         should_broadcast = True
 
@@ -9654,21 +9679,30 @@ def export_games():
     if redis_state_available:
         load_state_from_redis()
     exported_games = copy.deepcopy(games_state)
-    mmf = exported_games.get(MURDER_MARRY_FUCK_GAME_KEY, {})
-    if isinstance(mmf, dict):
-        mmf["participants"] = [
+    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS):
+        exported_game = exported_games.get(game_key, {})
+        if not isinstance(exported_game, dict):
+            continue
+        participants = party_game_state(game_key).get("participants", {}).values()
+        exported_game["participants"] = [
             {
                 "player_id": participant.get("player_id", ""),
-                "alias": participant.get("alias", "Anonymous player"),
-                "completed_rounds": len(participant.get("answers", {})),
+                "name": participant_public_name(participant),
+                "anonymous": bool(participant.get("anonymous", True)),
+                **(
+                    {"completed_rounds": len(participant.get("answers", {}))}
+                    if game_key == MURDER_MARRY_FUCK_GAME_KEY
+                    else {}
+                ),
             }
-            for participant in party_game_state(MURDER_MARRY_FUCK_GAME_KEY).get("participants", {}).values()
+            for participant in participants
+            if isinstance(participant, dict)
         ]
     return send_json_export(
         {
             "schema_version": STATE_SCHEMA_VERSION,
             "exported_at": _utc_now_iso(),
-            "privacy_note": "Murder, Marry, F%$@ exports contain aggregate results and anonymous aliases, never account-linked selections.",
+            "privacy_note": "Game exports use each player's selected public identity without account IDs. Murder, Marry, F%$@ includes aggregate results only and never account-linked selections.",
             "games_state": exported_games,
         },
         "halloween-games.json",

@@ -18,7 +18,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` - planned attendee YouTube search, host approval, playlist synchronization, dedicated karaoke admin workflow, stage controls, and manual two-tab playback.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
 - `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` - Redis-backed party Games framework, Two Truths and a Lie lifecycle, attendee/admin/display behavior, scoring, and verification.
-- `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` - adaptive TV layout, independent region rotations, admin control room, schema-v10 state, verification, and rollout notes.
+- `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` - adaptive TV layout, independent region rotations, admin control room, generated result-card controls, verification, and rollout notes.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
 - `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 2 details for automatic Halloween install on replacement API EC2 instances.
@@ -36,10 +36,13 @@ Important working notes:
 - Party account users can reset forgotten passwords through `/party/password-reset`; reset emails use SES, reset tokens are hashed before storage, expire after 45 minutes, and are single-use.
 - Before the party date, `/party` shows pre-party RSVP details and host updates in Event Highlights and hides/blocks attendee menu, costume, karaoke, drink-order, and voting actions. On the party date, `/party` switches to the event-night dashboard.
 - On the party date, enabled games appear on `/party` and at `/party/games`. The
-  registry includes Two Truths and a Lie, anonymous ten-round Murder/Marry/F%$@,
+  registry includes Two Truths and a Lie, ten-round Murder/Marry/F%$@,
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only. The last three
   share prompt submission/voting rounds; all games are operated independently
-  from `/admin/games` and new games default to disabled.
+  from `/admin/games` and new games default to disabled. MMF and prompt games
+  default to each player's signed-in name, with an anonymous-alias checkbox that
+  can be changed only while enrollment is open; blind voting and private MMF
+  ballots remain private regardless of the selected public identity.
 - `/party/menu` lets signed-in attendees view food/drink menu cards with images and order available drinks on the party date; food is currently view-only.
 - Admin can manage food/drink menu items, image URLs, availability, and drink recipes from `/admin`; bartender access is assigned to existing party accounts through account roles.
 - `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.
@@ -48,8 +51,8 @@ Important working notes:
 - Admin controls can set the root landing target, replace the RSVP submission party code, configure the host RSVP notification email, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.
 - The live display remains party-night oriented before `HALLOWEEN_PARTY_START` so hosts can stage and test the full TV experience.
 - Admin controls and the live display are protected through `/admin/login`; live-display clients still update through `/api/display-updates` server-sent events and periodically poll `/api/display-data`. Costume and karaoke event overrides are mutually exclusive; starting one stops the other static event mode.
-- Game clue, anonymous response, winner, and results cards join the normal
-  live-display rotation. Ended anonymous games support host-controlled
+- Game clue, blind response, winner, and results cards join the normal
+  live-display rotation. Ended games support host-controlled
   previous/next result presentations. Game `game_*` event overrides can be
   cleared without changing costume, karaoke, DJ, or drink-notice state.
 - `/admin/games?game=<game-key>` renders one detailed game console at a time;

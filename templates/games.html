@@ -6,7 +6,7 @@
   <header class="games-hero">
     <p class="admin-panel__eyebrow">Party games</p>
     <h2>Games</h2>
-    <p>Opt in, play from your phone, and watch the hosts reveal the anonymous results.</p>
+    <p>Opt in, choose how your name appears, play from your phone, and watch the hosts reveal the results.</p>
   </header>
 
   <nav class="games-tabs" aria-label="Available party games">
@@ -18,10 +18,10 @@
   {% if error %}<div class="flash flash--error"><p>{{ error }}</p></div>{% endif %}
   {% if success %}
     <div class="flash flash--success"><p>
-      {% if success == 'joined' %}You joined anonymously as <strong>{{ participant.alias }}</strong>.
+      {% if success == 'joined' %}Your game identity is <strong>{{ participant_identity }}</strong>{% if participant.anonymous %} (anonymous){% endif %}.
       {% elif success == 'answer' %}Your round was saved. You can update it until the hosts end the game.
-      {% elif success == 'response' %}Your anonymous response was saved.
-      {% elif success == 'vote' %}Your anonymous vote was saved.
+      {% elif success == 'response' %}Your response was saved.
+      {% elif success == 'vote' %}Your vote was saved.
       {% elif success == 'submission' %}Your mystery statements were saved and added to the live-display rotation.
       {% elif success == 'guess' %}Your guess was saved. You can update it until the hosts end the game.
       {% endif %}
@@ -32,7 +32,7 @@
     <header class="game-panel__header game-panel__header--illustrated">
       <img class="game-panel__art" src="{{ url_for('static', filename=game_metadata.image) }}" alt="" loading="eager">
       <div>
-        <p class="admin-panel__eyebrow">{{ '18+ anonymous game' if game_key != 'two_truths_and_a_lie' else 'Identity game' }}</p>
+        <p class="admin-panel__eyebrow">{{ '18+ party game' if game_key != 'two_truths_and_a_lie' else 'Identity game' }}</p>
         <h3>{{ game_metadata.title }}</h3>
         <p>{{ game_metadata.description }}</p>
       </div>
@@ -95,11 +95,10 @@
 
     {% elif game_key == 'murder_marry_fuck' %}
       {% if game.phase == 'signup' %}
-        {% if participant %}<div class="game-opt-in"><h4>You’re in as {{ participant.alias }}</h4><p>Your alias and every individual choice remain anonymous. The hosts will only reveal aggregate results.</p></div>
-        {% else %}<div class="game-opt-in"><h4>Join the anonymous ballot</h4><p>Ten trios. One Murder, one Marry, and one {{ game.explicit_label }} choice per round.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Opt In Anonymously</button></form></div>{% endif %}
+        <div class="game-opt-in"><h4>{% if participant %}You’re in as {{ participant_identity }}{% else %}Join the private ballot{% endif %}</h4><p>Ten trios. One Murder, one Marry, and one {{ game.explicit_label }} choice per round. Individual choices stay private; only aggregate results and final scores are revealed.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-check"><input type="checkbox" name="play_anonymously" value="yes"{% if participant and participant.anonymous %} checked{% endif %}><span>Play anonymously instead of appearing as {{ signed_in_name }}</span></label><button class="button button--primary" type="submit">{% if participant %}Save Identity Choice{% else %}Join Game{% endif %}</button></form></div>
       {% elif game.phase == 'active' %}
         {% if participant %}
-          <div class="game-instructions"><h4>{{ participant.alias }} · {{ participant.get('answers', {})|length }} / {{ game.rounds|length }} complete</h4><p>Each choice must use a different person. Submit one round at a time.</p></div>
+          <div class="game-instructions"><h4>{{ participant_identity }} · {{ participant.get('answers', {})|length }} / {{ game.rounds|length }} complete</h4><p>Each choice must use a different person. Submit one round at a time.</p></div>
           <div class="mmf-rounds">
             {% for round in game.rounds %}
               {% set saved = participant.get('answers', {}).get(round.id, {}) %}
@@ -114,7 +113,7 @@
               </form>
             {% endfor %}
           </div>
-        {% else %}<p class="empty-state">Anonymous enrollment closed when the hosts started the game.</p>{% endif %}
+        {% else %}<p class="empty-state">Enrollment closed when the hosts started the game.</p>{% endif %}
       {% else %}
         {% include '_game_scoreboard.html' %}
         <div class="mmf-results">
@@ -126,24 +125,23 @@
 
     {% else %}
       {% if game.phase == 'signup' %}
-        {% if participant %}<div class="game-opt-in"><h4>You’re in as {{ participant.alias }}</h4><p>Responses and votes appear under your anonymous alias.</p></div>
-        {% else %}<div class="game-opt-in"><h4>Join anonymously</h4><p>Submit one response per round. With a crowd, vote for someone else’s answer; alone, your response becomes a one-point solo spotlight.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Opt In Anonymously</button></form></div>{% endif %}
+        <div class="game-opt-in"><h4>{% if participant %}You’re in as {{ participant_identity }}{% else %}Join the game{% endif %}</h4><p>Submit one response per round. Voting stays blind; winners and final scores use your selected identity. Alone, your response becomes a one-point solo spotlight.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-check"><input type="checkbox" name="play_anonymously" value="yes"{% if participant and participant.anonymous %} checked{% endif %}><span>Play anonymously instead of appearing as {{ signed_in_name }}</span></label><button class="button button--primary" type="submit">{% if participant %}Save Identity Choice{% else %}Join Game{% endif %}</button></form></div>
       {% elif game.phase == 'active' %}
-        {% if not participant %}<p class="empty-state">Anonymous enrollment closed when the hosts started the game.</p>
-        {% elif not prompt_round %}<div class="game-opt-in"><h4>{{ participant.alias }}, stand by</h4><p>The hosts are choosing the next prompt.</p></div>
+        {% if not participant %}<p class="empty-state">Enrollment closed when the hosts started the game.</p>
+        {% elif not prompt_round %}<div class="game-opt-in"><h4>{{ participant_identity }}, stand by</h4><p>The hosts are choosing the next prompt.</p></div>
         {% elif prompt_round.status == 'submissions' %}
           <form class="game-submission-form" method="post" action="{{ url_for('party_prompt_response', game_slug=game_metadata.slug) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><p class="admin-panel__eyebrow">Responses open</p><h4>{{ prompt_round.prompt_text }}</h4>
-            <label for="game-response">Your anonymous response</label><textarea id="game-response" name="response" maxlength="{{ response_max_length }}" required>{{ saved_response.text if saved_response else '' }}</textarea>
+            <label for="game-response">Your response</label><textarea id="game-response" name="response" maxlength="{{ response_max_length }}" required>{{ saved_response.text if saved_response else '' }}</textarea>
             <button class="button button--primary" type="submit">{% if saved_response %}Update Response{% else %}Submit Response{% endif %}</button>
           </form>
         {% elif prompt_round.status == 'voting' %}
           <section class="game-voting"><p class="admin-panel__eyebrow">Voting open</p><h4>{{ prompt_round.prompt_text }}</h4><form method="post" action="{{ url_for('party_prompt_vote', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="response-grid">
             {% for response in prompt_responses %}{% if not response.is_own %}<label class="response-choice"><input type="radio" name="response_id" value="{{ response.id }}"{% if saved_vote == response.id %} checked{% endif %} required><span>{{ response.text }}</span></label>{% endif %}{% endfor %}
-          </div><button class="button button--primary" type="submit">Save Anonymous Vote</button></form>{% if saved_response %}<p class="form-helper">Your response: {{ saved_response.text }}</p>{% endif %}</section>
+          </div><button class="button button--primary" type="submit">Save Vote</button></form>{% if saved_response %}<p class="form-helper">Your response: {{ saved_response.text }}</p>{% endif %}</section>
         {% else %}
           <section class="game-results"><p class="admin-panel__eyebrow">Round revealed</p><h4>{{ prompt_round.prompt_text }}</h4><div class="response-grid">
-            {% for response in prompt_responses %}<article class="response-result{% if response.id in prompt_round.results.winner_response_ids %} response-result--winner{% endif %}"><p>{{ response.text }}</p><strong>{% if prompt_round.results.solo_spotlight %}Solo spotlight · 1 point{% else %}{{ prompt_round.results.vote_counts.get(response.id, 0) }} votes{% if response.id in prompt_round.results.winner_response_ids %} · Winner: {{ alias_by_player.get(response.player_id, 'Anonymous') }}{% endif %}{% endif %}</strong></article>{% endfor %}
+            {% for response in prompt_responses %}<article class="response-result{% if response.id in prompt_round.results.winner_response_ids %} response-result--winner{% endif %}"><p>{{ response.text }}</p><strong>{% if prompt_round.results.solo_spotlight %}Solo spotlight · 1 point{% else %}{{ prompt_round.results.vote_counts.get(response.id, 0) }} votes{% if response.id in prompt_round.results.winner_response_ids %} · Winner: {{ identity_by_player.get(response.player_id, 'Player') }}{% endif %}{% endif %}</strong></article>{% endfor %}
           </div><p>Stand by for the next prompt.</p></section>
         {% endif %}
       {% else %}

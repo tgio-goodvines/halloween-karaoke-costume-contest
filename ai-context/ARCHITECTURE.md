@@ -99,8 +99,9 @@
 - `GET /admin/export/costume-results` -> JSON export of costume contest scores.
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
 - `GET /admin/export/games` -> admin-only JSON export of the Redis-backed game
-  registry and finalized results. MMF account keys and individual ballots are
-  replaced with anonymous aliases/completion counts plus aggregate results.
+  registry and finalized results. MMF and prompt-game account keys are replaced
+  with selected public identities and anonymity flags; MMF individual ballots
+  are replaced with completion counts plus aggregate results.
 - `GET|POST /party/costumes` -> attendee costume signup form, available on
   the party date and redirected to `/party` before then.
 - `GET /party/games` -> party-day Games workspace for enabled games. The
@@ -110,8 +111,9 @@
   `POST /party/games/two-truths-and-a-lie/guesses/<submission_id>` ->
   CSRF-protected, account-bound enrollment, clue submission/update, and guess
   upsert actions with phase and ownership checks.
-- `POST /party/games/<game_slug>/join` -> anonymous-alias opt-in for MMF and
-  the three prompt/vote games while signup is open.
+- `POST /party/games/<game_slug>/join` -> account-name enrollment by default for
+  MMF and the three prompt/vote games, with an optional generated anonymous alias.
+  The same route can change that choice while signup remains open.
 - `POST /party/games/murder-marry-fuck/answers` -> saves one validated
   three-action MMF round ballot for an enrolled player while active.
 - `POST /party/games/<game_slug>/response|vote` -> upserts one anonymous
@@ -173,8 +175,9 @@ from each signup's persisted `workflow.playlist_item_id`; foreign/manual
 playlist items are intentionally outside its deletion scope.
 
 `party_games.py` is the pure game-domain boundary: default registry state,
-normalization of persisted submissions/guesses/results, anonymous statement
-ordering, identity scoring, tied winner calculation, and admin statistics.
+normalization of persisted submissions/guesses/results and mixed player
+identities, anonymous statement ordering, identity scoring, tied winner
+calculation, and admin statistics.
 `main.py` retains route authorization, Redis locking/persistence, backups, and
 display-update broadcasts.
 
@@ -283,8 +286,9 @@ Redis-backed `display_settings`, defaulting to
 values hide either row. Current game data, clues/prompts, voting responses, and
 phase metrics instead rotate independently in `layout.games`. Host-controlled
 `game_presentation` overrides walk MMF aggregate action totals or revealed
-prompt winners with previous/next center-stage controls; account identity and
-individual MMF ballots never enter display payloads. Admin
+prompt winners with previous/next center-stage controls; only each player's
+selected public identity enters result payloads, and individual MMF ballots
+never enter display payloads. Admin
 stop/reset actions clear matching live-display event overrides without deleting
 signup lineups. Starting costume stops active karaoke event mode, and starting
 karaoke closes active costume voting so costume/karaoke do not compete for the

@@ -4525,7 +4525,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("signup", game["phase"])
         self.assertEqual({}, game["participants"])
         main.save_state_to_redis()
-        self.assertEqual(10, self.redis_state()["schema_version"])
+        self.assertEqual(11, self.redis_state()["schema_version"])
         self.assertIn("games_state", self.redis_state())
         self.assertEqual(
             {
@@ -4716,7 +4716,7 @@ class RedisStateTests(unittest.TestCase):
                 self.assertIn(b"Generated Game Result Cards", display_page.data)
                 self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
                 persisted = self.redis_state()
-                self.assertEqual(10, persisted["schema_version"])
+                self.assertEqual(11, persisted["schema_version"])
                 self.assertTrue(persisted["games_state"][game_key]["simulation"]["is_simulated"])
                 self.assertEqual({}, persisted["user_accounts"])
 
@@ -4821,7 +4821,66 @@ class RedisStateTests(unittest.TestCase):
             self.assertEqual(302, blocked.status_code)
             self.assertEqual({}, main.two_truths_game()["guesses"])
 
-    def test_mmf_anonymous_lifecycle_scoring_presentation_export_and_reset(self):
+    def test_game_identity_defaults_to_name_and_can_change_during_signup(self):
+        game_key = main.FILL_BLANK_GAME_KEY
+        slug = main.GAME_CATALOG[game_key]["slug"]
+        main.party_game_state(game_key)["enabled"] = True
+        self.save_current_state()
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            joined = attendee.post(f"/party/games/{slug}/join")
+            named_page = attendee.get(f"/party/games?game={slug}")
+
+            participant = main.party_game_state(game_key)["participants"]["user-1"]
+            player_id = participant["player_id"]
+            alias = participant["alias"]
+            self.assertFalse(participant["anonymous"])
+            self.assertEqual("Jamie", participant["display_name"])
+            self.assertEqual("Jamie", main.participant_public_name(participant))
+            self.assertIn(b"You\xe2\x80\x99re in as Jamie", named_page.data)
+            self.assertIn(b"Play anonymously instead of appearing as Jamie", named_page.data)
+
+            changed = attendee.post(
+                f"/party/games/{slug}/join",
+                data={"play_anonymously": "yes"},
+            )
+            anonymous_page = attendee.get(f"/party/games?game={slug}")
+
+            participant = main.party_game_state(game_key)["participants"]["user-1"]
+            self.assertEqual(player_id, participant["player_id"])
+            self.assertTrue(participant["anonymous"])
+            self.assertEqual(alias, main.participant_public_name(participant))
+            self.assertIn(alias.encode(), anonymous_page.data)
+
+            main.party_game_state(game_key)["phase"] = "active"
+            self.save_current_state()
+            locked = attendee.post(f"/party/games/{slug}/join")
+
+        self.assertEqual(302, joined.status_code)
+        self.assertEqual(302, changed.status_code)
+        self.assertEqual(302, locked.status_code)
+        self.assertTrue(main.party_game_state(game_key)["participants"]["user-1"]["anonymous"])
+
+    def test_legacy_alias_participants_remain_anonymous_after_normalization(self):
+        raw = main.empty_prompt_game_state(main.BAD_ADVICE_GAME_KEY, enabled=True)
+        raw["participants"] = {
+            "legacy-user": {
+                "player_id": "legacy-player",
+                "alias": "Legacy Ghost",
+                "created_at": "",
+                "updated_at": "",
+            }
+        }
+
+        normalized = main.normalize_games_state({main.BAD_ADVICE_GAME_KEY: raw})
+        participant = normalized[main.BAD_ADVICE_GAME_KEY]["participants"]["legacy-user"]
+
+        self.assertTrue(participant["anonymous"])
+        self.assertEqual("", participant["display_name"])
+        self.assertEqual("Legacy Ghost", main.participant_public_name(participant))
+
+    def test_mmf_mixed_identity_lifecycle_scoring_presentation_export_and_reset(self):
         game_key = main.MURDER_MARRY_FUCK_GAME_KEY
         slug = main.GAME_CATALOG[game_key]["slug"]
         with main.app.test_client() as admin:
@@ -4830,13 +4889,18 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, enabled.status_code)
 
         aliases = {}
-        for user_id, username in (("user-1", "Jamie"), ("user-2", "Morgan")):
+        for user_id, username, join_data in (
+            ("user-1", "Jamie", {}),
+            ("user-2", "Morgan", {"play_anonymously": "yes"}),
+        ):
             with main.app.test_client() as attendee:
                 self.login_regular(attendee, user_id=user_id, username=username)
-                joined = attendee.post(f"/party/games/{slug}/join")
+                joined = attendee.post(f"/party/games/{slug}/join", data=join_data)
             self.assertEqual(302, joined.status_code)
             aliases[user_id] = main.party_game_state(game_key)["participants"][user_id]["alias"]
         self.assertNotEqual(aliases["user-1"], aliases["user-2"])
+        self.assertFalse(main.party_game_state(game_key)["participants"]["user-1"]["anonymous"])
+        self.assertTrue(main.party_game_state(game_key)["participants"]["user-2"]["anonymous"])
 
         with main.app.test_client() as admin:
             self.login_admin(admin)
@@ -4879,12 +4943,26 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("ended", game["phase"])
         self.assertEqual(2, len(game["results"]["winner_player_ids"]))
         self.assertTrue(all(score["points"] == 30 for score in game["results"]["scores"]))
+        self.assertEqual({"Jamie", aliases["user-2"]}, {score["name"] for score in game["results"]["scores"]})
+        public_result_text = json.dumps(
+            {
+                "scoreboard": main.game_scoreboard_entry(game_key),
+                "winner": main.game_winner_entry(game_key),
+                "stage": [entry for entry in main.build_game_stage_entries() if entry.get("game_key") == game_key],
+            }
+        )
+        self.assertIn("Jamie", public_result_text)
+        self.assertIn(aliases["user-2"], public_result_text)
+        self.assertNotIn("Morgan", public_result_text)
         self.assertEqual("game_presentation", main.live_display_event_override["type"])
         self.assertEqual(1, game["presentation"]["slide_index"])
         exported_mmf = exported["games_state"][game_key]
         self.assertIsInstance(exported_mmf["participants"], list)
         self.assertNotIn("user-1", json.dumps(exported_mmf))
-        self.assertNotIn("Jamie", json.dumps(exported_mmf))
+        self.assertNotIn("user-2", json.dumps(exported_mmf))
+        self.assertIn("Jamie", json.dumps(exported_mmf))
+        self.assertNotIn("Morgan", json.dumps(exported_mmf))
+        self.assertIn(aliases["user-2"], json.dumps(exported_mmf))
         self.assertNotIn("answers", json.dumps(exported_mmf))
 
         with main.app.test_client() as admin:
@@ -4936,7 +5014,12 @@ class RedisStateTests(unittest.TestCase):
                     voting = admin.post("/admin/games", data={"action": "open_prompt_voting", "game_key": game_key})
                     display_payload = admin.get("/api/display-data").get_json()
                 self.assertEqual(200, voting.status_code)
-                display_text = json.dumps(display_payload["layout"]["games"]["entries"])
+                current_game_entries = [
+                    entry
+                    for entry in display_payload["layout"]["games"]["entries"]
+                    if entry.get("game_key") == game_key
+                ]
+                display_text = json.dumps(current_game_entries)
                 self.assertIn("A haunted fax machine", display_text)
                 self.assertNotIn("Jamie", display_text)
                 with main.app.test_client() as attendee:
@@ -4963,6 +5046,7 @@ class RedisStateTests(unittest.TestCase):
                 self.assertEqual("ended", game["phase"])
                 self.assertEqual(2, len(game["results"]["winner_player_ids"]))
                 self.assertTrue(all(score["points"] == 1 for score in game["results"]["scores"]))
+                self.assertEqual({"Jamie", "Morgan"}, {score["name"] for score in game["results"]["scores"]})
                 self.assertEqual("game_presentation", main.live_display_event_override["type"])
 
     def test_single_player_games_start_and_score_without_peer_votes(self):

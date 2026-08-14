@@ -4987,10 +4987,26 @@ class RedisStateTests(unittest.TestCase):
             page = admin.get("/admin/games")
         self.assertEqual(200, response.status_code)
         self.assertEqual("signup", main.two_truths_game()["phase"])
-        self.assertIn(b"All five games share one workspace", page.data)
+        self.assertIn(b"Choose one game to operate", page.data)
         self.assertNotIn(b"Additional Games", page.data)
-        self.assertEqual(5, page.data.count(b'id="admin-game-'))
+        self.assertEqual(5, page.data.count(b'data-view-key="game-selector:'))
+        self.assertEqual(1, page.data.count(b'class="game-admin-card game-admin-card--selected"'))
+        self.assertIn(b'id="admin-game-two_truths_and_a_lie"', page.data)
+        self.assertIn(b'data-admin-inline="true"', page.data)
         self.assertIn(b"preserve-scroll.js", page.data)
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            selected = admin.get("/admin/games?game=fill_in_the_blank")
+            invalid = admin.get("/admin/games?game=not-a-game")
+            updated = admin.post(
+                "/admin/games?game=fill_in_the_blank",
+                data={"action": "enable_game", "game_key": main.FILL_BLANK_GAME_KEY},
+            )
+        self.assertIn(b'id="admin-game-fill_in_the_blank"', selected.data)
+        self.assertNotIn(b'id="admin-game-two_truths_and_a_lie"', selected.data)
+        self.assertIn(b'id="admin-game-two_truths_and_a_lie"', invalid.data)
+        self.assertIn(b'id="admin-game-fill_in_the_blank"', updated.data)
+        self.assertIn(b"Disable", updated.data)
         with main.app.test_client() as attendee:
             self.login_regular(attendee, user_id="user-1", username="Solo")
             dashboard = attendee.get("/party")

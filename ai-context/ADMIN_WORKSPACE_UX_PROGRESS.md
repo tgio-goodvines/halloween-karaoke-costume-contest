@@ -13,14 +13,10 @@ Replace the previous single, very long `/admin` document with a compact control-
 - `/admin/public` contains landing-page selection, party-date experience mode, RSVP party code/hint, RSVP host notification recipient, and live-display WiFi values.
 - `/admin/program` contains costume contest controls and a compact link to the
   dedicated karaoke operations workspace.
-- `/admin/games` contains one unified five-game card registry. Its Two Truths and a Lie card includes lifecycle controls, live
-  participation/guess metrics, provisional or final standings, participant
-  truth/lie inspection, raw guess data, export, display overrides, and a
-  confirmed reset.
-- The same registry contains independent control cards for Murder/Marry/F%$@,
-  Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only. The cards keep
-  prompt decks and the ten-trio MMF editor in disclosure rows, expose only the
-  current valid lifecycle actions, and add host-driven result presentation.
+- `/admin/games?game=<game-key>` contains a compact five-game status selector
+  and one detailed game console. The selected console includes lifecycle and
+  current-round controls, progress, results/display operations, configuration,
+  bounded data inspection, simulation, export, and confirmed reset.
 - `/admin/karaoke` contains YouTube connection/playlist health, host review,
   attention recovery, approved run of show, synchronization/history, and
   sticky stage controls.
@@ -30,12 +26,17 @@ Replace the previous single, very long `/admin` document with a compact control-
 
 The route continues to use the existing `admin_portal` POST action handler, so existing CSRF validation, Redis persistence, and mutation behavior are preserved. Each form posts to its focused URL automatically.
 
-Shared POST submissions now remember scroll position and expanded disclosure
-rows in session storage, then restore that view after the redirect/re-render.
+Standard admin POST submissions update the workspace in place. Stable browser-
+tab state preserves the selected query, action-relative viewport position,
+expanded disclosures, and logical focus. Specialized or non-enhanced forms use
+the same state for navigation/reload restoration.
 
 ### Responsive behavior
 
 - Admin workspace navigation is a visible horizontal chip rail rather than a second stack of cards. It is sticky on mobile and may scroll horizontally; each chip remains touch-sized.
+- The Games selector is a second, task-specific rail beneath the workspace
+  navigation. It is five columns on desktop and independently scrollable and
+  sticky on phones.
 - The Tonight status grid becomes flat, separated operational rows on phone widths. Repeated admin editors are flat list rows until an individual editor is expanded.
 - The admin shell, nav, and home surface explicitly allow shrinking below their intrinsic desktop width. This prevents horizontal page overflow at 390px.
 - Program controls now expose only valid next actions. Reset actions are placed in a descriptive danger disclosure instead of appearing beside normal party-night actions.

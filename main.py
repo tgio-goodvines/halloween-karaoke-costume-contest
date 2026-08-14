@@ -4570,27 +4570,49 @@ def prompt_admin_view(game_key: str) -> dict[str, object]:
     }
 
 
-def all_games_admin_view() -> dict[str, object]:
-    two_truths = two_truths_admin_view()
-    two_truths.update(
-        {
-            "key": TWO_TRUTHS_GAME_KEY,
-            "metadata": GAME_CATALOG[TWO_TRUTHS_GAME_KEY],
-            "reset_phrase": "RESET TWO TRUTHS AND A LIE",
-        }
-    )
-    game_views = {
-        TWO_TRUTHS_GAME_KEY: two_truths,
-        MURDER_MARRY_FUCK_GAME_KEY: mmf_admin_view(),
-        **{game_key: prompt_admin_view(game_key) for game_key in PROMPT_GAME_KEYS},
-    }
-    active_count = sum(1 for entry in game_views.values() if entry.get("phase") == "active")
-    enabled_count = sum(1 for entry in game_views.values() if entry.get("enabled"))
-    participant_count = sum(len(entry.get("participants", {})) for entry in game_views.values())
+def game_admin_view(game_key: str) -> dict[str, object]:
+    if game_key == TWO_TRUTHS_GAME_KEY:
+        view = two_truths_admin_view()
+        view.update(
+            {
+                "key": TWO_TRUTHS_GAME_KEY,
+                "metadata": GAME_CATALOG[TWO_TRUTHS_GAME_KEY],
+                "reset_phrase": "RESET TWO TRUTHS AND A LIE",
+            }
+        )
+        return view
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        return mmf_admin_view()
+    return prompt_admin_view(game_key)
+
+
+def game_admin_summary(game_key: str) -> dict[str, object]:
+    game = party_game_state(game_key)
     return {
-        **two_truths,
-        "games": game_views,
+        "key": game_key,
+        "metadata": GAME_CATALOG[game_key],
+        "enabled": bool(game.get("enabled")),
+        "phase": str(game.get("phase", "signup")),
+        "participant_count": len(game.get("participants", {})),
+        "simulation": copy.deepcopy(game.get("simulation", {})),
+    }
+
+
+def all_games_admin_view(
+    selected_key: str | None = None,
+    *,
+    include_selected: bool = True,
+) -> dict[str, object]:
+    game_summaries = {game_key: game_admin_summary(game_key) for game_key in GAME_CATALOG}
+    selected_key = selected_key if selected_key in game_summaries else TWO_TRUTHS_GAME_KEY
+    active_count = sum(1 for entry in game_summaries.values() if entry.get("phase") == "active")
+    enabled_count = sum(1 for entry in game_summaries.values() if entry.get("enabled"))
+    participant_count = sum(int(entry.get("participant_count", 0) or 0) for entry in game_summaries.values())
+    return {
+        "games": game_summaries,
         "catalog": GAME_CATALOG,
+        "selected_key": selected_key,
+        "selected": game_admin_view(selected_key) if include_selected else {},
         "active_count": active_count,
         "enabled_count": enabled_count,
         "participant_count": participant_count,
@@ -9362,6 +9384,7 @@ def admin_portal(admin_view: str):
 
     costume_scores, costume_leader = build_costume_scoreboard()
     top_costume_rankings = rank_costume_entries(costume_scores)[:5]
+    selected_admin_game = str(request.args.get("game", "") or "") if admin_view == "games" else None
 
     return render_template(
         "admin_karaoke.html" if admin_view == "karaoke" else "admin.html",
@@ -9423,7 +9446,10 @@ def admin_portal(admin_view: str):
         karaoke_admin=karaoke_admin_view_state(),
         karaoke_admin_state_url=url_for("admin_karaoke_state"),
         karaoke_admin_search_url=url_for("admin_karaoke_search"),
-        games_admin=all_games_admin_view(),
+        games_admin=all_games_admin_view(
+            selected_admin_game,
+            include_selected=admin_view == "games",
+        ),
         game_result_cards=generated_game_result_entries(include_hidden=True),
     )
 

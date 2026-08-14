@@ -6,6 +6,10 @@
   const clearProgress = root.querySelector('[data-karaoke-clear-progress]');
   const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
   let actionInFlight = false;
+  const reloadPreservingView = () => {
+    window.AdminViewState?.save(document.activeElement);
+    window.location.reload();
+  };
 
   const setClearStep = (name, state) => {
     const step = clearProgress?.querySelector(`[data-clear-step="${name}"]`);
@@ -76,14 +80,14 @@
       const payload = await response.json();
       if (!response.ok || !payload.ok) throw new Error(payload.message || 'The karaoke action failed.');
       showMessage(payload.message || 'Karaoke workflow updated.');
-      window.setTimeout(() => window.location.reload(), 450);
+      window.setTimeout(reloadPreservingView, 450);
     } catch (error) {
       showMessage(error.message || 'The karaoke action failed.', true);
       if (trigger) {
         trigger.disabled = false;
         trigger.textContent = trigger.dataset.originalLabel || 'Try Again';
         if (trigger.dataset.reloadOnError !== undefined) {
-          window.setTimeout(() => window.location.reload(), 900);
+          window.setTimeout(reloadPreservingView, 900);
         }
       }
     } finally {
@@ -260,7 +264,7 @@
         && !actionInFlight
         && !root.querySelector('input:focus, select:focus, textarea:focus')
       ) {
-        window.location.reload();
+        reloadPreservingView();
       }
     } catch (error) {
       console.error('Unable to refresh karaoke admin state', error);

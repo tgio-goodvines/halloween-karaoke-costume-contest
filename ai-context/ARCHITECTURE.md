@@ -71,10 +71,18 @@
 - `GET|POST /admin/login` -> password-backed admin session login; grants the `admin` role.
 - `GET|POST /admin` -> concise **Tonight** admin control-room dashboard and all
   admin mutations. Focused workspaces are available at `/admin/guests`,
-  `/admin/public`, `/admin/program`, `/admin/dj`, `/admin/bar`, `/admin/menu`, and
-  `/admin/accounts`; they share the existing POST action handler. `/admin/public`
+  `/admin/public`, `/admin/program`, `/admin/games`, `/admin/dj`, `/admin/bar`,
+  `/admin/menu`, and `/admin/accounts`; they share the existing POST action
+  handler. `/admin/games?game=<game-key>` builds one detailed game view plus
+  lightweight summaries for the selector; other admin workspaces receive only
+  the summaries. `/admin/public`
   also owns the session-local role-view demo action; it can only reduce the
   effective roles, so protected views match the selected demo role.
+- `static/preserve-scroll.js` progressively enhances standard same-origin admin
+  POST forms by fetching the existing full response and replacing only the
+  `.admin-panel`. Stable view keys preserve the action anchor, selected URL,
+  disclosures, and focus. The normal form request remains the no-JavaScript
+  fallback.
 - `GET /api/dj/catalog-search` -> authenticated Apple Music catalog search;
   the developer token stays server-side.
 - `GET /api/dj/musickit-token` -> authenticated developer-token endpoint for

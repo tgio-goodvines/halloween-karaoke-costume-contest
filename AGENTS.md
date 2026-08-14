@@ -13,6 +13,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` - focused admin workspace architecture and the current scrolling/narrow-screen UX rules.
+- `ai-context/ADMIN_GAMES_WORKSPACE_REORGANIZATION.md` - selected-game admin architecture, lightweight game summaries, and no-jump inline admin actions.
 - `ai-context/DJ_JUKEBOX_FEATURE.md` - DJ playlist, Redis command/acknowledgement state, MusicKit receiver setup, and operational recovery.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` - planned attendee YouTube search, host approval, playlist synchronization, dedicated karaoke admin workflow, stage controls, and manual two-tab playback.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
@@ -51,6 +52,10 @@ Important working notes:
   live-display rotation. Ended anonymous games support host-controlled
   previous/next result presentations. Game `game_*` event overrides can be
   cleared without changing costume, karaoke, DJ, or drink-notice state.
+- `/admin/games?game=<game-key>` renders one detailed game console at a time;
+  all other games remain visible through a compact status selector. Standard
+  admin POST actions update the current workspace in place and preserve the
+  active control, open disclosures, and viewport position.
 - The live display uses a fixed no-scroll viewport: title header, independently
   rotating game rail on the left, dominant center-card rotation, conditional
   bar queue/ready alerts on the right, and conditional DJ footer. Empty regions

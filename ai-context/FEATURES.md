@@ -325,6 +325,11 @@ app state.
 - Live-display cards use dynamic browser-size scaling, long/dense text classes,
   and overflow wrapping so normal desktop/laptop browser windows and narrow
   browsers do not clip cards.
+- Visible stages use occupancy-aware sparse/dense sizing and card-local
+  container scaling. Center action cards include live fact tiles, ordered phone
+  guidance, and route callouts; game cards include phase-specific play steps;
+  bar cards include queue positions, operational summary metrics, a featured
+  available drink, and pickup/order guidance.
 - Karaoke start override includes countdown and upcoming-singer panel markup for
   the existing client-side karaoke rotator.
 - Display client can cache-bust `display.css` once when an override becomes active.

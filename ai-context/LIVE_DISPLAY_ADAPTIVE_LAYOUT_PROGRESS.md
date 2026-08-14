@@ -118,3 +118,40 @@ saved card. Opening it reveals all text, media, CTA, duration, schedule, and
 visibility fields plus a clearly labeled `Save Card Changes` action. A browser
 save test confirmed the updated headline persisted and appeared back in the
 library.
+
+## Space Utilization And Informational Density (2026-08-14)
+
+The three-stage display now uses the interior of visible cards more
+productively instead of treating adaptive layout as column collapse alone.
+
+- Center entries support optional `kind`, `facts`, `steps`, and `action`
+  structures while preserving the original primary/secondary/tertiary payload
+  fields. System action cards show live participation facts, three-step phone
+  instructions, and direct party routes. Winner cards include a compact top
+  three preview when final scores exist.
+- The left game stage shows phase-specific instructions and a persistent phone
+  action. Prompt-response cards use the prompt as context, the current
+  anonymous response as the secondary message, and a complete read/vote flow
+  instead of duplicating the response in an extra row.
+- The right bar stage now includes queue positions, mixing/waiting counts,
+  recent average prep time, available-drink count, a featured available drink,
+  an order route, and pickup guidance. Drink-ready notices retain queue status
+  and can show the safe notice detail lines already present in the payload.
+- `static/display.js` classifies visible panels as sparse, dense, or
+  ultra-dense by measuring their rendered fit content. Sparse center/side cards
+  receive a larger presentation treatment; dense cards progressively compact
+  and hide optional modules. Overflow checks use both panel and inner-content
+  measurements so clipped grid children are still detected.
+- `static/display.css` uses container-relative sizing inside the center and
+  side stages. Type and spacing therefore respond to the width actually
+  assigned to a card, not only the browser viewport.
+
+No new persisted state or schema migration is required. All added display data
+is derived from existing contest, karaoke, game, menu, and drink-order state.
+The bar payload remains privacy-safe: email, account IDs, recipes, and other
+private operational fields are not exposed.
+
+Verification covers the enriched payload/markup and populated three-stage
+browser layouts at 1920x1080, 1366x768, 1280x720, and 1024x768. At every size,
+the document matched the viewport and every visible region remained within its
+fixed no-scroll track.

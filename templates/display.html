@@ -32,12 +32,14 @@
             <span>Left stage</span>
             <strong>Games</strong>
           </header>
-          <div class="display-game-stage__content">
+          <div class="display-game-stage__content" data-fit-content>
             <p class="display-game-stage__status" data-game-status></p>
             <h2 data-game-title></h2>
             <p class="display-game-stage__primary" data-game-primary></p>
             <p class="display-game-stage__secondary" data-game-secondary></p>
             <div class="display-game-stage__metrics" data-game-metrics></div>
+            <ol class="display-game-stage__steps" data-game-steps hidden></ol>
+            <p class="display-game-stage__action" data-game-action hidden></p>
           </div>
           <footer class="display-region-footer">
             <span data-game-position></span>
@@ -55,11 +57,13 @@
             <div class="display-center-card__media" data-center-image-wrap hidden>
               <img data-center-image alt="">
             </div>
-            <div class="display-center-card__body">
+            <div class="display-center-card__body" data-fit-content>
               <span class="display-pill" data-center-category></span>
               <h2 data-center-primary></h2>
               <p class="display-center-card__secondary" data-center-secondary></p>
               <p class="display-center-card__tertiary" data-center-tertiary hidden></p>
+              <dl class="display-fact-grid" data-center-facts hidden></dl>
+              <ol class="display-action-steps" data-center-steps hidden></ol>
               <div class="display-center-card__cta" data-center-cta hidden>
                 <dl>
                   <div data-cta-wifi-network-item hidden><dt>Network</dt><dd data-cta-wifi-network></dd></div>
@@ -73,6 +77,7 @@
                 <p class="display-karaoke-extra__countdown" data-karaoke-countdown></p>
                 <ol data-karaoke-lineup></ol>
               </section>
+              <p class="display-center-card__action" data-center-action hidden></p>
             </div>
           </article>
           <div class="display-center-progress"><span data-center-progress></span></div>
@@ -80,19 +85,33 @@
 
         <aside class="display-side display-bar-stage" data-bar-stage hidden>
           <div class="display-bar-queue" data-bar-queue>
-            <header class="display-region-header">
-              <span>Right stage</span>
-              <strong data-bar-heading>Bar queue</strong>
-            </header>
-            <ol data-bar-orders></ol>
-            <p class="display-bar-stage__overflow" data-bar-overflow hidden></p>
+            <div class="display-bar-queue__content" data-fit-content>
+              <header class="display-region-header">
+                <span>Right stage</span>
+                <strong data-bar-heading>Bar queue</strong>
+              </header>
+              <ol data-bar-orders></ol>
+              <p class="display-bar-stage__overflow" data-bar-overflow hidden></p>
+              <dl class="display-bar-summary" data-bar-summary hidden></dl>
+              <article class="display-bar-feature" data-bar-feature hidden>
+                <span>Available tonight</span>
+                <strong data-bar-feature-name></strong>
+                <p data-bar-feature-description></p>
+              </article>
+              <p class="display-bar-action" data-bar-action></p>
+              <small class="display-bar-pickup" data-bar-pickup></small>
+            </div>
           </div>
           <div class="display-ready-notice" data-ready-notice hidden>
-            <span class="display-pill">Drink ready</span>
-            <div class="display-ready-notice__image" data-ready-image-wrap hidden><img data-ready-image alt=""></div>
-            <h2 data-ready-name></h2>
-            <p data-ready-message></p>
-            <small data-ready-queue></small>
+            <div class="display-ready-notice__content" data-fit-content>
+              <span class="display-pill">Drink ready</span>
+              <div class="display-ready-notice__image" data-ready-image-wrap hidden><img data-ready-image alt=""></div>
+              <h2 data-ready-name></h2>
+              <p data-ready-message></p>
+              <ul class="display-ready-notice__details" data-ready-details hidden></ul>
+              <small data-ready-queue></small>
+              <p class="display-bar-pickup" data-ready-pickup></p>
+            </div>
           </div>
         </aside>
       </main>

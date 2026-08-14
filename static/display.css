@@ -123,6 +123,14 @@ body.display-mode * { box-sizing: border-box; }
   box-shadow: 0 -2px 24px rgba(255, 49, 49, 0.1), 0 10px 34px rgba(0, 0, 0, 0.38);
 }
 
+.display-side,
+.display-center-stage { container-type: inline-size; }
+
+.display-side {
+  --display-side-title: clamp(1rem, 6.2cqi, 1.85rem);
+  --display-side-copy: clamp(0.72rem, 4cqi, 1.18rem);
+}
+
 .display-game-stage {
   grid-area: games;
   display: grid;
@@ -147,6 +155,8 @@ body.display-mode * { box-sizing: border-box; }
   opacity: 1;
   transform: translateY(0);
   transition: opacity 280ms ease, transform 280ms ease;
+  --display-center-title: clamp(2.2rem, 7.2cqi, 5.8rem);
+  --display-center-copy: clamp(1rem, 2.6cqi, 2.15rem);
 }
 
 .display-center-stage.is-transitioning { opacity: 0; transform: translateY(0.75rem); }
@@ -209,12 +219,14 @@ body.display-mode * { box-sizing: border-box; }
 .display-center-card__body {
   align-self: center;
   display: grid;
+  align-content: center;
   justify-items: center;
   gap: clamp(0.6rem, 1.35vh, 1.1rem);
   min-width: 0;
   min-height: 0;
   padding: clamp(0.25rem, 0.7vw, 0.65rem);
   text-align: center;
+  width: 100%;
 }
 
 .display-pill {
@@ -247,6 +259,94 @@ body.display-mode * { box-sizing: border-box; }
 .display-center-card__tertiary { color: #a1a1aa; font-size: clamp(0.72rem, 1.1vw, 1.2rem); line-height: 1.3; }
 .display-center-card__link { padding: 0.55rem 0.8rem; border: 1px solid #52525b; border-radius: 0.6rem; color: #fff; background: rgba(0, 0, 0, 0.3); font: 700 clamp(0.75rem, 1.15vw, 1.2rem)/1.2 "Outfit", sans-serif; }
 
+.display-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
+  gap: clamp(0.45rem, 1cqi, 0.85rem);
+  width: min(64rem, 100%);
+  margin: 0;
+}
+.display-fact-grid div,
+.display-bar-summary div {
+  min-width: 0;
+  padding: clamp(0.55rem, 1.25cqi, 1rem);
+  border: 1px solid #3f3f46;
+  border-radius: 0.65rem;
+  background: linear-gradient(180deg, rgba(255, 49, 49, 0.08), rgba(0, 0, 0, 0.3));
+  text-align: left;
+}
+.display-fact-grid dt,
+.display-bar-summary dt {
+  color: #a1a1aa;
+  font: 700 clamp(0.5rem, 0.95cqi, 0.78rem)/1 "Outfit", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.display-fact-grid dd,
+.display-bar-summary dd {
+  margin: 0.35rem 0 0;
+  color: #fff;
+  font: 800 clamp(0.8rem, 1.65cqi, 1.4rem)/1.1 "Outfit", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.display-action-steps,
+.display-game-stage__steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.4rem, 0.9cqi, 0.8rem);
+  width: min(64rem, 100%);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: display-step;
+}
+.display-action-steps li,
+.display-game-stage__steps li {
+  position: relative;
+  min-width: 0;
+  padding: clamp(0.58rem, 1.2cqi, 0.9rem) clamp(0.45rem, 1cqi, 0.75rem) clamp(0.58rem, 1.2cqi, 0.9rem) clamp(1.75rem, 3.2cqi, 2.4rem);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 0.6rem;
+  color: #d4d4d8;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: clamp(0.65rem, 1.2cqi, 1rem);
+  line-height: 1.25;
+  text-align: left;
+  overflow-wrap: anywhere;
+  counter-increment: display-step;
+}
+.display-action-steps li::before,
+.display-game-stage__steps li::before {
+  position: absolute;
+  top: 50%;
+  left: clamp(0.45rem, 1cqi, 0.75rem);
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  color: #fff;
+  background: #c42020;
+  font: 800 0.68rem/1 "Outfit", sans-serif;
+  content: counter(display-step);
+  transform: translateY(-50%);
+}
+
+.display-center-card__action,
+.display-game-stage__action,
+.display-bar-action {
+  margin: 0;
+  padding: clamp(0.55rem, 1.1cqi, 0.85rem) clamp(0.7rem, 1.5cqi, 1.15rem);
+  border: 1px solid rgba(255, 49, 49, 0.7);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 49, 49, 0.14);
+  font: 700 clamp(0.65rem, 1.25cqi, 1.05rem)/1.15 "Outfit", sans-serif;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .display-center-card__cta { width: min(42rem, 100%); }
 .display-center-card__cta dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(0.4rem, 0.8vw, 0.75rem); margin: 0; }
 .display-center-card__cta dl div { min-width: 0; padding: clamp(0.5rem, 1vw, 0.85rem); border: 1px solid #3f3f46; border-radius: 0.6rem; background: rgba(0, 0, 0, 0.3); }
@@ -278,7 +378,7 @@ body.display-mode * { box-sizing: border-box; }
 .display-center-progress span { display: block; width: 100%; height: 100%; background: #ff3131; box-shadow: 0 0 8px #ff3131; transform-origin: left; }
 @keyframes display-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-.display-game-stage__content { align-self: center; min-height: 0; overflow: hidden; }
+.display-game-stage__content { align-self: center; display: grid; align-content: center; min-height: 0; overflow: hidden; }
 .display-game-stage__status { margin: 0 0 clamp(0.5rem, 1.2vh, 0.85rem); color: #ff8a8a; font: 700 clamp(0.56rem, 0.74vw, 0.76rem)/1.2 "Outfit", sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
 .display-game-stage__status::before { display: inline-block; width: 0.42rem; height: 0.42rem; margin-right: 0.38rem; border-radius: 50%; background: #ff3131; box-shadow: 0 0 8px #ff3131; content: ""; }
 .display-game-stage h2 { margin: 0 0 0.45rem; color: #fff; font: 800 var(--display-side-title)/1.05 "Outfit", sans-serif; overflow-wrap: anywhere; }
@@ -290,8 +390,13 @@ body.display-mode * { box-sizing: border-box; }
 .display-game-stage__metrics span { display: block; overflow: hidden; text-overflow: ellipsis; }
 .display-game-stage__metrics strong { color: #fff; font: 800 clamp(0.85rem, 1.3vw, 1.45rem)/1 "Outfit", sans-serif; }
 .display-game-stage__metrics span { margin-top: 0.25rem; color: #a1a1aa; font-size: clamp(0.48rem, 0.64vw, 0.68rem); letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; }
+.display-game-stage__steps { grid-template-columns: 1fr; gap: clamp(0.35rem, 1.5cqi, 0.55rem); margin-top: clamp(0.55rem, 1.2vh, 0.9rem); }
+.display-game-stage__steps li { padding: clamp(0.45rem, 2cqi, 0.65rem) clamp(0.4rem, 1.7cqi, 0.6rem) clamp(0.45rem, 2cqi, 0.65rem) clamp(1.75rem, 7.5cqi, 2.25rem); font-size: clamp(0.58rem, 3.4cqi, 0.88rem); }
+.display-game-stage__steps li::before { left: clamp(0.4rem, 1.8cqi, 0.6rem); }
+.display-game-stage__action { margin-top: clamp(0.55rem, 1.2vh, 0.9rem); padding: 0.55rem 0.65rem; border-radius: 0.65rem; font-size: clamp(0.58rem, 3.3cqi, 0.88rem); }
 
 .display-bar-queue { height: 100%; min-height: 0; overflow: hidden; }
+.display-bar-queue__content { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .display-bar-queue ol { display: grid; gap: clamp(0.3rem, 0.65vh, 0.55rem); margin: clamp(0.55rem, 1.2vh, 0.9rem) 0 0; padding: 0; list-style: none; }
 .display-bar-queue li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.48rem; align-items: center; min-width: 0; padding: clamp(0.45rem, 0.72vw, 0.7rem); border: 1px solid #3f3f46; border-radius: 0.55rem; background: rgba(0, 0, 0, 0.24); }
 .display-bar-queue li > span { width: 0.42rem; height: 0.42rem; border-radius: 50%; background: #a1a1aa; }
@@ -305,11 +410,26 @@ body.display-mode * { box-sizing: border-box; }
 .display-bar-queue li em { grid-column: 2; color: #ff8a8a; font: 700 clamp(0.48rem, 0.62vw, 0.66rem)/1 "Outfit", sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
 .display-bar-stage__overflow { margin: 0.55rem 0 0; color: #a1a1aa; font-size: clamp(0.52rem, 0.68vw, 0.72rem); text-transform: uppercase; }
 
+.display-bar-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(0.35rem, 1.5cqi, 0.55rem); margin: clamp(0.65rem, 1.4vh, 1rem) 0 0; }
+.display-bar-summary div { padding: clamp(0.45rem, 2.2cqi, 0.7rem); }
+.display-bar-summary dt { font-size: clamp(0.46rem, 2.7cqi, 0.66rem); }
+.display-bar-summary dd { font-size: clamp(0.72rem, 4.8cqi, 1.2rem); }
+.display-bar-feature { margin-top: auto; padding: clamp(0.65rem, 3cqi, 1rem); border: 1px solid rgba(255, 49, 49, 0.38); border-radius: 0.7rem; background: radial-gradient(circle at 50% 0, rgba(255, 49, 49, 0.16), transparent 70%), rgba(0, 0, 0, 0.22); }
+.display-bar-feature[hidden] + .display-bar-action { margin-top: auto; }
+.display-bar-feature span { display: block; color: #ff8a8a; font: 700 clamp(0.48rem, 2.8cqi, 0.68rem)/1 "Outfit", sans-serif; letter-spacing: 0.09em; text-transform: uppercase; }
+.display-bar-feature strong { display: block; margin-top: 0.35rem; color: #fff; font: 800 clamp(0.85rem, 5.5cqi, 1.4rem)/1.05 "Outfit", sans-serif; overflow-wrap: anywhere; }
+.display-bar-feature p { margin: 0.35rem 0 0; color: #d4d4d8; font-size: clamp(0.58rem, 3.4cqi, 0.82rem); line-height: 1.25; }
+.display-bar-action { margin-top: clamp(0.5rem, 1vh, 0.75rem); padding: 0.55rem 0.65rem; border-radius: 0.65rem; font-size: clamp(0.56rem, 3.2cqi, 0.82rem); }
+.display-bar-pickup { display: block; margin: clamp(0.4rem, 0.8vh, 0.6rem) 0 0; color: #a1a1aa; font-size: clamp(0.5rem, 2.8cqi, 0.7rem); line-height: 1.25; text-align: center; }
+
 .display-ready-notice { display: grid; align-content: center; justify-items: center; gap: clamp(0.45rem, 1vh, 0.8rem); height: 100%; text-align: center; }
-.display-ready-notice__image { width: min(7rem, 60%); aspect-ratio: 1; overflow: hidden; border: 1px solid #ff3131; border-radius: 0.85rem; background: #111; box-shadow: 0 0 28px rgba(255, 49, 49, 0.24); }
+.display-ready-notice__content { display: grid; align-content: center; justify-items: center; gap: clamp(0.45rem, 1vh, 0.8rem); width: 100%; }
+.display-ready-notice__image { width: min(11rem, 72%); aspect-ratio: 1; overflow: hidden; border: 1px solid #ff3131; border-radius: 0.85rem; background: #111; box-shadow: 0 0 28px rgba(255, 49, 49, 0.24); }
 .display-ready-notice__image img { width: 100%; height: 100%; object-fit: cover; }
 .display-ready-notice h2 { margin: 0; color: #fff; font: 800 clamp(1.1rem, 2vw, 2.2rem)/1 "Outfit", sans-serif; overflow-wrap: anywhere; text-shadow: 0 0 18px rgba(255, 49, 49, 0.3); }
 .display-ready-notice p { margin: 0; color: #e4e4e7; font-size: var(--display-side-copy); line-height: 1.3; }
+.display-ready-notice__details { display: grid; gap: 0.35rem; width: min(16rem, 100%); margin: 0; padding: 0; color: #d4d4d8; font-size: clamp(0.58rem, 3.5cqi, 0.86rem); line-height: 1.25; list-style: none; }
+.display-ready-notice__details li { padding: 0.45rem 0.55rem; border: 1px solid #3f3f46; border-radius: 0.55rem; background: rgba(0, 0, 0, 0.24); }
 .display-ready-notice small { color: #a1a1aa; font-size: clamp(0.5rem, 0.68vw, 0.72rem); text-transform: uppercase; }
 
 .display-now-playing {
@@ -355,6 +475,14 @@ body.display-mode * { box-sizing: border-box; }
 .display-now-playing.is-dense { --display-panel-padding: clamp(0.45rem, 0.8vw, 0.7rem); }
 .display-center-stage.is-dense { --display-center-title: clamp(1.65rem, 3.5vw, 4rem); --display-center-copy: clamp(0.78rem, 1.3vw, 1.35rem); }
 .display-side.is-dense { --display-side-title: clamp(0.8rem, 1.2vw, 1.25rem); --display-side-copy: clamp(0.58rem, 0.85vw, 0.88rem); }
+.display-center-stage.is-sparse { --display-center-title: clamp(2.8rem, 8.6cqi, 6.6rem); --display-center-copy: clamp(1.15rem, 3cqi, 2.5rem); }
+.display-center-stage.is-sparse .display-center-card__body { gap: clamp(0.75rem, 1.8vh, 1.4rem); }
+.display-side.is-sparse { --display-side-title: clamp(1.2rem, 7.2cqi, 2.1rem); --display-side-copy: clamp(0.82rem, 4.5cqi, 1.3rem); }
+.display-side.is-dense .display-bar-feature { display: none !important; }
+.display-side.is-ultra-dense .display-game-stage__steps,
+.display-center-stage.is-ultra-dense .display-action-steps { display: none !important; }
+.display-side.is-ultra-dense .display-bar-summary,
+.display-side.is-ultra-dense .display-bar-pickup { display: none !important; }
 .display-side.is-ultra-dense .display-game-stage__secondary,
 .display-side.is-ultra-dense .display-bar-stage__overflow,
 .display-center-stage.is-ultra-dense .display-center-card__tertiary { display: none !important; }
@@ -387,19 +515,32 @@ body.display-mode * { box-sizing: border-box; }
   .display-region-footer,
   .display-game-stage__secondary,
   .display-game-stage__metrics span,
+  .display-game-stage__steps,
+  .display-game-stage__action,
   .display-bar-queue li em,
-  .display-bar-stage__overflow { display: none !important; }
+  .display-bar-stage__overflow,
+  .display-bar-summary,
+  .display-bar-feature,
+  .display-bar-action,
+  .display-bar-pickup { display: none !important; }
   .display-game-stage__metrics { grid-template-columns: 1fr; }
   .display-center-stage.has-media .display-center-card { grid-template-columns: 1fr; }
   .display-center-card__media { display: none !important; }
   .display-center-card__cta dl { grid-template-columns: 1fr; }
   .display-center-card__cta dl div { padding: 0.3rem; }
+  .display-fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.25rem; }
+  .display-fact-grid div { padding: 0.3rem; }
+  .display-fact-grid dt { font-size: 0.38rem; }
+  .display-fact-grid dd { margin-top: 0.18rem; font-size: 0.55rem; }
+  .display-action-steps { display: none !important; }
+  .display-center-card__action { padding: 0.35rem 0.45rem; font-size: 0.48rem; }
   .display-scoreboard li { grid-template-columns: auto minmax(0, 1fr); }
   .display-scoreboard li > strong { display: none; }
   .display-bar-queue li { grid-template-columns: auto minmax(0, 1fr); padding: 0.28rem; }
   .display-bar-queue li strong { font-size: 0.48rem; }
   .display-bar-queue li small { font-size: 0.4rem; }
   .display-ready-notice__image { display: none !important; }
+  .display-ready-notice__details { display: none !important; }
   .display-now-playing { grid-template-columns: auto minmax(0, 1fr); min-height: 2.8rem; }
   .display-now-playing__progress,
   .display-now-playing__time { display: none !important; }

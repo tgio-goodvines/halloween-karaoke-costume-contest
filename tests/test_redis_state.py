@@ -2090,6 +2090,8 @@ class RedisStateTests(unittest.TestCase):
             game_keys,
         )
         self.assertTrue(payload["layout"]["games"]["visible"])
+        self.assertTrue(all(entry.get("steps") for entry in payload["layout"]["games"]["entries"]))
+        self.assertTrue(all(entry.get("action_label") for entry in payload["layout"]["games"]["entries"]))
         self.assertNotIn("private@example.com", json.dumps(payload))
 
     def test_bar_stage_hides_when_empty_and_ready_notices_advance_sequentially(self):
@@ -2110,6 +2112,17 @@ class RedisStateTests(unittest.TestCase):
             "completed_seconds": None,
         }
         empty_bar = main.build_bar_stage()
+        main.menu_items = [
+            {
+                "id": "drink-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "A smoky citrus specialty.",
+                "image_url": "https://example.test/witch.jpg",
+                "available": True,
+                "orderable": True,
+            }
+        ]
         main.drink_orders = [order]
         active_bar = main.build_bar_stage()
         first = main.build_drink_ready_override(order)
@@ -2122,10 +2135,34 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(empty_bar["visible"])
         self.assertTrue(active_bar["visible"])
         self.assertEqual("Jamie", active_bar["orders"][0]["name"])
+        self.assertEqual(1, active_bar["orders"][0]["position"])
+        self.assertEqual(1, active_bar["summary"]["waiting_count"])
+        self.assertEqual(1, active_bar["summary"]["available_drink_count"])
+        self.assertEqual("Witch Margarita", active_bar["featured_item"]["name"])
+        self.assertEqual("https://tnq-halloween.com/party/menu", active_bar["action"]["url"])
         self.assertNotIn("email", active_bar["orders"][0])
         self.assertNotIn("recipe", active_bar["orders"][0])
         self.assertEqual("Morgan", main.live_display_notice_override["highlight"])
         self.assertEqual([], main.live_display_notice_queue)
+
+    def test_live_display_renders_enriched_space_utilization_regions(self):
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/live-display")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        for marker in (
+            "data-center-facts",
+            "data-center-steps",
+            "data-center-action",
+            "data-game-steps",
+            "data-game-action",
+            "data-bar-summary",
+            "data-bar-feature",
+            "data-bar-action",
+        ):
+            self.assertIn(marker, body)
 
     def test_admin_page_shows_rsvp_list(self):
         main.rsvp_signups = [
@@ -2392,6 +2429,16 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Live Updates", {entry["category"] for entry in entries})
         self.assertIn("Dressed as Vampire", serialized_entries)
         self.assertIn("Thriller", serialized_entries)
+        portal_entry = next(entry for entry in entries if entry["id"] == "portal:wifi")
+        costume_entry = next(entry for entry in entries if entry["id"] == "costume:signup")
+        karaoke_entry = next(entry for entry in entries if entry["id"] == "karaoke:signup")
+        self.assertEqual("access", portal_entry["kind"])
+        self.assertEqual(4, len(portal_entry["facts"]))
+        self.assertEqual(3, len(portal_entry["steps"]))
+        self.assertEqual("action", costume_entry["kind"])
+        self.assertEqual("https://tnq-halloween.com/party/costumes", costume_entry["action"]["url"])
+        self.assertEqual("action", karaoke_entry["kind"])
+        self.assertEqual("https://tnq-halloween.com/party/karaoke", karaoke_entry["action"]["url"])
         self.assertNotIn("RSVP before party night", serialized_entries)
         self.assertNotIn("Parking", serialized_entries)
 
@@ -4659,8 +4706,13 @@ class RedisStateTests(unittest.TestCase):
 
                 cards = main.generated_game_result_entries(include_hidden=True)
                 card_ids = {entry["id"] for entry in cards}
+                winner_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-winner")
                 self.assertIn(f"games:{game_key}-winner", card_ids)
                 self.assertIn(f"games:{game_key}-scores", card_ids)
+                self.assertEqual("result", winner_card["kind"])
+                self.assertEqual(3, len(winner_card["facts"]))
+                self.assertTrue(winner_card["scoreboard"]["entries"])
+                self.assertLessEqual(len(winner_card["scoreboard"]["entries"]), 3)
                 self.assertIn(b"Generated Game Result Cards", display_page.data)
                 self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
                 persisted = self.redis_state()

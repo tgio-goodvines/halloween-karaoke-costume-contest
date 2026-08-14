@@ -250,6 +250,12 @@ That function increments `display_update_version` and notifies `display_update_c
 - `category`: small heading.
 - `primary`: main card text.
 - `secondary`: supporting text.
+- `kind`: optional semantic layout type such as `access`, `action`, `profile`,
+  `status`, `result`, `scoreboard`, or `announcement`.
+- `facts`: optional privacy-safe label/value tiles derived from current event
+  state.
+- `steps`: optional ordered phone-participation or game-play instructions.
+- `action`: optional display-only label and party URL callout.
 - `tertiary`: optional footnote/detail text.
 - `cta`: boolean for signup-instruction layout.
 - `link` and `link_label`: optional external link.
@@ -261,7 +267,10 @@ That function increments `display_update_version` and notifies `display_update_c
 `build_game_stage_entries()` produces privacy-safe per-game summaries, current
 clues/prompts/responses, and ended results for an independent left-stage
 rotation. `build_bar_stage()` exposes only public active-order fields plus the
-current/queued ready alerts. `build_music_footer()` provides receiver-confirmed
+current/queued ready alerts. It also derives queue positions, mixing/waiting
+counts, average prep time, available-drink count, a featured public menu item,
+and order/pickup guidance without exposing email, account IDs, or recipes.
+`build_music_footer()` provides receiver-confirmed
 Now Playing and Up Next data. Region modes are `auto`, `always`, or `hidden`;
 the client toggles layout classes so unused tracks disappear and center grows.
 
@@ -322,6 +331,11 @@ locked winner.
   state.
 - Applying display entries to the card DOM.
 - Switching between default, CTA, and scoreboard layouts.
+- Rendering structured fact grids, action steps, game instructions, bar
+  summaries, featured items, and pickup details.
+- Measuring inner content occupancy and applying sparse/dense/ultra-dense
+  classes; `static/display.css` combines those classes with container-relative
+  type sizing so cards can expand as well as compact.
 - Applying costume/winner styling classes.
 - Rotating cards every 8 seconds.
 - Fetching latest display data.

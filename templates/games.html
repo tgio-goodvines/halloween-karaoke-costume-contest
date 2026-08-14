@@ -6,7 +6,7 @@
   <header class="games-hero">
     <p class="admin-panel__eyebrow">Party games</p>
     <h2>Games</h2>
-    <p>Opt in, choose how your name appears, play from your phone, and watch the hosts reveal the results.</p>
+    <p>Opt in, play from your phone, and watch the hosts reveal the results.</p>
   </header>
 
   <nav class="games-tabs" aria-label="Available party games">
@@ -18,7 +18,7 @@
   {% if error %}<div class="flash flash--error"><p>{{ error }}</p></div>{% endif %}
   {% if success %}
     <div class="flash flash--success"><p>
-      {% if success == 'joined' %}Your game identity is <strong>{{ participant_identity }}</strong>{% if participant.anonymous %} (anonymous){% endif %}.
+      {% if success == 'joined' %}You joined as <strong>{{ participant_identity }}</strong>{% if game.anonymous_mode %} (anonymous){% endif %}.
       {% elif success == 'answer' %}Your round was saved. You can update it until the hosts end the game.
       {% elif success == 'response' %}Your response was saved.
       {% elif success == 'vote' %}Your vote was saved.
@@ -95,7 +95,7 @@
 
     {% elif game_key == 'murder_marry_fuck' %}
       {% if game.phase == 'signup' %}
-        <div class="game-opt-in"><h4>{% if participant %}You’re in as {{ participant_identity }}{% else %}Join the private ballot{% endif %}</h4><p>Ten trios. One Murder, one Marry, and one {{ game.explicit_label }} choice per round. Individual choices stay private; only aggregate results and final scores are revealed.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-check"><input type="checkbox" name="play_anonymously" value="yes"{% if participant and participant.anonymous %} checked{% endif %}><span>Play anonymously instead of appearing as {{ signed_in_name }}</span></label><button class="button button--primary" type="submit">{% if participant %}Save Identity Choice{% else %}Join Game{% endif %}</button></form></div>
+        <div class="game-opt-in"><h4>{% if participant %}You’re in as {{ participant_identity }}{% else %}Join the private ballot{% endif %}</h4><p>Ten trios. One Murder, one Marry, and one {{ game.explicit_label }} choice per round. Individual choices stay private; only aggregate results and final scores are revealed. The hosts have selected {{ 'anonymous aliases' if game.anonymous_mode else 'signed-in names' }} for this game.</p>{% if not participant %}<form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Join Game</button></form>{% endif %}</div>
       {% elif game.phase == 'active' %}
         {% if participant %}
           <div class="game-instructions"><h4>{{ participant_identity }} · {{ participant.get('answers', {})|length }} / {{ game.rounds|length }} complete</h4><p>Each choice must use a different person. Submit one round at a time.</p></div>
@@ -125,7 +125,7 @@
 
     {% else %}
       {% if game.phase == 'signup' %}
-        <div class="game-opt-in"><h4>{% if participant %}You’re in as {{ participant_identity }}{% else %}Join the game{% endif %}</h4><p>Submit one response per round. Voting stays blind; winners and final scores use your selected identity. Alone, your response becomes a one-point solo spotlight.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-check"><input type="checkbox" name="play_anonymously" value="yes"{% if participant and participant.anonymous %} checked{% endif %}><span>Play anonymously instead of appearing as {{ signed_in_name }}</span></label><button class="button button--primary" type="submit">{% if participant %}Save Identity Choice{% else %}Join Game{% endif %}</button></form></div>
+        <div class="game-opt-in"><h4>{% if participant %}You’re in as {{ participant_identity }}{% else %}Join the game{% endif %}</h4><p>Submit one response per round. Voting stays blind; winners and final scores use {{ 'anonymous aliases' if game.anonymous_mode else 'signed-in names' }} selected by the hosts. Alone, your response becomes a one-point solo spotlight.</p>{% if not participant %}<form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Join Game</button></form>{% endif %}</div>
       {% elif game.phase == 'active' %}
         {% if not participant %}<p class="empty-state">Enrollment closed when the hosts started the game.</p>
         {% elif not prompt_round %}<div class="game-opt-in"><h4>{{ participant_identity }}, stand by</h4><p>The hosts are choosing the next prompt.</p></div>

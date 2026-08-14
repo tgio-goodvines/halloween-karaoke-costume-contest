@@ -40,9 +40,9 @@ Important working notes:
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only. The last three
   share prompt submission/voting rounds; all games are operated independently
   from `/admin/games` and new games default to disabled. MMF and prompt games
-  default to each player's signed-in name, with an anonymous-alias checkbox that
-  can be changed only while enrollment is open; blind voting and private MMF
-  ballots remain private regardless of the selected public identity.
+  default to signed-in names. Admins may switch each game to anonymous aliases
+  while enrollment is open; attendees cannot choose their own mode. Blind
+  voting and private MMF ballots remain private regardless of the admin setting.
 - `/party/menu` lets signed-in attendees view food/drink menu cards with images and order available drinks on the party date; food is currently view-only.
 - Admin can manage food/drink menu items, image URLs, availability, and drink recipes from `/admin`; bartender access is assigned to existing party accounts through account roles.
 - `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.

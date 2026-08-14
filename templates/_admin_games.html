@@ -46,6 +46,13 @@
     </header>
     <p>{{ admin_game.metadata.description }} <strong>{{ admin_game.metadata.solo_note }}</strong></p>
 
+    {% if game_key != 'two_truths_and_a_lie' %}
+      <section class="game-admin-primary game-admin-identity" data-view-key="game:{{ game_key }}:identity">
+        <div><p class="admin-panel__eyebrow">Player identity</p><h5>{{ 'Anonymous aliases' if admin_game.anonymous_mode else 'Signed-in names' }}</h5><p>This setting applies to every player and locks when the game starts.</p></div>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="toggle_game_anonymity"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Use {{ 'Signed-in Names' if admin_game.anonymous_mode else 'Anonymous Aliases' }}</button></form>
+      </section>
+    {% endif %}
+
     <section class="game-admin-primary" id="admin-game-run" data-view-key="game:{{ game_key }}:run">
       <div class="game-admin-section-heading">
         <div><p class="admin-panel__eyebrow">Run game</p><h5>Lifecycle and next action</h5></div>

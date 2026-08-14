@@ -100,7 +100,7 @@
 - `GET /admin/export/karaoke-lineup` -> JSON export of karaoke lineup.
 - `GET /admin/export/games` -> admin-only JSON export of the Redis-backed game
   registry and finalized results. MMF and prompt-game account keys are replaced
-  with selected public identities and anonymity flags; MMF individual ballots
+  with admin-selected public identities and game anonymity flags; MMF individual ballots
   are replaced with completion counts plus aggregate results.
 - `GET|POST /party/costumes` -> attendee costume signup form, available on
   the party date and redirected to `/party` before then.
@@ -111,12 +111,12 @@
   `POST /party/games/two-truths-and-a-lie/guesses/<submission_id>` ->
   CSRF-protected, account-bound enrollment, clue submission/update, and guess
   upsert actions with phase and ownership checks.
-- `POST /party/games/<game_slug>/join` -> account-name enrollment by default for
-  MMF and the three prompt/vote games, with an optional generated anonymous alias.
-  The same route can change that choice while signup remains open.
+- `POST /party/games/<game_slug>/join` -> attendee enrollment for MMF and the
+  three prompt/vote games. The game-level admin setting determines whether every
+  player appears under a signed-in name or generated anonymous alias.
 - `POST /party/games/murder-marry-fuck/answers` -> saves one validated
   three-action MMF round ballot for an enrolled player while active.
-- `POST /party/games/<game_slug>/response|vote` -> upserts one anonymous
+- `POST /party/games/<game_slug>/response|vote` -> upserts one blind
   response or non-self vote for the current Fill in the Blank, Bad Advice, or
   Wrong Answers round.
 - `GET|POST /party/karaoke` -> attendee karaoke signup form, available on the
@@ -175,8 +175,8 @@ from each signup's persisted `workflow.playlist_item_id`; foreign/manual
 playlist items are intentionally outside its deletion scope.
 
 `party_games.py` is the pure game-domain boundary: default registry state,
-normalization of persisted submissions/guesses/results and mixed player
-identities, anonymous statement ordering, identity scoring, tied winner
+normalization of persisted submissions/guesses/results and admin-controlled
+game identity modes, anonymous statement ordering, identity scoring, tied winner
 calculation, and admin statistics.
 `main.py` retains route authorization, Redis locking/persistence, backups, and
 display-update broadcasts.
@@ -286,8 +286,8 @@ Redis-backed `display_settings`, defaulting to
 values hide either row. Current game data, clues/prompts, voting responses, and
 phase metrics instead rotate independently in `layout.games`. Host-controlled
 `game_presentation` overrides walk MMF aggregate action totals or revealed
-prompt winners with previous/next center-stage controls; only each player's
-selected public identity enters result payloads, and individual MMF ballots
+prompt winners with previous/next center-stage controls; only the admin-selected
+public identity enters result payloads, and individual MMF ballots
 never enter display payloads. Admin
 stop/reset actions clear matching live-display event overrides without deleting
 signup lineups. Starting costume stops active karaoke event mode, and starting

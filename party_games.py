@@ -203,6 +203,7 @@ def empty_two_truths_game_state(*, enabled: bool = False) -> dict[str, Any]:
 def empty_mmf_game_state(*, enabled: bool = False) -> dict[str, Any]:
     return {
         "enabled": bool(enabled),
+        "anonymous_mode": False,
         "phase": "signup",
         "started_at": "",
         "ended_at": "",
@@ -218,6 +219,7 @@ def empty_mmf_game_state(*, enabled: bool = False) -> dict[str, Any]:
 def empty_prompt_game_state(game_key: str, *, enabled: bool = False) -> dict[str, Any]:
     return {
         "enabled": bool(enabled),
+        "anonymous_mode": False,
         "phase": "signup",
         "started_at": "",
         "ended_at": "",
@@ -251,11 +253,17 @@ def generate_game_alias(existing_aliases: set[str] | None = None) -> str:
     return f"Mysterious Guest {len(existing) + 1}"
 
 
-def participant_public_name(participant: object, fallback: str = "Player") -> str:
+def participant_public_name(
+    participant: object,
+    fallback: str = "Player",
+    *,
+    anonymous: bool | None = None,
+) -> str:
     if not isinstance(participant, dict):
         return fallback
     alias = normalize_player_name(participant.get("alias")) or fallback
-    if bool(participant.get("anonymous", True)):
+    use_alias = bool(participant.get("anonymous", True)) if anonymous is None else bool(anonymous)
+    if use_alias:
         return alias
     return normalize_player_name(participant.get("display_name")) or alias
 
@@ -410,13 +418,9 @@ def normalize_alias_participant(raw: object, user_id: str, *, include_answers: b
     if not user_id or not player_id or not alias:
         return None
     display_name = normalize_player_name(raw.get("display_name"))
-    anonymous = bool(raw.get("anonymous", True))
-    if not anonymous and not display_name:
-        anonymous = True
     participant = {
         "player_id": player_id,
         "display_name": display_name,
-        "anonymous": anonymous,
         "alias": alias,
         "created_at": str(raw.get("created_at", "") or ""),
         "updated_at": str(raw.get("updated_at", "") or ""),
@@ -437,12 +441,13 @@ def normalize_alias_participant(raw: object, user_id: str, *, include_answers: b
 
 def calculate_mmf_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
     participants = game.get("participants", {})
+    anonymous_mode = bool(game.get("anonymous_mode"))
     scores_by_player = {str(entry.get("player_id")): 0 for entry in participants.values()}
     identities = {
         str(entry.get("player_id")): {
-            "name": participant_public_name(entry),
+            "name": participant_public_name(entry, anonymous=anonymous_mode),
             "alias": str(entry.get("alias", "Player")),
-            "anonymous": bool(entry.get("anonymous", True)),
+            "anonymous": anonymous_mode,
         }
         for entry in participants.values()
     }
@@ -493,6 +498,7 @@ def normalize_mmf_game_state(raw: object) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return state
     state["enabled"] = bool(raw.get("enabled"))
+    state["anonymous_mode"] = bool(raw.get("anonymous_mode"))
     state["phase"] = _phase(raw.get("phase"))
     state["started_at"] = str(raw.get("started_at", "") or "")
     state["ended_at"] = str(raw.get("ended_at", "") or "")
@@ -555,12 +561,13 @@ def finalize_prompt_round(game_round: dict[str, Any]) -> dict[str, Any]:
 
 def calculate_prompt_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
     participants = game.get("participants", {})
+    anonymous_mode = bool(game.get("anonymous_mode"))
     scores_by_player = {str(entry.get("player_id")): 0 for entry in participants.values()}
     identities = {
         str(entry.get("player_id")): {
-            "name": participant_public_name(entry),
+            "name": participant_public_name(entry, anonymous=anonymous_mode),
             "alias": str(entry.get("alias", "Player")),
-            "anonymous": bool(entry.get("anonymous", True)),
+            "anonymous": anonymous_mode,
         }
         for entry in participants.values()
     }
@@ -600,6 +607,7 @@ def normalize_prompt_game_state(raw: object, game_key: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return state
     state["enabled"] = bool(raw.get("enabled"))
+    state["anonymous_mode"] = bool(raw.get("anonymous_mode"))
     state["phase"] = _phase(raw.get("phase"))
     state["started_at"] = str(raw.get("started_at", "") or "")
     state["ended_at"] = str(raw.get("ended_at", "") or "")
@@ -808,6 +816,7 @@ def build_simulated_game_state(
 
     if game_key == MURDER_MARRY_FUCK_GAME_KEY:
         game = empty_mmf_game_state(enabled=True)
+        game["anonymous_mode"] = bool(current_game.get("anonymous_mode"))
         configured_rounds = current_game.get("rounds", [])
         game["rounds"] = copy.deepcopy(configured_rounds if len(configured_rounds) == MMF_ROUND_COUNT else DEFAULT_MMF_ROUNDS)
         game["explicit_label"] = str(current_game.get("explicit_label", "F%$@") or "F%$@")[:24]
@@ -826,7 +835,6 @@ def build_simulated_game_state(
             game["participants"][user_id] = {
                 "player_id": f"simulation-player-{number:02d}",
                 "display_name": f"Test Player {number:02d}",
-                "anonymous": False,
                 "alias": f"Test Alias {number:02d}",
                 "answers": answers,
                 "created_at": timestamp,
@@ -840,6 +848,7 @@ def build_simulated_game_state(
         return game
 
     game = empty_prompt_game_state(game_key, enabled=True)
+    game["anonymous_mode"] = bool(current_game.get("anonymous_mode"))
     configured_prompts = current_game.get("prompts", [])
     game["prompts"] = copy.deepcopy(configured_prompts or default_prompt_records(game_key))
     for index in range(count):
@@ -848,7 +857,6 @@ def build_simulated_game_state(
         game["participants"][user_id] = {
             "player_id": f"simulation-player-{number:02d}",
             "display_name": f"Test Player {number:02d}",
-            "anonymous": False,
             "alias": f"Test Alias {number:02d}",
             "created_at": timestamp,
             "updated_at": timestamp,

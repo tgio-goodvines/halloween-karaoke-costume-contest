@@ -323,7 +323,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 11
+STATE_SCHEMA_VERSION = 12
 
 
 @dataclass
@@ -3629,6 +3629,17 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
 
     bartender_tip_settings = normalize_bartender_tip_settings(data.get("bartender_tip_settings", {}))
     games_state = normalize_games_state(data.get("games_state", {}))
+    account_names_by_id = {
+        str(account.get("id", "")): str(account.get("username", "") or "")
+        for account in user_accounts.values()
+        if isinstance(account, dict) and account.get("id")
+    }
+    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS):
+        for user_id, participant in games_state[game_key].get("participants", {}).items():
+            if isinstance(participant, dict) and not participant.get("display_name"):
+                participant["display_name"] = str(
+                    registered_users.get(user_id, "") or account_names_by_id.get(user_id, "")
+                )[:80]
 
     raw_password_reset_tokens = data.get("password_reset_tokens", {})
     password_reset_tokens = {}
@@ -4529,13 +4540,11 @@ def add_alias_participant(
     user_id: str,
     *,
     display_name: str = "",
-    anonymous: bool = False,
 ) -> dict[str, object]:
     existing = game_alias_participant(game, user_id)
     if existing:
         normalized_name = re.sub(r"\s+", " ", str(display_name or "").strip())[:80]
         existing["display_name"] = normalized_name
-        existing["anonymous"] = bool(anonymous or not normalized_name)
         existing["updated_at"] = _utc_now_iso()
         return existing
     existing_aliases = {
@@ -4547,7 +4556,6 @@ def add_alias_participant(
     participant = {
         "player_id": uuid4().hex,
         "display_name": re.sub(r"\s+", " ", str(display_name or "").strip())[:80],
-        "anonymous": bool(anonymous or not str(display_name or "").strip()),
         "alias": generate_game_alias(existing_aliases),
         "answers": {},
         "created_at": timestamp,
@@ -4732,7 +4740,10 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             winning_ids = results.get("winner_response_ids", [])
             winners = [game_round.get("responses", {}).get(response_id, {}) for response_id in winning_ids]
             identities_by_player = {
-                entry.get("player_id"): participant_public_name(entry)
+                entry.get("player_id"): participant_public_name(
+                    entry,
+                    anonymous=bool(game.get("anonymous_mode")),
+                )
                 for entry in game.get("participants", {}).values()
             }
             round_detail = "Solo spotlight · 1 point" if results.get("solo_spotlight") else f"{len(game_round.get('responses', {}))} responses · {results.get('vote_count', 0)} votes"
@@ -4785,7 +4796,7 @@ PARTY_DAY_DASHBOARD_SLIDES = [
     },
     {
         "title": "Party Games",
-        "content": "Open Games to join tonight's enabled challenges, choose how your name appears, submit answers, vote, and follow the host-led results.",
+        "content": "Open Games to join tonight's enabled challenges, submit answers, vote, and follow the host-selected player identity shown for each game.",
     },
     {
         "title": "Event Drinks",
@@ -7420,7 +7431,10 @@ def party_games():
         random.Random(str(prompt_round.get("id", ""))).shuffle(prompt_responses)
 
     identity_by_player = {
-        str(entry.get("player_id", "")): participant_public_name(entry)
+        str(entry.get("player_id", "")): participant_public_name(
+            entry,
+            anonymous=bool(game.get("anonymous_mode")),
+        )
         for entry in game.get("participants", {}).values()
         if isinstance(entry, dict)
     }
@@ -7439,9 +7453,11 @@ def party_games():
         prompt_responses=prompt_responses,
         saved_response=saved_response,
         saved_vote=saved_vote,
-        participant_identity=participant_public_name(participant) if participant else "",
+        participant_identity=participant_public_name(
+            participant,
+            anonymous=bool(game.get("anonymous_mode")),
+        ) if participant else "",
         identity_by_player=identity_by_player,
-        signed_in_name=re.sub(r"\s+", " ", str(session.get("username", "") or "").strip())[:80],
         show_participation_form=request.args.get("participate") == "1",
         success=request.args.get("success", ""),
         error=request.args.get("error", ""),
@@ -7554,12 +7570,10 @@ def party_game_join(game_slug: str):
     if not user_id or not session.get("username"):
         return redirect(url_for("party_login", next=url_for("party_games", game=game_slug)))
     display_name = re.sub(r"\s+", " ", str(session.get("username", "") or "").strip())[:80]
-    anonymous = request.form.get("play_anonymously") == "yes"
     participant = add_alias_participant(
         game,
         user_id,
         display_name=display_name,
-        anonymous=anonymous,
     )
     broadcast_display_update()
     return redirect(url_for("party_games", game=game_slug, success="joined"))
@@ -8019,6 +8033,7 @@ def admin_portal(admin_view: str):
             "simulate_game",
             "enable_game",
             "disable_game",
+            "toggle_game_anonymity",
             "start_game",
             "end_game",
             "reset_game",
@@ -8265,6 +8280,17 @@ def admin_portal(admin_view: str):
                         live_display_event_override = None
                     messages.append(f"{title} is hidden from attendees. Existing data was preserved.")
                     should_broadcast = True
+
+                elif action == "toggle_game_anonymity":
+                    if game_key == TWO_TRUTHS_GAME_KEY:
+                        errors.append("Two Truths and a Lie must use account names for identity guesses.")
+                    elif game.get("phase") != "signup":
+                        errors.append("Player anonymity can only be changed while enrollment is open.")
+                    else:
+                        game["anonymous_mode"] = not bool(game.get("anonymous_mode"))
+                        mode_label = "anonymous aliases" if game["anonymous_mode"] else "signed-in names"
+                        messages.append(f"{title} will use {mode_label} for every player.")
+                        should_broadcast = True
 
                 elif action == "start_game":
                     participant_count = len(game.get("participants", {}))
@@ -9687,8 +9713,11 @@ def export_games():
         exported_game["participants"] = [
             {
                 "player_id": participant.get("player_id", ""),
-                "name": participant_public_name(participant),
-                "anonymous": bool(participant.get("anonymous", True)),
+                "name": participant_public_name(
+                    participant,
+                    anonymous=bool(exported_game.get("anonymous_mode")),
+                ),
+                "anonymous": bool(exported_game.get("anonymous_mode")),
                 **(
                     {"completed_rounds": len(participant.get("answers", {}))}
                     if game_key == MURDER_MARRY_FUCK_GAME_KEY
@@ -9702,7 +9731,7 @@ def export_games():
         {
             "schema_version": STATE_SCHEMA_VERSION,
             "exported_at": _utc_now_iso(),
-            "privacy_note": "Game exports use each player's selected public identity without account IDs. Murder, Marry, F%$@ includes aggregate results only and never account-linked selections.",
+            "privacy_note": "Game exports use the admin-selected public identity mode without account IDs. Murder, Marry, F%$@ includes aggregate results only and never account-linked selections.",
             "games_state": exported_games,
         },
         "halloween-games.json",

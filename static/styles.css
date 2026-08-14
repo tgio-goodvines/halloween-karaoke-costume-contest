@@ -5645,6 +5645,16 @@ textarea,
   background: rgba(255, 49, 49, 0.07);
 }
 
+.game-admin-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.game-admin-identity h5 { margin-block: 0; }
+.game-admin-identity p:last-child { margin-bottom: 0; }
+
 .game-admin-card--selected > details { margin: 0; }
 .admin-panel[aria-busy="true"] { cursor: progress; }
 .admin-panel[aria-busy="true"] button { pointer-events: none; }
@@ -5698,6 +5708,8 @@ textarea,
   .game-showcase-card:hover { transform: none; }
   .game-panel__header--illustrated { align-items: flex-start; flex-direction: column; }
   .game-panel__header--illustrated::after { background: linear-gradient(to bottom, rgba(7, 7, 10, 0.18), rgba(7, 7, 10, 0.96) 78%); }
+  .game-admin-identity { align-items: stretch; flex-direction: column; }
+  .game-admin-identity .button { width: 100%; }
   .mystery-grid { grid-template-columns: 1fr; }
   .mmf-people,
   .mmf-choices,

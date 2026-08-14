@@ -10,16 +10,16 @@ operations, and host-controlled live-display results.
 
 1. **Two Truths and a Lie** — account-named clue submissions, anonymous clue
    rotation, identity guesses, tied winners, and final reveal.
-2. **Murder, Marry, F%$@** — selectable signed-in-name or anonymous-alias
-   identity, ten configurable trios of famous adults, one unique assignment per
+2. **Murder, Marry, F%$@** — admin-selected signed-in-name or anonymous-alias
+   mode, ten configurable trios of famous adults, one unique assignment per
    action and round, aggregate-only results, plurality scoring, and announcer
    presentation.
 3. **Fill in the Blank: After Dark** — blind prompt responses and voting with
-   selectable public player identity.
+   an admin-selected public identity mode.
 4. **Bad Advice Hotline** — fictional dilemmas, blind bad advice, response
-   voting, and selectable public player identity.
+   voting, and an admin-selected public identity mode.
 5. **Wrong Answers Only** — fictional/general questions, blind wrong answers,
-   response voting, and selectable public player identity.
+   response voting, and an admin-selected public identity mode.
 
 All new games deploy disabled. Admin must enable each game before its tab,
 dashboard status, or enrollment flow appears to attendees.
@@ -69,12 +69,12 @@ interaction depends on guessing another attendee.
 
 ## Privacy And Content Guardrails
 
-- MMF and prompt-game enrollment defaults to a snapshot of the signed-in display
-  name. An unchecked-by-default `Play anonymously` control switches the public
-  identity to a generated alias and can be changed only during signup.
+- MMF and prompt games default to signed-in display names. The selected-game
+  admin console can switch the entire game to generated aliases during signup;
+  attendees do not control anonymity.
 - Prompt responses remain authorless during voting so named enrollment cannot
   bias voting. Reveals, scoreboards, result cards, and presentation slides use
-  the selected public identity.
+  the admin-selected public identity.
 - MMF individual ballots remain private for named and anonymous players alike.
   Admin/export surfaces show aggregate selections only.
 - The aggregate game export removes account-keyed participant maps from MMF and
@@ -85,9 +85,9 @@ interaction depends on guessing another attendee.
   explicitly prohibits attendees, private people, minors, confessions, and
   personal information.
 - The server retains account association for authorization, duplicate
-  prevention, score integrity, and returning a player to their selected game
-  identity. Legacy alias-only participants normalize as anonymous instead of
-  being unexpectedly exposed after deployment.
+  prevention, score integrity, and returning a player to the game identity
+  selected by the host. Schema normalization backfills legacy display names
+  from registered users when available and otherwise retains alias fallback.
 
 ## Admin And Display
 
@@ -118,10 +118,11 @@ interaction depends on guessing another attendee.
 
 ## State And Routes
 
-- Redis schema version is `11`.
+- Redis schema version is `12`.
 - `games_state` contains all five independent game records.
 - Attendee hub: `GET /party/games?game=<slug>`.
-- Named-by-default identity enrollment/update: `POST /party/games/<slug>/join`.
+- Attendee enrollment under the admin-selected identity mode:
+  `POST /party/games/<slug>/join`.
 - MMF ballot round: `POST /party/games/murder-marry-fuck/answers`.
 - Prompt response/vote: `POST /party/games/<slug>/response|vote`.
 - Admin operations continue through the focused `/admin/games` POST handler.
@@ -130,9 +131,9 @@ interaction depends on guessing another attendee.
 ## Verification
 
 - `python -m compileall -q main.py party_games.py` passed.
-- `python -m pytest -q` passed with 136 tests and 11 subtests.
-- Coverage includes schema migration, every game variant, mixed named/anonymous
-  identity, MMF 30-point ties, aggregate-only export, invalid assignments,
+- `python -m pytest -q` passed with 146 tests and 16 subtests.
+- Coverage includes schema migration, every game variant, admin-selected
+  named/anonymous identity, MMF 30-point ties, aggregate-only export, invalid assignments,
   blind prompt voting, self-vote rejection, result presentation, and resets.
 - Browser QA exercised the dashboard, game tabs, adult-content notice,
   game enrollment, multi-game admin enable/start controls, prompt selection,
@@ -154,26 +155,26 @@ interaction depends on guessing another attendee.
   game is disabled for attendees.
 - `/admin/display` exposes every generated game result card with Show Now and
   Include/Hide actions. Per-card inclusion was introduced in schema v10 and is
-  retained in schema-v11 `display_config.game_result_card_enabled` state.
+  retained in schema-v12 `display_config.game_result_card_enabled` state.
 - Verification passed with 143 tests and 16 subtests, Python compilation,
   bundled-Node syntax checks for both live-display scripts, deployment-script
   shell validation, and `git diff --check`.
 
-## Named-By-Default Game Identity (2026-08-14)
+## Admin-Controlled Game Identity (2026-08-14)
 
-- MMF and the three prompt games now default new enrollment to the attendee's
-  signed-in display name and offer an explicit `Play anonymously` checkbox.
-- Each game stores its own identity choice so an attendee may be named in one
-  game and anonymous in another. The choice is editable during signup and locks
-  with the rest of enrollment when the host starts the game.
-- A generated alias is retained for every player as a safe fallback. Schema-v11
-  normalization keeps legacy participants anonymous when their saved record has
-  no explicit identity mode.
+- MMF and the three prompt games default to attendees' signed-in display names.
+  The selected-game admin console owns one game-level anonymity toggle; it
+  switches every player to generated aliases and locks when the game starts.
+- Attendees do not receive an identity or anonymity control. The game page tells
+  them whether the hosts selected signed-in names or anonymous aliases.
+- A generated alias is retained for every player as a safe fallback. Schema-v12
+  normalization adds the game-level mode and backfills legacy display names from
+  registered users when available.
 - Prompt voting remains blind and MMF ballots remain aggregate-only. Selected
   identities appear only on appropriate reveals, final scoreboards, winner
   cards, presentation slides, and live-display results.
-- The game export redacts MMF and prompt account keys, includes selected public
-  names plus anonymity flags, omits anonymous players' account names, and still
+- The game export redacts MMF and prompt account keys, includes admin-selected
+  public names plus game anonymity flags, omits account names in anonymous mode, and still
   excludes individual MMF ballots.
 
 ## Presentation And Navigation Refinement (2026-08-05)

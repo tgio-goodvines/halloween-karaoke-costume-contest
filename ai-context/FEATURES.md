@@ -69,15 +69,15 @@
   enrollment, shows anonymous shuffled clue cards, accepts one editable
   free-text identity guess per other participant during active play, and
   reveals finalized results after the host ends the game.
-- Murder, Marry, F%$@ defaults each opted-in player to their signed-in display
-  name and offers an anonymous-alias checkbox during enrollment. It presents ten
+- Murder, Marry, F%$@ defaults opted-in players to signed-in display names. The
+  admin may switch the entire game to anonymous aliases during enrollment. It presents ten
   configurable trios of famous adults. Players use each action once per
   round, can edit ballots while active, and score one point for every assignment
   matching the party plurality. Individual ballots are never exposed.
 - Fill in the Blank: After Dark, Bad Advice Hotline, and Wrong Answers Only use
   independent prompt decks over one shared blind response/voting engine. Players
-  default to their signed-in display name or can select an anonymous alias while
-  enrollment is open. Each round moves through submissions, voting, and reveal;
+  default to signed-in display names; the admin can switch each entire game to
+  anonymous aliases while enrollment is open. Each round moves through submissions, voting, and reveal;
   responses remain authorless during voting, self-voting is rejected, and
   received votes become cumulative game points.
 - MMF and all prompt games support a single opted-in player. Solo prompt rounds
@@ -227,8 +227,8 @@
   guess completion, provisional/final scores, truth/lie data, and raw guesses;
   export game JSON; and manually pause on game, winner, or results display
   cards before resuming rotation.
-- The Games workspace independently operates the four adult games with mixed
-  named/anonymous player identities,
+- The Games workspace independently operates the four adult games with an
+  admin-controlled signed-in-name/anonymous-alias mode,
   edits MMF's ten public-figure trios and optional images, manages three prompt
   decks, advances prompt response/vote/reveal phases, shows aggregate progress,
   and drives previous/next announcer presentation slides after game end.
@@ -237,8 +237,8 @@
   accounts, preserves MMF/prompt configuration, creates a Redis backup, and
   refuses to replace real participant data.
 - Games export keeps Two Truths operational data but redacts account-map keys
-  from MMF and prompt games. It returns each selected public identity and privacy
-  mode; MMF individual ballots remain excluded in favor of completion counts and
+  from MMF and prompt games. It returns the admin-selected public identity and
+  game privacy mode; MMF individual ballots remain excluded in favor of completion counts and
   aggregate results.
 - Admin receives inline success/error messages.
 - Standard admin POST forms update their workspace in place while preserving the
@@ -298,7 +298,7 @@ app state.
   on game, winner, or result announcements while ready notices remain isolated
   to the right rail.
 - Blind prompt responses join the left stage only after voting opens. Ended MMF
-  and prompt games use each player's selected signed-in name or anonymous alias
+  and prompt games use the admin-selected signed-in-name or anonymous-alias mode
   on winner/outcome and scoreboard cards, while host-controlled
   presentation overrides walk the display through each aggregate result.
 - Generated game result cards remain available after attendee enrollment is

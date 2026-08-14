@@ -138,7 +138,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 9. The following globals in `main.py` are
+`halloween:state` with schema version 10. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -177,7 +177,8 @@ the process-local cache:
   `HALLOWEEN_DISPLAY_WIFI_NETWORK` and `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank
   values are allowed so the display can hide either row.
 - `display_config`: source visibility/order, center/game intervals, region
-  visibility modes, queue size, alert duration, density, and pinned game.
+  visibility modes, queue size, alert duration, density, pinned game, and
+  per-card visibility for generated game winner/final-score cards.
 - `display_runtime`: center index, pause/pin state, and revision used to push
   host run-of-show changes to connected displays.
 - `display_custom_cards`: ordered, scheduled host-authored cards with optional
@@ -215,7 +216,9 @@ the process-local cache:
   trios, anonymous aliases, ballots, aggregate results, and presentation state;
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only store independent
   prompt decks, submission/voting/reveal rounds, anonymous responses, votes,
-  cumulative scores, and presentation state. MMF and prompt engines permit a
+  cumulative scores, presentation state, and explicit simulation metadata.
+  Admin simulation builds deterministic completed games without creating party
+  accounts and refuses to replace real participant data. MMF and prompt engines permit a
   one-player session; a single prompt response becomes a one-point solo
   spotlight while Two Truths retains its two-player minimum.
 

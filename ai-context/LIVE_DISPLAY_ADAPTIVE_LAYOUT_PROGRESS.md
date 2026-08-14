@@ -49,6 +49,11 @@ Redis schema version `9` adds:
 - `display_custom_cards` for ordered scheduled cards;
 - `live_display_notice_queue` for sequential ready alerts.
 
+Schema version `10` extends `display_config` with per-card visibility for
+generated game winner/outcome and final-score cards. These cards use stable IDs,
+remain available after attendee game disablement, and have explicit Show Now
+and Include/Hide controls in `/admin/display`.
+
 `build_display_layout()` supplies `header`, `center`, `games`, `bar`, `music`,
 and `density`. `/api/display-data` keeps legacy top-level fields for existing
 consumers. SSE continues to trigger immediate full-layout refreshes and the

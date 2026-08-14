@@ -65,6 +65,7 @@ from party_games import (
     calculate_mmf_results,
     calculate_prompt_results,
     calculate_two_truths_results,
+    build_simulated_game_state,
     empty_mmf_game_state,
     empty_prompt_game_state,
     empty_two_truths_game_state,
@@ -321,7 +322,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 9
+STATE_SCHEMA_VERSION = 10
 
 
 @dataclass
@@ -534,6 +535,7 @@ DEFAULT_DISPLAY_CONFIG: dict[str, object] = {
     "max_bar_orders": 4,
     "notice_duration_seconds": DRINK_READY_OVERRIDE_SECONDS,
     "density": "standard",
+    "game_result_card_enabled": {},
 }
 DEFAULT_DISPLAY_RUNTIME: dict[str, object] = {
     "center_index": 0,
@@ -1968,6 +1970,15 @@ def normalize_display_config(raw_config: object) -> dict[str, object]:
 
     pinned_game_key = str(raw_config.get("pinned_game_key", "") or "")
     normalized["pinned_game_key"] = pinned_game_key if pinned_game_key in GAME_CATALOG else ""
+    raw_game_card_enabled = raw_config.get("game_result_card_enabled", {})
+    if isinstance(raw_game_card_enabled, dict):
+        valid_suffixes = {"winner", "scores"}
+        normalized["game_result_card_enabled"] = {
+            str(card_id)[:80]: bool(enabled)
+            for card_id, enabled in raw_game_card_enabled.items()
+            if str(card_id).startswith("games:")
+            and str(card_id).rsplit("-", 1)[-1] in valid_suffixes
+        }
     density = str(raw_config.get("density", "standard") or "standard")
     normalized["density"] = density if density in {"compact", "standard", "large"} else "standard"
     return normalized
@@ -4613,9 +4624,11 @@ def game_scoreboard_entry(game_key: str) -> dict[str, object] | None:
 
 
 def game_winner_entry(game_key: str) -> dict[str, object] | None:
+    game = party_game_state(game_key)
+    if game.get("phase") != "ended":
+        return None
     if game_key == TWO_TRUTHS_GAME_KEY:
         return build_two_truths_winner_entry()
-    game = party_game_state(game_key)
     winners = game_winners(game_key, game)
     if not winners:
         return None
@@ -4626,6 +4639,21 @@ def game_winner_entry(game_key: str) -> dict[str, object] | None:
         "primary": ", ".join(aliases),
         "secondary": f"{points} point{'s' if points != 1 else ''}",
         "tertiary": "A tie at the top!" if len(winners) > 1 else "Tonight's anonymous champion.",
+    }
+
+
+def game_outcome_entry(game_key: str) -> dict[str, object] | None:
+    game = party_game_state(game_key)
+    if game.get("phase") != "ended":
+        return None
+    winner = game_winner_entry(game_key)
+    if winner:
+        return winner
+    return {
+        "category": f"{GAME_CATALOG[game_key]['title']} Results",
+        "primary": "No Winner This Round",
+        "secondary": "No positive score was recorded.",
+        "tertiary": "Thanks for playing — the final standings are still available.",
     }
 
 
@@ -4677,9 +4705,9 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
     scoreboard = game_scoreboard_entry(game_key)
     if scoreboard:
         slides.append({"type": "game_presentation", "title": title, "highlight": "Final leaderboard", "message": scoreboard.get("secondary", ""), "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]})
-    winner = game_winner_entry(game_key)
-    if winner:
-        slides.append({"type": "game_winner", "title": winner["category"], "highlight": winner["primary"], "message": winner["secondary"], "details": [winner["tertiary"]]})
+    outcome = game_outcome_entry(game_key)
+    if outcome:
+        slides.append({"type": "game_winner", "title": outcome["category"], "highlight": outcome["primary"], "message": outcome["secondary"], "details": [outcome["tertiary"]]})
     return slides
 
 
@@ -4787,6 +4815,35 @@ def _display_entry(source: str, entry_id: str, **content: object) -> dict[str, o
     }
 
 
+def game_result_card_is_enabled(card_id: str) -> bool:
+    configured = display_config.get("game_result_card_enabled", {})
+    if not isinstance(configured, dict):
+        return True
+    return bool(configured.get(card_id, True))
+
+
+def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for game_key in GAME_CATALOG:
+        game = party_game_state(game_key)
+        if game.get("phase") != "ended":
+            continue
+        outcome = game_outcome_entry(game_key)
+        scoreboard = game_scoreboard_entry(game_key)
+        cards = (("winner", "Winner / Outcome", outcome), ("scores", "Final Scores", scoreboard))
+        for suffix, card_type, card in cards:
+            if not card:
+                continue
+            entry = _display_entry("games", f"{game_key}-{suffix}", **card)
+            entry["game_key"] = game_key
+            entry["game_title"] = GAME_CATALOG[game_key]["title"]
+            entry["card_type"] = card_type
+            entry["included"] = game_result_card_is_enabled(str(entry["id"]))
+            if include_hidden or entry["included"]:
+                entries.append(entry)
+    return entries
+
+
 def display_source_is_enabled(source: str) -> bool:
     enabled = display_config.get("source_enabled", {})
     return bool(isinstance(enabled, dict) and enabled.get(source, True))
@@ -4878,15 +4935,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 tertiary="Available: " + " · ".join(GAME_CATALOG[key]["short_title"] for key in enabled_games),
             )
         )
-        for game_key in enabled_games:
-            if party_game_state(game_key).get("phase") != "ended":
-                continue
-            winner_card = game_winner_entry(game_key)
-            scoreboard_card = game_scoreboard_entry(game_key)
-            if winner_card:
-                grouped["games"].append(_display_entry("games", f"{game_key}-winner", **winner_card))
-            if scoreboard_card:
-                grouped["games"].append(_display_entry("games", f"{game_key}-scores", **scoreboard_card))
+    grouped["games"].extend(generated_game_result_entries())
 
     grouped["bar"].append(
         _display_entry(
@@ -7755,6 +7804,7 @@ def admin_portal(admin_view: str):
             action = ""
 
         generic_game_actions = {
+            "simulate_game",
             "enable_game",
             "disable_game",
             "start_game",
@@ -7793,6 +7843,8 @@ def admin_portal(admin_view: str):
             "pin_display_game",
             "clear_display_game_pin",
             "dismiss_display_notice",
+            "toggle_game_result_card",
+            "show_game_result_card",
         }
 
         if action in display_actions:
@@ -7885,6 +7937,33 @@ def admin_portal(admin_view: str):
                     messages.append(f"Pinned {entry.get('primary', 'the selected card')} to center stage.")
                     should_broadcast = True
 
+            elif action in {"toggle_game_result_card", "show_game_result_card"}:
+                card_id = str(request.form.get("card_id", "") or "")
+                available_cards = generated_game_result_entries(include_hidden=True)
+                card = next((entry for entry in available_cards if entry.get("id") == card_id), None)
+                if card is None:
+                    errors.append("That generated game result card is no longer available.")
+                else:
+                    configured = display_config.setdefault("game_result_card_enabled", {})
+                    if action == "toggle_game_result_card":
+                        included = game_result_card_is_enabled(card_id)
+                        configured[card_id] = not included
+                        if included and display_runtime.get("pinned_card_id") == card_id:
+                            display_runtime["pinned_card_id"] = ""
+                            display_runtime["center_paused"] = False
+                        messages.append(
+                            f"{'Included' if not included else 'Hidden'} {card.get('game_title', 'game')} "
+                            f"{str(card.get('card_type', 'result')).lower()} card."
+                        )
+                    else:
+                        configured[card_id] = True
+                        display_config.setdefault("source_enabled", {})["games"] = True
+                        display_runtime["pinned_card_id"] = card_id
+                        display_runtime["center_paused"] = True
+                        messages.append(f"Pinned {card.get('primary', 'the game result')} to center stage.")
+                    display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
+                    should_broadcast = True
+
             elif action in {"pause_display_rotation", "resume_display_rotation", "previous_display_card", "next_display_card", "clear_display_pin"}:
                 entries = build_rotation_entries()
                 current_index = int(display_runtime.get("center_index", 0) or 0)
@@ -7939,7 +8018,31 @@ def admin_portal(admin_view: str):
                 metadata = GAME_CATALOG[game_key]
                 title = metadata["title"]
 
-                if action == "enable_game":
+                if action == "simulate_game":
+                    participants = game.get("participants", {}) if isinstance(game.get("participants"), dict) else {}
+                    simulation = game.get("simulation", {})
+                    is_simulated = bool(isinstance(simulation, dict) and simulation.get("is_simulated"))
+                    if participants and not is_simulated:
+                        errors.append(f"Reset {title} before replacing real participant data with a simulation.")
+                    else:
+                        player_count = _bounded_int(request.form.get("player_count"), 8, 2, 20)
+                        write_state_backup_if_available(f"game-{game_key}-simulation")
+                        games_state[game_key] = build_simulated_game_state(
+                            game_key,
+                            game,
+                            player_count=player_count,
+                            generated_at=_utc_now_iso(),
+                        )
+                        card_settings = display_config.setdefault("game_result_card_enabled", {})
+                        card_settings[f"games:{game_key}-winner"] = True
+                        card_settings[f"games:{game_key}-scores"] = True
+                        display_config.setdefault("source_enabled", {})["games"] = True
+                        if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
+                            live_display_event_override = None
+                        messages.append(f"Simulated {title} with {player_count} test players and finalized its results.")
+                        should_broadcast = True
+
+                elif action == "enable_game":
                     game["enabled"] = True
                     messages.append(f"{title} is enabled for attendees.")
                     should_broadcast = True
@@ -9321,6 +9424,7 @@ def admin_portal(admin_view: str):
         karaoke_admin_state_url=url_for("admin_karaoke_state"),
         karaoke_admin_search_url=url_for("admin_karaoke_search"),
         games_admin=all_games_admin_view(),
+        game_result_cards=generated_game_result_entries(include_hidden=True),
     )
 
 

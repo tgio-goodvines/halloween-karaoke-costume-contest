@@ -276,6 +276,19 @@ not replace an active contest/karaoke/winner center card. `build_rotation_entrie
 returns party-night cards even before `HALLOWEEN_PARTY_START` so hosts can
 stage and test the live display ahead of the event.
 
+Ended game result cards are derived from finalized `games_state` results with
+stable `games:<game-key>-winner` and `games:<game-key>-scores` IDs. They remain
+available independently of attendee game enablement. Per-card inclusion is
+stored in `display_config.game_result_card_enabled`; `/admin/display` can show
+either card immediately or include/hide it from normal center rotation. Games
+with no positive score receive a No Winner outcome card instead of silently
+omitting the result.
+
+`build_simulated_game_state()` creates deterministic completed test data for
+all five engines. The admin action backs up Redis, preserves MMF trio and prompt
+configuration, avoids party-account creation, marks the state as simulated,
+and refuses to overwrite non-simulated participants.
+
 The attendee portal has a related but separate date gate: `party_day_has_arrived()`
 uses the persisted `event_experience_mode` first, then compares the local date
 of `HALLOWEEN_PARTY_START` to the current date when the mode is `auto`. Admins

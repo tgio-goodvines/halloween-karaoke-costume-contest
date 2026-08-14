@@ -93,6 +93,12 @@ interaction depends on guessing another attendee.
   walks through each revealed prompt and winning anonymous response.
 - Ended winner/scoreboard cards join normal live-display rotation. Prompt
   responses join rotation only during voting/reveal.
+- Each game card provides a deterministic completed-game simulator for 2-20
+  test players. It preserves game configuration, creates no party accounts,
+  backs up Redis before mutation, and refuses to replace real participants.
+- Ended games always contribute a winner or No Winner outcome card. Generated
+  outcome and final-score cards remain available when attendee enrollment is
+  disabled and can be shown, included, or hidden from `/admin/display`.
 - Temporary drink-ready notices retain priority above game event overrides.
 - Every enabled game contributes privacy-safe left-stage data to an independent
   rotation, so multiple live games can cycle without interrupting center cards.
@@ -100,7 +106,7 @@ interaction depends on guessing another attendee.
 
 ## State And Routes
 
-- Redis schema version is `9`.
+- Redis schema version is `10`.
 - `games_state` contains all five independent game records.
 - Attendee hub: `GET /party/games?game=<slug>`.
 - Anonymous opt-in: `POST /party/games/<slug>/join`.
@@ -121,6 +127,25 @@ interaction depends on guessing another attendee.
   the 10-round configuration presence, and desktop overflow at 1280px.
 - Active MMF, prompt submission, and prompt voting templates have dedicated
   authenticated route-render regression tests.
+
+## Simulation And Result-Card Controls (2026-08-13)
+
+- Every `/admin/games` card now includes a completed-game simulator for 2-20
+  deterministic test players. Simulation creates a Redis backup, preserves
+  configured MMF rounds and prompt decks, creates no party accounts, and blocks
+  replacement when non-simulated participants exist.
+- Simulated games finalize directly into `ended`, retain explicit simulation
+  metadata, and immediately broadcast their winner/outcome and final-score
+  cards to the live display.
+- Every ended game now has a stable winner/outcome card, including a No Winner
+  card when no positive score exists. Result cards remain available after the
+  game is disabled for attendees.
+- `/admin/display` exposes every generated game result card with Show Now and
+  Include/Hide actions. Per-card inclusion is persisted in schema-v10
+  `display_config.game_result_card_enabled`.
+- Verification passed with 143 tests and 16 subtests, Python compilation,
+  bundled-Node syntax checks for both live-display scripts, deployment-script
+  shell validation, and `git diff --check`.
 
 ## Presentation And Navigation Refinement (2026-08-05)
 

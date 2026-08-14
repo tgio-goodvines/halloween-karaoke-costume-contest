@@ -4478,7 +4478,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("signup", game["phase"])
         self.assertEqual({}, game["participants"])
         main.save_state_to_redis()
-        self.assertEqual(9, self.redis_state()["schema_version"])
+        self.assertEqual(10, self.redis_state()["schema_version"])
         self.assertIn("games_state", self.redis_state())
         self.assertEqual(
             {
@@ -4615,6 +4615,132 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(main.two_truths_game()["enabled"])
         self.assertEqual({}, main.two_truths_game()["participants"])
         self.assertEqual({}, main.two_truths_game()["guesses"])
+
+    def test_admin_can_simulate_every_game_and_generate_result_cards(self):
+        for game_key in main.GAME_CATALOG:
+            with self.subTest(game_key=game_key):
+                self.reset_state()
+                game = main.party_game_state(game_key)
+                if game_key == main.MURDER_MARRY_FUCK_GAME_KEY:
+                    game["explicit_label"] = "Choose"
+                elif game_key in main.PROMPT_GAME_KEYS:
+                    game["prompts"][0]["text"] = "Custom simulation prompt ___" if game_key == main.FILL_BLANK_GAME_KEY else "Custom simulation prompt"
+                    if game_key == main.WRONG_ANSWERS_GAME_KEY:
+                        for prompt in game["prompts"]:
+                            prompt["enabled"] = False
+                self.save_current_state()
+
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    response = admin.post(
+                        "/admin/games",
+                        data={"action": "simulate_game", "game_key": game_key, "player_count": "6"},
+                    )
+                    display_page = admin.get("/admin/display")
+
+                self.assertEqual(200, response.status_code)
+                self.assertIn("Simulated", response.get_data(as_text=True))
+                game = main.party_game_state(game_key)
+                self.assertTrue(game["enabled"])
+                self.assertEqual("ended", game["phase"])
+                self.assertEqual(6, len(game["participants"]))
+                self.assertEqual(
+                    {"is_simulated": True, "player_count": 6, "generated_at": game["ended_at"]},
+                    game["simulation"],
+                )
+                self.assertTrue(game["results"]["scores"])
+                self.assertTrue(main.game_winners(game_key, game))
+                if game_key == main.MURDER_MARRY_FUCK_GAME_KEY:
+                    self.assertEqual("Choose", game["explicit_label"])
+                elif game_key in main.PROMPT_GAME_KEYS:
+                    self.assertTrue(game["prompts"][0]["text"].startswith("Custom simulation prompt"))
+                    if game_key == main.WRONG_ANSWERS_GAME_KEY:
+                        self.assertFalse(any(prompt["enabled"] for prompt in game["prompts"]))
+
+                cards = main.generated_game_result_entries(include_hidden=True)
+                card_ids = {entry["id"] for entry in cards}
+                self.assertIn(f"games:{game_key}-winner", card_ids)
+                self.assertIn(f"games:{game_key}-scores", card_ids)
+                self.assertIn(b"Generated Game Result Cards", display_page.data)
+                self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
+                persisted = self.redis_state()
+                self.assertEqual(10, persisted["schema_version"])
+                self.assertTrue(persisted["games_state"][game_key]["simulation"]["is_simulated"])
+                self.assertEqual({}, persisted["user_accounts"])
+
+    def test_simulation_refuses_to_replace_real_players(self):
+        game = main.party_game_state(main.FILL_BLANK_GAME_KEY)
+        game["participants"]["real-user"] = {
+            "player_id": "real-player",
+            "alias": "Real Alias",
+            "created_at": "",
+            "updated_at": "",
+        }
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(
+                "/admin/games",
+                data={"action": "simulate_game", "game_key": main.FILL_BLANK_GAME_KEY, "player_count": "8"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Reset Fill in the Blank", response.get_data(as_text=True))
+        self.assertEqual({"real-user"}, set(main.party_game_state(main.FILL_BLANK_GAME_KEY)["participants"]))
+        self.assertFalse(main.party_game_state(main.FILL_BLANK_GAME_KEY)["simulation"]["is_simulated"])
+
+    def test_generated_game_cards_survive_disable_and_can_be_hidden_or_pinned(self):
+        game_key = main.BAD_ADVICE_GAME_KEY
+        main.games_state[game_key] = main.build_simulated_game_state(
+            game_key,
+            main.party_game_state(game_key),
+            player_count=5,
+            generated_at="2026-08-13T12:00:00Z",
+        )
+        main.party_game_state(game_key)["enabled"] = False
+        self.save_current_state()
+        winner_id = f"games:{game_key}-winner"
+
+        self.assertIn(winner_id, {entry["id"] for entry in main.build_rotation_entries()})
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            hidden = admin.post(
+                "/admin/display",
+                data={"action": "toggle_game_result_card", "card_id": winner_id},
+            )
+            self.assertNotIn(winner_id, {entry["id"] for entry in main.build_rotation_entries()})
+            shown = admin.post(
+                "/admin/display",
+                data={"action": "show_game_result_card", "card_id": winner_id},
+            )
+
+        self.assertEqual(200, hidden.status_code)
+        self.assertEqual(200, shown.status_code)
+        self.assertTrue(main.display_config["game_result_card_enabled"][winner_id])
+        self.assertTrue(main.display_config["source_enabled"]["games"])
+        self.assertEqual(winner_id, main.display_runtime["pinned_card_id"])
+        self.assertTrue(main.display_runtime["center_paused"])
+
+    def test_ended_game_without_positive_score_gets_no_winner_outcome_card(self):
+        game = main.two_truths_game()
+        game.update(
+            main.build_simulated_game_state(
+                main.TWO_TRUTHS_GAME_KEY,
+                game,
+                player_count=2,
+                generated_at="2026-08-13T12:00:00Z",
+            )
+        )
+        game["guesses"] = {}
+        game["results"] = main.calculate_two_truths_results(game, finalized_at=game["ended_at"])
+
+        outcome = main.game_outcome_entry(main.TWO_TRUTHS_GAME_KEY)
+        self.assertEqual("No Winner This Round", outcome["primary"])
+        self.assertIn(
+            f"games:{main.TWO_TRUTHS_GAME_KEY}-winner",
+            {entry["id"] for entry in main.generated_game_result_entries()},
+        )
 
     def test_two_truths_routes_require_role_phase_and_participation(self):
         main.two_truths_game()["enabled"] = True

@@ -175,6 +175,24 @@
     </section>
 
     <section class="admin-subsection">
+      <h4>Generated Game Result Cards</h4>
+      <p>Ended games create center-stage winner or outcome cards and final-score cards. These remain available even after attendee enrollment is disabled.</p>
+      {% if game_result_cards %}
+        <div class="display-admin__game-list">
+          {% for card in game_result_cards %}
+            <article>
+              <div><strong>{{ card.game_title }} — {{ card.card_type }}</strong><small>{{ card.primary }} · {{ 'Included in rotation' if card.included else 'Hidden from rotation' }}</small></div>
+              <div class="contest-actions">
+                <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="card_id" value="{{ card.id }}"><button class="button button--small" name="action" value="show_game_result_card">Show Now</button></form>
+                <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="card_id" value="{{ card.id }}"><button class="button button--small" name="action" value="toggle_game_result_card">{{ 'Hide' if card.included else 'Include' }}</button></form>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}<p class="empty-state">End or simulate a game to create its winner and final-score cards.</p>{% endif %}
+    </section>
+
+    <section class="admin-subsection">
       <h4>Left-Stage Game Rotation</h4>
       {% if display_layout.games.entries %}
         <div class="display-admin__game-list">
@@ -268,7 +286,7 @@
 
     <div class="game-registry-grid">
     <article class="game-admin-card game-admin-card--two-truths" id="admin-game-two_truths_and_a_lie">
-      <header><div><p class="admin-panel__eyebrow">Identity game</p><h4>Two Truths and a Lie</h4></div><span class="game-phase game-phase--{{ games_admin.phase }}">{% if not games_admin.enabled %}Disabled{% elif games_admin.phase == 'signup' %}Signup{% else %}{{ games_admin.phase|title }}{% endif %}</span></header>
+      <header><div><p class="admin-panel__eyebrow">Identity game</p><h4>Two Truths and a Lie</h4></div><span class="game-phase game-phase--{{ games_admin.phase }}">{% if games_admin.simulation.is_simulated %}Simulated Results{% elif not games_admin.enabled %}Disabled{% elif games_admin.phase == 'signup' %}Signup{% else %}{{ games_admin.phase|title }}{% endif %}</span></header>
       <p>{{ games_admin.metadata.description }} <strong>{{ games_admin.metadata.solo_note }}</strong></p>
     <div class="game-admin-metrics game-admin-metrics--compact">
       <div><span>Participants</span><strong>{{ games_admin.statistics.participant_count }}</strong></div>
@@ -340,6 +358,16 @@
       {% else %}<p class="empty-state">No raw guesses are available yet.</p>{% endif %}
     </section>
 
+    <details class="admin-entry">
+      <summary><strong>Test tools</strong><span>{% if games_admin.simulation.is_simulated %}{{ games_admin.simulation.player_count }} simulated players{% else %}Build completed test results{% endif %}</span></summary>
+      <form method="post" class="admin-entry__form" onsubmit="return confirm('Simulate a completed Two Truths and a Lie game? This replaces this game\'s current test state and adds its result cards to the live rotation.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="two_truths_and_a_lie">
+        <p>Creates deterministic participants, clues, guesses, final scores, and display cards. Real participant data must be reset first.</p>
+        <label>Test players<input type="number" name="player_count" min="2" max="20" value="{{ games_admin.simulation.player_count or 8 }}"></label>
+        <button class="button button--primary" name="action" value="simulate_game"{% if games_admin.participants and not games_admin.simulation.is_simulated %} disabled{% endif %}>Simulate Completed Game</button>
+      </form>
+    </details>
+
     <details class="danger-zone">
       <summary>Reset Two Truths and a Lie</summary>
       <form method="post">
@@ -355,7 +383,7 @@
         {% for game_key in ['murder_marry_fuck', 'fill_in_the_blank', 'bad_advice_hotline', 'wrong_answers_only'] %}
           {% set admin_game = games_admin.games[game_key] %}
           <article class="game-admin-card" id="admin-game-{{ game_key }}">
-            <header><div><p class="admin-panel__eyebrow">{{ admin_game.metadata.engine|replace('_', ' ') }}</p><h4>{{ admin_game.metadata.title }}</h4></div><span class="game-phase game-phase--{{ admin_game.phase }}">{% if not admin_game.enabled %}Disabled{% else %}{{ admin_game.phase|title }}{% endif %}</span></header>
+            <header><div><p class="admin-panel__eyebrow">{{ admin_game.metadata.engine|replace('_', ' ') }}</p><h4>{{ admin_game.metadata.title }}</h4></div><span class="game-phase game-phase--{{ admin_game.phase }}">{% if admin_game.simulation.is_simulated %}Simulated Results{% elif not admin_game.enabled %}Disabled{% else %}{{ admin_game.phase|title }}{% endif %}</span></header>
             <p>{{ admin_game.metadata.description }} <strong>{{ admin_game.metadata.solo_note }}</strong></p>
             <div class="game-admin-metrics game-admin-metrics--compact">
               <div><span>Players</span><strong>{{ admin_game.statistics.participant_count }}</strong></div>
@@ -394,6 +422,8 @@
             {% if admin_game.statistics.scores %}<details class="admin-entry"><summary><strong>{% if admin_game.phase == 'ended' %}Final{% else %}Provisional{% endif %} leaderboard</strong><span>{{ admin_game.statistics.scores|length }} players</span></summary><div class="admin-entry__form table-wrapper"><table><thead><tr><th>Rank</th><th>Alias</th><th>Points</th></tr></thead><tbody>{% for score in admin_game.statistics.scores %}<tr><td>#{{ loop.index }}</td><td>{{ score.alias }}</td><td>{{ score.points }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
 
             {% if admin_game.phase == 'ended' %}<section class="game-presentation-controls"><h5>Announcer display</h5><div class="contest-actions"><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="start_game_presentation">Start Presentation</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="previous_game_slide">Previous</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="next_game_slide">Next</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_results">Results</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_winner">Winner</button></form></div></section>{% endif %}
+
+            <details class="admin-entry"><summary><strong>Test tools</strong><span>{% if admin_game.simulation.is_simulated %}{{ admin_game.simulation.player_count }} simulated players{% else %}Build completed test results{% endif %}</span></summary><form method="post" class="admin-entry__form" onsubmit="return confirm('Simulate a completed {{ admin_game.metadata.title|e }} game? This replaces this game\'s current test state and adds its result cards to the live rotation.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><p>Creates deterministic anonymous players, completed rounds, final scores, and display cards. Real participant data must be reset first.</p><label>Test players<input type="number" name="player_count" min="2" max="20" value="{{ admin_game.simulation.player_count or 8 }}"></label><button class="button button--primary" name="action" value="simulate_game"{% if admin_game.participants and not admin_game.simulation.is_simulated %} disabled{% endif %}>Simulate Completed Game</button></form></details>
 
             <details class="danger-zone"><summary>Reset {{ admin_game.metadata.title }}</summary><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><p>Clears anonymous players, responses, votes, scores, and results after a Redis backup.</p><label>Type {{ admin_game.reset_phrase }}<input name="confirmation" autocomplete="off" required></label><button class="button button--danger" name="action" value="reset_game">Reset Game</button></form></details>
           </article>

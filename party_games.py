@@ -98,6 +98,10 @@ def normalize_response(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "").strip())[:GAME_RESPONSE_MAX_LENGTH]
 
 
+def normalize_player_name(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip())[:80]
+
+
 def _nonnegative_int(value: object) -> int:
     try:
         return max(0, int(value or 0))
@@ -247,6 +251,15 @@ def generate_game_alias(existing_aliases: set[str] | None = None) -> str:
     return f"Mysterious Guest {len(existing) + 1}"
 
 
+def participant_public_name(participant: object, fallback: str = "Player") -> str:
+    if not isinstance(participant, dict):
+        return fallback
+    alias = normalize_player_name(participant.get("alias")) or fallback
+    if bool(participant.get("anonymous", True)):
+        return alias
+    return normalize_player_name(participant.get("display_name")) or alias
+
+
 def normalize_participant(raw: object, user_id: str = "") -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
@@ -393,10 +406,21 @@ def normalize_alias_participant(raw: object, user_id: str, *, include_answers: b
     if not isinstance(raw, dict):
         return None
     player_id = str(raw.get("player_id", "") or "").strip()[:80]
-    alias = re.sub(r"\s+", " ", str(raw.get("alias", "") or "").strip())[:80]
+    alias = normalize_player_name(raw.get("alias"))
     if not user_id or not player_id or not alias:
         return None
-    participant = {"player_id": player_id, "alias": alias, "created_at": str(raw.get("created_at", "") or ""), "updated_at": str(raw.get("updated_at", "") or "")}
+    display_name = normalize_player_name(raw.get("display_name"))
+    anonymous = bool(raw.get("anonymous", True))
+    if not anonymous and not display_name:
+        anonymous = True
+    participant = {
+        "player_id": player_id,
+        "display_name": display_name,
+        "anonymous": anonymous,
+        "alias": alias,
+        "created_at": str(raw.get("created_at", "") or ""),
+        "updated_at": str(raw.get("updated_at", "") or ""),
+    }
     if include_answers:
         answers = {}
         raw_answers = raw.get("answers", {})
@@ -414,7 +438,14 @@ def normalize_alias_participant(raw: object, user_id: str, *, include_answers: b
 def calculate_mmf_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
     participants = game.get("participants", {})
     scores_by_player = {str(entry.get("player_id")): 0 for entry in participants.values()}
-    aliases = {str(entry.get("player_id")): str(entry.get("alias", "Player")) for entry in participants.values()}
+    identities = {
+        str(entry.get("player_id")): {
+            "name": participant_public_name(entry),
+            "alias": str(entry.get("alias", "Player")),
+            "anonymous": bool(entry.get("anonymous", True)),
+        }
+        for entry in participants.values()
+    }
     round_results = []
     for game_round in game.get("rounds", []):
         round_id = str(game_round.get("id", ""))
@@ -440,8 +471,18 @@ def calculate_mmf_results(game: dict[str, Any], *, finalized_at: str | None = No
                 continue
             scores_by_player[player_id] += sum(1 for action in MMF_ACTIONS if answer.get(action) in winners[action])
         round_results.append({"round_id": round_id, "people": copy.deepcopy(people), "respondent_count": respondent_count, "totals": totals, "winners": winners})
-    scores = [{"player_id": player_id, "alias": aliases.get(player_id, "Player"), "points": points, "completed_rounds": len(next((entry.get("answers", {}) for entry in participants.values() if str(entry.get("player_id")) == player_id), {}))} for player_id, points in scores_by_player.items()]
-    scores.sort(key=lambda entry: (-entry["points"], entry["alias"].casefold()))
+    scores = [
+        {
+            "player_id": player_id,
+            "name": identities.get(player_id, {}).get("name", "Player"),
+            "alias": identities.get(player_id, {}).get("alias", "Player"),
+            "anonymous": bool(identities.get(player_id, {}).get("anonymous", True)),
+            "points": points,
+            "completed_rounds": len(next((entry.get("answers", {}) for entry in participants.values() if str(entry.get("player_id")) == player_id), {})),
+        }
+        for player_id, points in scores_by_player.items()
+    ]
+    scores.sort(key=lambda entry: (-entry["points"], entry["name"].casefold()))
     top_score = scores[0]["points"] if scores else 0
     winner_player_ids = [entry["player_id"] for entry in scores if top_score > 0 and entry["points"] == top_score]
     return {"finalized_at": finalized_at or utc_now_iso(), "round_results": round_results, "scores": scores, "winner_player_ids": winner_player_ids}
@@ -515,7 +556,14 @@ def finalize_prompt_round(game_round: dict[str, Any]) -> dict[str, Any]:
 def calculate_prompt_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
     participants = game.get("participants", {})
     scores_by_player = {str(entry.get("player_id")): 0 for entry in participants.values()}
-    aliases = {str(entry.get("player_id")): str(entry.get("alias", "Player")) for entry in participants.values()}
+    identities = {
+        str(entry.get("player_id")): {
+            "name": participant_public_name(entry),
+            "alias": str(entry.get("alias", "Player")),
+            "anonymous": bool(entry.get("anonymous", True)),
+        }
+        for entry in participants.values()
+    }
     for game_round in game.get("rounds", []):
         if game_round.get("status") != "revealed":
             continue
@@ -532,8 +580,17 @@ def calculate_prompt_results(game: dict[str, Any], *, finalized_at: str | None =
                 player_id = str(response.get("player_id", ""))
                 if player_id in scores_by_player:
                     scores_by_player[player_id] += 1
-    scores = [{"player_id": player_id, "alias": aliases.get(player_id, "Player"), "points": points} for player_id, points in scores_by_player.items()]
-    scores.sort(key=lambda entry: (-entry["points"], entry["alias"].casefold()))
+    scores = [
+        {
+            "player_id": player_id,
+            "name": identities.get(player_id, {}).get("name", "Player"),
+            "alias": identities.get(player_id, {}).get("alias", "Player"),
+            "anonymous": bool(identities.get(player_id, {}).get("anonymous", True)),
+            "points": points,
+        }
+        for player_id, points in scores_by_player.items()
+    ]
+    scores.sort(key=lambda entry: (-entry["points"], entry["name"].casefold()))
     top = scores[0]["points"] if scores else 0
     return {"finalized_at": finalized_at or utc_now_iso(), "scores": scores, "winner_player_ids": [entry["player_id"] for entry in scores if top > 0 and entry["points"] == top]}
 
@@ -768,6 +825,8 @@ def build_simulated_game_state(
                 }
             game["participants"][user_id] = {
                 "player_id": f"simulation-player-{number:02d}",
+                "display_name": f"Test Player {number:02d}",
+                "anonymous": False,
                 "alias": f"Test Alias {number:02d}",
                 "answers": answers,
                 "created_at": timestamp,
@@ -788,6 +847,8 @@ def build_simulated_game_state(
         user_id = f"simulation:{game_key}:player-{number:02d}"
         game["participants"][user_id] = {
             "player_id": f"simulation-player-{number:02d}",
+            "display_name": f"Test Player {number:02d}",
+            "anonymous": False,
             "alias": f"Test Alias {number:02d}",
             "created_at": timestamp,
             "updated_at": timestamp,

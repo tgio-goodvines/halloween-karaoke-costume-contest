@@ -63,7 +63,7 @@
         <h2 id="party-games-heading">Party Games</h2>
         <p>{% if party_games_state.active_count %}{{ party_games_state.active_count }} game{{ 's are' if party_games_state.active_count != 1 else ' is' }} live now.{% else %}Choose a game and opt in before the hosts start play.{% endif %}</p>
       </div>
-      <span>{{ party_games_state.participant_count }} anonymous signup{{ 's' if party_games_state.participant_count != 1 else '' }}</span>
+      <span>{{ party_games_state.participant_count }} game signup{{ 's' if party_games_state.participant_count != 1 else '' }}</span>
     </div>
     <div class="games-showcase__grid">
       {% for game in party_games_state.games %}

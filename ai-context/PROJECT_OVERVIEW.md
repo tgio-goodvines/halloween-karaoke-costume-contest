@@ -138,7 +138,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 10. The following globals in `main.py` are
+`halloween:state` with schema version 11. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -213,10 +213,14 @@ the process-local cache:
   retained failure details, and the latest DJ reset acknowledgement.
 - `games_state`: five-game registry state. Two Truths and a Lie stores clues and
   identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
-  trios, anonymous aliases, ballots, aggregate results, and presentation state;
+  trios, per-player public identity choices, private ballots, aggregate results,
+  and presentation state;
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only store independent
-  prompt decks, submission/voting/reveal rounds, anonymous responses, votes,
-  cumulative scores, presentation state, and explicit simulation metadata.
+  prompt decks, blind submission/voting/reveal rounds, per-player public identity
+  choices, votes, cumulative scores, presentation state, and explicit simulation
+  metadata. New MMF and prompt-game enrollment defaults to the signed-in display
+  name; an attendee may choose a generated anonymous alias while signup is open.
+  Legacy alias-only participants remain anonymous during schema normalization.
   Admin simulation builds deterministic completed games without creating party
   accounts and refuses to replace real participant data. MMF and prompt engines permit a
   one-player session; a single prompt response becomes a one-point solo

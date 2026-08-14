@@ -226,6 +226,10 @@
   edits MMF's ten public-figure trios and optional images, manages three prompt
   decks, advances prompt response/vote/reveal phases, shows aggregate progress,
   and drives previous/next announcer presentation slides after game end.
+- Every game card includes a test-tool action that can generate a deterministic
+  completed game with 2-20 synthetic players. Simulation never creates party
+  accounts, preserves MMF/prompt configuration, creates a Redis backup, and
+  refuses to replace real participant data.
 - Games export keeps Two Truths operational data but redacts MMF account keys
   and individual ballots, returning only aliases, completion counts, and
   aggregate results for that game.
@@ -280,13 +284,16 @@ app state.
   prompts, karaoke signup prompts, game signup/results cards, drink-order promotion,
   live-update explanation cards, winner/scoreboard cards, costume entries, and
   karaoke entries.
-- Ended Two Truths and a Lie games add tied-winner and final-score cards to the
+- Ended Two Truths and a Lie games add tied-winner/outcome and final-score cards to the
   center rotation. Persistent `game_*` overrides let admins pause center stage
   on game, winner, or result announcements while ready notices remain isolated
   to the right rail.
 - Anonymous prompt responses join the left stage only after voting opens. Ended
-  MMF and prompt games add alias-only winner/scoreboard cards, while host-controlled
+  MMF and prompt games add alias-only winner/outcome and scoreboard cards, while host-controlled
   presentation overrides walk the display through each aggregate result.
+- Generated game result cards remain available after attendee enrollment is
+  disabled. `/admin/display` lists each card with Show Now and Include/Hide
+  controls; the Party Games source toggle remains the master visibility switch.
 - Signup portal card includes admin-configurable WiFi network/password details
   and the party portal link.
 - Multiple enabled games rotate independently on the left stage; admins may pin

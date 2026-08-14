@@ -118,6 +118,15 @@ def _presentation(raw: object) -> dict[str, Any]:
     }
 
 
+def _simulation(raw: object) -> dict[str, Any]:
+    source = raw if isinstance(raw, dict) else {}
+    return {
+        "is_simulated": bool(source.get("is_simulated")),
+        "player_count": _nonnegative_int(source.get("player_count")),
+        "generated_at": str(source.get("generated_at", "") or ""),
+    }
+
+
 DEFAULT_TWO_TRUTHS_GAME_STATE: dict[str, Any] = {
     "enabled": False,
     "phase": "signup",
@@ -131,6 +140,7 @@ DEFAULT_TWO_TRUTHS_GAME_STATE: dict[str, Any] = {
         "winner_ids": [],
         "participant_results": [],
     },
+    "simulation": {"is_simulated": False, "player_count": 0, "generated_at": ""},
 }
 
 
@@ -197,6 +207,7 @@ def empty_mmf_game_state(*, enabled: bool = False) -> dict[str, Any]:
         "participants": {},
         "results": {"finalized_at": "", "round_results": [], "scores": [], "winner_player_ids": []},
         "presentation": {"active": False, "slide_index": 0},
+        "simulation": {"is_simulated": False, "player_count": 0, "generated_at": ""},
     }
 
 
@@ -212,6 +223,7 @@ def empty_prompt_game_state(game_key: str, *, enabled: bool = False) -> dict[str
         "current_round_id": "",
         "results": {"finalized_at": "", "scores": [], "winner_player_ids": []},
         "presentation": {"active": False, "slide_index": 0},
+        "simulation": {"is_simulated": False, "player_count": 0, "generated_at": ""},
     }
 
 
@@ -345,6 +357,7 @@ def normalize_two_truths_game_state(raw: object) -> dict[str, Any]:
                 guesses[guesser_id] = normalized_submission_guesses
     state["guesses"] = guesses
     state["results"] = normalize_results(raw.get("results"))
+    state["simulation"] = _simulation(raw.get("simulation"))
     return state
 
 
@@ -464,6 +477,7 @@ def normalize_mmf_game_state(raw: object) -> dict[str, Any]:
     state["participants"] = participants
     state["results"] = calculate_mmf_results(state, finalized_at=str(raw.get("results", {}).get("finalized_at", "") if isinstance(raw.get("results"), dict) else "")) if state["phase"] == "ended" else copy.deepcopy(state["results"])
     state["presentation"] = _presentation(raw.get("presentation"))
+    state["simulation"] = _simulation(raw.get("simulation"))
     return state
 
 
@@ -589,6 +603,7 @@ def normalize_prompt_game_state(raw: object, game_key: str) -> dict[str, Any]:
     state["current_round_id"] = current_round_id if current_round_id in seen_round_ids else ""
     state["results"] = calculate_prompt_results(state, finalized_at=str(raw.get("results", {}).get("finalized_at", "") if isinstance(raw.get("results"), dict) else "")) if state["phase"] == "ended" else copy.deepcopy(state["results"])
     state["presentation"] = _presentation(raw.get("presentation"))
+    state["simulation"] = _simulation(raw.get("simulation"))
     return state
 
 
@@ -679,3 +694,144 @@ def game_winners(game_key: str, game: dict[str, Any]) -> list[dict[str, Any]]:
 def prompt_round_for_game(game: dict[str, Any]) -> dict[str, Any] | None:
     current_id = str(game.get("current_round_id", ""))
     return next((entry for entry in game.get("rounds", []) if entry.get("id") == current_id), None)
+
+
+def build_simulated_game_state(
+    game_key: str,
+    current_game: dict[str, Any],
+    *,
+    player_count: int = 8,
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    """Build deterministic, completed test data without creating party accounts."""
+    if game_key not in GAME_CATALOG:
+        raise KeyError(game_key)
+    count = min(20, max(2, int(player_count)))
+    timestamp = generated_at or utc_now_iso()
+    simulation = {"is_simulated": True, "player_count": count, "generated_at": timestamp}
+
+    if game_key == TWO_TRUTHS_GAME_KEY:
+        game = empty_two_truths_game_state(enabled=True)
+        for index in range(count):
+            number = index + 1
+            user_id = f"simulation:{game_key}:player-{number:02d}"
+            game["participants"][user_id] = {
+                "user_id": user_id,
+                "submission_id": f"simulation-two-truths-{number:02d}",
+                "answer_name": f"Test Player {number:02d}",
+                "truths": [
+                    f"I have attended {number} costume parties.",
+                    f"My lucky number is {number * 3}.",
+                ],
+                "lie": f"I keep {number + 2} pet ghosts at home.",
+                "display_order": [index % 3, (index + 1) % 3, (index + 2) % 3],
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        participants = list(game["participants"].items())
+        for guesser_index, (guesser_id, _guesser) in enumerate(participants):
+            guesses = {}
+            for target_index, (target_id, target) in enumerate(participants):
+                if target_id == guesser_id:
+                    continue
+                correct = guesser_index == 0 or (guesser_index + target_index) % 3 != 0
+                guessed_name = target["answer_name"] if correct else f"Mystery Guest {target_index + 1:02d}"
+                guesses[target["submission_id"]] = {
+                    "guessed_name": guessed_name,
+                    "normalized_name": normalize_guess_name(guessed_name),
+                    "submitted_at": timestamp,
+                }
+            game["guesses"][guesser_id] = guesses
+        game["phase"] = "ended"
+        game["started_at"] = timestamp
+        game["ended_at"] = timestamp
+        game["results"] = calculate_two_truths_results(game, finalized_at=timestamp)
+        game["simulation"] = simulation
+        return game
+
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        game = empty_mmf_game_state(enabled=True)
+        configured_rounds = current_game.get("rounds", [])
+        game["rounds"] = copy.deepcopy(configured_rounds if len(configured_rounds) == MMF_ROUND_COUNT else DEFAULT_MMF_ROUNDS)
+        game["explicit_label"] = str(current_game.get("explicit_label", "F%$@") or "F%$@")[:24]
+        for index in range(count):
+            number = index + 1
+            user_id = f"simulation:{game_key}:player-{number:02d}"
+            answers = {}
+            for round_index, game_round in enumerate(game["rounds"]):
+                people = [str(person["id"]) for person in game_round["people"]]
+                offset = (index + round_index) % 3
+                answers[str(game_round["id"])] = {
+                    "murder": people[offset],
+                    "marry": people[(offset + 1) % 3],
+                    "fuck": people[(offset + 2) % 3],
+                }
+            game["participants"][user_id] = {
+                "player_id": f"simulation-player-{number:02d}",
+                "alias": f"Test Alias {number:02d}",
+                "answers": answers,
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        game["phase"] = "ended"
+        game["started_at"] = timestamp
+        game["ended_at"] = timestamp
+        game["results"] = calculate_mmf_results(game, finalized_at=timestamp)
+        game["simulation"] = simulation
+        return game
+
+    game = empty_prompt_game_state(game_key, enabled=True)
+    configured_prompts = current_game.get("prompts", [])
+    game["prompts"] = copy.deepcopy(configured_prompts or default_prompt_records(game_key))
+    for index in range(count):
+        number = index + 1
+        user_id = f"simulation:{game_key}:player-{number:02d}"
+        game["participants"][user_id] = {
+            "player_id": f"simulation-player-{number:02d}",
+            "alias": f"Test Alias {number:02d}",
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+    simulation_prompts = [prompt for prompt in game["prompts"] if prompt.get("enabled")][:3]
+    if not simulation_prompts:
+        simulation_prompts = game["prompts"][:1]
+    if not simulation_prompts:
+        game["prompts"] = default_prompt_records(game_key)
+        simulation_prompts = game["prompts"][:1]
+    participant_items = list(game["participants"].items())
+    for round_index, prompt in enumerate(simulation_prompts):
+        round_id = f"simulation-{game_key}-round-{round_index + 1:02d}"
+        responses = {}
+        response_ids = []
+        for player_index, (_user_id, participant) in enumerate(participant_items):
+            response_id = f"{round_id}-response-{player_index + 1:02d}"
+            response_ids.append(response_id)
+            responses[response_id] = {
+                "id": response_id,
+                "player_id": participant["player_id"],
+                "text": f"Simulated answer {player_index + 1} for round {round_index + 1}",
+                "submitted_at": timestamp,
+            }
+        votes = {}
+        for player_index, (_user_id, participant) in enumerate(participant_items):
+            target_index = 1 if player_index == 0 else 0
+            votes[participant["player_id"]] = response_ids[target_index]
+        game_round = {
+            "id": round_id,
+            "prompt_id": str(prompt.get("id", "")),
+            "prompt_text": str(prompt.get("text", "")),
+            "status": "revealed",
+            "responses": responses,
+            "votes": votes,
+            "created_at": timestamp,
+            "revealed_at": timestamp,
+        }
+        game_round["results"] = finalize_prompt_round(game_round)
+        game["rounds"].append(game_round)
+    game["current_round_id"] = str(game["rounds"][-1]["id"])
+    game["phase"] = "ended"
+    game["started_at"] = timestamp
+    game["ended_at"] = timestamp
+    game["results"] = calculate_prompt_results(game, finalized_at=timestamp)
+    game["simulation"] = simulation
+    return game

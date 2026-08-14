@@ -4837,6 +4837,42 @@ def _display_entry(source: str, entry_id: str, **content: object) -> dict[str, o
     }
 
 
+def _display_fact(label: str, value: object) -> dict[str, str]:
+    return {"label": str(label), "value": str(value)}
+
+
+def _display_duration_label(seconds: object) -> str:
+    duration = max(0, _safe_int(seconds, 0))
+    if duration < 60:
+        return "Under 1 min"
+    minutes = max(1, round(duration / 60))
+    return f"About {minutes} min"
+
+
+def _display_contest_status() -> str:
+    if contest_state.get("winner_locked"):
+        return "Winner selected"
+    if contest_state.get("voting_open"):
+        return "Voting open"
+    if contest_state.get("contest_started"):
+        return "Judging live"
+    return "Signup open"
+
+
+def _display_karaoke_status() -> str:
+    if karaoke_state.get("party_started"):
+        return str(karaoke_state.get("stage_mode", "Live") or "Live").replace("_", " ").title()
+    return "Queue open"
+
+
+def _display_available_drinks() -> list[dict[str, object]]:
+    return [
+        item
+        for item in menu_items
+        if item.get("category") == "drink" and item.get("available") and item.get("orderable")
+    ]
+
+
 def game_result_card_is_enabled(card_id: str) -> bool:
     configured = display_config.get("game_result_card_enabled", {})
     if not isinstance(configured, dict):
@@ -4857,6 +4893,20 @@ def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[
             if not card:
                 continue
             entry = _display_entry("games", f"{game_key}-{suffix}", **card)
+            entry["kind"] = "result" if suffix == "winner" else "scoreboard"
+            entry["facts"] = [
+                _display_fact("Game", GAME_CATALOG[game_key]["short_title"]),
+                _display_fact("Players", len(game.get("participants", {}))),
+                _display_fact("Status", "Final"),
+            ]
+            if suffix == "winner" and scoreboard and scoreboard.get("scoreboard"):
+                entry["scoreboard"] = {
+                    "entries": copy.deepcopy(scoreboard["scoreboard"].get("entries", []))[:3]
+                }
+            entry["action"] = {
+                "label": "See every result",
+                "url": f"{PARTY_SITE_URL}/party/games",
+            }
             entry["game_key"] = game_key
             entry["game_title"] = GAME_CATALOG[game_key]["title"]
             entry["card_type"] = card_type
@@ -4876,6 +4926,10 @@ def build_rotation_entries() -> List[dict[str, object]]:
     wifi_network = display_settings.get("wifi_network", DEFAULT_DISPLAY_SETTINGS["wifi_network"])
     wifi_password = display_settings.get("wifi_password", DEFAULT_DISPLAY_SETTINGS["wifi_password"])
     enabled_games = enabled_game_keys()
+    available_drinks = _display_available_drinks()
+    active_orders = active_drink_orders()
+    active_game_count = sum(1 for key in enabled_games if party_game_state(key).get("phase") == "active")
+    public_karaoke = public_karaoke_signups()
     grouped: dict[str, list[dict[str, object]]] = {source: [] for source in DISPLAY_SOURCE_KEYS}
 
     grouped["portal"].append(
@@ -4883,6 +4937,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "portal",
             "wifi",
             category="Signup Portal",
+            kind="access",
             primary="Connect to the party WiFi.",
             secondary=f"After you connect, browse to {PARTY_SITE_URL} to start the party experience.",
             cta=True,
@@ -4892,6 +4947,17 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 "wifi_password": wifi_password,
                 "site_url": PARTY_SITE_URL,
             },
+            facts=[
+                _display_fact("Costumes", len(costume_signups)),
+                _display_fact("Karaoke", len(public_karaoke)),
+                _display_fact("Games live", active_game_count),
+                _display_fact("Bar orders", len(active_orders)),
+            ],
+            steps=[
+                "Connect to the party WiFi",
+                "Open the party site on your phone",
+                "Sign in to play, sing, enter, and order",
+            ],
         )
     )
 
@@ -4900,9 +4966,17 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "costume",
             "signup",
             category="Costume Contest",
+            kind="action",
             primary="Add your costume to the live lineup.",
             secondary="Use the party portal to enter your name and costume before judging starts.",
             tertiary="New costume signups appear here automatically.",
+            facts=[
+                _display_fact("Entries", len(costume_signups)),
+                _display_fact("Contest", _display_contest_status()),
+                _display_fact("Scoring", "1–10 per costume"),
+            ],
+            steps=["Open Costumes", "Add your costume", "Return when voting opens"],
+            action={"label": "Enter the costume contest", "url": f"{PARTY_SITE_URL}/party/costumes"},
         )
     )
     winner_entry = build_winner_entry()
@@ -4917,11 +4991,18 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "costume",
             signup.id,
             category="Costume Contest",
+            kind="profile",
             primary=signup.name,
             secondary=f"Dressed as {signup.costume}",
             tertiary="Tonight's live costume lineup",
+            facts=[
+                _display_fact("Entry", index + 1),
+                _display_fact("Lineup", len(costume_signups)),
+                _display_fact("Contest", _display_contest_status()),
+            ],
+            action={"label": "Add your costume", "url": f"{PARTY_SITE_URL}/party/costumes"},
         )
-        for signup in costume_signups
+        for index, signup in enumerate(costume_signups)
     )
 
     grouped["karaoke"].append(
@@ -4929,8 +5010,16 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "karaoke",
             "signup",
             category="Karaoke Stage",
+            kind="action",
             primary="Reserve your karaoke song.",
             secondary="Use the party portal to queue the song you want to perform.",
+            facts=[
+                _display_fact("In lineup", len(public_karaoke)),
+                _display_fact("Stage", _display_karaoke_status()),
+                _display_fact("Video", "Host approved" if app.config.get("YOUTUBE_KARAOKE_ENABLED") else "Bring a song"),
+            ],
+            steps=["Open Karaoke", "Choose your exact song", "Watch for your stage call"],
+            action={"label": "Join the karaoke queue", "url": f"{PARTY_SITE_URL}/party/karaoke"},
         )
     )
     grouped["karaoke"].extend(
@@ -4938,12 +5027,19 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "karaoke",
             signup.id,
             category="Karaoke Stage",
+            kind="profile",
             primary=signup.name,
             secondary=f'Performing "{signup.song_title}"',
             tertiary=f"by {signup.artist}" if signup.artist else "",
             image_url=str(signup.youtube.get("thumbnail_url", "") or ""),
+            facts=[
+                _display_fact("Queue", index + 1),
+                _display_fact("Performers", len(public_karaoke)),
+                _display_fact("Stage", str(signup.workflow.get("performance_status", "waiting") or "waiting").replace("_", " ").title()),
+            ],
+            action={"label": "Reserve your song", "url": f"{PARTY_SITE_URL}/party/karaoke"},
         )
-        for signup in public_karaoke_signups()
+        for index, signup in enumerate(public_karaoke)
     )
 
     if enabled_games:
@@ -4952,9 +5048,17 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 "games",
                 "join",
                 category="Party Games",
+                kind="action",
                 primary="Join tonight's party games.",
                 secondary="Open Games in the party portal to opt in, answer, and vote.",
                 tertiary="Available: " + " · ".join(GAME_CATALOG[key]["short_title"] for key in enabled_games),
+                facts=[
+                    _display_fact("Available", len(enabled_games)),
+                    _display_fact("Live now", active_game_count),
+                    _display_fact("Players", total_game_participations()),
+                ],
+                steps=["Open Games", "Join any enabled game", "Submit, vote, and follow results"],
+                action={"label": "Join party games", "url": f"{PARTY_SITE_URL}/party/games"},
             )
         )
     grouped["games"].extend(generated_game_result_entries())
@@ -4964,9 +5068,17 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "bar",
             "ordering",
             category="Bar Queue",
+            kind="action",
             primary="Order event drinks from your phone.",
             secondary="Browse the menu, send available drinks to the bar, and watch the right stage for status.",
             tertiary="Completed drinks receive a ready alert here and by email.",
+            facts=[
+                _display_fact("Available", len(available_drinks)),
+                _display_fact("Active orders", len(active_orders)),
+                _display_fact("Average prep", _display_duration_label(average_drink_completion_seconds())),
+            ],
+            steps=["Open the Menu", "Choose an available drink", "Watch the right stage for pickup"],
+            action={"label": "Browse drinks", "url": f"{PARTY_SITE_URL}/party/menu"},
         )
     )
     grouped["updates"].append(
@@ -4974,9 +5086,18 @@ def build_rotation_entries() -> List[dict[str, object]]:
             "updates",
             "live",
             category="Live Updates",
+            kind="status",
             primary="Watch the party build in real time.",
             secondary="Costumes, karaoke, game results, drink status, and announcements update all night.",
             tertiary="Keep an eye on every stage after each signup.",
+            facts=[
+                _display_fact("Costumes", len(costume_signups)),
+                _display_fact("Karaoke", len(public_karaoke)),
+                _display_fact("Game players", total_game_participations()),
+                _display_fact("Bar queue", len(active_orders)),
+            ],
+            steps=["Use your phone to participate", "Changes appear here live", "Ready alerts stay on the right"],
+            action={"label": "Open the party hub", "url": PARTY_PORTAL_URL},
         )
     )
 
@@ -4988,6 +5109,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 "custom",
                 str(card.get("id", "")),
                 category=card.get("category", "Announcement"),
+                kind="announcement",
                 primary=card.get("primary", ""),
                 secondary=card.get("secondary", ""),
                 tertiary=card.get("tertiary", ""),
@@ -5025,6 +5147,12 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             "primary": GAME_CATALOG[game_key]["description"],
             "secondary": "Open Games in the party portal to join.",
             "metrics": [{"label": "Players", "value": len(participants)}],
+            "steps": [
+                "Open Games in the party portal",
+                "Join this game",
+                "Follow the live phase shown here",
+            ],
+            "action_label": "Join at tnq-halloween.com/party/games",
             "priority": 2 if phase == "active" else (1 if phase == "ended" else 0),
         }
 
@@ -5052,6 +5180,8 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                             "status_label": "Mystery clue",
                             "primary": f"1. {statements[0]} · 2. {statements[1]} · 3. {statements[2]}",
                             "secondary": "Can you identify the mystery guest?",
+                            "steps": statements,
+                            "action_label": "Make your guess in Party Games",
                             "metrics": [],
                             "priority": 3 if phase == "active" else 1,
                         }
@@ -5062,6 +5192,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             entry["metrics"] = [
                 {"label": "Players", "value": len(participants)},
                 {"label": "Complete", "value": f"{completed}/{len(participants)}"},
+                {"label": "Rounds", "value": "10"},
             ]
             if phase == "ended":
                 winners = game_winners(game_key, game)
@@ -5079,7 +5210,14 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 entry["metrics"] = [
                     {"label": "Answers", "value": len(responses)},
                     {"label": "Votes", "value": len(votes)},
+                    {"label": "Players", "value": len(participants)},
                 ]
+                entry["steps"] = [
+                    "Read the current prompt",
+                    "Submit anonymously" if round_status == "submissions" else "Vote for another response",
+                    "Watch for the reveal",
+                ]
+                entry["action_label"] = "Respond in Party Games" if round_status == "submissions" else "Vote now in Party Games"
                 entry["priority"] = 3 if round_status in {"voting", "revealed"} else 2
                 if round_status in {"voting", "revealed"}:
                     for response in responses.values():
@@ -5093,7 +5231,14 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                                 "metrics": [
                                     {"label": "Answers", "value": len(responses)},
                                     {"label": "Votes", "value": len(votes)},
+                                    {"label": "Players", "value": len(participants)},
                                 ],
+                                "steps": [
+                                    "Open Party Games",
+                                    "Read every anonymous answer",
+                                    "Vote for your favorite",
+                                ],
+                                "action_label": "Vote anonymously in Party Games",
                                 "priority": 4,
                             }
                         )
@@ -5128,9 +5273,12 @@ def build_bar_stage() -> dict[str, object]:
             "status": str(order.get("status", "received")),
             "status_label": "Mixing" if order.get("status") == "in_progress" else "Received",
             "estimated_ready_label": format_time_label(order.get("estimated_ready_at")),
+            "position": index + 1,
         }
-        for order in orders[:maximum]
+        for index, order in enumerate(orders[:maximum])
     ]
+    available_drinks = _display_available_drinks()
+    featured_drink = available_drinks[0] if available_drinks else None
     mode = str(display_config.get("bar_mode", "auto"))
     visible = mode != "hidden" and (mode == "always" or bool(public_orders) or bool(live_display_notice_override))
     return {
@@ -5140,6 +5288,23 @@ def build_bar_stage() -> dict[str, object]:
         "overflow_count": max(0, len(orders) - len(public_orders)),
         "notice": copy.deepcopy(live_display_notice_override),
         "queued_notice_count": len(live_display_notice_queue),
+        "summary": {
+            "mixing_count": sum(1 for order in orders if order.get("status") == "in_progress"),
+            "waiting_count": sum(1 for order in orders if order.get("status") == "received"),
+            "average_prep_label": _display_duration_label(average_drink_completion_seconds()),
+            "available_drink_count": len(available_drinks),
+        },
+        "featured_item": (
+            {
+                "name": str(featured_drink.get("name", "") or ""),
+                "description": str(featured_drink.get("description", "") or ""),
+                "image_url": safe_image_url(str(featured_drink.get("image_url", "") or "")),
+            }
+            if featured_drink
+            else None
+        ),
+        "action": {"label": "Order from your phone", "url": f"{PARTY_SITE_URL}/party/menu"},
+        "pickup_note": "Pick up completed drinks at the bar when your name appears here.",
     }
 
 

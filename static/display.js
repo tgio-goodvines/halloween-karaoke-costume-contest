@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     gamePrimary: document.querySelector('[data-game-primary]'),
     gameSecondary: document.querySelector('[data-game-secondary]'),
     gameMetrics: document.querySelector('[data-game-metrics]'),
+    gameSteps: document.querySelector('[data-game-steps]'),
+    gameAction: document.querySelector('[data-game-action]'),
     gamePosition: document.querySelector('[data-game-position]'),
     gameProgress: document.querySelector('[data-game-progress]'),
     centerStage: document.querySelector('[data-center-stage]'),
@@ -26,6 +28,9 @@ document.addEventListener('DOMContentLoaded', () => {
     centerPrimary: document.querySelector('[data-center-primary]'),
     centerSecondary: document.querySelector('[data-center-secondary]'),
     centerTertiary: document.querySelector('[data-center-tertiary]'),
+    centerFacts: document.querySelector('[data-center-facts]'),
+    centerSteps: document.querySelector('[data-center-steps]'),
+    centerAction: document.querySelector('[data-center-action]'),
     centerImageWrap: document.querySelector('[data-center-image-wrap]'),
     centerImage: document.querySelector('[data-center-image]'),
     centerCta: document.querySelector('[data-center-cta]'),
@@ -46,12 +51,20 @@ document.addEventListener('DOMContentLoaded', () => {
     barHeading: document.querySelector('[data-bar-heading]'),
     barOrders: document.querySelector('[data-bar-orders]'),
     barOverflow: document.querySelector('[data-bar-overflow]'),
+    barSummary: document.querySelector('[data-bar-summary]'),
+    barFeature: document.querySelector('[data-bar-feature]'),
+    barFeatureName: document.querySelector('[data-bar-feature-name]'),
+    barFeatureDescription: document.querySelector('[data-bar-feature-description]'),
+    barAction: document.querySelector('[data-bar-action]'),
+    barPickup: document.querySelector('[data-bar-pickup]'),
     readyNotice: document.querySelector('[data-ready-notice]'),
     readyImageWrap: document.querySelector('[data-ready-image-wrap]'),
     readyImage: document.querySelector('[data-ready-image]'),
     readyName: document.querySelector('[data-ready-name]'),
     readyMessage: document.querySelector('[data-ready-message]'),
+    readyDetails: document.querySelector('[data-ready-details]'),
     readyQueue: document.querySelector('[data-ready-queue]'),
+    readyPickup: document.querySelector('[data-ready-pickup]'),
     music: document.querySelector('[data-dj-now-playing]'),
     djProgressWrap: document.querySelector('[data-dj-progress-wrap]'),
     djProgress: document.querySelector('[data-dj-progress]'),
@@ -99,9 +112,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const fitPanel = (panel) => {
     if (!panel || panel.hasAttribute('hidden')) return;
-    panel.classList.remove('is-dense', 'is-ultra-dense');
-    if (panel.scrollHeight > panel.clientHeight + 2) panel.classList.add('is-dense');
-    if (panel.scrollHeight > panel.clientHeight + 2) panel.classList.add('is-ultra-dense');
+    panel.classList.remove('is-sparse', 'is-dense', 'is-ultra-dense');
+    const fitContent = panel.querySelector('[data-fit-content]');
+    const availableHeight = Math.max(1, panel.clientHeight);
+    const contentHeight = fitContent ? Math.max(fitContent.scrollHeight, fitContent.getBoundingClientRect().height) : panel.scrollHeight;
+    const contentOverflows = () => Boolean(
+      fitContent && fitContent.clientHeight > 0 && fitContent.scrollHeight > fitContent.clientHeight + 2
+    );
+    if (contentHeight / availableHeight < 0.56) panel.classList.add('is-sparse');
+    if (panel.scrollHeight > panel.clientHeight + 2 || contentOverflows()) panel.classList.add('is-dense');
+    if (panel.scrollHeight > panel.clientHeight + 2 || contentOverflows()) panel.classList.add('is-ultra-dense');
   };
   const fitAll = () => requestAnimationFrame(() => {
     fitPanel(elements.gameStage);
@@ -134,8 +154,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setHidden(elements.centerScoreboard, true);
     setHidden(elements.centerLink, true);
     setHidden(elements.karaokeExtra, true);
+    setHidden(elements.centerFacts, true);
+    setHidden(elements.centerSteps, true);
+    setHidden(elements.centerAction, true);
     if (elements.centerScoreboard) elements.centerScoreboard.innerHTML = '';
     if (elements.karaokeLineup) elements.karaokeLineup.innerHTML = '';
+    if (elements.centerFacts) elements.centerFacts.innerHTML = '';
+    if (elements.centerSteps) elements.centerSteps.innerHTML = '';
     if (karaokeTimer) window.clearInterval(karaokeTimer);
     karaokeTimer = null;
   };
@@ -175,6 +200,43 @@ document.addEventListener('DOMContentLoaded', () => {
       visible = visible || Boolean(value);
     });
     setHidden(elements.centerCta, !visible);
+  };
+
+  const renderFacts = (container, facts, limit = 4) => {
+    const entries = safeArray(facts).slice(0, limit);
+    if (!container || !entries.length) return false;
+    container.innerHTML = '';
+    entries.forEach((fact) => {
+      const item = document.createElement('div');
+      const label = document.createElement('dt');
+      const value = document.createElement('dd');
+      label.textContent = fact.label || '';
+      value.textContent = fact.value == null ? '' : String(fact.value);
+      item.append(label, value);
+      container.appendChild(item);
+    });
+    setHidden(container, false);
+    return true;
+  };
+
+  const renderSteps = (container, steps, limit = 3) => {
+    const entries = safeArray(steps).filter(Boolean).slice(0, limit);
+    if (!container || !entries.length) return false;
+    container.innerHTML = '';
+    entries.forEach((step) => {
+      const item = document.createElement('li');
+      item.textContent = String(step);
+      container.appendChild(item);
+    });
+    setHidden(container, false);
+    return true;
+  };
+
+  const renderAction = (element, action) => {
+    const safeAction = asObject(action);
+    const label = safeAction.label || '';
+    const url = safeAction.url || '';
+    setOptionalText(element, label && url ? `${label} · ${url}` : (label || url));
   };
 
   const renderKaraokeExtra = (entry) => {
@@ -221,6 +283,9 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.centerStage?.classList.toggle('is-spotlight', spotlight);
     elements.centerStage?.classList.toggle('is-scoreboard', Boolean(asObject(safeEntry.scoreboard).entries));
     elements.centerStage?.classList.toggle('has-media', Boolean(safeEntry.image_url));
+    ['access', 'action', 'profile', 'status', 'result', 'scoreboard', 'announcement'].forEach((kind) => {
+      elements.centerStage?.classList.toggle(`is-${kind}`, safeEntry.kind === kind);
+    });
     elements.centerStage?.classList.remove('is-transitioning');
     if (elements.centerCategory) elements.centerCategory.textContent = safeEntry.category || 'Live display';
     if (elements.centerPrimary) elements.centerPrimary.textContent = safeEntry.primary || 'Display standby';
@@ -238,12 +303,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     if (safeEntry.cta) renderCta(safeEntry);
+    renderFacts(elements.centerFacts, safeEntry.facts);
+    renderSteps(elements.centerSteps, safeEntry.steps);
     renderScoreboard(safeEntry.scoreboard);
     if (safeEntry.link) {
       elements.centerLink.textContent = safeEntry.link_label ? `${safeEntry.link_label}: ${safeEntry.link}` : safeEntry.link;
       setHidden(elements.centerLink, false);
     }
     if (safeEntry.karaoke) renderKaraokeExtra(safeEntry);
+    renderAction(elements.centerAction, safeEntry.action);
     fitAll();
   };
 
@@ -350,6 +418,10 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.gameMetrics.appendChild(item);
       });
     }
+    setHidden(elements.gameSteps, true);
+    if (elements.gameSteps) elements.gameSteps.innerHTML = '';
+    renderSteps(elements.gameSteps, game.steps);
+    setOptionalText(elements.gameAction, game.action_label || '');
     if (elements.gamePosition) elements.gamePosition.textContent = count > 1 ? `Game ${gameIndex + 1} of ${count}` : 'Game live';
     if (elements.gameProgress) elements.gameProgress.textContent = count > 1 ? 'Rotating' : 'Pinned';
     gameEntryId = String(game.id || '');
@@ -417,6 +489,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const queued = Number(bar.queued_notice_count) || 0;
         elements.readyQueue.textContent = `${remaining} active order${remaining === 1 ? '' : 's'}${queued ? ` · ${queued} more ready` : ''}`;
       }
+      setOptionalText(elements.readyPickup, bar.pickup_note || 'Pick up at the bar.');
+      if (elements.readyDetails) {
+        elements.readyDetails.innerHTML = '';
+        safeArray(notice.details).slice(0, 2).forEach((detail) => {
+          const item = document.createElement('li');
+          item.textContent = String(detail);
+          elements.readyDetails.appendChild(item);
+        });
+        setHidden(elements.readyDetails, !elements.readyDetails.children.length);
+      }
       if (elements.readyImage && elements.readyImageWrap) {
         if (notice.image_url) {
           elements.readyImage.src = notice.image_url;
@@ -439,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const copy = document.createElement('div');
           const status = document.createElement('em');
           copy.innerHTML = '<strong></strong><small></small>';
-          copy.querySelector('strong').textContent = order.name || 'Guest';
+          copy.querySelector('strong').textContent = `${order.position ? `#${order.position} · ` : ''}${order.name || 'Guest'}`;
           copy.querySelector('small').textContent = order.drink || 'Drink';
           status.textContent = order.estimated_ready_label ? `${order.status_label} · ${order.estimated_ready_label}` : order.status_label || '';
           item.append(dot, copy, status);
@@ -448,6 +530,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const overflow = Number(bar.overflow_count) || 0;
       setOptionalText(elements.barOverflow, overflow ? `+${overflow} more active order${overflow === 1 ? '' : 's'}` : '');
+      const summary = asObject(bar.summary);
+      renderFacts(elements.barSummary, [
+        { label: 'Mixing', value: Number(summary.mixing_count) || 0 },
+        { label: 'Waiting', value: Number(summary.waiting_count) || 0 },
+        { label: 'Avg prep', value: summary.average_prep_label || 'About 8 min' },
+        { label: 'Drinks', value: Number(summary.available_drink_count) || 0 },
+      ]);
+      const feature = asObject(bar.featured_item);
+      const hasFeature = Boolean(feature.name);
+      setHidden(elements.barFeature, !hasFeature);
+      if (elements.barFeatureName) elements.barFeatureName.textContent = feature.name || '';
+      if (elements.barFeatureDescription) elements.barFeatureDescription.textContent = feature.description || 'Available to order from your phone.';
+      renderAction(elements.barAction, bar.action);
+      setOptionalText(elements.barPickup, bar.pickup_note || '');
     }
     fitAll();
   };

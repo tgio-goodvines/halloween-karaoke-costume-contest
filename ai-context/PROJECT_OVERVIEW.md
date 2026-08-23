@@ -243,6 +243,14 @@ live-display receiver's confirmed player state. MusicKit signing material stays
 in Vault at runtime; the Media Services private key and browser user token are
 never stored in Redis.
 
+Confirmed DJ song summaries on `/party`, `/party/jukebox`, `/admin`, and
+`/admin/display` share one client renderer, including artwork replacement and
+cleanup. Attendee views use five-second/visibility polling to preserve the
+single-worker production thread pool; compact admin summaries additionally use
+the authenticated display-update SSE signal. Monotonic display versions and
+request ordering prevent stale responses from rolling the UI back to an older
+song.
+
 The DJ reset workflow clears only transient control/playback/receiver state;
 the curated `dj_playlist` is retained. A reset remains pending until the live
 display acknowledges it, including when the TV is temporarily offline.

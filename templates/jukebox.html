@@ -5,8 +5,10 @@
 <section
   class="jukebox-page"
   data-party-jukebox
+  data-dj-live-widget
+  data-dj-payload-shape="jukebox"
+  data-dj-state-url="{{ jukebox_data_url }}"
   data-search-url="{{ catalog_search_url }}"
-  data-state-url="{{ jukebox_data_url }}"
 >
   <header class="jukebox-page__header">
     <p class="admin-panel__eyebrow">Guest requests</p>
@@ -18,11 +20,13 @@
   {% if request.args.get('request_error') %}<div class="flash flash--error"><p>{{ request.args.get('request_error') }}</p></div>{% endif %}
 
   <section class="jukebox-now-playing" data-jukebox-now-playing>
-    {% if jukebox.now_playing and jukebox.now_playing.artwork_url %}<img src="{{ jukebox.now_playing.artwork_url }}" alt="Album artwork" data-jukebox-artwork>{% endif %}
+    <div class="jukebox-now-playing__artwork" data-live-dj-artwork-wrap{% if not jukebox.now_playing or not jukebox.now_playing.artwork_url %} hidden{% endif %}>
+      <img data-live-dj-artwork{% if jukebox.now_playing and jukebox.now_playing.artwork_url %} src="{{ jukebox.now_playing.artwork_url }}" alt="{{ jukebox.now_playing.title }} artwork"{% else %} alt=""{% endif %}>
+    </div>
     <div>
-      <p class="admin-panel__eyebrow" data-jukebox-status>{{ jukebox.playback_status|replace('_', ' ')|title }}</p>
-      <h3 data-jukebox-title>{% if jukebox.now_playing %}{{ jukebox.now_playing.title }}{% else %}Nothing is playing yet{% endif %}</h3>
-      <p data-jukebox-artist>{% if jukebox.now_playing %}{{ jukebox.now_playing.artist }}{% if jukebox.now_playing.album %} · {{ jukebox.now_playing.album }}{% endif %}{% else %}The next DJ selection will appear here.{% endif %}</p>
+      <p class="admin-panel__eyebrow" data-live-dj-status>{{ jukebox.playback_status|replace('_', ' ')|title }}</p>
+      <h3 data-live-dj-title data-empty-text="Nothing is playing yet">{% if jukebox.now_playing %}{{ jukebox.now_playing.title }}{% else %}Nothing is playing yet{% endif %}</h3>
+      <p data-live-dj-artist data-empty-text="The next DJ selection will appear here.">{% if jukebox.now_playing %}{{ jukebox.now_playing.artist }}{% if jukebox.now_playing.album %} · {{ jukebox.now_playing.album }}{% endif %}{% else %}The next DJ selection will appear here.{% endif %}</p>
     </div>
   </section>
 
@@ -87,4 +91,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='jukebox.js') }}"></script>
+<script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>
 {% endblock %}

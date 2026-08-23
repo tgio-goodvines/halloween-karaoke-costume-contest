@@ -3,7 +3,6 @@
   if (!root) return;
 
   const searchUrl = root.dataset.searchUrl;
-  const stateUrl = root.dataset.stateUrl;
   const query = root.querySelector('[data-jukebox-query]');
   const searchButton = root.querySelector('[data-jukebox-search]');
   const searchMessage = root.querySelector('[data-jukebox-search-message]');
@@ -132,27 +131,13 @@
     }
   };
 
-  const refresh = async () => {
-    if (!stateUrl) return;
-    try {
-      const response = await fetch(stateUrl, { credentials: 'same-origin', cache: 'no-store' });
-      const state = await response.json();
-      if (!response.ok) return;
-      const nowPlaying = state.now_playing || null;
-      const title = root.querySelector('[data-jukebox-title]');
-      const artist = root.querySelector('[data-jukebox-artist]');
-      const status = root.querySelector('[data-jukebox-status]');
-      if (title) title.textContent = nowPlaying?.title || 'Nothing is playing yet';
-      if (artist) artist.textContent = nowPlaying ? [nowPlaying.artist, nowPlaying.album].filter(Boolean).join(' · ') : 'The next DJ selection will appear here.';
-      if (status) status.textContent = String(state.playback_status || 'stopped').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-      const playlist = root.querySelector('[data-jukebox-playlist]');
-      const pending = root.querySelector('[data-jukebox-pending]');
-      renderSongList(playlist, Array.isArray(state.playlist) ? state.playlist : [], true, 'The DJ has not added songs to the playlist yet.');
-      renderSongList(pending, Array.isArray(state.pending_requests) ? state.pending_requests : [], false, 'No requests waiting for DJ approval.');
-    } catch (error) {
-      console.error('Unable to refresh jukebox state', error);
-    }
-  };
+  root.addEventListener('dj:state-updated', (event) => {
+    const state = event.detail?.state || {};
+    const playlist = root.querySelector('[data-jukebox-playlist]');
+    const pending = root.querySelector('[data-jukebox-pending]');
+    renderSongList(playlist, Array.isArray(state.playlist) ? state.playlist : [], true, 'The DJ has not added songs to the playlist yet.');
+    renderSongList(pending, Array.isArray(state.pending_requests) ? state.pending_requests : [], false, 'No requests waiting for DJ approval.');
+  });
 
   searchButton?.addEventListener('click', search);
   previousButton?.addEventListener('click', () => search(Math.max(0, activeOffset - 8)));
@@ -165,5 +150,4 @@
       search();
     }
   });
-  window.setInterval(refresh, 5000);
 })();

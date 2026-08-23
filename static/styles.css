@@ -3378,7 +3378,20 @@ textarea:focus,
 }
 
 .jukebox-now-playing { justify-content: flex-start; }
-.jukebox-now-playing img,
+.jukebox-overview__artwork,
+.jukebox-now-playing__artwork {
+  flex: 0 0 4.5rem;
+  width: 4.5rem;
+  height: 4.5rem;
+  overflow: hidden;
+  border: 1px solid var(--line, #3f3f46);
+  border-radius: 0.7rem;
+  background: #111;
+}
+.jukebox-overview__artwork[hidden],
+.jukebox-now-playing__artwork[hidden] { display: none; }
+.jukebox-overview__artwork img,
+.jukebox-now-playing__artwork img,
 .dj-request-card img { width: 4.5rem; height: 4.5rem; object-fit: cover; border-radius: 0.7rem; }
 .jukebox-now-playing h3,
 .jukebox-page__header h2,

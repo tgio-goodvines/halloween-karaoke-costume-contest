@@ -94,6 +94,10 @@
   the DJ playlist, lets attendees search Apple Music, and submit up to three
   pending song requests for DJ approval. Approved requests retain provenance
   and enter an oldest-request-first priority lane.
+- The `/party` Jukebox card and `/party/jukebox` Now Playing card refresh the
+  receiver-confirmed song, artist/album, playback status, pending count, and
+  artwork in place. Missing-artwork and stopped transitions clear the previous
+  image instead of leaving stale cover art on screen.
 - YouTube karaoke search is explicit-submit, paginated, Redis-cached, and
   protected by daily project/account safety budgets with direct-link fallback.
 - Attendees see personal seven-step workflow status and may replace or cancel
@@ -221,6 +225,9 @@
   only the regular lane. Offline/busy synchronization remains pending for the
   next ready receiver heartbeat, and playlist rows offer manual priority and
   retry controls.
+- The `/admin` DJ receiver card and `/admin/display` Music Footer summary update
+  in place from the same confirmed display state, with SSE notification and a
+  five-second polling fallback.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.

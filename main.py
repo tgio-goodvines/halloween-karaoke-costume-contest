@@ -2258,6 +2258,7 @@ def attendee_jukebox_state(user_id: str) -> dict[str, object]:
         "playlist": [public_dj_song(song) for song in dj_playlist if bool(song.get("enabled", True))],
         "pending_requests": copy.deepcopy(user_dj_song_requests(user_id)),
         "request_limit": MAX_DJ_SONG_REQUESTS_PER_ATTENDEE,
+        "update_version": display_update_version,
     }
 
 
@@ -2939,6 +2940,7 @@ def dj_view_state() -> dict[str, object]:
     view["controls_ready"] = controls_ready
     view["controls_message"] = controls_message
     view["playlist"] = copy.deepcopy(dj_playlist)
+    view["request_count"] = len(dj_song_requests)
     view["flow"] = dj_command_flow()
     return view
 
@@ -6210,6 +6212,7 @@ def party_dashboard():
         drink_orders=user_orders[:5] if party_day else [],
         ready_drink_orders=ready_orders,
         jukebox=attendee_jukebox_state(str(session.get("user_id", "") or "")) if party_day else None,
+        jukebox_data_url=url_for("party_jukebox_data") if party_day else "",
         bartender_tip_settings=bartender_tip_settings,
         party_day_has_arrived=party_day,
         show_admin_link=False,

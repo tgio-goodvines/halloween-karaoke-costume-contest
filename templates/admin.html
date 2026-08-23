@@ -75,10 +75,17 @@
           <strong>{% if games_admin.active_count %}{{ games_admin.active_count }} Live{% elif games_admin.enabled_count %}{{ games_admin.enabled_count }} Enabled{% else %}Disabled{% endif %}</strong>
           <span>{{ games_admin.participant_count }} total participation{{ 's' if games_admin.participant_count != 1 else '' }}</span>
         </a>
-        <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='dj') }}">
+        <a
+          class="admin-home__card"
+          href="{{ url_for('admin_portal', admin_view='dj') }}"
+          data-dj-live-widget
+          data-dj-payload-shape="display"
+          data-dj-state-url="{{ url_for('display_data') }}"
+          data-dj-updates-url="{{ url_for('display_updates') }}"
+        >
           <span class="admin-home__label">DJ receiver</span>
-          <strong>{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</strong>
-          <span>{% if dj_song_requests %}{{ dj_song_requests|length }} request{{ 's' if dj_song_requests|length != 1 else '' }} waiting · {% endif %}{% if dj_state.current_song %}{{ dj_state.current_song.title }}{% else %}{{ dj_playlist|length }} song{{ 's' if dj_playlist|length != 1 else '' }} in playlist{% endif %}</span>
+          <strong data-live-dj-receiver-status>{{ dj_state.receiver.effective_status|replace('_', ' ')|title }}</strong>
+          <span data-live-dj-admin-summary>{% if dj_song_requests %}{{ dj_song_requests|length }} request{{ 's' if dj_song_requests|length != 1 else '' }} waiting · {% endif %}{% if dj_state.current_song %}{{ dj_state.current_song.title }}{% else %}{{ dj_playlist|length }} song{{ 's' if dj_playlist|length != 1 else '' }} in playlist{% endif %}</span>
         </a>
         <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='display') }}">
           <span class="admin-home__label">Live display</span>
@@ -95,7 +102,13 @@
   {% endif %}
 
   {% if admin_view == 'display' %}
-  <section class="admin-section display-admin">
+  <section
+    class="admin-section display-admin"
+    data-dj-live-widget
+    data-dj-payload-shape="display"
+    data-dj-state-url="{{ url_for('display_data') }}"
+    data-dj-updates-url="{{ url_for('display_updates') }}"
+  >
     <div class="display-admin__heading">
       <div>
         <p class="admin-panel__eyebrow">TV control room</p>
@@ -109,7 +122,7 @@
       <article><span>Center stage</span><strong>{% if live_override %}Spotlight{% elif display_runtime.pinned_card_id %}Pinned{% elif display_runtime.center_paused %}Paused{% else %}Rotating{% endif %}</strong><small>{{ display_layout.center.entries|length }} available cards</small></article>
       <article><span>Left stage</span><strong>{% if display_layout.games.visible %}{{ display_layout.games.entries|length }} Game{{ 's' if display_layout.games.entries|length != 1 else '' }}{% else %}Collapsed{% endif %}</strong><small>{% if display_config.pinned_game_key %}Pinned{% else %}Automatic rotation{% endif %}</small></article>
       <article><span>Right stage</span><strong>{% if display_layout.bar.visible %}{{ display_layout.bar.active_count }} Active{% else %}Collapsed{% endif %}</strong><small>{% if display_layout.bar.notice %}Ready alert showing{% else %}Drink queue{% endif %}</small></article>
-      <article><span>Music footer</span><strong>{% if display_layout.music.visible %}Visible{% else %}Collapsed{% endif %}</strong><small>{{ display_config.music_mode|title }} mode</small></article>
+      <article><span>Music footer</span><strong data-live-dj-music-visible>{% if display_layout.music.visible %}Visible{% else %}Collapsed{% endif %}</strong><small>{{ display_config.music_mode|title }} mode</small></article>
     </div>
 
     <section class="admin-subsection">
@@ -1358,6 +1371,9 @@
 {% endblock %}
 
 {% block scripts %}
+  {% if admin_view in ('home', 'display') %}
+    <script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>
+  {% endif %}
   {% if admin_view == 'dj' %}
     <script src="{{ url_for('static', filename='dj-admin.js') }}"></script>
     <script src="{{ url_for('static', filename='dj-admin-status.js') }}"></script>

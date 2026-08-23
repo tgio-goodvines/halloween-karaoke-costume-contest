@@ -50,6 +50,33 @@ progress, receiver/audio state, and Up Next in the footer. In automatic mode
 the footer collapses when it has no meaningful playback/receiver state, letting
 the center stage reclaim its height.
 
+## Live Song Surfaces
+
+Receiver-confirmed song metadata is the only source of truth for every live
+song summary. `static/dj-live-widgets.js` normalizes the attendee jukebox
+payload and authenticated display payload into one rendering contract, then
+updates title, artist/album, playback status, artwork, request count, receiver
+status, and music-footer visibility as one state transition. Artwork targets
+remain in the DOM even when the first render has no song, so a later track can
+add an image without reloading the page. A transition to a song without artwork
+or to stopped playback removes the previous image URL and hides the wrapper.
+
+The shared renderer is used by:
+
+- the `/party` Jukebox overview card;
+- `/party/jukebox` Now Playing, playlist, and personal request summaries;
+- the `/admin` DJ receiver summary; and
+- the `/admin/display` Music Footer status summary.
+
+Attendee pages refresh `/api/party/jukebox-data` every five seconds and again
+when the tab becomes visible. They intentionally do not open permanent SSE
+connections because production currently runs a single eight-thread Gunicorn
+worker and a party-sized audience could consume the worker pool. The two small
+admin summaries use the existing authenticated display-update SSE signal plus
+the same five-second polling fallback. Response sequence and
+`display_update_version` checks prevent a slower, older request from restoring
+stale song text or artwork after a newer track change.
+
 ## Redis State
 
 The DJ model was introduced in schema version 5. Canonical schema version 13
@@ -159,6 +186,10 @@ also polls the display-state API every five seconds. Receiver pairing,
 authorization, playback, reset, and command acknowledgements therefore update
 in-place without an admin-page refresh.
 
+The compact DJ summaries on `/admin` and `/admin/display` use the same update
+signal and fallback. Attendee `/party` and `/party/jukebox` summaries use the
+capacity-safe polling path described above.
+
 The receiver captures MusicKit's resolved Queue after `setQueue()`, listens for
 `nowPlayingItemDidChange`, and treats that event—not a predicted application
 queue position—as playback confirmation. Catalog songs and library-backed
@@ -227,10 +258,13 @@ error retention, reset acknowledgement and playlist preservation, confirmed
 Now Playing payloads, and JSON CSRF/admin authorization.
 `tests/test_dj_queue_state.js` covers catalog/library identifier resolution,
 resolved queue order, priority remainder/catalog payload construction, unknown
-placeholders, and confirmation boundaries. Run:
+placeholders, and confirmation boundaries. `tests/test_dj_live_widgets.js`
+covers payload normalization, atomic Song A → Song B → no-artwork → stopped
+rendering, and stale/out-of-order response rejection. Run:
 
 ```bash
 python -m compileall main.py
 python -m pytest
 node --test tests/test_dj_queue_state.js
+node --test tests/test_dj_live_widgets.js
 ```

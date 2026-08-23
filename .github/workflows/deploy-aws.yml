@@ -50,7 +50,10 @@ jobs:
           node --check static/dj-queue-state.js
           node --check static/dj-display.js
           node --check static/dj-admin-status.js
+          node --check static/dj-live-widgets.js
+          node --check static/jukebox.js
           node --test tests/test_dj_queue_state.js
+          node --test tests/test_dj_live_widgets.js
 
       - name: Validate deploy scripts
         run: |

@@ -18,6 +18,7 @@
 | `.env.example` | Blank/local Redis, email, MusicKit, and YouTube karaoke environment examples. |
 | `tests/test_redis_state.py` | Redis/state/route/security tests plus DJ FIFO request priority/reconciliation/lifecycle coverage and fake-backed YouTube search, workflow, playlist, ordering, stage, OAuth-state, migration, and secret-exclusion coverage. |
 | `tests/test_dj_queue_state.js` | Dependency-free Node regression tests for MusicKit catalog/library identifier resolution, resolved queue ordering, priority remainder/catalog payload construction, and track/queue confirmation boundaries. |
+| `tests/test_dj_live_widgets.js` | Dependency-free Node regression tests for shared attendee/admin DJ payload normalization, atomic song/artwork lifecycle rendering, and stale/out-of-order response rejection. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, game-specific illustrated cards, header menu, menu cards, and bartender queue. |
 | `static/preserve-scroll.js` | Stable view-state restoration plus progressive same-origin admin POST handling that replaces the returned workspace in place and preserves anchor, disclosure, query, and focus state. |
 | `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
@@ -28,16 +29,17 @@
 | `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, resolved-queue capture, non-interrupting `playNext` priority reconciliation, event-confirmed track changes, retained authorization diagnostics, reset handling, serialized heartbeat/acknowledgement reporting, and Now Playing dock updates. |
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
 | `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal path, confirmed Current/Up Next cards, priority synchronization diagnostics/retry state, readiness message, and playback-control availability without reloading forms. |
-| `static/jukebox.js` | Attendee jukebox catalog search, request submission, and safe Now Playing/playlist polling. |
+| `static/dj-live-widgets.js` | Browser/Node-compatible confirmed-song renderer shared by `/party`, `/party/jukebox`, `/admin`, and `/admin/display`; normalizes safe/display payloads, updates text/artwork atomically, rejects stale responses, polls at five seconds, refreshes visible tabs, and optionally listens to authenticated display SSE. |
+| `static/jukebox.js` | Attendee jukebox catalog search, request submission, and playlist/personal-request rendering from the shared live-widget state event. |
 | `static/karaoke.js` | Attendee song-details-first YouTube search, pagination, stale-selection protection, exact-video review, and direct-link fallback. |
 | `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
-| `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, priority illustrated game gallery, ready drink/order cards, slides, costume and karaoke summaries. |
+| `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, live receiver-confirmed Jukebox summary/artwork, priority illustrated game gallery, ready drink/order cards, slides, costume and karaoke summaries. |
 | `templates/games.html` | Party-day five-game workspace with dynamic tabs, admin-selected identity messaging, MMF ten-round ballots, prompt responses/blind voting, Two Truths guessing, aggregate reveals, and final results. |
 | `templates/_game_scoreboard.html` | Shared attendee winner and final-score table for every game engine. |
 | `templates/_admin_games.html` | Selected-game admin selector and operational console for lifecycle, progress, results/display, configuration, data, simulation, and reset. |
-| `templates/jukebox.html` | Attendee party-day Jukebox page with confirmed Now Playing, playlist, catalog search, and personal pending requests. |
+| `templates/jukebox.html` | Attendee party-day Jukebox page with live confirmed Now Playing/artwork, playlist, catalog search, and personal pending requests. |
 | `templates/menu.html` | Attendee food/drink menu for `/party/menu`, including menu images, availability, specialty/standard badges, drink ordering, and recent order statuses. |
 | `templates/drink_history.html` | Attendee full drink order history for `/party/drink-history`, including account-scoped order records, reorder controls, and per-order bartender tip QR/payment disclosure. |
 | `templates/bartender.html` | Bartender/admin page shell for `/bartender`, with messages and the live-refresh queue container. |
@@ -64,6 +66,7 @@
 | `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, preserving existing CSRF-protected admin actions. |
 | `templates/display.html` | Standalone no-scroll live-display shell and layout JSON bootstrap for title, left games, center cards/spotlights, right bar/ready alerts, and music footer. |
 | `ai-context/DJ_JUKEBOX_FEATURE.md` | Durable DJ feature state model, routes, MusicKit/Vault setup, visual acknowledgement flow, and recovery procedure. |
+| `ai-context/DJ_LIVE_SURFACES_CORRECTIVE_ACTION.md` | Completed cross-surface DJ song/artwork synchronization root-cause analysis, capacity-safe corrective design, affected surfaces, and verification record. |
 | `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` | Durable Two Truths and a Lie lifecycle, Redis model, scoring, attendee/admin/display behavior, verification, and rollout progress. |
 | `ai-context/ACCOUNT_MANAGEMENT_FEATURE.md` | Attendee account workspace behavior, access boundaries, persistence rules, and verification coverage. |
 | `ai-context/ROLE_VIEW_PREVIEW_FEATURE.md` | Admin role-view demo behavior, safety boundary, and regression coverage. |

@@ -276,6 +276,15 @@ and order/pickup guidance without exposing email, account IDs, or recipes.
 `build_music_footer()` provides receiver-confirmed
 Now Playing and Up Next data from `dj_state.receiver.queue_order` and
 `current_queue_index`, never from a predicted saved-playlist position.
+`attendee_jukebox_state()` exposes the same confirmed current song through a
+privacy-safe payload with `update_version`. `dj-live-widgets.js` normalizes that
+payload and `/api/display-data`, rejects out-of-order refreshes, and atomically
+updates text and artwork on the party dashboard, attendee jukebox, admin home,
+and display workspace. Attendee pages poll every five seconds plus on tab
+visibility; admin summaries also subscribe to the existing authenticated SSE
+signal. Public attendee SSE is intentionally avoided so the single-worker,
+eight-thread production process cannot be exhausted by long-lived guest
+connections.
 The DJ admin workspace consumes the same derived songs, places playback
 controls beneath them, and gates those controls on live receiver,
 authorization, audio, and pending-command readiness. Approved attendee songs
@@ -411,6 +420,9 @@ locked winner.
   dismissal, and scheduled custom-card CRUD. Individual add/edit records remain
   disclosure rows to keep mobile scanning manageable.
 - `dj-admin.js`: Apple Music catalog search and add-song form hydration.
+- `dj-live-widgets.js`: shared confirmed-song renderer for attendee and compact
+  admin summaries, including artwork lifecycle, stale-response protection,
+  five-second refresh, visibility refresh, and optional authenticated SSE.
 - `display.html`: standalone live-display page without `base.html`; includes the
   fixed title/header, independent left/center/right stages, CTA/scoreboard/
   karaoke markup, and conditional DJ footer.

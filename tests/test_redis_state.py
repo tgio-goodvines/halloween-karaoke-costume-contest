@@ -1390,7 +1390,13 @@ class RedisStateTests(unittest.TestCase):
         main.event_experience_mode = "party_day"
         main.dj_playlist = [
             main.normalize_dj_song(
-                {"id": "dj-1", "apple_music_id": "203709340", "title": "Thriller", "artist": "Michael Jackson"}
+                {
+                    "id": "dj-1",
+                    "apple_music_id": "203709340",
+                    "title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "artwork_url": "https://example.test/thriller.jpg",
+                }
             )
         ]
         main.dj_state["desired"]["song_id"] = "missing-song"
@@ -1417,12 +1423,53 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, page_response.status_code)
         self.assertEqual(200, dashboard_response.status_code)
         self.assertEqual("Thriller", payload["now_playing"]["title"])
+        self.assertEqual("https://example.test/thriller.jpg", payload["now_playing"]["artwork_url"])
         self.assertEqual("playing", payload["playback_status"])
+        self.assertEqual(main.display_update_version, payload["update_version"])
         self.assertEqual(["request-1"], [entry["id"] for entry in payload["pending_requests"]])
         self.assertNotIn("desired", payload)
         self.assertNotIn("receiver", payload)
-        self.assertIn("data-party-jukebox", page_response.get_data(as_text=True))
-        self.assertIn("Open Jukebox", dashboard_response.get_data(as_text=True))
+        page_html = page_response.get_data(as_text=True)
+        dashboard_html = dashboard_response.get_data(as_text=True)
+        self.assertIn("data-party-jukebox", page_html)
+        self.assertIn("data-dj-live-widget", page_html)
+        self.assertIn("data-live-dj-artwork", page_html)
+        self.assertIn("Open Jukebox", dashboard_html)
+        self.assertIn("data-live-dj-title", dashboard_html)
+        self.assertIn("data-live-dj-artwork", dashboard_html)
+
+    def test_attendee_jukebox_renders_persistent_hidden_artwork_target_before_playback(self):
+        main.event_experience_mode = "party_day"
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            html = client.get("/party/jukebox").get_data(as_text=True)
+
+        self.assertIn('data-live-dj-artwork-wrap hidden', html)
+        self.assertIn('data-live-dj-artwork alt=""', html)
+
+    def test_admin_overview_and_display_workspace_bind_live_dj_summaries(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "catalog-1", "title": "Song A", "artist": "Artist A"}
+            )
+        ]
+        main.dj_state["receiver"].update(
+            {"current_song_id": "dj-1", "playback_status": "playing"}
+        )
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            home_html = client.get("/admin").get_data(as_text=True)
+            display_html = client.get("/admin/display").get_data(as_text=True)
+
+        self.assertIn("data-live-dj-receiver-status", home_html)
+        self.assertIn("data-live-dj-admin-summary", home_html)
+        self.assertIn("dj-live-widgets.js", home_html)
+        self.assertIn("data-live-dj-music-visible", display_html)
+        self.assertIn("dj-live-widgets.js", display_html)
 
     def test_apple_music_catalog_search_returns_safe_eight_song_pages(self):
         class FakeAppleResponse:

@@ -110,15 +110,23 @@
 {% endif %}
 
 {% if party_day_has_arrived and jukebox %}
-  <section class="jukebox-overview">
+  <section
+    class="jukebox-overview"
+    data-dj-live-widget
+    data-dj-payload-shape="jukebox"
+    data-dj-state-url="{{ jukebox_data_url }}"
+  >
+    <div class="jukebox-overview__artwork" data-live-dj-artwork-wrap{% if not jukebox.now_playing or not jukebox.now_playing.artwork_url %} hidden{% endif %}>
+      <img data-live-dj-artwork{% if jukebox.now_playing and jukebox.now_playing.artwork_url %} src="{{ jukebox.now_playing.artwork_url }}" alt="{{ jukebox.now_playing.title }} artwork"{% else %} alt=""{% endif %}>
+    </div>
     <div>
-      <p class="admin-panel__eyebrow">Party jukebox</p>
-      <h2>{% if jukebox.now_playing %}Now Playing: {{ jukebox.now_playing.title }}{% else %}The DJ Is Ready{% endif %}</h2>
-      <p>
+      <p class="admin-panel__eyebrow">Party jukebox · <span data-live-dj-status>{{ jukebox.playback_status|replace('_', ' ')|title }}</span></p>
+      <h2 data-live-dj-title data-playing-prefix="Now Playing: " data-empty-text="The DJ Is Ready">{% if jukebox.now_playing %}Now Playing: {{ jukebox.now_playing.title }}{% else %}The DJ Is Ready{% endif %}</h2>
+      <p data-live-dj-artist data-empty-text="Browse the playlist and send a song request to the DJ.">
         {% if jukebox.now_playing %}{{ jukebox.now_playing.artist }}{% if jukebox.now_playing.album %} · {{ jukebox.now_playing.album }}{% endif %}{% else %}Browse the playlist and send a song request to the DJ.{% endif %}
       </p>
     </div>
-    <a class="button button--primary" href="{{ url_for('party_jukebox') }}">Open Jukebox{% if jukebox.pending_requests %} · {{ jukebox.pending_requests|length }} pending{% endif %}</a>
+    <a class="button button--primary" href="{{ url_for('party_jukebox') }}" data-live-dj-request-link data-base-label="Open Jukebox">Open Jukebox{% if jukebox.pending_requests %} · {{ jukebox.pending_requests|length }} pending{% endif %}</a>
   </section>
 {% endif %}
 
@@ -184,5 +192,6 @@
 
 {% block scripts %}
 {{ super() }}
+{% if party_day_has_arrived and jukebox %}<script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='slides.js') }}"></script>
 {% endblock %}

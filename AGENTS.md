@@ -15,6 +15,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` - focused admin workspace architecture and the current scrolling/narrow-screen UX rules.
 - `ai-context/ADMIN_GAMES_WORKSPACE_REORGANIZATION.md` - selected-game admin architecture, lightweight game summaries, and no-jump inline admin actions.
 - `ai-context/DJ_JUKEBOX_FEATURE.md` - DJ playlist, Redis command/acknowledgement state, MusicKit receiver setup, and operational recovery.
+- `ai-context/DJ_LIVE_SURFACES_CORRECTIVE_ACTION.md` - cross-surface confirmed-song/artwork synchronization root cause, corrective design, and verification.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` - planned attendee YouTube search, host approval, playlist synchronization, dedicated karaoke admin workflow, stage controls, and manual two-tab playback.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
 - `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` - Redis-backed party Games framework, Two Truths and a Lie lifecycle, attendee/admin/display behavior, scoring, and verification.

@@ -205,6 +205,10 @@
   → Audio output flow, with pending/confirmed/failed/timed-out command state,
   receiver heartbeat, retained authorization errors, and a readable recovery
   message.
+- DJ workspace shows receiver-confirmed Current Song and Up Next cards from the
+  MusicKit-resolved queue directly beneath the signal path. Playback controls
+  follow those cards and remain unavailable until the display is connected,
+  Apple Music is authorized, audio is enabled, and no command is pending.
 - DJ workspace has a confirmed **Reset DJ Workflow** recovery action. It stops
   the live display when connected, clears transient receiver/playback/command
   state only after acknowledgement, and preserves the saved playlist.

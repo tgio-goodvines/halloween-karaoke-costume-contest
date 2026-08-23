@@ -992,6 +992,16 @@ class RedisStateTests(unittest.TestCase):
                 },
             )
             song_id = self.redis_state()["dj_playlist"][0]["id"]
+            main.record_dj_receiver_state(
+                {
+                    "receiver_id": "living-room-tv",
+                    "status": "ready",
+                    "authorization_status": "authorized",
+                    "audio_enabled": True,
+                    "playback_status": "stopped",
+                }
+            )
+            self.save_current_state()
             play_response = client.post(
                 "/admin/dj",
                 data={"action": "play_dj_song", "song_id": song_id},
@@ -1005,6 +1015,26 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("pending", state["dj_state"]["current_command"]["status"])
         self.assertEqual(song_id, state["dj_state"]["desired"]["song_id"])
         self.assertIn("Waiting for confirmation", play_response.get_data(as_text=True))
+
+    def test_admin_playback_controls_require_a_ready_display_receiver(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "203709340", "title": "Thriller", "artist": "Michael Jackson"}
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/dj",
+                data={"action": "play_dj_song", "song_id": "dj-1"},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertIsNone(state["dj_state"]["current_command"])
+        self.assertIn("Connect the live display", response.get_data(as_text=True))
 
     def test_attendee_can_submit_song_request_and_admin_approval_randomly_inserts_it_without_command(self):
         main.event_experience_mode = "party_day"
@@ -1287,6 +1317,74 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("succeeded", state["dj_state"]["last_command"]["status"])
         self.assertEqual("playing", display_payload["dj"]["receiver"]["playback_status"])
         self.assertEqual("Thriller", display_payload["dj"]["current_song"]["title"])
+
+    def test_dj_receiver_queue_drives_current_and_up_next_across_admin_and_display_views(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "catalog-1", "title": "Song A", "artist": "Artist A"}
+            ),
+            main.normalize_dj_song(
+                {"id": "dj-2", "apple_music_id": "catalog-2", "title": "Song B", "artist": "Artist B"}
+            ),
+            main.normalize_dj_song(
+                {"id": "dj-3", "apple_music_id": "catalog-3", "title": "Song C", "artist": "Artist C"}
+            ),
+        ]
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+                "current_song_id": "dj-1",
+                "queue_order": ["dj-2", "dj-1", "dj-3"],
+                "current_queue_index": 1,
+                "queue_revision": 7,
+            }
+        )
+
+        dj = main.dj_view_state()
+        music = main.build_music_footer()
+
+        self.assertEqual("Song A", dj["current_song"]["title"])
+        self.assertEqual("Song C", dj["next_song"]["title"])
+        self.assertEqual(2, dj["current_queue_position"])
+        self.assertEqual(3, dj["next_queue_position"])
+        self.assertEqual(3, dj["actual_queue_size"])
+        self.assertTrue(dj["controls_ready"])
+        self.assertEqual("Song A", music["current_song"]["title"])
+        self.assertEqual("Song C", music["next_song"]["title"])
+
+        self.save_current_state()
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.get("/admin/dj")
+        html = response.get_data(as_text=True)
+        self.assertLess(html.index("Current Song"), html.index("Play from Beginning"))
+        self.assertIn("Song A", html)
+        self.assertIn("Song C", html)
+        self.assertIn("Queue position 3 of 3", html)
+
+    def test_dj_receiver_queue_sanitizes_unknown_playlist_ids(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "dj-1", "apple_music_id": "catalog-1", "title": "Song A", "artist": "Artist A"}
+            )
+        ]
+        main.record_dj_receiver_state(
+            {
+                "current_song_id": "missing-song",
+                "queue_order": ["dj-1", "missing-song"],
+                "current_queue_index": 1,
+                "queue_revision": 3,
+            }
+        )
+
+        self.assertEqual("", main.dj_state["receiver"]["current_song_id"])
+        self.assertEqual(["dj-1", ""], main.dj_state["receiver"]["queue_order"])
+        self.assertEqual(1, main.dj_state["receiver"]["current_queue_index"])
+        self.assertEqual(3, main.dj_state["receiver"]["queue_revision"])
 
     def test_dj_failure_remains_visible_after_a_regular_receiver_heartbeat(self):
         main.dj_playlist = [

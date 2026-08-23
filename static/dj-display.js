@@ -8,6 +8,11 @@
   const receiverEndpoint = body.dataset.djReceiverApi;
   const tokenEndpoint = body.dataset.djTokenApi;
   const appleMusicConfigured = body.dataset.djAppleMusicConfigured === 'true';
+  const queueState = window.HalloweenDjQueueState;
+  if (!queueState) {
+    console.error('DJ queue state helpers did not load. Refresh this display and try again.');
+    return;
+  }
   const csrfToken = body.dataset.csrfToken || '';
   const enableButton = document.querySelector('[data-dj-enable]');
   const artworkWrap = document.querySelector('[data-dj-artwork-wrap]');
@@ -28,6 +33,13 @@
   let receiverError = '';
   let pairingInProgress = false;
   let processingCommandId = '';
+  let playbackSongId = '';
+  let actualQueueOrder = [];
+  let currentQueueIndex = -1;
+  let queueRevision = 0;
+  let pendingTrackSelection = null;
+  let eventMusic = null;
+  let reportChain = Promise.resolve();
 
   try {
     dj = JSON.parse(initialData.textContent || '{}');
@@ -38,6 +50,47 @@
   const receiver = () => (dj && typeof dj.receiver === 'object' ? dj.receiver : {});
   const songs = () => (Array.isArray(dj.playlist) ? dj.playlist : []);
   const songById = (songId) => songs().find((song) => song && String(song.id) === String(songId));
+
+  playbackSongId = receiver().current_song_id || '';
+  actualQueueOrder = Array.isArray(receiver().queue_order) ? [...receiver().queue_order] : [];
+  currentQueueIndex = Number.isInteger(Number(receiver().current_queue_index))
+    ? Number(receiver().current_queue_index)
+    : -1;
+  queueRevision = Math.max(0, Number(receiver().queue_revision) || 0);
+
+  const localSongIdForMediaItem = (item) => queueState.localSongIdForMediaItem(item, songs());
+
+  const queueItems = (queueCandidate = music?.queue) => queueState.queueItems(queueCandidate);
+
+  const playbackSnapshot = (item = music?.nowPlayingItem) => {
+    const songId = localSongIdForMediaItem(item);
+    const items = queueItems();
+    if (items.length) actualQueueOrder = items.map(localSongIdForMediaItem);
+    const reportedIndex = Number(music?.nowPlayingItemIndex);
+    if (Number.isInteger(reportedIndex) && reportedIndex >= 0) {
+      currentQueueIndex = reportedIndex;
+    } else if (songId) {
+      const resolvedIndex = actualQueueOrder.indexOf(songId);
+      if (resolvedIndex >= 0) currentQueueIndex = resolvedIndex;
+    }
+    return {
+      songId,
+      queueOrder: [...actualQueueOrder],
+      queueIndex: currentQueueIndex,
+    };
+  };
+
+  const applyPlaybackSnapshot = (snapshot) => {
+    if (!snapshot?.songId) return;
+    playbackSongId = snapshot.songId;
+    actualQueueOrder = [...snapshot.queueOrder];
+    currentQueueIndex = snapshot.queueIndex;
+    receiver().current_song_id = snapshot.songId;
+    receiver().queue_order = [...snapshot.queueOrder];
+    receiver().current_queue_index = snapshot.queueIndex;
+    dj.current_song = songById(snapshot.songId) || null;
+    render();
+  };
 
   const setDetail = (text) => {
     if (detailElement) detailElement.textContent = text || '';
@@ -57,9 +110,8 @@
   };
 
   const render = () => {
-    const confirmedSong = dj.current_song || songById(receiver().current_song_id);
-    const requestedSong = dj.desired_song || songById(dj?.desired?.song_id);
-    const song = confirmedSong || requestedSong;
+    const confirmedSong = songById(playbackSongId) || dj.current_song || songById(receiver().current_song_id);
+    const song = confirmedSong;
     const playbackStatus = receiver().effective_status === 'offline'
       ? 'Display offline'
       : (receiver().playback_status || 'stopped');
@@ -91,14 +143,27 @@
 
   const statusPayload = (extra = {}) => {
     const hasError = Object.prototype.hasOwnProperty.call(extra, 'error');
+    const hasCurrentSong = Object.prototype.hasOwnProperty.call(extra, 'current_song_id');
+    const hasPlaybackPosition = Object.prototype.hasOwnProperty.call(extra, 'playback_position_seconds');
     return {
       receiver_id: receiverId,
       status: extra.status || (audioEnabled ? 'ready' : (receiverError ? 'error' : 'needs_audio_enable')),
       authorization_status: extra.authorization_status || (audioEnabled ? 'authorized' : authorizationStatus),
       audio_enabled: audioEnabled,
       playback_status: extra.playback_status || receiver().playback_status || 'stopped',
-      current_song_id: extra.current_song_id || receiver().current_song_id || '',
-      playback_position_seconds: extra.playback_position_seconds || 0,
+      current_song_id: hasCurrentSong
+        ? String(extra.current_song_id || '')
+        : (playbackSongId || receiver().current_song_id || ''),
+      playback_position_seconds: hasPlaybackPosition
+        ? (extra.playback_position_seconds || 0)
+        : Math.max(0, Number(music?.currentPlaybackTime) || 0),
+      queue_order: Array.isArray(extra.queue_order) ? extra.queue_order : [...actualQueueOrder],
+      current_queue_index: Object.prototype.hasOwnProperty.call(extra, 'current_queue_index')
+        ? Number(extra.current_queue_index)
+        : currentQueueIndex,
+      queue_revision: Object.prototype.hasOwnProperty.call(extra, 'queue_revision')
+        ? Math.max(0, Number(extra.queue_revision) || 0)
+        : queueRevision,
       acknowledged_command_id: extra.acknowledged_command_id || '',
       command_succeeded: Boolean(extra.command_succeeded),
       clear_error: Boolean(extra.clear_error),
@@ -106,7 +171,7 @@
     };
   };
 
-  const report = async (extra = {}) => {
+  const sendReport = async (extra = {}) => {
     if (!receiverEndpoint) return;
     try {
       const response = await fetch(receiverEndpoint, {
@@ -124,6 +189,102 @@
     } catch (error) {
       console.error('Unable to report DJ receiver state', error);
     }
+  };
+
+  // Keep receiver reports ordered. A heartbeat that starts while MusicKit is
+  // changing tracks must not arrive after the track-change report and put the
+  // old song back into Redis.
+  const report = (extra = {}) => {
+    reportChain = reportChain.then(() => sendReport(extra));
+    return reportChain;
+  };
+
+  const clearPendingTrackSelection = (error) => {
+    if (!pendingTrackSelection) return;
+    window.clearTimeout(pendingTrackSelection.timeoutId);
+    const pending = pendingTrackSelection;
+    pendingTrackSelection = null;
+    if (error) pending.reject(error);
+  };
+
+  const resolvePendingTrackSelection = (snapshot) => {
+    if (!pendingTrackSelection || !snapshot?.songId) return false;
+    if (
+      snapshot.queueOrder.length
+      && snapshot.queueIndex >= 0
+      && snapshot.queueOrder[snapshot.queueIndex] !== snapshot.songId
+    ) return false;
+    if (!queueState.selectionChanged(
+      snapshot,
+      pendingTrackSelection.previousSongId,
+      pendingTrackSelection.previousQueueIndex,
+      pendingTrackSelection.allowSame,
+    )) return false;
+    window.clearTimeout(pendingTrackSelection.timeoutId);
+    const pending = pendingTrackSelection;
+    pendingTrackSelection = null;
+    pending.resolve(snapshot);
+    return true;
+  };
+
+  const waitForConfirmedTrack = async (performAction, { allowSame = false } = {}) => {
+    clearPendingTrackSelection(new Error('A newer DJ track change replaced the previous one.'));
+    const previousSongId = playbackSongId || receiver().current_song_id || '';
+    const previousQueueIndex = currentQueueIndex;
+    const confirmation = new Promise((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        if (!pendingTrackSelection) return;
+        pendingTrackSelection = null;
+        reject(new Error('Apple Music changed the queue but did not confirm the resulting song. Try the command again.'));
+      }, 7000);
+      pendingTrackSelection = {
+        allowSame,
+        previousSongId,
+        previousQueueIndex,
+        resolve,
+        reject,
+        timeoutId,
+      };
+    });
+
+    try {
+      await performAction();
+      const immediate = playbackSnapshot();
+      if (immediate.songId) resolvePendingTrackSelection(immediate);
+      return await confirmation;
+    } catch (error) {
+      if (pendingTrackSelection) {
+        window.clearTimeout(pendingTrackSelection.timeoutId);
+        pendingTrackSelection = null;
+      }
+      throw error;
+    }
+  };
+
+  const onNowPlayingItemDidChange = async (event) => {
+    if (!audioEnabled) return;
+    const snapshot = playbackSnapshot(event?.item || music?.nowPlayingItem);
+    if (!snapshot.songId) {
+      setDetail('Apple Music changed songs, but the new catalog item is not in the saved DJ playlist.');
+      return;
+    }
+    applyPlaybackSnapshot(snapshot);
+    if (resolvePendingTrackSelection(snapshot)) return;
+    await report({
+      current_song_id: snapshot.songId,
+      queue_order: snapshot.queueOrder,
+      current_queue_index: snapshot.queueIndex,
+      playback_status: music?.isPlaying ? 'playing' : (receiver().playback_status || 'stopped'),
+    });
+  };
+
+  const bindMusicEvents = (instance) => {
+    if (!instance || eventMusic === instance || typeof instance.addEventListener !== 'function') return;
+    if (eventMusic && typeof eventMusic.removeEventListener === 'function') {
+      eventMusic.removeEventListener('nowPlayingItemDidChange', onNowPlayingItemDidChange);
+    }
+    eventMusic = instance;
+    eventMusic.addEventListener('nowPlayingItemDidChange', onNowPlayingItemDidChange);
   };
 
   const waitForMusicKit = async () => {
@@ -154,6 +315,7 @@
     });
     music = musicKit.getInstance();
     if (!music || typeof music.authorize !== 'function') throw new Error('Apple Music did not initialize correctly. Refresh this display and try again.');
+    bindMusicEvents(music);
     return music;
   };
 
@@ -169,17 +331,26 @@
     authorizationStatus = 'not_authorized';
     receiverError = '';
     processingCommandId = '';
+    playbackSongId = '';
+    actualQueueOrder = [];
+    currentQueueIndex = -1;
+    queueRevision = 0;
+    clearPendingTrackSelection(new Error('The DJ workflow was reset.'));
     if (stopError) throw stopError;
   };
 
-  const queueSongs = async (queueOrder) => {
+  const queueSongs = async (queueOrder, revision) => {
     const identifiers = (Array.isArray(queueOrder) ? queueOrder : [])
       .map(songById)
       .filter(Boolean)
       .map((song) => song.apple_music_id);
     if (!identifiers.length) throw new Error('The selected playlist has no enabled Apple Music songs.');
-    await music.setQueue({ songs: identifiers });
-    return identifiers;
+    const resolvedQueue = await music.setQueue({ songs: identifiers });
+    const resolvedItems = queueItems(resolvedQueue || music?.queue);
+    actualQueueOrder = resolvedItems.map(localSongIdForMediaItem);
+    currentQueueIndex = -1;
+    queueRevision = Math.max(0, Number(revision) || queueRevision + 1);
+    return actualQueueOrder;
   };
 
   const executeCommand = async () => {
@@ -234,32 +405,37 @@
 
     try {
       const action = command.action;
-      let currentSongId = command.song_id || receiver().current_song_id || '';
+      let currentSongId = playbackSongId || receiver().current_song_id || '';
+      let snapshot = playbackSnapshot();
       if (action === 'play_song' || action === 'play_playlist' || action === 'shuffle_playlist') {
-        await queueSongs(command.queue_order);
-        await music.play();
+        await queueSongs(command.queue_order, command.revision);
+        snapshot = await waitForConfirmedTrack(() => music.play(), { allowSame: true });
+        currentSongId = snapshot.songId;
       } else if (action === 'pause') {
         await music.pause();
+        snapshot = playbackSnapshot();
       } else if (action === 'stop') {
         await music.stop();
+        snapshot = playbackSnapshot();
       } else if (action === 'next') {
-        await music.skipToNextItem();
-        const queueOrder = Array.isArray(dj?.desired?.queue_order) ? dj.desired.queue_order : [];
-        const currentIndex = queueOrder.indexOf(currentSongId);
-        if (currentIndex >= 0 && queueOrder.length) currentSongId = queueOrder[(currentIndex + 1) % queueOrder.length];
+        snapshot = await waitForConfirmedTrack(() => music.skipToNextItem());
+        currentSongId = snapshot.songId;
       } else if (action === 'previous') {
-        await music.skipToPreviousItem();
-        const queueOrder = Array.isArray(dj?.desired?.queue_order) ? dj.desired.queue_order : [];
-        const currentIndex = queueOrder.indexOf(currentSongId);
-        if (currentIndex >= 0 && queueOrder.length) currentSongId = queueOrder[(currentIndex - 1 + queueOrder.length) % queueOrder.length];
+        snapshot = await waitForConfirmedTrack(() => music.skipToPreviousItem());
+        currentSongId = snapshot.songId;
       }
 
       const playbackStatus = action === 'pause' ? 'paused' : (action === 'stop' ? 'stopped' : 'playing');
+      playbackSongId = currentSongId;
+      if (currentSongId) applyPlaybackSnapshot(snapshot);
       await report({
         acknowledged_command_id: command.id,
         command_succeeded: true,
         playback_status: playbackStatus,
         current_song_id: currentSongId,
+        queue_order: snapshot.queueOrder,
+        current_queue_index: snapshot.queueIndex,
+        queue_revision: queueRevision,
         error: '',
         clear_error: true,
       });
@@ -268,7 +444,6 @@
     } catch (error) {
       const message = errorMessage(error, 'Apple Music could not complete the DJ command.');
       receiverError = message;
-      authorizationStatus = 'error';
       setDetail(message);
       await report({
         status: 'error',

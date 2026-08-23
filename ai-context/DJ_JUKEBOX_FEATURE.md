@@ -68,8 +68,11 @@ document:
 - `dj_state.last_reset`: an audit record for the latest reset request and its
   pending, acknowledged, or failed display acknowledgement.
 - `dj_state.receiver`: receiver identity, heartbeat, Apple Music/audio
-  readiness, confirmed playback state/current song, elapsed position, and the
-  latest receiver error.
+  readiness, confirmed playback state/current song, MusicKit-resolved local
+  queue order/current index/revision, elapsed position, and the latest receiver
+  error. The resolved queue is distinct from `dj_state.desired.queue_order` so
+  a skipped or library-backed MusicKit item cannot silently move display state
+  onto a different song.
 - `dj_song_requests`: pending attendee requests with requester identity,
   timestamp, and normalized Apple Music song metadata.
 
@@ -98,6 +101,13 @@ The DJ workspace always renders these four stages:
 4. **Audio output** — actual playback state and whether the display has been
    locally enabled for browser audio.
 
+Directly below the signal path, the workspace renders receiver-confirmed
+**Current Song** and **Up Next** cards from the resolved MusicKit queue. The
+playback controls sit beneath those cards and remain disabled until the display
+heartbeat is current, Apple Music is authorized, audio is enabled, and no
+command is already awaiting acknowledgement. Playlist editing and the reset
+workflow remain available independently.
+
 When the display has completed Apple authorization and unlocked audio, the idle
 path is intentionally all green: **Admin request: Ready**, **Live display:
 Connected**, **Apple Music: Authorized**, and **Audio output: Ready**. Playback
@@ -119,6 +129,15 @@ The DJ admin workspace subscribes to the existing display-update stream and
 also polls the display-state API every five seconds. Receiver pairing,
 authorization, playback, reset, and command acknowledgements therefore update
 in-place without an admin-page refresh.
+
+The receiver captures MusicKit's resolved Queue after `setQueue()`, listens for
+`nowPlayingItemDidChange`, and treats that event—not a predicted application
+queue position—as playback confirmation. Catalog songs and library-backed
+items map through direct IDs plus `catalogId`/`reportingId`. Next/Previous wait
+up to seven seconds for a changed song or queue index before failing visibly.
+Natural track advancement reports the same resolved queue/current index to
+Redis. Receiver reports are serialized so an older heartbeat cannot overwrite
+a newer track-change report.
 
 ## MusicKit Setup
 
@@ -167,11 +186,14 @@ by MusicKit and is not persisted server-side.
 ## Verification
 
 `tests/test_redis_state.py` covers DJ state serialization, playlist CRUD,
-pending commands, failed-command error retention, reset acknowledgement and
-playlist preservation, confirmed Now Playing payloads, and JSON CSRF/admin
-authorization. Run:
+readiness-gated commands, resolved queue/current/up-next views, failed-command
+error retention, reset acknowledgement and playlist preservation, confirmed
+Now Playing payloads, and JSON CSRF/admin authorization.
+`tests/test_dj_queue_state.js` covers catalog/library identifier resolution,
+resolved queue order, unknown placeholders, and confirmation boundaries. Run:
 
 ```bash
 python -m compileall main.py
 python -m pytest
+node --test tests/test_dj_queue_state.js
 ```

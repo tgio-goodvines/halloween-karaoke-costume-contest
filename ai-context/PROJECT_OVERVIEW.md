@@ -209,8 +209,9 @@ the process-local cache:
   the request and inserts the song at a random saved-playlist position;
   rejection removes it without changing the playlist or current playback.
 - `dj_state`: Redis-persisted desired command, acknowledgement, live-display
-  heartbeat, MusicKit/audio readiness, confirmed player state, current song,
-  retained failure details, and the latest DJ reset acknowledgement.
+  heartbeat, MusicKit/audio readiness, confirmed player state/current song,
+  resolved MusicKit queue order/current index/revision, retained failure
+  details, and the latest DJ reset acknowledgement.
 - `games_state`: five-game registry state. Two Truths and a Lie stores clues and
   identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
   trios, an admin-controlled public identity mode, private ballots, aggregate results,

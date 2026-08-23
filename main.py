@@ -476,6 +476,9 @@ DEFAULT_DJ_STATE: dict[str, object] = {
         "audio_enabled": False,
         "playback_status": "stopped",
         "current_song_id": "",
+        "queue_order": [],
+        "current_queue_index": -1,
+        "queue_revision": 0,
         "playback_position_seconds": 0,
         "last_seen_at": "",
         "last_error": "",
@@ -2235,6 +2238,17 @@ def dj_receiver_is_online(receiver: dict[str, object] | None = None) -> bool:
     return bool(last_seen and last_seen >= datetime.now(timezone.utc) - timedelta(seconds=DJ_RECEIVER_STALE_SECONDS))
 
 
+def dj_receiver_is_ready(receiver: dict[str, object] | None = None) -> bool:
+    source = receiver if isinstance(receiver, dict) else dj_state.get("receiver", {})
+    return bool(
+        isinstance(source, dict)
+        and dj_receiver_is_online(source)
+        and source.get("status") == "ready"
+        and source.get("authorization_status") == "authorized"
+        and source.get("audio_enabled")
+    )
+
+
 def normalize_dj_state(raw_state: object) -> dict[str, object]:
     state = copy.deepcopy(DEFAULT_DJ_STATE)
     if not isinstance(raw_state, dict):
@@ -2256,6 +2270,20 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
         playback_status = str(raw_receiver.get("playback_status", "stopped") or "stopped")
         receiver["playback_status"] = playback_status if playback_status in DJ_PLAYBACK_STATUSES else "unknown"
         receiver["current_song_id"] = str(raw_receiver.get("current_song_id", "") or "")
+        raw_queue_order = raw_receiver.get("queue_order", [])
+        receiver["queue_order"] = (
+            [str(song_id or "") for song_id in raw_queue_order[:500]]
+            if isinstance(raw_queue_order, list)
+            else []
+        )
+        try:
+            receiver["current_queue_index"] = max(-1, int(raw_receiver.get("current_queue_index", -1)))
+        except (TypeError, ValueError):
+            receiver["current_queue_index"] = -1
+        try:
+            receiver["queue_revision"] = max(0, int(raw_receiver.get("queue_revision", 0) or 0))
+        except (TypeError, ValueError):
+            receiver["queue_revision"] = 0
         try:
             receiver["playback_position_seconds"] = max(0, int(raw_receiver.get("playback_position_seconds", 0) or 0))
         except (TypeError, ValueError):
@@ -2416,7 +2444,25 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
     receiver["audio_enabled"] = bool(payload.get("audio_enabled", False))
     playback_status = str(payload.get("playback_status", "") or receiver.get("playback_status", "stopped"))
     receiver["playback_status"] = playback_status if playback_status in DJ_PLAYBACK_STATUSES else "unknown"
-    receiver["current_song_id"] = str(payload.get("current_song_id", "") or receiver.get("current_song_id", ""))
+    if "current_song_id" in payload:
+        reported_song_id = str(payload.get("current_song_id", "") or "")
+        receiver["current_song_id"] = reported_song_id if not reported_song_id or find_dj_song(reported_song_id) else ""
+    raw_queue_order = payload.get("queue_order")
+    if isinstance(raw_queue_order, list):
+        receiver["queue_order"] = [
+            song_id if not song_id or find_dj_song(song_id) else ""
+            for song_id in (str(candidate or "") for candidate in raw_queue_order[:500])
+        ]
+    if "current_queue_index" in payload:
+        try:
+            receiver["current_queue_index"] = max(-1, int(payload.get("current_queue_index", -1)))
+        except (TypeError, ValueError):
+            receiver["current_queue_index"] = -1
+    if "queue_revision" in payload:
+        try:
+            receiver["queue_revision"] = max(0, int(payload.get("queue_revision", 0) or 0))
+        except (TypeError, ValueError):
+            receiver["queue_revision"] = 0
     try:
         receiver["playback_position_seconds"] = max(0, int(payload.get("playback_position_seconds", 0) or 0))
     except (TypeError, ValueError):
@@ -2442,6 +2488,10 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
         current_command["status"] = "succeeded" if succeeded else "failed"
         current_command["acknowledged_at"] = _utc_now_iso()
         current_command["error"] = "" if succeeded else receiver["last_error"] or "The display could not complete the DJ command."
+        if succeeded:
+            dj_state["desired"]["playback_status"] = receiver["playback_status"]
+            if receiver.get("current_song_id"):
+                dj_state["desired"]["song_id"] = receiver["current_song_id"]
         dj_state["last_command"] = copy.deepcopy(current_command)
         dj_state["current_command"] = None
 
@@ -2452,13 +2502,7 @@ def dj_command_flow() -> list[dict[str, str]]:
     last_command = dj_state.get("last_command")
     last_reset = dj_state.get("last_reset")
     receiver_online = dj_receiver_is_online(receiver if isinstance(receiver, dict) else None)
-    receiver_ready = bool(
-        isinstance(receiver, dict)
-        and receiver_online
-        and receiver.get("status") == "ready"
-        and receiver.get("authorization_status") == "authorized"
-        and receiver.get("audio_enabled")
-    )
+    receiver_ready = dj_receiver_is_ready(receiver if isinstance(receiver, dict) else None)
     requested_state = "ready" if receiver_ready else "idle"
     requested_detail = "DJ controls are armed and ready for a song." if receiver_ready else "No command waiting."
     command_error = ""
@@ -2508,9 +2552,43 @@ def dj_view_state() -> dict[str, object]:
         else:
             receiver["effective_status"] = receiver.get("status", "offline")
     current_song = find_dj_song(str(receiver.get("current_song_id", "") if isinstance(receiver, dict) else ""))
+    actual_queue_order = receiver.get("queue_order", []) if isinstance(receiver, dict) else []
+    if not isinstance(actual_queue_order, list):
+        actual_queue_order = []
+    try:
+        current_queue_index = int(receiver.get("current_queue_index", -1) if isinstance(receiver, dict) else -1)
+    except (TypeError, ValueError):
+        current_queue_index = -1
+    current_song_id = str(current_song.get("id", "") if current_song else "")
+    if not (0 <= current_queue_index < len(actual_queue_order)) and current_song_id:
+        current_queue_index = next(
+            (index for index, song_id in enumerate(actual_queue_order) if str(song_id) == current_song_id),
+            -1,
+        )
+    next_song = None
+    next_queue_index = current_queue_index + 1
+    if 0 <= next_queue_index < len(actual_queue_order):
+        next_song = find_dj_song(str(actual_queue_order[next_queue_index] or ""))
     desired_song = find_dj_song(str(view.get("desired", {}).get("song_id", ""))) if isinstance(view.get("desired"), dict) else None
+    controls_ready = dj_receiver_is_ready(receiver if isinstance(receiver, dict) else None) and not isinstance(view.get("current_command"), dict)
+    if isinstance(view.get("current_command"), dict):
+        controls_message = "Wait for the live display to confirm the pending command."
+    elif not bool(receiver.get("online") if isinstance(receiver, dict) else False):
+        controls_message = "Open the live display on the playback device to connect the receiver."
+    elif str(receiver.get("authorization_status", "") if isinstance(receiver, dict) else "") != "authorized":
+        controls_message = "Authorize Apple Music on the live display before using playback controls."
+    elif not bool(receiver.get("audio_enabled") if isinstance(receiver, dict) else False):
+        controls_message = "Press Enable DJ Audio on the live display before using playback controls."
+    else:
+        controls_message = "Receiver connected, Apple Music authorized, and audio output ready."
     view["current_song"] = copy.deepcopy(current_song)
+    view["next_song"] = copy.deepcopy(next_song)
     view["desired_song"] = copy.deepcopy(desired_song)
+    view["current_queue_position"] = current_queue_index + 1 if current_queue_index >= 0 else 0
+    view["next_queue_position"] = next_queue_index + 1 if next_song else 0
+    view["actual_queue_size"] = len(actual_queue_order)
+    view["controls_ready"] = controls_ready
+    view["controls_message"] = controls_message
     view["playlist"] = copy.deepcopy(dj_playlist)
     view["flow"] = dj_command_flow()
     return view
@@ -5338,14 +5416,8 @@ def build_bar_stage() -> dict[str, object]:
 def build_music_footer() -> dict[str, object]:
     dj = dj_view_state()
     receiver = dj.get("receiver", {}) if isinstance(dj.get("receiver"), dict) else {}
-    current_song = dj.get("current_song") or dj.get("desired_song")
-    enabled_playlist = [song for song in dj.get("playlist", []) if song.get("enabled", True)]
-    next_song = None
-    if current_song and enabled_playlist:
-        current_id = str(current_song.get("id", ""))
-        current_index = next((index for index, song in enumerate(enabled_playlist) if str(song.get("id", "")) == current_id), -1)
-        if current_index >= 0 and len(enabled_playlist) > 1:
-            next_song = enabled_playlist[(current_index + 1) % len(enabled_playlist)]
+    current_song = dj.get("current_song")
+    next_song = dj.get("next_song")
     mode = str(display_config.get("music_mode", "auto"))
     needs_attention = bool(apple_music_is_configured() and (not receiver.get("audio_enabled") or receiver.get("last_error")))
     visible = mode != "hidden" and (mode == "always" or bool(current_song) or needs_attention)
@@ -8625,12 +8697,19 @@ def admin_portal(admin_view: str):
                 "next_dj": "next",
                 "previous_dj": "previous",
             }
-            command = queue_dj_command(action_map[action], request.form.get("song_id", "").strip(), requested_by="Admin")
-            if not command:
-                errors.append("Add and enable at least one valid DJ song before sending this command.")
+            if not dj_receiver_is_ready():
+                errors.append("Connect the live display, authorize Apple Music, and enable DJ audio before using playback controls.")
+                command = None
+            elif isinstance(dj_state.get("current_command"), dict):
+                errors.append("Wait for the live display to confirm the pending DJ command before sending another one.")
+                command = None
             else:
+                command = queue_dj_command(action_map[action], request.form.get("song_id", "").strip(), requested_by="Admin")
+            if command:
                 messages.append("DJ command sent to the live display. Waiting for receiver confirmation.")
                 should_broadcast = True
+            elif not errors:
+                errors.append("Add and enable at least one valid DJ song before sending this command.")
 
         elif action == "update_costume":
             index = parse_entry_index(

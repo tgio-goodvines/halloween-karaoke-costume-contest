@@ -3165,6 +3165,102 @@ textarea:focus,
   font: 700 1.05rem/1.2 "Outfit", sans-serif;
 }
 
+.dj-playback-deck {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.dj-playback-card {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 49, 49, 0.38);
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.dj-playback-card--current {
+  border-color: rgba(100, 220, 145, 0.58);
+  box-shadow: inset 0 0 26px rgba(100, 220, 145, 0.045), 0 0 18px rgba(100, 220, 145, 0.08);
+}
+
+.dj-playback-card__artwork {
+  flex: 0 0 4.75rem;
+  width: 4.75rem;
+  height: 4.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #0d0d0d;
+}
+
+.dj-playback-card__artwork[hidden] { display: none; }
+
+.dj-playback-card__artwork img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dj-playback-card__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.dj-playback-card__label {
+  color: #ff8a8a;
+  font: 700 0.7rem/1 "Outfit", sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dj-playback-card__copy strong {
+  color: #f4f4f5;
+  font: 700 clamp(1rem, 2vw, 1.35rem)/1.2 "Outfit", sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.dj-playback-card__copy p,
+.dj-playback-card__copy small {
+  margin: 0;
+  color: #a1a1aa;
+  overflow-wrap: anywhere;
+}
+
+.dj-playback-card__copy small {
+  color: #d4d4d8;
+  font: 700 0.72rem/1.35 "Outfit", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dj-controls-readiness {
+  margin: 0.8rem 0 0;
+  padding: 0.7rem 0.85rem;
+  border-left: 3px solid #ffd166;
+  background: rgba(255, 209, 102, 0.06);
+  color: #f4f4f5;
+}
+
+.dj-controls-readiness--ready {
+  border-left-color: #64dc91;
+  background: rgba(100, 220, 145, 0.06);
+  color: #b8ffd2;
+}
+
+[data-dj-playback-control]:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+  transform: none;
+  box-shadow: none;
+}
+
 .dj-command-state,
 .dj-setup-warning {
   margin: 1rem 0 0;
@@ -3298,12 +3394,17 @@ textarea:focus,
 
 @media (max-width: 760px) {
   .dj-flow,
-  .dj-status-grid { grid-template-columns: 1fr 1fr; }
+  .dj-status-grid,
+  .dj-playback-deck { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 460px) {
   .dj-flow,
-  .dj-status-grid { grid-template-columns: 1fr; }
+  .dj-status-grid,
+  .dj-playback-deck { grid-template-columns: 1fr; }
+  .dj-playback-card__artwork { flex-basis: 4rem; width: 4rem; height: 4rem; }
+  .dj-controls form,
+  .dj-controls .button { flex: 1 1 100%; width: 100%; }
   .dj-catalog-result { grid-template-columns: 2.5rem minmax(0, 1fr); }
   .dj-catalog-result .button { grid-column: 1 / -1; }
 }

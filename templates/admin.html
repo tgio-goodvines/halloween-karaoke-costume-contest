@@ -765,9 +765,9 @@
         <p data-dj-requested-song>{% if dj_state.desired_song %}{{ dj_state.desired_song.title }} — {{ dj_state.desired_song.artist }}{% else %}No song selected{% endif %}</p>
       </article>
       <article class="dj-status-card">
-        <span class="dj-status-card__label">Confirmed by display</span>
-        <strong data-dj-confirmed-status>{{ dj_state.receiver.playback_status|title }}</strong>
-        <p data-dj-confirmed-song>{% if dj_state.current_song %}{{ dj_state.current_song.title }} — {{ dj_state.current_song.artist }}{% else %}No confirmed song{% endif %}</p>
+        <span class="dj-status-card__label">MusicKit queue</span>
+        <strong data-dj-queue-status>{% if dj_state.actual_queue_size %}{{ dj_state.actual_queue_size }} Track{{ 's' if dj_state.actual_queue_size != 1 else '' }}{% else %}Waiting{% endif %}</strong>
+        <p data-dj-queue-detail>{% if dj_state.current_queue_position %}Confirmed position {{ dj_state.current_queue_position }} of {{ dj_state.actual_queue_size }}{% else %}Start playback to confirm the resolved queue{% endif %}</p>
       </article>
       <article class="dj-status-card">
         <span class="dj-status-card__label">Receiver heartbeat</span>
@@ -781,6 +781,60 @@
       </article>
     </div>
 
+    <section class="dj-playback-deck" aria-label="Confirmed DJ queue" aria-live="polite">
+      <article class="dj-playback-card dj-playback-card--current">
+        <div class="dj-playback-card__artwork" data-dj-current-artwork-wrap{% if not dj_state.current_song or not dj_state.current_song.artwork_url %} hidden{% endif %}>
+          <img data-dj-current-artwork{% if dj_state.current_song and dj_state.current_song.artwork_url %} src="{{ dj_state.current_song.artwork_url }}" alt="{{ dj_state.current_song.title }} artwork"{% else %} alt=""{% endif %}>
+        </div>
+        <div class="dj-playback-card__copy">
+          <span class="dj-playback-card__label">Current Song</span>
+          <strong data-dj-current-title>{{ dj_state.current_song.title if dj_state.current_song else 'No confirmed song' }}</strong>
+          <p data-dj-current-artist>{% if dj_state.current_song %}{{ dj_state.current_song.artist }}{% if dj_state.current_song.album %} · {{ dj_state.current_song.album }}{% endif %}{% else %}Waiting for the live display receiver.{% endif %}</p>
+          <small data-dj-current-meta>{{ dj_state.receiver.playback_status|replace('_', ' ')|title }}{% if dj_state.current_queue_position %} · Queue {{ dj_state.current_queue_position }} of {{ dj_state.actual_queue_size }}{% endif %}</small>
+        </div>
+      </article>
+      <article class="dj-playback-card dj-playback-card--next">
+        <div class="dj-playback-card__artwork" data-dj-next-artwork-wrap{% if not dj_state.next_song or not dj_state.next_song.artwork_url %} hidden{% endif %}>
+          <img data-dj-next-artwork{% if dj_state.next_song and dj_state.next_song.artwork_url %} src="{{ dj_state.next_song.artwork_url }}" alt="{{ dj_state.next_song.title }} artwork"{% else %} alt=""{% endif %}>
+        </div>
+        <div class="dj-playback-card__copy">
+          <span class="dj-playback-card__label">Up Next</span>
+          <strong data-dj-next-title>{{ dj_state.next_song.title if dj_state.next_song else 'No confirmed next song' }}</strong>
+          <p data-dj-next-artist>{% if dj_state.next_song %}{{ dj_state.next_song.artist }}{% if dj_state.next_song.album %} · {{ dj_state.next_song.album }}{% endif %}{% else %}MusicKit has not confirmed another queue item.{% endif %}</p>
+          <small data-dj-next-meta>{% if dj_state.next_queue_position %}Queue position {{ dj_state.next_queue_position }} of {{ dj_state.actual_queue_size }}{% else %}End of the confirmed queue{% endif %}</small>
+        </div>
+      </article>
+    </section>
+
+    <p class="dj-controls-readiness{% if dj_state.controls_ready %} dj-controls-readiness--ready{% endif %}" data-dj-controls-readiness>{{ dj_state.controls_message }}</p>
+
+    <div class="dj-controls" aria-label="DJ playback controls">
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="play_dj_playlist" class="button button--primary" data-dj-playback-control data-dj-requires-playlist="true" {% if not dj_playlist or not dj_state.controls_ready %}disabled{% endif %}>Play from Beginning</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="shuffle_dj_playlist" class="button" data-dj-playback-control data-dj-requires-playlist="true" {% if not dj_playlist or not dj_state.controls_ready %}disabled{% endif %}>Shuffle & Play</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="previous_dj" class="button" data-dj-playback-control {% if not dj_state.controls_ready %}disabled{% endif %}>Previous</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="pause_dj" class="button" data-dj-playback-control {% if not dj_state.controls_ready %}disabled{% endif %}>Pause</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="stop_dj" class="button button--danger" data-dj-playback-control {% if not dj_state.controls_ready %}disabled{% endif %}>Stop</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="action" value="next_dj" class="button" data-dj-playback-control {% if not dj_state.controls_ready %}disabled{% endif %}>Next</button>
+      </form>
+    </div>
+
     <p class="dj-command-state{% if dj_state.current_command %} dj-command-state--pending{% elif dj_state.last_command %} dj-command-state--{{ dj_state.last_command.status }}{% endif %}" data-dj-command-state{% if not dj_state.current_command and not dj_state.last_command %} hidden{% endif %}>
       {% if dj_state.current_command %}<strong>Waiting for confirmation:</strong> {{ dj_state.current_command.action|replace('_', ' ')|title }} (revision {{ dj_state.current_command.revision }}).{% elif dj_state.last_command %}<strong>Last command:</strong> {{ dj_state.last_command.action|replace('_', ' ')|title }} — {{ dj_state.last_command.status|title }}{% if dj_state.last_command.error %}: {{ dj_state.last_command.error }}{% endif %}{% endif %}
     </p>
@@ -790,33 +844,6 @@
     <section class="dj-request-queue" aria-label="Attendee song requests" data-dj-song-request-queue>
       {% include "_dj_song_request_queue.html" %}
     </section>
-
-    <div class="dj-controls">
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="play_dj_playlist" class="button button--primary" {% if not dj_playlist %}disabled{% endif %}>Play from Beginning</button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="shuffle_dj_playlist" class="button" {% if not dj_playlist %}disabled{% endif %}>Shuffle & Play</button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="previous_dj" class="button">Previous</button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="pause_dj" class="button">Pause</button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="stop_dj" class="button button--danger">Stop</button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" name="action" value="next_dj" class="button">Next</button>
-      </form>
-    </div>
 
     <details class="dj-reset-workflow">
       <summary>Reset DJ workflow</summary>
@@ -881,7 +908,7 @@
               <span class="admin-entry__summary-text"><strong>{{ song.title }}</strong><span>{{ song.artist }}{% if song.album %} · {{ song.album }}{% endif %}{% if not song.enabled %} · Disabled{% endif %}</span></span>
             </summary>
             <div class="dj-song-actions">
-              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="song_id" value="{{ song.id }}"><button type="submit" name="action" value="play_dj_song" class="button button--primary" {% if not song.enabled %}disabled{% endif %}>Play This Song</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="song_id" value="{{ song.id }}"><button type="submit" name="action" value="play_dj_song" class="button button--primary" data-dj-playback-control data-dj-song-enabled="{{ 'true' if song.enabled else 'false' }}" {% if not song.enabled or not dj_state.controls_ready %}disabled{% endif %}>Play This Song</button></form>
             </div>
             <form method="post" class="admin-entry__form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

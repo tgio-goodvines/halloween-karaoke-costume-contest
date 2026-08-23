@@ -17,15 +17,17 @@
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
 | `.env.example` | Blank/local Redis, email, MusicKit, and YouTube karaoke environment examples. |
 | `tests/test_redis_state.py` | Redis/state/route/security tests plus fake-backed YouTube search, workflow, playlist, reconciliation, ordering, stage, OAuth-state, migration, and secret-exclusion coverage. |
+| `tests/test_dj_queue_state.js` | Dependency-free Node regression tests for MusicKit catalog/library identifier resolution, resolved queue ordering, and track-change confirmation boundaries. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, game-specific illustrated cards, header menu, menu cards, and bartender queue. |
 | `static/preserve-scroll.js` | Stable view-state restoration plus progressive same-origin admin POST handling that replaces the returned workspace in place and preserves anchor, disclosure, query, and focus state. |
 | `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Fixed-viewport adaptive TV grid with title header, independent game/bar rails, dominant center cards, conditional music footer, density fitting, event spotlights, ready alerts, CTA, scoreboard, and karaoke layouts. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
-| `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, retained authorization diagnostics, reset handling, Redis-command execution, heartbeat/acknowledgement reporting, and Now Playing dock updates. |
+| `static/dj-queue-state.js` | Browser/Node-compatible pure helpers for resolving MusicKit catalog and library item identifiers, preserving MusicKit queue order, and validating confirmed track transitions. |
+| `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, resolved-queue capture, event-confirmed track changes, retained authorization diagnostics, reset handling, serialized heartbeat/acknowledgement reporting, and Now Playing dock updates. |
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
-| `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal-path UI without reloading forms. |
+| `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal path, confirmed Current/Up Next cards, readiness message, and playback-control availability without reloading forms. |
 | `static/jukebox.js` | Attendee jukebox catalog search, request submission, and safe Now Playing/playlist polling. |
 | `static/karaoke.js` | Attendee song-details-first YouTube search, pagination, stale-selection protection, exact-video review, and direct-link fallback. |
 | `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |

@@ -45,6 +45,13 @@ jobs:
       - name: Compile Python
         run: python -m py_compile main.py
 
+      - name: Validate DJ receiver JavaScript
+        run: |
+          node --check static/dj-queue-state.js
+          node --check static/dj-display.js
+          node --check static/dj-admin-status.js
+          node --test tests/test_dj_queue_state.js
+
       - name: Validate deploy scripts
         run: |
           bash -n deploy/ec2_deploy_from_github.sh

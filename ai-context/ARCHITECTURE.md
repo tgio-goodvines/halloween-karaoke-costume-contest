@@ -274,7 +274,11 @@ current/queued ready alerts. It also derives queue positions, mixing/waiting
 counts, average prep time, available-drink count, a featured public menu item,
 and order/pickup guidance without exposing email, account IDs, or recipes.
 `build_music_footer()` provides receiver-confirmed
-Now Playing and Up Next data. Region modes are `auto`, `always`, or `hidden`;
+Now Playing and Up Next data from `dj_state.receiver.queue_order` and
+`current_queue_index`, never from a predicted saved-playlist position.
+The DJ admin workspace consumes the same derived songs, places playback
+controls beneath them, and gates those controls on live receiver,
+authorization, audio, and pending-command readiness. Region modes are `auto`, `always`, or `hidden`;
 the client toggles layout classes so unused tracks disappear and center grows.
 
 The center rotation is grouped and ordered by `display_config.source_order`;
@@ -403,9 +407,12 @@ locked winner.
 - `display.html`: standalone live-display page without `base.html`; includes the
   fixed title/header, independent left/center/right stages, CTA/scoreboard/
   karaoke markup, and conditional DJ footer.
+- `dj-queue-state.js`: pure MusicKit catalog/library identifier and queue-order
+  normalization shared by the browser receiver and dependency-free Node tests.
 - `dj-display.js`: display-side MusicKit receiver, load-safe pairing,
-  persistent error reporting, reset acknowledgement, command acknowledgements,
-  heartbeats, and Now Playing dock updates.
+  MusicKit-resolved queue capture, event-confirmed track transitions,
+  persistent error reporting, reset acknowledgement, serialized command
+  acknowledgements/heartbeats, and Now Playing dock updates.
 - `email/*.html`: generated HTML email bodies for RSVP confirmation/update,
   host RSVP notification, account welcome, password reset, and drink order
   notifications. These use email-client-safe inline CSS aligned with the dark

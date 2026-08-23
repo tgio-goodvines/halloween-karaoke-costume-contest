@@ -32,6 +32,7 @@
     class="karaoke-attendee-alert{% if karaoke_primary %} karaoke-attendee-alert--{{ karaoke_primary.status.tone }}{% endif %}"
     data-karaoke-live-widget
     data-karaoke-state-url="{{ karaoke_data_url }}"
+    data-karaoke-csrf-token="{{ csrf_token() }}"
     data-karaoke-alert
     role="status"
     aria-live="polite"
@@ -43,7 +44,17 @@
       <p data-karaoke-alert-detail>{{ karaoke_primary.status.detail if karaoke_primary else '' }}</p>
       <small data-karaoke-alert-song>{% if karaoke_primary %}{{ karaoke_primary.singer_label }} · “{{ karaoke_primary.song_title }}” by {{ karaoke_primary.artist }}{% endif %}</small>
     </div>
-    <a class="contest-banner__button" href="{{ url_for('party_karaoke') }}">Open Karaoke</a>
+    <div class="karaoke-attendee-alert__actions">
+      <a class="contest-banner__button" href="{{ url_for('party_karaoke') }}">Open Karaoke</a>
+      <button
+        class="button button--small"
+        type="button"
+        data-karaoke-dismiss-completion
+        data-endpoint="{{ karaoke_primary.dismiss_url if karaoke_primary else '' }}"
+        data-completion-id="{{ karaoke_primary.completion_id if karaoke_primary else '' }}"
+        {% if not karaoke_primary or not karaoke_primary.status.dismissible %}hidden{% endif %}
+      >Dismiss</button>
+    </div>
   </section>
 {% endif %}
 
@@ -212,6 +223,6 @@
 {% block scripts %}
 {{ super() }}
 {% if party_day_has_arrived and jukebox %}<script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>{% endif %}
-{% if party_day_has_arrived %}<script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-live-status') }}"></script>{% endif %}
+{% if party_day_has_arrived %}<script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-completion-dismissal') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='slides.js') }}"></script>
 {% endblock %}

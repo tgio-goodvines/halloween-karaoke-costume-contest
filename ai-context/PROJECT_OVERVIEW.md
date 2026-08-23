@@ -111,8 +111,10 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    verification/approval/playlist/stage progress. Requesters and registered
    co-singers receive live Ready, Up Next, Called, On Stage, and completion
    status on `/party` and `/party/karaoke` through a safe five-second polling
-   endpoint. The legacy optional-link flow remains available while the YouTube
-   feature flag is disabled.
+   endpoint. Completed notices can be dismissed per attendee and per
+   performance without suppressing any later song lifecycle. The legacy
+   optional-link flow remains available while the YouTube feature flag is
+   disabled.
 8. On the party date, attendees can view food and drink menu cards with images
    at `/party/menu` and order available/orderable drinks from the bar.
    Specialty drinks are limited to 3 included attendee orders; after 11:00 PM,
@@ -141,7 +143,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 14. The following globals in `main.py` are
+`halloween:state` with schema version 15. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -156,7 +158,8 @@ the process-local cache:
 - `costume_ballots`: maps `user_id` to `{costume_id: score}`.
 - `user_accounts`: maps normalized usernames to Redis-backed attendee account
   records with stable IDs, password hashes, and roles such as `regular` and
-  optional `bartender`.
+  optional `bartender`. Each account also holds a bounded map of acknowledged
+  karaoke completion instances keyed by entry ID and `completed_at` timestamp.
 - `password_reset_tokens`: maps SHA-256 reset-token hashes to account-bound
   reset records with email, created/expiration timestamps, and used timestamp.
   Plaintext reset tokens are only sent in the emailed link and are not stored.

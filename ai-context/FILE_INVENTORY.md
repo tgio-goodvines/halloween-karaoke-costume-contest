@@ -32,8 +32,8 @@
 | `static/dj-live-widgets.js` | Browser/Node-compatible confirmed-song renderer shared by `/party`, `/party/jukebox`, `/admin`, and `/admin/display`; normalizes safe/display payloads, updates text/artwork atomically, rejects stale responses, polls at five seconds, refreshes visible tabs, and optionally listens to authenticated display SSE. |
 | `static/jukebox.js` | Attendee jukebox catalog search, request submission, and playlist/personal-request rendering from the shared live-widget state event. |
 | `static/karaoke.js` | Attendee song-details-first YouTube search, pagination, stale-selection protection, multi-singer review, exact-video review, and direct-link fallback. |
-| `static/karaoke-live-status.js` | Shared five-second attendee karaoke status polling, stale-response protection, personal alert/workflow rendering, public lineup labels, and urgent browser-title updates. |
-| `tests/test_karaoke_live_status.js` | Dependency-free Node regression tests for attendee karaoke payload normalization, safe text-only lineup rendering, and stale response rejection. |
+| `static/karaoke-live-status.js` | Shared five-second attendee karaoke status polling, stale-response protection, personal alert/workflow/card reconciliation, protected completion dismissal, public lineup labels, and urgent browser-title updates. |
+| `tests/test_karaoke_live_status.js` | Dependency-free Node regression tests for attendee karaoke payload normalization, safe text-only lineup and personal-card rendering, and stale response rejection. |
 | `static/karaoke-singers.js` | Reusable attendee/admin one-to-four singer editor behavior, custom-name toggles, duplicate validation, add/remove controls, and combined review labels. |
 | `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |

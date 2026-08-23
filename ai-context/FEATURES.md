@@ -91,7 +91,9 @@
 - The party overview and karaoke page refresh attendee-safe karaoke state every
   five seconds and on tab visibility. Requesters and registered co-singers see
   explicit Ready, Up Next, Called, On Stage, Complete, and exception states;
-  only the requester can replace or cancel a pending request.
+  only the requester can replace or cancel a pending request. Each attendee can
+  dismiss an individual completed performance from both surfaces without
+  affecting another singer or any later song notification.
 - Karaoke signup accepts one to four singers, defaulting the first singer to
   the signed-in attendee. Each singer can be selected from registered party
   accounts or entered as a custom name without creating a new account. It also
@@ -153,6 +155,9 @@
   for host approval; a direct-link fallback remains available.
 - Guests then track Submitted, Video verified, Approved, Playlist synced,
   Ready, On stage, and Complete.
+- Completion notices are ordered by the latest lifecycle event and carry a
+  durable per-user Dismiss action. The exact completion timestamp scopes the
+  acknowledgement so re-completing a requeued song creates a new notice.
 - Complete and Advance and Skip and Call Next atomically call the next ready
   singer; reordering a different song preserves the current stage, while
   stop/reset safely returns called or on-stage entries to the waiting queue.

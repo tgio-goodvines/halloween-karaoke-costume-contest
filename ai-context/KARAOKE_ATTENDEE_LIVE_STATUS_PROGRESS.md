@@ -21,10 +21,19 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
 - `/party/karaoke` shows the same live banner, complete status copy on each
   participating song, workflow updates, and public Now Singing/Up Next/Ready
   labels.
+- Completed performance notices include a per-user Dismiss action on both
+  attendee surfaces. Dismissing removes only that completion instance from the
+  signed-in attendee's banner and active personal-song cards; it does not
+  delete the karaoke record, admin history, or exports.
+- Each song retains an independent notification lifecycle. An acknowledged
+  completion cannot suppress Ready, Up Next, Called, On Stage, or Complete
+  notices for another song, and completion ties favor the most recently
+  completed performance.
 - `static/karaoke-live-status.js` refreshes both attendee surfaces every five
   seconds and whenever the tab becomes visible. It rejects stale responses,
-  updates the browser title for Up Next and Called states, and uses text-only
-  DOM construction for refreshed lineup entries.
+  updates the browser title for Up Next and Called states, posts protected
+  completion dismissals, reconciles personal-song cards by entry ID, and uses
+  text-only DOM construction for refreshed entries.
 - Attendee refresh intentionally uses short polling instead of attendee SSE so
   party traffic does not consume the production Gunicorn worker pool with
   long-lived connections.
@@ -45,10 +54,25 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
   the lineup and completed/skipped history.
 - The workflow step label distinguishes Called to stage from On stage.
 
+## Completion Acknowledgements
+
+- Redis schema 15 adds bounded `karaoke_completion_acknowledgements` to each
+  attendee account. The map stores a karaoke entry ID and its exact
+  `completed_at` timestamp, capped at 50 entries per account.
+- The completion timestamp makes acknowledgements performance-specific. If a
+  host requeues and later completes the same entry, the new timestamp produces
+  a new dismissible notice.
+- `POST /api/party/karaoke/entries/<entry_id>/dismiss-completion` requires a
+  regular-user session and CSRF token, verifies requester/co-singer
+  participation, accepts only completed performances, matches the completion
+  identifier supplied by the rendered notice to reject stale clicks, and is
+  idempotent for that completion instance. Legacy completed entries without a
+  timestamp derive a stable fallback identifier until they are re-completed.
+- Co-singer acknowledgements are independent; one singer cannot dismiss the
+  completion for another singer.
+
 ## Data And Security
 
-- No Redis schema change was required. Existing workflow dimensions and
-  current/next stage fields remain authoritative.
 - The attendee endpoint excludes playlist IDs, operation IDs, history,
   host-only sync errors, OAuth state, YouTube credentials, and other attendees'
   private pending requests.
@@ -59,18 +83,28 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
 
 ## Verification
 
-- Full Python suite: 170 tests passed.
-- Dependency-free Node suites: 12 tests passed, including three attendee live
+- Full Python suite: 176 tests passed.
+- Dependency-free Node suites: 13 tests passed, including four attendee live
   status tests.
 - Python compilation, JavaScript syntax checks, and `git diff --check` passed.
 - Browser QA confirmed a separate attendee tab changed from Ready to Called
   within one five-second polling window, the overview matched the karaoke page,
   the urgent browser title updated, and the `390x844` layout had no horizontal
   overflow or console errors during the final pass.
+- Completion-dismissal browser QA used two sequential songs: the second song's
+  Called and Complete states took primary focus over the older completion,
+  dismissing the newest completion revealed the older one, dismissing from
+  `/party` immediately hid that notice, and `/party/karaoke` then showed no
+  acknowledged personal cards. The final browser console had no warnings or
+  errors. QA also caught and corrected an author-style override of native
+  `[hidden]` behavior before release so Dismiss is visible only for completed
+  performances.
 - Regression coverage includes atomic completion/advance, stage preservation
   while reordering another song, display-only singer-card replay, stop cleanup,
   co-singer visibility/authorization, safe endpoint output, and stale browser
-  response rejection.
+  response rejection, newest-completion selection, per-song dismissal,
+  independent co-singer acknowledgement, Redis persistence, CSRF enforcement,
+  re-completion visibility, and the next song's full notification lifecycle.
 
 ## Event-Night Operator Contract
 

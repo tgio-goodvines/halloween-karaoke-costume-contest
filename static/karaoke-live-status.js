@@ -59,6 +59,14 @@
       alert.querySelector('[data-karaoke-alert-song]'),
       `${primary.singer_label || 'Singer'} · “${primary.song_title || 'Song'}”${primary.artist ? ` by ${primary.artist}` : ''}`,
     );
+    const dismissButton = alert.querySelector('[data-karaoke-dismiss-completion]');
+    if (dismissButton) {
+      dismissButton.hidden = !status.dismissible;
+      dismissButton.disabled = false;
+      dismissButton.dataset.endpoint = status.dismissible ? String(primary.dismiss_url || '') : '';
+      dismissButton.dataset.karaokeEntryId = String(primary.id || '');
+      dismissButton.dataset.completionId = status.dismissible ? String(primary.completion_id || '') : '';
+    }
   };
 
   const renderWorkflow = (entryElement, steps) => {
@@ -78,11 +86,64 @@
     });
   };
 
+  const createPersonalEntry = (documentRoot, entry) => {
+    const article = documentRoot.createElement('article');
+    article.className = 'karaoke-request karaoke-request--attendee';
+    article.dataset.karaokePersonalEntry = String(entry.id || '');
+
+    const song = documentRoot.createElement('p');
+    const singer = documentRoot.createElement('strong');
+    singer.textContent = String(entry.singer_label || 'Singer');
+    song.append(
+      singer,
+      documentRoot.createTextNode(` — “${entry.song_title || 'Song'}”${entry.artist ? ` by ${entry.artist}` : ''}`),
+    );
+    article.append(song);
+
+    if (entry.relationship === 'singer') {
+      const relationship = documentRoot.createElement('p');
+      relationship.className = 'karaoke-participation-label';
+      relationship.textContent = 'You’re listed as a singer on this request.';
+      article.append(relationship);
+    }
+
+    const status = documentRoot.createElement('p');
+    status.className = 'contest-status';
+    status.dataset.karaokeEntryStatus = '';
+    const label = documentRoot.createElement('strong');
+    label.dataset.karaokeEntryStatusLabel = '';
+    const detail = documentRoot.createElement('span');
+    detail.dataset.karaokeEntryStatusDetail = '';
+    status.append(label, detail);
+    article.append(status);
+
+    const dismiss = documentRoot.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'button button--small';
+    dismiss.dataset.karaokeDismissCompletion = '';
+    dismiss.textContent = 'Dismiss completed performance';
+    article.append(dismiss);
+    return article;
+  };
+
   const renderPersonalEntries = (documentRoot, entries) => {
     const entryMap = new Map(safeArray(entries).map((entry) => [String(entry.id || ''), entry]));
+    const personalList = documentRoot.querySelector('[data-karaoke-personal-list]');
+    if (personalList) {
+      const existingIds = new Set(
+        Array.from(personalList.querySelectorAll('[data-karaoke-personal-entry]'))
+          .map((element) => String(element.dataset.karaokePersonalEntry || '')),
+      );
+      entryMap.forEach((entry, entryId) => {
+        if (!existingIds.has(entryId)) personalList.append(createPersonalEntry(documentRoot, entry));
+      });
+    }
     documentRoot.querySelectorAll('[data-karaoke-personal-entry]').forEach((entryElement) => {
       const entry = entryMap.get(entryElement.dataset.karaokePersonalEntry || '');
-      if (!entry) return;
+      if (!entry) {
+        entryElement.remove();
+        return;
+      }
       const status = safeObject(entry.status);
       const statusElement = entryElement.querySelector('[data-karaoke-entry-status]');
       if (statusElement) statusElement.dataset.karaokeStatusTone = String(status.tone || 'neutral');
@@ -90,7 +151,18 @@
       setText(entryElement.querySelector('[data-karaoke-entry-status-detail]'), status.detail);
       const manageActions = entryElement.querySelector('[data-karaoke-manage-actions]');
       if (manageActions) manageActions.hidden = !entry.can_manage;
+      const dismissButton = entryElement.querySelector('[data-karaoke-dismiss-completion]');
+      if (dismissButton) {
+        dismissButton.hidden = !status.dismissible;
+        dismissButton.disabled = false;
+        dismissButton.dataset.endpoint = status.dismissible ? String(entry.dismiss_url || '') : '';
+        dismissButton.dataset.karaokeEntryId = String(entry.id || '');
+        dismissButton.dataset.completionId = status.dismissible ? String(entry.completion_id || '') : '';
+      }
       renderWorkflow(entryElement, entry.steps);
+    });
+    documentRoot.querySelectorAll('[data-karaoke-personal-empty]').forEach((empty) => {
+      empty.hidden = entryMap.size > 0;
     });
   };
 
@@ -155,6 +227,14 @@
     let latestUpdateVersion = 0;
     let closed = false;
 
+    const applyPayload = (payload) => {
+      const view = buildView(payload);
+      latestUpdateVersion = Math.max(latestUpdateVersion, view.updateVersion);
+      renderWidget(widgetRoot, view);
+      widgetRoot.dispatchEvent(new CustomEvent('karaoke:state-updated', { detail: { payload, view } }));
+      return view;
+    };
+
     const refresh = async () => {
       const requestNumber = ++latestRequestNumber;
       try {
@@ -172,11 +252,43 @@
           updateVersion: view.updateVersion,
           latestUpdateVersion,
         })) return;
-        latestUpdateVersion = Math.max(latestUpdateVersion, view.updateVersion);
-        renderWidget(widgetRoot, view);
-        widgetRoot.dispatchEvent(new CustomEvent('karaoke:state-updated', { detail: { payload, view } }));
+        applyPayload(payload);
       } catch (error) {
         console.error('Unable to refresh live karaoke status', error);
+      }
+    };
+
+    const onClick = async (event) => {
+      const button = event.target.closest?.('[data-karaoke-dismiss-completion]');
+      if (!button || !widgetRoot.contains(button) || button.hidden || button.disabled) return;
+      const endpoint = String(button.dataset.endpoint || '');
+      if (!endpoint) return;
+      const entryId = String(button.dataset.karaokeEntryId || '');
+      const completionId = String(button.dataset.completionId || '');
+      if (!completionId) return;
+      const matchingButtons = Array.from(
+        widgetRoot.querySelectorAll('[data-karaoke-dismiss-completion]'),
+      ).filter((candidate) => String(candidate.dataset.karaokeEntryId || '') === entryId);
+      matchingButtons.forEach((candidate) => { candidate.disabled = true; });
+      latestRequestNumber += 1;
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': String(widgetRoot.dataset.karaokeCsrfToken || ''),
+          },
+          body: JSON.stringify({ completion_id: completionId }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || `Unable to dismiss karaoke status (${response.status})`);
+        applyPayload(payload);
+      } catch (error) {
+        matchingButtons.forEach((candidate) => { candidate.disabled = false; });
+        console.error('Unable to dismiss completed karaoke status', error);
       }
     };
 
@@ -185,6 +297,7 @@
       if (document.visibilityState === 'visible') refresh();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
+    widgetRoot.addEventListener('click', onClick);
     const controller = {
       refresh,
       close: () => {
@@ -192,6 +305,7 @@
         closed = true;
         window.clearInterval(intervalId);
         document.removeEventListener('visibilitychange', onVisibilityChange);
+        widgetRoot.removeEventListener('click', onClick);
         connections.delete(widgetRoot);
       },
     };
@@ -207,6 +321,7 @@
   return {
     buildView,
     connect,
+    createPersonalEntry,
     createLineupItem,
     renderAlert,
     renderLineups,

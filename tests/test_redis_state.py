@@ -5017,6 +5017,274 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("You’re up next", overview)
         self.assertIn("Up next", overview)
 
+    def test_newest_completed_karaoke_song_becomes_primary_notification(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        completed_workflow = {
+            "approval_status": "approved",
+            "performance_status": "completed",
+        }
+        first = main.KaraokeSignup(
+            id="song-one",
+            requester_id="user-1",
+            requested_at="2026-08-23T20:00:00Z",
+            name="Jamie",
+            song_title="Monster Mash",
+            artist="Bobby Pickett",
+            workflow=main.normalize_karaoke_workflow(completed_workflow, has_video=False),
+        )
+        first.workflow["completed_at"] = "2026-08-23T21:00:00Z"
+        second = main.KaraokeSignup(
+            id="song-two",
+            requester_id="user-1",
+            requested_at="2026-08-23T20:05:00Z",
+            name="Jamie",
+            song_title="Thriller",
+            artist="Michael Jackson",
+            workflow=main.normalize_karaoke_workflow(completed_workflow, has_video=False),
+        )
+        second.workflow["completed_at"] = "2026-08-23T21:05:00Z"
+        main.karaoke_signups = [first, second]
+
+        payload = main.karaoke_attendee_view_state("user-1")
+
+        self.assertEqual("song-two", payload["primary"]["id"])
+        self.assertEqual("completed", payload["primary"]["status"]["key"])
+        self.assertTrue(payload["primary"]["status"]["dismissible"])
+        self.assertEqual(["song-two", "song-one"], [entry["id"] for entry in payload["personal_entries"]])
+
+    def test_attendee_can_dismiss_each_completed_song_and_reveal_the_next(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1")
+        main.registered_users["user-1"] = "Jamie"
+        for entry_id, completed_at in (
+            ("song-one", "2026-08-23T21:00:00Z"),
+            ("song-two", "2026-08-23T21:05:00Z"),
+        ):
+            signup = main.KaraokeSignup(
+                id=entry_id,
+                requester_id="user-1",
+                requested_at="2026-08-23T20:00:00Z",
+                name="Jamie",
+                song_title=entry_id,
+                artist="Test Artist",
+            )
+            signup.workflow["approval_status"] = "approved"
+            signup.workflow["performance_status"] = "completed"
+            signup.workflow["completed_at"] = completed_at
+            main.karaoke_signups.append(signup)
+        self.save_current_state()
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            first_dismissal = attendee.post(
+                "/api/party/karaoke/entries/song-two/dismiss-completion",
+                json={"completion_id": "2026-08-23T21:05:00Z"},
+            )
+            second_dismissal = attendee.post(
+                "/api/party/karaoke/entries/song-one/dismiss-completion",
+                json={"completion_id": "2026-08-23T21:00:00Z"},
+            )
+            karaoke_page = attendee.get("/party/karaoke")
+
+        self.assertEqual(200, first_dismissal.status_code)
+        self.assertEqual("song-one", first_dismissal.get_json()["primary"]["id"])
+        self.assertEqual(200, second_dismissal.status_code)
+        self.assertIsNone(second_dismissal.get_json()["primary"])
+        self.assertEqual([], second_dismissal.get_json()["personal_entries"])
+        self.assertNotIn('data-karaoke-personal-entry="song-one"', karaoke_page.get_data(as_text=True))
+        self.assertNotIn('data-karaoke-personal-entry="song-two"', karaoke_page.get_data(as_text=True))
+        persisted_account = self.redis_state()["user_accounts"]["jamie"]
+        self.assertEqual(
+            {
+                "song-one": "2026-08-23T21:00:00Z",
+                "song-two": "2026-08-23T21:05:00Z",
+            },
+            persisted_account["karaoke_completion_acknowledgements"],
+        )
+        self.assertEqual({}, account["karaoke_completion_acknowledgements"])
+
+    def test_karaoke_completion_dismissal_is_per_user_and_new_completion_instance(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.add_user_account(username="Morgan", user_id="user-2")
+        signup = main.KaraokeSignup(
+            id="duet-song",
+            requester_id="user-1",
+            requested_at="2026-08-23T20:00:00Z",
+            name="Jamie & Morgan",
+            song_title="Time Warp",
+            artist="Rocky Horror Cast",
+            singers=[
+                {"account_id": "user-1", "name": "Jamie"},
+                {"account_id": "user-2", "name": "Morgan"},
+            ],
+        )
+        signup.workflow["approval_status"] = "approved"
+        signup.workflow["performance_status"] = "completed"
+        signup.workflow["completed_at"] = "2026-08-23T21:00:00Z"
+        main.karaoke_signups = [signup]
+        self.save_current_state()
+
+        with main.app.test_client() as morgan:
+            self.login_regular(morgan, user_id="user-2", username="Morgan")
+            dismissed = morgan.post(
+                "/api/party/karaoke/entries/duet-song/dismiss-completion",
+                json={"completion_id": "2026-08-23T21:00:00Z"},
+            )
+        with main.app.test_client() as jamie:
+            self.login_regular(jamie, user_id="user-1", username="Jamie")
+            jamie_payload = jamie.get("/api/party/karaoke-data").get_json()
+
+        self.assertEqual(200, dismissed.status_code)
+        self.assertIsNone(dismissed.get_json()["primary"])
+        self.assertEqual("duet-song", jamie_payload["primary"]["id"])
+
+        main.load_state_from_redis()
+        signup = main.find_karaoke_signup("duet-song")
+        signup.workflow["performance_status"] = "waiting"
+        signup.workflow["completed_at"] = ""
+        signup.workflow["performance_status"] = "completed"
+        signup.workflow["completed_at"] = "2026-08-23T22:00:00Z"
+        self.save_current_state()
+        with main.app.test_client() as morgan:
+            self.login_regular(morgan, user_id="user-2", username="Morgan")
+            refreshed = morgan.get("/api/party/karaoke-data").get_json()
+
+        self.assertEqual("duet-song", refreshed["primary"]["id"])
+        self.assertEqual("completed", refreshed["primary"]["status"]["key"])
+
+    def test_karaoke_completion_dismissal_rejects_nonparticipant_and_active_song(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.add_user_account(username="Morgan", user_id="user-2")
+        signup = main.KaraokeSignup(
+            id="active-song",
+            requester_id="user-1",
+            name="Jamie",
+            song_title="Thriller",
+            artist="Michael Jackson",
+        )
+        signup.workflow["approval_status"] = "approved"
+        main.karaoke_signups = [signup]
+        self.save_current_state()
+
+        with main.app.test_client() as morgan:
+            self.login_regular(morgan, user_id="user-2", username="Morgan")
+            missing = morgan.post(
+                "/api/party/karaoke/entries/active-song/dismiss-completion"
+            )
+        with main.app.test_client() as jamie:
+            self.login_regular(jamie, user_id="user-1", username="Jamie")
+            active = jamie.post(
+                "/api/party/karaoke/entries/active-song/dismiss-completion"
+            )
+
+        self.assertEqual(404, missing.status_code)
+        self.assertEqual(409, active.status_code)
+
+        main.load_state_from_redis()
+        signup = main.find_karaoke_signup("active-song")
+        signup.workflow["performance_status"] = "completed"
+        signup.workflow["completed_at"] = "2026-08-23T22:00:00Z"
+        self.save_current_state()
+        with main.app.test_client() as jamie:
+            self.login_regular(jamie, user_id="user-1", username="Jamie")
+            stale = jamie.post(
+                "/api/party/karaoke/entries/active-song/dismiss-completion",
+                json={"completion_id": "2026-08-23T21:00:00Z"},
+            )
+
+        self.assertEqual(409, stale.status_code)
+        self.assertEqual(
+            {},
+            self.redis_state()["user_accounts"]["jamie"][
+                "karaoke_completion_acknowledgements"
+            ],
+        )
+
+    def test_next_song_keeps_its_full_notification_lifecycle_after_dismissal(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1")
+        completed = main.KaraokeSignup(
+            id="completed-song",
+            requester_id="user-1",
+            requested_at="2026-08-23T20:00:00Z",
+            name="Jamie",
+            song_title="Monster Mash",
+            artist="Bobby Pickett",
+        )
+        completed.workflow["approval_status"] = "approved"
+        completed.workflow["performance_status"] = "completed"
+        completed.workflow["completed_at"] = "2026-08-23T21:00:00Z"
+        account["karaoke_completion_acknowledgements"] = {
+            completed.id: completed.workflow["completed_at"]
+        }
+        next_song = main.KaraokeSignup(
+            id="next-song",
+            requester_id="user-1",
+            requested_at="2026-08-23T20:05:00Z",
+            name="Jamie",
+            song_title="Thriller",
+            artist="Michael Jackson",
+        )
+        next_song.workflow["approval_status"] = "approved"
+        main.karaoke_signups = [completed, next_song]
+
+        observed_statuses = []
+        observed_statuses.append(
+            main.karaoke_attendee_view_state("user-1")["primary"]["status"]["key"]
+        )
+        main.karaoke_state.update(
+            {"party_started": True, "current_singer_id": next_song.id, "stage_mode": "called"}
+        )
+        next_song.workflow["performance_status"] = "called"
+        observed_statuses.append(
+            main.karaoke_attendee_view_state("user-1")["primary"]["status"]["key"]
+        )
+        main.karaoke_state["stage_mode"] = "on_stage"
+        next_song.workflow["performance_status"] = "on_stage"
+        observed_statuses.append(
+            main.karaoke_attendee_view_state("user-1")["primary"]["status"]["key"]
+        )
+        main.karaoke_state.update(
+            {"current_singer_id": None, "stage_mode": "standby"}
+        )
+        next_song.workflow["performance_status"] = "completed"
+        next_song.workflow["completed_at"] = "2026-08-23T22:00:00Z"
+        observed_statuses.append(
+            main.karaoke_attendee_view_state("user-1")["primary"]["status"]["key"]
+        )
+
+        self.assertEqual(["ready", "called", "on_stage", "completed"], observed_statuses)
+        self.assertEqual(
+            ["next-song"],
+            [
+                entry["id"]
+                for entry in main.karaoke_attendee_view_state("user-1")["personal_entries"]
+            ],
+        )
+
+    def test_karaoke_completion_dismissal_requires_csrf_outside_testing_mode(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        signup = main.KaraokeSignup(
+            id="completed-song",
+            requester_id="user-1",
+            name="Jamie",
+            song_title="Thriller",
+            artist="Michael Jackson",
+        )
+        signup.workflow["approval_status"] = "approved"
+        signup.workflow["performance_status"] = "completed"
+        signup.workflow["completed_at"] = "2026-08-23T21:00:00Z"
+        main.karaoke_signups = [signup]
+        self.save_current_state()
+        main.app.config["TESTING"] = False
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            response = attendee.post(
+                "/api/party/karaoke/entries/completed-song/dismiss-completion"
+            )
+
+        self.assertEqual(400, response.status_code)
+        self.assertIn("form expired", response.get_data(as_text=True))
+
     def test_admin_lineup_reorder_marks_playlist_order_for_resynchronization(self):
         self.enable_youtube_karaoke()
         entries = []

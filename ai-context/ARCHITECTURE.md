@@ -130,6 +130,12 @@
   requester's or registered co-singer's entries, derived stage status, safe
   public current/next metadata and lineup, and the display update version;
   playlist operation details, history, and credentials are excluded.
+- `POST /api/party/karaoke/entries/<entry_id>/dismiss-completion` ->
+  CSRF-protected, participant-only acknowledgement of one exact completed
+  performance. The submitted completion identifier must still match current
+  server state, preventing a stale page from dismissing a later re-completion.
+  Returns refreshed attendee state so the next eligible song appears
+  immediately.
 - `GET /api/party/karaoke/search` -> deliberate, cached, quota-budgeted
   normalized YouTube search for signed-in attendees. Structured
   `song_title`/`artist` parameters become the canonical
@@ -206,7 +212,10 @@ display-update broadcasts.
 
 The app uses Flask sessions for role and attendee identity. Regular attendee
 accounts live in Redis app state as `user_accounts`; active session display
-names are also tracked in `registered_users` by account ID.
+names are also tracked in `registered_users` by account ID. Schema 15 account
+records include a bounded `karaoke_completion_acknowledgements` map from entry
+ID to the dismissed `completed_at`; timestamp matching prevents an old
+acknowledgement from suppressing a later re-completion.
 
 Navigation is the union of active session roles: a mixed regular/bartender/admin
 session exposes the destinations for each represented role. Attendee sign-in
@@ -355,8 +364,10 @@ locked winner.
 `/party` and `/party/karaoke`. It polls `/api/party/karaoke-data` every five
 seconds and on visibility, rejects stale responses with
 `display_update_version`, updates personal alerts/workflows and the safe public
-lineup, and changes the browser title for Up Next or Called states. Attendee
-karaoke deliberately does not open long-lived SSE connections.
+lineup, reconciles personal cards by stable entry ID, submits completion
+dismissals with the session CSRF token, and changes the browser title for Up
+Next or Called states. Attendee karaoke deliberately does not open long-lived
+SSE connections.
 
 `templates/display.html` renders initial display state and embeds JSON in:
 

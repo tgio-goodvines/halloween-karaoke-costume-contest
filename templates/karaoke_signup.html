@@ -4,7 +4,7 @@
 {% set title = "Karaoke Signup" %}
 
 {% block content %}
-<div data-karaoke-live-widget data-karaoke-state-url="{{ karaoke_data_url }}">
+<div data-karaoke-live-widget data-karaoke-state-url="{{ karaoke_data_url }}" data-karaoke-csrf-token="{{ csrf_token() }}">
   {% set karaoke_primary = karaoke_attendee.primary %}
   <section
     class="karaoke-attendee-alert{% if karaoke_primary %} karaoke-attendee-alert--{{ karaoke_primary.status.tone }}{% endif %}"
@@ -19,6 +19,14 @@
       <p data-karaoke-alert-detail>{{ karaoke_primary.status.detail if karaoke_primary else '' }}</p>
       <small data-karaoke-alert-song>{% if karaoke_primary %}{{ karaoke_primary.singer_label }} · “{{ karaoke_primary.song_title }}” by {{ karaoke_primary.artist }}{% endif %}</small>
     </div>
+    <button
+      class="button button--small"
+      type="button"
+      data-karaoke-dismiss-completion
+      data-endpoint="{{ karaoke_primary.dismiss_url if karaoke_primary else '' }}"
+      data-completion-id="{{ karaoke_primary.completion_id if karaoke_primary else '' }}"
+      {% if not karaoke_primary or not karaoke_primary.status.dismissible %}hidden{% endif %}
+    >Dismiss</button>
   </section>
 
 <section
@@ -166,7 +174,7 @@
   {% endif %}
 </section>
 
-<section class="submitted-list karaoke-own-requests">
+<section class="submitted-list karaoke-own-requests" data-karaoke-personal-list>
   <h3>Your Karaoke Requests and Songs</h3>
   {% for entry in own_karaoke_requests %}
     <article class="karaoke-request karaoke-request--attendee" data-karaoke-personal-entry="{{ entry.id }}">
@@ -178,6 +186,14 @@
         <strong data-karaoke-entry-status-label>{{ entry.attendee_status.label }}</strong>
         <span data-karaoke-entry-status-detail>{{ entry.attendee_status.detail }}</span>
       </p>
+      <button
+        class="button button--small"
+        type="button"
+        data-karaoke-dismiss-completion
+        data-endpoint="{{ entry.dismiss_url }}"
+        data-completion-id="{{ entry.completion_id }}"
+        {% if not entry.attendee_status.dismissible %}hidden{% endif %}
+      >Dismiss completed performance</button>
       {% if entry.can_manage and youtube_karaoke_enabled %}
         <div class="karaoke-request__actions" data-karaoke-manage-actions>
           <details class="karaoke-link-fallback">
@@ -195,9 +211,8 @@
         </div>
       {% endif %}
     </article>
-  {% else %}
-    <p>You are not currently listed on a karaoke song.</p>
   {% endfor %}
+  <p data-karaoke-personal-empty{% if own_karaoke_requests %} hidden{% endif %}>You are not currently listed on a karaoke song.</p>
 </section>
 
 <section class="submitted-list">
@@ -219,5 +234,5 @@
 {% block scripts %}
   <script src="{{ url_for('static', filename='karaoke-singers.js', v='20260823-multi-singer') }}"></script>
   {% if youtube_karaoke_enabled %}<script src="{{ url_for('static', filename='karaoke.js', v='20260730-song-details-search') }}"></script>{% endif %}
-  <script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-live-status') }}"></script>
+  <script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-completion-dismissal') }}"></script>
 {% endblock %}

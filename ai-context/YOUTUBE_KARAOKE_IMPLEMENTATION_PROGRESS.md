@@ -93,6 +93,10 @@ Deployment record:
 - Added attendee-safe live karaoke status to `/party` and `/party/karaoke`,
   including registered co-singers, explicit Up Next/Called/On Stage copy,
   five-second polling, visibility refresh, and urgent browser-title updates.
+- Added schema-15 per-account completion acknowledgements and CSRF-protected
+  Dismiss actions on both attendee surfaces. Acknowledgements are scoped to the
+  entry's exact completion timestamp, remain independent for co-singers, and
+  cannot suppress notifications for a later song or re-completion.
 - Corrected the stage transition contract so complete/skip calls the next ready
   singer atomically, display-only card replay does not mutate workflow,
   non-current reordering preserves the active performer, and stop/reset cannot

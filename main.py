@@ -323,10 +323,11 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 14
+STATE_SCHEMA_VERSION = 15
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
+KARAOKE_COMPLETION_ACK_LIMIT = 50
 
 
 @dataclass
@@ -784,6 +785,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_karaoke_search",
     "party_karaoke_cancel",
     "party_karaoke_replace",
+    "party_karaoke_dismiss_completion",
     "party_costume_voting",
     "party_jukebox",
     "party_jukebox_data",
@@ -1215,6 +1217,7 @@ def create_user_account(username: str, password: str, email: str = "") -> dict[s
         "username": username.strip(),
         "email": normalize_email(email),
         "email_updates_acknowledged": True,
+        "karaoke_completion_acknowledgements": {},
         "roles": ["regular"],
         "password_hash": generate_password_hash(password),
         "created_at": _utc_now_iso(),
@@ -1226,6 +1229,18 @@ def find_user_account_key_by_id(account_id: str) -> str | None:
         if str(account.get("id", "")) == account_id:
             return normalized_username
     return None
+
+
+def normalize_karaoke_completion_acknowledgements(raw_value: object) -> dict[str, str]:
+    if not isinstance(raw_value, dict):
+        return {}
+    acknowledgements: dict[str, str] = {}
+    for raw_entry_id, raw_completed_at in list(raw_value.items())[-KARAOKE_COMPLETION_ACK_LIMIT:]:
+        entry_id = str(raw_entry_id or "").strip()[:120]
+        completed_at = str(raw_completed_at or "").strip()[:180]
+        if entry_id and completed_at:
+            acknowledgements[entry_id] = completed_at
+    return acknowledgements
 
 
 def find_rsvp_index_by_id(rsvp_id: str) -> int | None:
@@ -3780,6 +3795,53 @@ def karaoke_user_is_participant(signup: KaraokeSignup, user_id: str) -> bool:
     )
 
 
+def karaoke_completion_is_dismissed(signup: KaraokeSignup, user_id: str) -> bool:
+    if signup.workflow.get("performance_status") != "completed":
+        return False
+    completion_id = karaoke_completion_acknowledgement_value(signup)
+    account_key = find_user_account_key_by_id(user_id)
+    if not completion_id or account_key is None:
+        return False
+    acknowledgements = normalize_karaoke_completion_acknowledgements(
+        user_accounts[account_key].get("karaoke_completion_acknowledgements", {})
+    )
+    return acknowledgements.get(signup.id) == completion_id
+
+
+def karaoke_completion_acknowledgement_value(signup: KaraokeSignup) -> str:
+    if signup.workflow.get("performance_status") != "completed":
+        return ""
+    completed_at = str(signup.workflow.get("completed_at", "") or "")
+    if completed_at:
+        return completed_at
+    for event in reversed(signup.history):
+        if event.get("event") == "performance_completed" and event.get("at"):
+            return str(event["at"])
+    return f"legacy:{signup.id}"
+
+
+def karaoke_attendee_signup_is_visible(signup: KaraokeSignup, user_id: str) -> bool:
+    return (
+        karaoke_user_is_participant(signup, user_id)
+        and not karaoke_completion_is_dismissed(signup, user_id)
+    )
+
+
+def karaoke_attendee_notification_timestamp(signup: KaraokeSignup) -> float:
+    workflow = signup.workflow
+    for raw_timestamp in (
+        workflow.get("completed_at"),
+        workflow.get("started_at"),
+        workflow.get("called_at"),
+        workflow.get("approved_at"),
+        signup.requested_at,
+    ):
+        timestamp = parse_utc_iso(raw_timestamp)
+        if timestamp:
+            return timestamp.timestamp()
+    return 0.0
+
+
 def karaoke_attendee_status(signup: KaraokeSignup) -> dict[str, object]:
     workflow = signup.workflow
     approval = str(workflow.get("approval_status", "pending") or "pending")
@@ -3926,6 +3988,7 @@ def karaoke_attendee_status(signup: KaraokeSignup) -> dict[str, object]:
         "queue_position": queue_position,
         "is_current": signup.id == current_id,
         "is_up_next": key == "up_next",
+        "dismissible": key == "completed",
     }
 
 
@@ -3955,6 +4018,7 @@ def karaoke_public_entry_view(signup: KaraokeSignup) -> dict[str, object]:
 
 def karaoke_attendee_entry_view(signup: KaraokeSignup, user_id: str) -> dict[str, object]:
     status = karaoke_attendee_status(signup)
+    completion_id = karaoke_completion_acknowledgement_value(signup)
     return {
         "id": signup.id,
         "singer_label": signup.singer_label,
@@ -3974,6 +4038,10 @@ def karaoke_attendee_entry_view(signup: KaraokeSignup, user_id: str) -> dict[str
         "relationship": "requester" if signup.requester_id == user_id else "singer",
         "can_manage": signup.requester_id == user_id
         and signup.workflow.get("approval_status") == "pending",
+        "dismiss_url": f"/api/party/karaoke/entries/{signup.id}/dismiss-completion"
+        if status["dismissible"]
+        else "",
+        "completion_id": completion_id,
     }
 
 
@@ -3985,21 +4053,27 @@ def karaoke_attendee_template_entry(
     entry["attendee_status"] = attendee_entry["status"]
     entry["relationship"] = attendee_entry["relationship"]
     entry["can_manage"] = attendee_entry["can_manage"]
+    entry["dismiss_url"] = attendee_entry["dismiss_url"]
+    entry["completion_id"] = attendee_entry["completion_id"]
     return entry
 
 
 def karaoke_attendee_view_state(user_id: str) -> dict[str, object]:
-    personal_entries = [
-        karaoke_attendee_entry_view(signup, user_id)
+    personal_signups = [
+        signup
         for signup in karaoke_signups
-        if karaoke_user_is_participant(signup, user_id)
+        if karaoke_attendee_signup_is_visible(signup, user_id)
     ]
-    personal_entries.sort(
-        key=lambda entry: (
-            -int(entry["status"].get("priority", 0) or 0),
-            int(entry["status"].get("queue_position") or 10_000),
+    personal_signups.sort(
+        key=lambda signup: (
+            -int(karaoke_attendee_status(signup).get("priority", 0) or 0),
+            -karaoke_attendee_notification_timestamp(signup),
+            int(karaoke_attendee_status(signup).get("queue_position") or 10_000),
         )
     )
+    personal_entries = [
+        karaoke_attendee_entry_view(signup, user_id) for signup in personal_signups
+    ]
     current = find_karaoke_signup(str(karaoke_state.get("current_singer_id", "") or ""))
     next_signup = find_karaoke_signup(str(karaoke_state.get("next_singer_id", "") or ""))
     return {
@@ -4534,6 +4608,9 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                     "username": username,
                     "email": normalize_email(str(raw_account.get("email", "") or "")),
                     "email_updates_acknowledged": bool(raw_account.get("email_updates_acknowledged", False)),
+                    "karaoke_completion_acknowledgements": normalize_karaoke_completion_acknowledgements(
+                        raw_account.get("karaoke_completion_acknowledgements", {})
+                    ),
                     "roles": normalize_account_roles(raw_account.get("roles", [])),
                     "password_hash": password_hash,
                     "created_at": str(raw_account.get("created_at", "") or ""),
@@ -10993,7 +11070,7 @@ def party_karaoke():
         own_karaoke_requests=[
             karaoke_attendee_template_entry(signup, user_id)
             for signup in karaoke_signups
-            if karaoke_user_is_participant(signup, user_id)
+            if karaoke_attendee_signup_is_visible(signup, user_id)
         ],
         karaoke_attendee=karaoke_attendee_view_state(user_id),
         karaoke_data_url=url_for("party_karaoke_data"),
@@ -11016,6 +11093,45 @@ def party_karaoke_data():
     return jsonify(
         karaoke_attendee_view_state(str(session.get("user_id", "") or ""))
     )
+
+
+@app.post("/api/party/karaoke/entries/<entry_id>/dismiss-completion")
+def party_karaoke_dismiss_completion(entry_id: str):
+    user_id = str(session.get("user_id", "") or "")
+    payload = request.get_json(silent=True)
+    expected_completion_id = str(
+        payload.get("completion_id", "") if isinstance(payload, dict) else ""
+    )
+
+    def dismiss_completion() -> None:
+        signup = find_karaoke_signup(entry_id)
+        account_key = find_user_account_key_by_id(user_id)
+        if not signup or account_key is None or not karaoke_user_is_participant(signup, user_id):
+            raise LookupError("Completed karaoke performance could not be found.")
+        if signup.workflow.get("performance_status") != "completed":
+            raise RuntimeError("Only a completed karaoke performance can be dismissed.")
+        completion_id = karaoke_completion_acknowledgement_value(signup)
+        if not expected_completion_id or expected_completion_id != completion_id:
+            raise RuntimeError("This performance changed. Refresh before dismissing it.")
+        account = user_accounts[account_key]
+        acknowledgements = normalize_karaoke_completion_acknowledgements(
+            account.get("karaoke_completion_acknowledgements", {})
+        )
+        acknowledgements.pop(signup.id, None)
+        acknowledgements[signup.id] = completion_id
+        account["karaoke_completion_acknowledgements"] = (
+            normalize_karaoke_completion_acknowledgements(acknowledgements)
+        )
+
+    try:
+        explicit_state_mutation(dismiss_completion, broadcast=False)
+    except StateMutationBusy as exc:
+        return jsonify({"error": str(exc)}), 503
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 409
+    return jsonify(karaoke_attendee_view_state(user_id))
 
 
 @app.get("/api/party/karaoke/search")

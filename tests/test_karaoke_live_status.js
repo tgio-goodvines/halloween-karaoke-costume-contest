@@ -58,6 +58,22 @@ test('renders public lineup text and status without HTML interpolation', () => {
   assert.match(item.children[2].className, /karaoke-lineup-status--up_next/);
 });
 
+test('creates a safe personal status card for a newly associated song', () => {
+  const item = karaoke.createPersonalEntry(fakeDocument, {
+    id: 'song-2',
+    singer_label: '<Jamie & Morgan>',
+    song_title: '<Time Warp>',
+    artist: 'Rocky Horror Cast',
+    relationship: 'singer',
+  });
+
+  assert.equal(item.dataset.karaokePersonalEntry, 'song-2');
+  assert.equal(item.children[0].children[0].textContent, '<Jamie & Morgan>');
+  assert.match(item.children[0].children[1].textContent, /<Time Warp>/);
+  assert.equal(item.children[1].textContent, 'You’re listed as a singer on this request.');
+  assert.equal(item.children[3].dataset.karaokeDismissCompletion, '');
+});
+
 test('rejects stale or out-of-order attendee refresh responses', () => {
   assert.equal(karaoke.shouldApplyResponse({
     requestNumber: 2,

@@ -156,8 +156,10 @@
 - Guests then track Submitted, Video verified, Approved, Playlist synced,
   Ready, On stage, and Complete.
 - Completion notices are ordered by the latest lifecycle event and carry a
-  durable per-user Dismiss action. The exact completion timestamp scopes the
-  acknowledgement so re-completing a requeued song creates a new notice.
+  durable per-user Dismiss action backed by the schema-16 stable-user ledger.
+  The exact completion timestamp scopes the acknowledgement so re-completing a
+  requeued song creates a new notice. Completed/skipped entries do not remain
+  in the attendee public lineup.
 - Complete and Advance and Skip and Call Next atomically call the next ready
   singer; reordering a different song preserves the current stage, while
   stop/reset safely returns called or on-stage entries to the waiting queue.

@@ -18,7 +18,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/DJ_LIVE_SURFACES_CORRECTIVE_ACTION.md` - cross-surface confirmed-song/artwork synchronization root cause, corrective design, and verification.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` - planned attendee YouTube search, host approval, playlist synchronization, dedicated karaoke admin workflow, stage controls, and manual two-tab playback.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
-- `ai-context/KARAOKE_ATTENDEE_LIVE_STATUS_PROGRESS.md` - attendee-safe live karaoke status, per-performance completion dismissal, multi-song/co-singer notification behavior, stage-transition invariants, polling behavior, and verification.
+- `ai-context/KARAOKE_ATTENDEE_LIVE_STATUS_PROGRESS.md` - attendee-safe live karaoke status, schema-16 user-ID completion acknowledgement ledger, multi-song/co-singer notification behavior, stage-transition invariants, polling behavior, and verification.
 - `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` - Redis-backed party Games framework, Two Truths and a Lie lifecycle, attendee/admin/display behavior, scoring, and verification.
 - `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` - adaptive TV layout, independent region rotations, admin control room, generated result-card controls, verification, and rollout notes.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.

@@ -24,10 +24,12 @@
       type="button"
       data-karaoke-dismiss-completion
       data-endpoint="{{ karaoke_primary.dismiss_url if karaoke_primary else '' }}"
+      data-karaoke-entry-id="{{ karaoke_primary.id if karaoke_primary else '' }}"
       data-completion-id="{{ karaoke_primary.completion_id if karaoke_primary else '' }}"
       {% if not karaoke_primary or not karaoke_primary.status.dismissible %}hidden{% endif %}
     >Dismiss</button>
   </section>
+  <p class="karaoke-dismiss-error" data-karaoke-dismiss-error role="alert" hidden></p>
 
 <section
   class="form-section karaoke-signup-page"
@@ -191,6 +193,7 @@
         type="button"
         data-karaoke-dismiss-completion
         data-endpoint="{{ entry.dismiss_url }}"
+        data-karaoke-entry-id="{{ entry.id }}"
         data-completion-id="{{ entry.completion_id }}"
         {% if not entry.attendee_status.dismissible %}hidden{% endif %}
       >Dismiss completed performance</button>
@@ -234,5 +237,5 @@
 {% block scripts %}
   <script src="{{ url_for('static', filename='karaoke-singers.js', v='20260823-multi-singer') }}"></script>
   {% if youtube_karaoke_enabled %}<script src="{{ url_for('static', filename='karaoke.js', v='20260730-song-details-search') }}"></script>{% endif %}
-  <script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-completion-dismissal') }}"></script>
+  <script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-dismissal-ledger') }}"></script>
 {% endblock %}

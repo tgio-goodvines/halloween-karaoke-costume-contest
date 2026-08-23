@@ -42,6 +42,20 @@
     if (element) element.textContent = String(value || '');
   };
 
+  const renderDismissError = (widgetRoot, message = '') => {
+    const error = widgetRoot.querySelector('[data-karaoke-dismiss-error]');
+    if (!error) return;
+    error.textContent = String(message || '');
+    error.hidden = !message;
+  };
+
+  const responsePayload = async (response) => {
+    const contentType = String(response.headers?.get?.('content-type') || '');
+    if (contentType.includes('application/json')) return response.json();
+    const message = String(await response.text()).trim();
+    return message ? { error: message } : {};
+  };
+
   const renderAlert = (widgetRoot, primary) => {
     const alert = findWithin(widgetRoot, '[data-karaoke-alert]');
     if (!alert) return;
@@ -121,6 +135,7 @@
     dismiss.type = 'button';
     dismiss.className = 'button button--small';
     dismiss.dataset.karaokeDismissCompletion = '';
+    dismiss.dataset.karaokeEntryId = String(entry.id || '');
     dismiss.textContent = 'Dismiss completed performance';
     article.append(dismiss);
     return article;
@@ -270,6 +285,7 @@
         widgetRoot.querySelectorAll('[data-karaoke-dismiss-completion]'),
       ).filter((candidate) => String(candidate.dataset.karaokeEntryId || '') === entryId);
       matchingButtons.forEach((candidate) => { candidate.disabled = true; });
+      renderDismissError(widgetRoot);
       latestRequestNumber += 1;
       try {
         const response = await fetch(endpoint, {
@@ -283,11 +299,15 @@
           },
           body: JSON.stringify({ completion_id: completionId }),
         });
-        const payload = await response.json();
+        const payload = await responsePayload(response);
         if (!response.ok) throw new Error(payload.error || `Unable to dismiss karaoke status (${response.status})`);
         applyPayload(payload);
       } catch (error) {
         matchingButtons.forEach((candidate) => { candidate.disabled = false; });
+        renderDismissError(
+          widgetRoot,
+          error?.message || 'Unable to dismiss this completed performance. Refresh and try again.',
+        );
         console.error('Unable to dismiss completed karaoke status', error);
       }
     };
@@ -326,6 +346,7 @@
     renderAlert,
     renderLineups,
     renderPersonalEntries,
+    renderDismissError,
     renderWidget,
     shouldApplyResponse,
     startAll,

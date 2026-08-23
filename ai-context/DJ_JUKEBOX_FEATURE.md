@@ -79,7 +79,7 @@ stale song text or artwork after a newer track change.
 
 ## Redis State
 
-The DJ model was introduced in schema version 5. Canonical schema version 15
+The DJ model was introduced in schema version 5. Canonical schema version 16
 adds request provenance and priority synchronization state inside the
 `halloween:state` JSON document:
 

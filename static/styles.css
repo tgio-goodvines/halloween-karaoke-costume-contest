@@ -6036,6 +6036,7 @@ textarea,
 /* Live attendee karaoke status */
 .karaoke-attendee-alert {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -6050,6 +6051,16 @@ textarea,
 
 .karaoke-attendee-alert[hidden] { display: none; }
 [data-karaoke-dismiss-completion][hidden] { display: none; }
+.karaoke-dismiss-error[hidden] { display: none; }
+.karaoke-dismiss-error {
+  width: 100%;
+  margin: 0.75rem 0 0;
+  color: #ff8f8f;
+  font-weight: 700;
+}
+.karaoke-attendee-alert > .karaoke-dismiss-error {
+  flex-basis: 100%;
+}
 .karaoke-attendee-alert > div { min-width: 0; }
 .karaoke-attendee-alert__actions {
   display: flex;

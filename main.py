@@ -323,11 +323,12 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 15
+STATE_SCHEMA_VERSION = 16
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
 KARAOKE_COMPLETION_ACK_LIMIT = 50
+KARAOKE_COMPLETION_ACK_USER_LIMIT = 2_000
 
 
 @dataclass
@@ -656,6 +657,7 @@ costume_votes: List[List[int]] = []
 costume_ballots: dict[str, dict[str, int]] = {}
 registered_users: dict[str, str] = {}
 user_accounts: dict[str, dict[str, object]] = {}
+karaoke_completion_acknowledgements: dict[str, dict[str, str]] = {}
 password_reset_tokens: dict[str, dict[str, object]] = {}
 menu_items: list[dict[str, object]] = []
 drink_orders: list[dict[str, object]] = []
@@ -1241,6 +1243,24 @@ def normalize_karaoke_completion_acknowledgements(raw_value: object) -> dict[str
         if entry_id and completed_at:
             acknowledgements[entry_id] = completed_at
     return acknowledgements
+
+
+def normalize_karaoke_completion_acknowledgement_ledger(
+    raw_value: object,
+) -> dict[str, dict[str, str]]:
+    if not isinstance(raw_value, dict):
+        return {}
+    ledger: dict[str, dict[str, str]] = {}
+    for raw_user_id, raw_acknowledgements in list(raw_value.items())[
+        -KARAOKE_COMPLETION_ACK_USER_LIMIT:
+    ]:
+        user_id = str(raw_user_id or "").strip()[:120]
+        acknowledgements = normalize_karaoke_completion_acknowledgements(
+            raw_acknowledgements
+        )
+        if user_id and acknowledgements:
+            ledger[user_id] = acknowledgements
+    return ledger
 
 
 def find_rsvp_index_by_id(rsvp_id: str) -> int | None:
@@ -3699,7 +3719,7 @@ def active_karaoke_signups() -> list[KaraokeSignup]:
 
 def public_karaoke_signups() -> list[KaraokeSignup]:
     if not app.config.get("YOUTUBE_KARAOKE_ENABLED"):
-        return list(karaoke_signups)
+        return active_karaoke_signups()
     return [
         signup
         for signup in approved_karaoke_signups(include_completed=False)
@@ -3799,11 +3819,10 @@ def karaoke_completion_is_dismissed(signup: KaraokeSignup, user_id: str) -> bool
     if signup.workflow.get("performance_status") != "completed":
         return False
     completion_id = karaoke_completion_acknowledgement_value(signup)
-    account_key = find_user_account_key_by_id(user_id)
-    if not completion_id or account_key is None:
+    if not completion_id or not user_id:
         return False
     acknowledgements = normalize_karaoke_completion_acknowledgements(
-        user_accounts[account_key].get("karaoke_completion_acknowledgements", {})
+        karaoke_completion_acknowledgements.get(user_id, {})
     )
     return acknowledgements.get(signup.id) == completion_id
 
@@ -4507,6 +4526,9 @@ def snapshot_state() -> dict[str, object]:
         ],
         "costume_ballots": copy.deepcopy(costume_ballots),
         "user_accounts": copy.deepcopy(user_accounts),
+        "karaoke_completion_acknowledgements": copy.deepcopy(
+            karaoke_completion_acknowledgements
+        ),
         "password_reset_tokens": copy.deepcopy(password_reset_tokens),
         "menu_items": copy.deepcopy(menu_items),
         "drink_orders": copy.deepcopy(drink_orders),
@@ -4547,7 +4569,7 @@ def snapshot_state() -> dict[str, object]:
 
 def apply_state_snapshot(data: dict[str, object]) -> None:
     global costume_signups, karaoke_signups, costume_votes, registered_users, rsvp_signups, rsvp_updates
-    global user_accounts, costume_ballots, submitted_costume_votes
+    global user_accounts, karaoke_completion_acknowledgements, costume_ballots, submitted_costume_votes
     global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, display_custom_cards, display_update_version
     global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke, games_state
@@ -4617,6 +4639,27 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                 }
     else:
         user_accounts = {}
+
+    karaoke_completion_acknowledgements = (
+        normalize_karaoke_completion_acknowledgement_ledger(
+            data.get("karaoke_completion_acknowledgements", {})
+        )
+    )
+    for account in user_accounts.values():
+        account_id = str(account.get("id", "") or "").strip()
+        legacy_acknowledgements = normalize_karaoke_completion_acknowledgements(
+            account.get("karaoke_completion_acknowledgements", {})
+        )
+        if not account_id or not legacy_acknowledgements:
+            continue
+        karaoke_completion_acknowledgements[account_id] = (
+            normalize_karaoke_completion_acknowledgements(
+                {
+                    **legacy_acknowledgements,
+                    **karaoke_completion_acknowledgements.get(account_id, {}),
+                }
+            )
+        )
 
     raw_menu_items = data.get("menu_items", [])
     menu_items = []
@@ -11105,21 +11148,19 @@ def party_karaoke_dismiss_completion(entry_id: str):
 
     def dismiss_completion() -> None:
         signup = find_karaoke_signup(entry_id)
-        account_key = find_user_account_key_by_id(user_id)
-        if not signup or account_key is None or not karaoke_user_is_participant(signup, user_id):
+        if not signup or not karaoke_user_is_participant(signup, user_id):
             raise LookupError("Completed karaoke performance could not be found.")
         if signup.workflow.get("performance_status") != "completed":
             raise RuntimeError("Only a completed karaoke performance can be dismissed.")
         completion_id = karaoke_completion_acknowledgement_value(signup)
         if not expected_completion_id or expected_completion_id != completion_id:
             raise RuntimeError("This performance changed. Refresh before dismissing it.")
-        account = user_accounts[account_key]
         acknowledgements = normalize_karaoke_completion_acknowledgements(
-            account.get("karaoke_completion_acknowledgements", {})
+            karaoke_completion_acknowledgements.get(user_id, {})
         )
         acknowledgements.pop(signup.id, None)
         acknowledgements[signup.id] = completion_id
-        account["karaoke_completion_acknowledgements"] = (
+        karaoke_completion_acknowledgements[user_id] = (
             normalize_karaoke_completion_acknowledgements(acknowledgements)
         )
 

@@ -51,10 +51,12 @@
         type="button"
         data-karaoke-dismiss-completion
         data-endpoint="{{ karaoke_primary.dismiss_url if karaoke_primary else '' }}"
+        data-karaoke-entry-id="{{ karaoke_primary.id if karaoke_primary else '' }}"
         data-completion-id="{{ karaoke_primary.completion_id if karaoke_primary else '' }}"
         {% if not karaoke_primary or not karaoke_primary.status.dismissible %}hidden{% endif %}
       >Dismiss</button>
     </div>
+    <p class="karaoke-dismiss-error" data-karaoke-dismiss-error role="alert" hidden></p>
   </section>
 {% endif %}
 
@@ -223,6 +225,6 @@
 {% block scripts %}
 {{ super() }}
 {% if party_day_has_arrived and jukebox %}<script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>{% endif %}
-{% if party_day_has_arrived %}<script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-completion-dismissal') }}"></script>{% endif %}
+{% if party_day_has_arrived %}<script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-dismissal-ledger') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='slides.js') }}"></script>
 {% endblock %}

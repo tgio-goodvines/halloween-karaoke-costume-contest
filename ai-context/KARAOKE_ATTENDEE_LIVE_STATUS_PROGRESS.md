@@ -25,6 +25,9 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
   attendee surfaces. Dismissing removes only that completion instance from the
   signed-in attendee's banner and active personal-song cards; it does not
   delete the karaoke record, admin history, or exports.
+- Completed or skipped performances are excluded from the attendee public
+  lineup in both manual and YouTube modes, so dismissed history cannot remain
+  behind as a misleading Ready item.
 - Each song retains an independent notification lifecycle. An acknowledged
   completion cannot suppress Ready, Up Next, Called, On Stage, or Complete
   notices for another song, and completion ties favor the most recently
@@ -56,9 +59,13 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
 
 ## Completion Acknowledgements
 
-- Redis schema 15 adds bounded `karaoke_completion_acknowledgements` to each
-  attendee account. The map stores a karaoke entry ID and its exact
-  `completed_at` timestamp, capped at 50 entries per account.
+- Redis schema 16 stores bounded `karaoke_completion_acknowledgements` in a
+  top-level ledger keyed by stable user ID. Each user map stores a karaoke
+  entry ID and its exact `completed_at` timestamp, capped at 50 entries.
+- Schema-15 acknowledgements nested in attendee accounts migrate into the
+  schema-16 ledger on load. The dismissal path no longer repeats an account
+  lookup after participant authorization, which fixes valid production
+  sessions receiving a silent 404.
 - The completion timestamp makes acknowledgements performance-specific. If a
   host requeues and later completes the same entry, the new timestamp produces
   a new dismissible notice.
@@ -70,6 +77,9 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
   timestamp derive a stable fallback identifier until they are re-completed.
 - Co-singer acknowledgements are independent; one singer cannot dismiss the
   completion for another singer.
+- All server-rendered dismiss buttons carry the entry ID. Failed dismissals
+  appear in an attendee-visible alert and re-enable the action instead of
+  being written only to the browser console.
 
 ## Data And Security
 
@@ -83,8 +93,8 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
 
 ## Verification
 
-- Full Python suite: 176 tests passed.
-- Dependency-free Node suites: 13 tests passed, including four attendee live
+- Full Python suite: 178 tests and 21 subtests passed.
+- Dependency-free Node suites: 14 tests passed, including five attendee live
   status tests.
 - Python compilation, JavaScript syntax checks, and `git diff --check` passed.
 - Browser QA confirmed a separate attendee tab changed from Ready to Called
@@ -99,6 +109,12 @@ next, called, on stage, completed, skipped, rejected, or cancelled.
   errors. QA also caught and corrected an author-style override of native
   `[hidden]` behavior before release so Dismiss is visible only for completed
   performances.
+- Schema-16 corrective QA used a non-testing Flask session with real CSRF:
+  dismissing a completed song removed the banner and personal card immediately,
+  they remained absent after a full reload and on `/party`, and the browser
+  console remained clear. Production diagnosis confirmed the original clicks
+  reached both attendee routes but the account-dependent backend path returned
+  404 before acknowledgement persistence.
 - Regression coverage includes atomic completion/advance, stage preservation
   while reordering another song, display-only singer-card replay, stop cleanup,
   co-singer visibility/authorization, safe endpoint output, and stale browser

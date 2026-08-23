@@ -291,6 +291,7 @@ class RedisStateTests(unittest.TestCase):
         main.costume_ballots = {}
         main.registered_users = {}
         main.user_accounts = {}
+        main.karaoke_completion_acknowledgements = {}
         main.password_reset_tokens = {}
         main.menu_items = []
         main.drink_orders = []
@@ -5052,6 +5053,31 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(payload["primary"]["status"]["dismissible"])
         self.assertEqual(["song-two", "song-one"], [entry["id"] for entry in payload["personal_entries"]])
 
+    def test_schema_15_account_acknowledgements_migrate_to_user_ledger(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1")
+        account["karaoke_completion_acknowledgements"] = {
+            "completed-song": "2026-08-23T21:00:00Z"
+        }
+        snapshot = main.snapshot_state()
+        snapshot["schema_version"] = 15
+        snapshot.pop("karaoke_completion_acknowledgements", None)
+        self.fake_redis.set(main.redis_key("state"), json.dumps(snapshot))
+        main.karaoke_completion_acknowledgements = {}
+
+        self.assertTrue(main.load_state_from_redis())
+        self.assertEqual(
+            {"completed-song": "2026-08-23T21:00:00Z"},
+            main.karaoke_completion_acknowledgements["user-1"],
+        )
+
+        main.save_state_to_redis()
+        persisted = self.redis_state()
+        self.assertEqual(main.STATE_SCHEMA_VERSION, persisted["schema_version"])
+        self.assertEqual(
+            {"completed-song": "2026-08-23T21:00:00Z"},
+            persisted["karaoke_completion_acknowledgements"]["user-1"],
+        )
+
     def test_attendee_can_dismiss_each_completed_song_and_reveal_the_next(self):
         account = self.add_user_account(username="Jamie", user_id="user-1")
         main.registered_users["user-1"] = "Jamie"
@@ -5092,13 +5118,12 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual([], second_dismissal.get_json()["personal_entries"])
         self.assertNotIn('data-karaoke-personal-entry="song-one"', karaoke_page.get_data(as_text=True))
         self.assertNotIn('data-karaoke-personal-entry="song-two"', karaoke_page.get_data(as_text=True))
-        persisted_account = self.redis_state()["user_accounts"]["jamie"]
         self.assertEqual(
             {
                 "song-one": "2026-08-23T21:00:00Z",
                 "song-two": "2026-08-23T21:05:00Z",
             },
-            persisted_account["karaoke_completion_acknowledgements"],
+            self.redis_state()["karaoke_completion_acknowledgements"]["user-1"],
         )
         self.assertEqual({}, account["karaoke_completion_acknowledgements"])
 
@@ -5194,9 +5219,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(409, stale.status_code)
         self.assertEqual(
             {},
-            self.redis_state()["user_accounts"]["jamie"][
-                "karaoke_completion_acknowledgements"
-            ],
+            self.redis_state()["karaoke_completion_acknowledgements"],
         )
 
     def test_next_song_keeps_its_full_notification_lifecycle_after_dismissal(self):
@@ -5212,7 +5235,7 @@ class RedisStateTests(unittest.TestCase):
         completed.workflow["approval_status"] = "approved"
         completed.workflow["performance_status"] = "completed"
         completed.workflow["completed_at"] = "2026-08-23T21:00:00Z"
-        account["karaoke_completion_acknowledgements"] = {
+        main.karaoke_completion_acknowledgements["user-1"] = {
             completed.id: completed.workflow["completed_at"]
         }
         next_song = main.KaraokeSignup(
@@ -5284,6 +5307,49 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(400, response.status_code)
         self.assertIn("form expired", response.get_data(as_text=True))
+
+    def test_karaoke_completion_dismissal_succeeds_with_csrf_without_account_lookup(self):
+        signup = main.KaraokeSignup(
+            id="completed-song",
+            requester_id="user-1",
+            name="Jamie",
+            song_title="Thriller",
+            artist="Michael Jackson",
+        )
+        signup.workflow["approval_status"] = "approved"
+        signup.workflow["performance_status"] = "completed"
+        signup.workflow["completed_at"] = "2026-08-23T21:00:00Z"
+        main.karaoke_signups = [signup]
+        self.save_current_state()
+        main.app.config["TESTING"] = False
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            with attendee.session_transaction() as session:
+                session["csrf_token"] = "completion-csrf"
+            overview_before = attendee.get("/party").get_data(as_text=True)
+            karaoke_before = attendee.get("/party/karaoke").get_data(as_text=True)
+            dismissed = attendee.post(
+                "/api/party/karaoke/entries/completed-song/dismiss-completion",
+                json={"completion_id": "2026-08-23T21:00:00Z"},
+                headers={"X-CSRF-Token": "completion-csrf"},
+            )
+            refreshed_page = attendee.get("/party/karaoke")
+
+        self.assertEqual(200, dismissed.status_code)
+        self.assertIn('data-karaoke-entry-id="completed-song"', overview_before)
+        self.assertIn('data-karaoke-entry-id="completed-song"', karaoke_before)
+        self.assertIsNone(dismissed.get_json()["primary"])
+        self.assertEqual([], dismissed.get_json()["lineup"])
+        self.assertNotIn(
+            'data-karaoke-personal-entry="completed-song"',
+            refreshed_page.get_data(as_text=True),
+        )
+        self.assertNotIn("will sing “Thriller”", refreshed_page.get_data(as_text=True))
+        self.assertEqual(
+            {"completed-song": "2026-08-23T21:00:00Z"},
+            self.redis_state()["karaoke_completion_acknowledgements"]["user-1"],
+        )
 
     def test_admin_lineup_reorder_marks_playlist_order_for_resynchronization(self):
         self.enable_youtube_karaoke()

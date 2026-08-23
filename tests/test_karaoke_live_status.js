@@ -72,6 +72,20 @@ test('creates a safe personal status card for a newly associated song', () => {
   assert.match(item.children[0].children[1].textContent, /<Time Warp>/);
   assert.equal(item.children[1].textContent, 'You’re listed as a singer on this request.');
   assert.equal(item.children[3].dataset.karaokeDismissCompletion, '');
+  assert.equal(item.children[3].dataset.karaokeEntryId, 'song-2');
+});
+
+test('shows and clears a visible dismissal error', () => {
+  const error = { textContent: '', hidden: true };
+  const widget = { querySelector: () => error };
+
+  karaoke.renderDismissError(widget, 'Unable to dismiss this performance.');
+  assert.equal(error.textContent, 'Unable to dismiss this performance.');
+  assert.equal(error.hidden, false);
+
+  karaoke.renderDismissError(widget);
+  assert.equal(error.textContent, '');
+  assert.equal(error.hidden, true);
 });
 
 test('rejects stale or out-of-order attendee refresh responses', () => {

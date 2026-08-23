@@ -143,7 +143,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 15. The following globals in `main.py` are
+`halloween:state` with schema version 16. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -158,8 +158,10 @@ the process-local cache:
 - `costume_ballots`: maps `user_id` to `{costume_id: score}`.
 - `user_accounts`: maps normalized usernames to Redis-backed attendee account
   records with stable IDs, password hashes, and roles such as `regular` and
-  optional `bartender`. Each account also holds a bounded map of acknowledged
-  karaoke completion instances keyed by entry ID and `completed_at` timestamp.
+  optional `bartender`.
+- `karaoke_completion_acknowledgements`: bounded stable-user-ID ledger of
+  karaoke entry IDs and acknowledged `completed_at` timestamps. Schema-15
+  nested account acknowledgements migrate into this ledger when state loads.
 - `password_reset_tokens`: maps SHA-256 reset-token hashes to account-bound
   reset records with email, created/expiration timestamps, and used timestamp.
   Plaintext reset tokens are only sent in the emailed link and are not stored.

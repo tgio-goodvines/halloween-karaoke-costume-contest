@@ -212,10 +212,13 @@ display-update broadcasts.
 
 The app uses Flask sessions for role and attendee identity. Regular attendee
 accounts live in Redis app state as `user_accounts`; active session display
-names are also tracked in `registered_users` by account ID. Schema 15 account
-records include a bounded `karaoke_completion_acknowledgements` map from entry
-ID to the dismissed `completed_at`; timestamp matching prevents an old
-acknowledgement from suppressing a later re-completion.
+names are also tracked in `registered_users` by account ID. Schema 16 stores a
+top-level, stable-user-ID keyed `karaoke_completion_acknowledgements` ledger.
+Each user's bounded map records entry ID to dismissed `completed_at`; timestamp
+matching prevents an old acknowledgement from suppressing a later
+re-completion. Schema-15 nested account maps migrate into the ledger on load,
+and dismissal no longer depends on a second username/account lookup after the
+session participant has been authorized.
 
 Navigation is the union of active session roles: a mixed regular/bartender/admin
 session exposes the destinations for each represented role. Attendee sign-in

@@ -90,6 +90,13 @@ Deployment record:
   uncertain-result reconciliation.
 - Added karaoke call/on-stage/completion display transitions without embedded
   playback state.
+- Added attendee-safe live karaoke status to `/party` and `/party/karaoke`,
+  including registered co-singers, explicit Up Next/Called/On Stage copy,
+  five-second polling, visibility refresh, and urgent browser-title updates.
+- Corrected the stage transition contract so complete/skip calls the next ready
+  singer atomically, display-only card replay does not mutate workflow,
+  non-current reordering preserves the active performer, and stop/reset cannot
+  leave stale called/on-stage entries.
 - Public/dashboard/display lineups include only approved,
   playlist-synchronized entries when the feature is enabled.
 - Preserved the legacy manual karaoke flow behind

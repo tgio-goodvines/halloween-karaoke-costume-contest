@@ -321,10 +321,12 @@
           {% if karaoke_admin.current and karaoke_admin.current.workflow.performance_status == 'on_stage' %}
             <button class="button button--primary" name="action" value="complete_karaoke_and_advance">Complete and Advance</button>
           {% endif %}
+          {% if karaoke_admin.current and karaoke_admin.current.workflow.performance_status in ['called', 'on_stage'] %}
+            <button class="button" name="action" value="show_karaoke_singer_card">Show Singer Card</button>
+          {% endif %}
           {% if karaoke_admin.current %}
-            <button class="button" name="action" value="call_karaoke_singer">Show Singer Card</button>
             <button class="button" name="action" value="move_karaoke_to_end">Move to End</button>
-            <button class="button button--danger" name="action" value="skip_karaoke_singer">Skip</button>
+            <button class="button button--danger" name="action" value="skip_karaoke_singer">Skip and Call Next</button>
           {% endif %}
           <button class="button" name="action" value="clear_display_override">Restore Display Rotation</button>
         </form>

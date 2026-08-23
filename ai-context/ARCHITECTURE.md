@@ -125,6 +125,11 @@
   an exact version, preserves the user's song/artist independently from
   YouTube metadata, requires server-verified video metadata, and creates a
   pending workflow entry.
+- `GET /api/party/karaoke-data` -> regular-user-authenticated, attendee-safe
+  live status for `/party` and `/party/karaoke`. It returns the signed-in
+  requester's or registered co-singer's entries, derived stage status, safe
+  public current/next metadata and lineup, and the display update version;
+  playlist operation details, history, and credentials are excluded.
 - `GET /api/party/karaoke/search` -> deliberate, cached, quota-budgeted
   normalized YouTube search for signed-in attendees. Structured
   `song_title`/`artist` parameters become the canonical
@@ -346,6 +351,13 @@ locked winner.
 
 ## Frontend Responsibilities
 
+`static/karaoke-live-status.js` owns attendee karaoke status refresh on
+`/party` and `/party/karaoke`. It polls `/api/party/karaoke-data` every five
+seconds and on visibility, rejects stale responses with
+`display_update_version`, updates personal alerts/workflows and the safe public
+lineup, and changes the browser title for Up Next or Called states. Attendee
+karaoke deliberately does not open long-lived SSE connections.
+
 `templates/display.html` renders initial display state and embeds JSON in:
 
 - `#entries-data`
@@ -402,8 +414,8 @@ locked winner.
 - `_karaoke_singers.html`: reusable one-to-four singer fieldset with registered
   attendee choices, a custom-name path, and server-restored row state.
 - `karaoke_signup.html`: multi-singer, song-details-first three-step exact-video
-  search/selection and review, direct-link fallback, attendee workflow status,
-  pending recovery, and synchronized public lineup.
+  search/selection and review, direct-link fallback, live requester/co-singer
+  workflow status, pending-owner recovery, and synchronized public lineup.
 - `admin_karaoke.html`: dedicated YouTube connection, review, run-of-show,
   reconciliation/history, and stage-control workspace.
 - `_karaoke_workflow.html`: shared media and seven-step workflow macros.

@@ -725,6 +725,7 @@ STATE_REFRESH_ENDPOINTS = {
     "bartender_queue_data",
     "party_costumes",
     "party_karaoke",
+    "party_karaoke_data",
     "party_karaoke_search",
     "party_karaoke_cancel",
     "party_karaoke_replace",
@@ -779,6 +780,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_bartender_tip",
     "party_costumes",
     "party_karaoke",
+    "party_karaoke_data",
     "party_karaoke_search",
     "party_karaoke_cancel",
     "party_karaoke_replace",
@@ -3419,7 +3421,7 @@ def karaoke_entry_is_ready(signup: KaraokeSignup) -> bool:
 def karaoke_entry_can_stage(signup: KaraokeSignup) -> bool:
     if app.config.get("YOUTUBE_KARAOKE_ENABLED"):
         return karaoke_entry_is_ready(signup)
-    return signup.workflow.get("performance_status") == "waiting"
+    return signup.workflow.get("performance_status", "waiting") == "waiting"
 
 
 def karaoke_workflow_steps(signup: KaraokeSignup) -> list[dict[str, str]]:
@@ -3478,7 +3480,7 @@ def karaoke_workflow_steps(signup: KaraokeSignup) -> list[dict[str, str]]:
         },
         {
             "key": "stage",
-            "label": "On stage",
+            "label": "Called to stage" if performance == "called" else "On stage",
             "state": state(
                 performance in {"on_stage", "completed"},
                 performance == "called",
@@ -3767,6 +3769,254 @@ def karaoke_signup_view(signup: KaraokeSignup) -> dict[str, object]:
     }
 
 
+def karaoke_user_is_participant(signup: KaraokeSignup, user_id: str) -> bool:
+    if not user_id:
+        return False
+    if signup.requester_id == user_id:
+        return True
+    return any(
+        str(singer.get("account_id", "") or "") == user_id
+        for singer in normalize_karaoke_singers(signup.singers, signup.name)
+    )
+
+
+def karaoke_attendee_status(signup: KaraokeSignup) -> dict[str, object]:
+    workflow = signup.workflow
+    approval = str(workflow.get("approval_status", "pending") or "pending")
+    playlist = str(workflow.get("playlist_sync_status", "not_started") or "not_started")
+    validation = str(workflow.get("video_validation_status", "pending") or "pending")
+    performance = str(workflow.get("performance_status", "waiting") or "waiting")
+    if not app.config.get("YOUTUBE_KARAOKE_ENABLED"):
+        approval = "approved"
+        playlist = "synced"
+        validation = "verified"
+    current_id = str(karaoke_state.get("current_singer_id", "") or "")
+    next_id = str(karaoke_state.get("next_singer_id", "") or "")
+    stage_mode = str(karaoke_state.get("stage_mode", "standby") or "standby")
+    party_started = bool(karaoke_state.get("party_started"))
+    queue_position = next(
+        (
+            index + 1
+            for index, entry in enumerate(active_karaoke_signups())
+            if entry.id == signup.id
+        ),
+        None,
+    )
+
+    key = "waiting"
+    label = "Waiting for karaoke"
+    detail = "The host will update this song as the queue moves."
+    tone = "neutral"
+    priority = 10
+
+    if approval == "cancelled":
+        key, label, detail, tone, priority = (
+            "cancelled",
+            "Request cancelled",
+            "This song is no longer in the active karaoke lineup.",
+            "muted",
+            5,
+        )
+    elif approval == "rejected":
+        key, label, detail, tone, priority = (
+            "rejected",
+            "Request not approved",
+            "Choose another song or ask the host for help.",
+            "attention",
+            35,
+        )
+    elif approval == "pending":
+        key, label, detail, tone, priority = (
+            "awaiting_approval",
+            "Awaiting host approval",
+            "Your selected karaoke video is waiting for host review.",
+            "pending",
+            30,
+        )
+    elif performance == "completed":
+        key, label, detail, tone, priority = (
+            "completed",
+            "Performance complete",
+            "Thanks for singing—your performance is marked complete.",
+            "success",
+            20,
+        )
+    elif performance == "skipped":
+        key, label, detail, tone, priority = (
+            "skipped",
+            "Song skipped",
+            "This song has been removed from the active run of show.",
+            "muted",
+            15,
+        )
+    elif performance == "on_stage" or (signup.id == current_id and stage_mode == "on_stage"):
+        key, label, detail, tone, priority = (
+            "on_stage",
+            "You’re on stage",
+            "Your karaoke performance is in progress.",
+            "live",
+            95,
+        )
+    elif performance == "called" or (signup.id == current_id and stage_mode == "called"):
+        key, label, detail, tone, priority = (
+            "called",
+            "You’ve been called to the stage",
+            "Head to the microphone now—the host is ready for you.",
+            "urgent",
+            100,
+        )
+    elif validation in {"failed", "unavailable"} or playlist in {
+        "failed",
+        "out_of_order",
+        "removal_pending",
+    }:
+        key, label, detail, tone, priority = (
+            "attention",
+            "Host is resolving your song",
+            "A video or playlist issue needs host attention before this song is ready.",
+            "attention",
+            70,
+        )
+    elif approval == "approved" and playlist != "synced" and app.config.get(
+        "YOUTUBE_KARAOKE_ENABLED"
+    ):
+        key, label, detail, tone, priority = (
+            "syncing",
+            "Approved—playlist syncing",
+            "The host approved this song and is adding it to the event playlist.",
+            "pending",
+            45,
+        )
+    elif (
+        party_started
+        and signup.id == next_id
+        and stage_mode in {"called", "on_stage"}
+    ):
+        current = find_karaoke_signup(current_id)
+        current_label = current.singer_label if current else "The current singers"
+        key, label, detail, tone, priority = (
+            "up_next",
+            "You’re up next",
+            f"{current_label} {'is' if len(current.singer_names) == 1 else 'are'} up now. Stay close to the microphone."
+            if current
+            else "Stay close to the microphone and be ready for the host’s call.",
+            "urgent",
+            90,
+        )
+    elif karaoke_entry_can_stage(signup):
+        position_detail = (
+            f"You’re number {queue_position} in the active run of show."
+            if queue_position
+            else "You’re in the active run of show."
+        )
+        key, label, detail, tone, priority = (
+            "ready",
+            "Ready for karaoke",
+            position_detail,
+            "success",
+            55,
+        )
+
+    return {
+        "key": key,
+        "label": label,
+        "detail": detail,
+        "tone": tone,
+        "priority": priority,
+        "queue_position": queue_position,
+        "is_current": signup.id == current_id,
+        "is_up_next": key == "up_next",
+    }
+
+
+def karaoke_public_entry_view(signup: KaraokeSignup) -> dict[str, object]:
+    status = karaoke_attendee_status(signup)
+    public_status_key = status["key"] if status["key"] in {
+        "called",
+        "on_stage",
+        "up_next",
+    } else "ready"
+    public_status_labels = {
+        "called": "Called to stage",
+        "on_stage": "Now singing",
+        "up_next": "Up next",
+        "ready": "Ready",
+    }
+    return {
+        "id": signup.id,
+        "singer_label": signup.singer_label,
+        "song_title": signup.song_title,
+        "artist": signup.artist,
+        "queue_position": status["queue_position"],
+        "status_key": public_status_key,
+        "status_label": public_status_labels[public_status_key],
+    }
+
+
+def karaoke_attendee_entry_view(signup: KaraokeSignup, user_id: str) -> dict[str, object]:
+    status = karaoke_attendee_status(signup)
+    return {
+        "id": signup.id,
+        "singer_label": signup.singer_label,
+        "song_title": signup.song_title,
+        "artist": signup.artist,
+        "workflow": {
+            key: str(signup.workflow.get(key, "") or "")
+            for key in (
+                "video_validation_status",
+                "approval_status",
+                "playlist_sync_status",
+                "performance_status",
+            )
+        },
+        "steps": karaoke_workflow_steps(signup),
+        "status": status,
+        "relationship": "requester" if signup.requester_id == user_id else "singer",
+        "can_manage": signup.requester_id == user_id
+        and signup.workflow.get("approval_status") == "pending",
+    }
+
+
+def karaoke_attendee_template_entry(
+    signup: KaraokeSignup, user_id: str
+) -> dict[str, object]:
+    entry = karaoke_signup_view(signup)
+    attendee_entry = karaoke_attendee_entry_view(signup, user_id)
+    entry["attendee_status"] = attendee_entry["status"]
+    entry["relationship"] = attendee_entry["relationship"]
+    entry["can_manage"] = attendee_entry["can_manage"]
+    return entry
+
+
+def karaoke_attendee_view_state(user_id: str) -> dict[str, object]:
+    personal_entries = [
+        karaoke_attendee_entry_view(signup, user_id)
+        for signup in karaoke_signups
+        if karaoke_user_is_participant(signup, user_id)
+    ]
+    personal_entries.sort(
+        key=lambda entry: (
+            -int(entry["status"].get("priority", 0) or 0),
+            int(entry["status"].get("queue_position") or 10_000),
+        )
+    )
+    current = find_karaoke_signup(str(karaoke_state.get("current_singer_id", "") or ""))
+    next_signup = find_karaoke_signup(str(karaoke_state.get("next_singer_id", "") or ""))
+    return {
+        "display_update_version": display_update_version,
+        "party_started": bool(karaoke_state.get("party_started")),
+        "stage_mode": str(karaoke_state.get("stage_mode", "standby") or "standby"),
+        "current": karaoke_public_entry_view(current) if current else None,
+        "next": karaoke_public_entry_view(next_signup) if next_signup else None,
+        "primary": personal_entries[0] if personal_entries else None,
+        "personal_entries": personal_entries,
+        "lineup": [
+            karaoke_public_entry_view(signup)
+            for signup in public_karaoke_signups()
+        ],
+    }
+
+
 def karaoke_admin_view_state() -> dict[str, object]:
     ensure_signup_ids()
     refresh_karaoke_stage_selection()
@@ -3871,6 +4121,63 @@ def build_karaoke_stage_override(signup: KaraokeSignup, mode: str) -> dict[str, 
             f"by {signup.artist}",
         ],
     }
+
+
+def call_karaoke_entry(signup: KaraokeSignup, *, actor_name: str = "admin") -> None:
+    global live_display_event_override
+    if not karaoke_entry_can_stage(signup):
+        raise ValueError(
+            "This singer is not ready. Resolve video approval and playlist synchronization first."
+        )
+    previous = find_karaoke_signup(
+        str(karaoke_state.get("current_singer_id", "") or "")
+    )
+    if previous and previous.id != signup.id:
+        previous_status = str(previous.workflow.get("performance_status", "waiting"))
+        if previous_status == "on_stage":
+            raise ValueError("Complete or skip the current singer before calling another.")
+        if previous_status == "called":
+            previous.workflow["performance_status"] = "waiting"
+            previous.workflow["called_at"] = ""
+            append_karaoke_history(
+                previous,
+                "returned_to_queue",
+                detail="Another singer was called before this performance started.",
+                actor_name=actor_name,
+            )
+    signup.workflow["performance_status"] = "called"
+    signup.workflow["called_at"] = _utc_now_iso()
+    signup.workflow["started_at"] = ""
+    signup.workflow["completed_at"] = ""
+    append_karaoke_history(signup, "called_to_stage", actor_name=actor_name)
+    karaoke_state["party_started"] = True
+    karaoke_state["current_singer_id"] = signup.id
+    karaoke_state["stage_mode"] = "called"
+    refresh_karaoke_stage_selection()
+    live_display_event_override = build_karaoke_stage_override(signup, "call")
+
+
+def show_karaoke_entry_card(signup: KaraokeSignup) -> None:
+    global live_display_event_override
+    performance = str(signup.workflow.get("performance_status", "waiting") or "waiting")
+    mode = "on_stage" if performance == "on_stage" else "call"
+    live_display_event_override = build_karaoke_stage_override(signup, mode)
+
+
+def return_active_karaoke_entries_to_queue(*, event: str, detail: str) -> None:
+    for signup in karaoke_signups:
+        if signup.workflow.get("performance_status") not in {"called", "on_stage"}:
+            continue
+        signup.workflow["performance_status"] = "waiting"
+        signup.workflow["called_at"] = ""
+        signup.workflow["started_at"] = ""
+        signup.workflow["completed_at"] = ""
+        append_karaoke_history(
+            signup,
+            event,
+            detail=detail,
+            actor_name="admin",
+        )
 
 
 def youtube_search_cache_key(query: str, page_token: str) -> str:
@@ -4464,7 +4771,9 @@ def build_karaoke_lineup_export() -> dict[str, object]:
         "schema_version": STATE_SCHEMA_VERSION,
         "exported_at": _utc_now_iso(),
         "party_started": bool(karaoke_state.get("party_started")),
+        "stage_mode": str(karaoke_state.get("stage_mode", "standby") or "standby"),
         "current_singer_id": karaoke_state.get("current_singer_id"),
+        "next_singer_id": karaoke_state.get("next_singer_id"),
         "lineup": [
             {
                 "position": index + 1,
@@ -6388,7 +6697,8 @@ def party_dashboard():
         return redirect(url_for("party_login", next=url_for("party_dashboard")))
 
     party_day = party_day_has_arrived()
-    user_orders = user_drink_orders(str(session.get("user_id", "")))
+    user_id = str(session.get("user_id", "") or "")
+    user_orders = user_drink_orders(user_id)
     ready_orders = [order for order in user_orders if ready_order_is_visible_on_dashboard(order)][:3] if party_day else []
     if party_day:
         slides = list(PARTY_DAY_DASHBOARD_SLIDES)
@@ -6422,9 +6732,11 @@ def party_dashboard():
         slides=slides,
         costume_signups=costume_signups,
         karaoke_signups=public_karaoke_signups(),
+        karaoke_attendee=karaoke_attendee_view_state(user_id) if party_day else None,
+        karaoke_data_url=url_for("party_karaoke_data") if party_day else "",
         drink_orders=user_orders[:5] if party_day else [],
         ready_drink_orders=ready_orders,
-        jukebox=attendee_jukebox_state(str(session.get("user_id", "") or "")) if party_day else None,
+        jukebox=attendee_jukebox_state(user_id) if party_day else None,
         jukebox_data_url=url_for("party_jukebox_data") if party_day else "",
         bartender_tip_settings=bartender_tip_settings,
         party_day_has_arrived=party_day,
@@ -8660,6 +8972,7 @@ def admin_portal(admin_view: str):
             "delete_karaoke",
             "start_karaoke_party",
             "call_karaoke_singer",
+            "show_karaoke_singer_card",
             "mark_karaoke_on_stage",
             "complete_karaoke_and_advance",
             "skip_karaoke_singer",
@@ -10161,21 +10474,28 @@ def admin_portal(admin_view: str):
                 )
             if not signup:
                 errors.append("No ready karaoke singer is available to call.")
-            elif not karaoke_entry_can_stage(signup):
-                errors.append("This singer is not ready. Resolve video approval and playlist synchronization first.")
             else:
-                previous = find_karaoke_signup(str(karaoke_state.get("current_singer_id", "") or ""))
-                if previous and previous.id != signup.id and previous.workflow.get("performance_status") == "called":
-                    previous.workflow["performance_status"] = "waiting"
-                signup.workflow["performance_status"] = "called"
-                signup.workflow["called_at"] = _utc_now_iso()
-                append_karaoke_history(signup, "called_to_stage", actor_name="admin")
-                karaoke_state["party_started"] = True
-                karaoke_state["current_singer_id"] = signup.id
-                karaoke_state["stage_mode"] = "called"
-                refresh_karaoke_stage_selection()
-                live_display_event_override = build_karaoke_stage_override(signup, "call")
-                messages.append(f"Called {signup.singer_label} to the karaoke stage.")
+                try:
+                    call_karaoke_entry(signup)
+                except ValueError as exc:
+                    errors.append(str(exc))
+                else:
+                    messages.append(f"Called {signup.singer_label} to the karaoke stage.")
+                    should_broadcast = True
+
+        elif action == "show_karaoke_singer_card":
+            signup = find_karaoke_signup(
+                request.form.get("entry_id", "").strip()
+                or str(karaoke_state.get("current_singer_id", "") or "")
+            )
+            if not signup or signup.workflow.get("performance_status") not in {
+                "called",
+                "on_stage",
+            }:
+                errors.append("Call a singer before showing their stage card.")
+            else:
+                show_karaoke_entry_card(signup)
+                messages.append(f"Showing {signup.singer_label}'s current stage card.")
                 should_broadcast = True
 
         elif action == "mark_karaoke_on_stage":
@@ -10229,7 +10549,8 @@ def admin_portal(admin_view: str):
                 refresh_karaoke_stage_selection()
                 next_signup = find_karaoke_signup(str(karaoke_state.get("next_singer_id", "") or ""))
                 if next_signup:
-                    live_display_event_override = build_karaoke_stage_override(next_signup, "call")
+                    call_karaoke_entry(next_signup)
+                    messages.append(f"Called {next_signup.singer_label} to the karaoke stage.")
                 else:
                     live_display_event_override = build_karaoke_stage_override(signup, "complete")
                 should_broadcast = True
@@ -10250,6 +10571,9 @@ def admin_portal(admin_view: str):
             if current_position is None:
                 errors.append("Karaoke signup could not be found.")
             else:
+                was_current = entry_id == str(
+                    karaoke_state.get("current_singer_id", "") or ""
+                )
                 signup = approved_entries.pop(current_position)
                 if action == "move_karaoke_to_top":
                     target_position = 0
@@ -10269,6 +10593,15 @@ def admin_portal(admin_view: str):
                 ]
                 if signup.workflow.get("performance_status") in {"called", "on_stage"}:
                     signup.workflow["performance_status"] = "waiting"
+                    signup.workflow["called_at"] = ""
+                    signup.workflow["started_at"] = ""
+                    signup.workflow["completed_at"] = ""
+                    append_karaoke_history(
+                        signup,
+                        "returned_to_queue",
+                        detail="The host changed this song's run-of-show position.",
+                        actor_name="admin",
+                    )
                 if app.config.get("YOUTUBE_KARAOKE_ENABLED"):
                     for entry in approved_karaoke_signups():
                         if entry.workflow.get("playlist_sync_status") == "synced":
@@ -10283,12 +10616,22 @@ def admin_portal(admin_view: str):
                     }[action],
                     actor_name="admin",
                 )
-                karaoke_state["current_singer_id"] = None
+                if was_current:
+                    karaoke_state["current_singer_id"] = None
+                    karaoke_state["stage_mode"] = "standby"
+                    if live_display_event_override and str(
+                        live_display_event_override.get("type", "")
+                    ).startswith("karaoke_"):
+                        live_display_event_override = None
                 refresh_karaoke_stage_selection()
                 messages.append(f"Updated {signup.singer_label}'s karaoke lineup position.")
                 should_broadcast = True
 
         elif action == "stop_karaoke_party":
+            return_active_karaoke_entries_to_queue(
+                event="party_stopped_requeued",
+                detail="Karaoke was stopped before this performance completed.",
+            )
             karaoke_state["party_started"] = False
             karaoke_state["current_singer_index"] = None
             karaoke_state["current_singer_id"] = None
@@ -10301,9 +10644,15 @@ def admin_portal(admin_view: str):
             should_broadcast = True
 
         elif action == "reset_karaoke_party":
+            return_active_karaoke_entries_to_queue(
+                event="party_reset_requeued",
+                detail="Karaoke stage state was reset by the host.",
+            )
             karaoke_state.clear()
             karaoke_state.update(copy.deepcopy(DEFAULT_KARAOKE_STATE))
-            if live_display_event_override and live_display_event_override.get("type") == "karaoke_start":
+            if live_display_event_override and str(
+                live_display_event_override.get("type", "")
+            ).startswith("karaoke_"):
                 live_display_event_override = None
             messages.append("Karaoke party reset. The lineup was kept.")
             write_state_backup_if_available("karaoke-reset")
@@ -10642,10 +10991,12 @@ def party_karaoke():
         submitted=submitted,
         karaoke_signups=public_karaoke_signups(),
         own_karaoke_requests=[
-            karaoke_signup_view(signup)
+            karaoke_attendee_template_entry(signup, user_id)
             for signup in karaoke_signups
-            if signup.requester_id == user_id
+            if karaoke_user_is_participant(signup, user_id)
         ],
+        karaoke_attendee=karaoke_attendee_view_state(user_id),
+        karaoke_data_url=url_for("party_karaoke_data"),
         youtube_karaoke_enabled=bool(app.config.get("YOUTUBE_KARAOKE_ENABLED")),
         youtube_search_configured=youtube_config().search_configured,
         youtube_search_url=url_for("party_karaoke_search"),
@@ -10655,6 +11006,15 @@ def party_karaoke():
         karaoke_custom_singer_value=KARAOKE_CUSTOM_SINGER_VALUE,
         karaoke_max_singers=KARAOKE_MAX_SINGERS,
         show_admin_link=False,
+    )
+
+
+@app.get("/api/party/karaoke-data")
+def party_karaoke_data():
+    if not party_day_has_arrived():
+        return jsonify({"error": "Karaoke is not open yet."}), 403
+    return jsonify(
+        karaoke_attendee_view_state(str(session.get("user_id", "") or ""))
     )
 
 

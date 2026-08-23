@@ -108,8 +108,11 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    `/party/costumes`.
 7. On the party date, attendees can search for and select an exact YouTube
    karaoke video at `/party/karaoke`, submit it for host approval, and track
-   verification/approval/playlist/stage progress. The legacy optional-link flow
-   remains available while the YouTube feature flag is disabled.
+   verification/approval/playlist/stage progress. Requesters and registered
+   co-singers receive live Ready, Up Next, Called, On Stage, and completion
+   status on `/party` and `/party/karaoke` through a safe five-second polling
+   endpoint. The legacy optional-link flow remains available while the YouTube
+   feature flag is disabled.
 8. On the party date, attendees can view food and drink menu cards with images
    at `/party/menu` and order available/orderable drinks from the bar.
    Specialty drinks are limited to 3 included attendee orders; after 11:00 PM,
@@ -205,7 +208,9 @@ the process-local cache:
   for new public RSVPs, defaulting to `tgio1129@gmail.com`; blank disables host
   RSVP notifications.
 - `contest_state`: contest started/stopped, voting open/closed, winner lock, scoreboard card visibility.
-- `karaoke_state`: whether karaoke has been started/stopped/reset and current singer metadata.
+- `karaoke_state`: whether karaoke has been started/stopped/reset plus current,
+  next, and stage-mode metadata. Stage transitions update this object and the
+  selected entry workflow atomically so attendee and display status agree.
 - `display_update_version`: monotonic counter used by server-sent events.
 - `dj_playlist`: ordered Apple Music songs managed by admins, including
   request provenance and the `pending -> playing -> served` priority lifecycle.

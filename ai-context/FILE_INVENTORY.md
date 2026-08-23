@@ -32,6 +32,8 @@
 | `static/dj-live-widgets.js` | Browser/Node-compatible confirmed-song renderer shared by `/party`, `/party/jukebox`, `/admin`, and `/admin/display`; normalizes safe/display payloads, updates text/artwork atomically, rejects stale responses, polls at five seconds, refreshes visible tabs, and optionally listens to authenticated display SSE. |
 | `static/jukebox.js` | Attendee jukebox catalog search, request submission, and playlist/personal-request rendering from the shared live-widget state event. |
 | `static/karaoke.js` | Attendee song-details-first YouTube search, pagination, stale-selection protection, multi-singer review, exact-video review, and direct-link fallback. |
+| `static/karaoke-live-status.js` | Shared five-second attendee karaoke status polling, stale-response protection, personal alert/workflow rendering, public lineup labels, and urgent browser-title updates. |
+| `tests/test_karaoke_live_status.js` | Dependency-free Node regression tests for attendee karaoke payload normalization, safe text-only lineup rendering, and stale response rejection. |
 | `static/karaoke-singers.js` | Reusable attendee/admin one-to-four singer editor behavior, custom-name toggles, duplicate validation, add/remove controls, and combined review labels. |
 | `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
@@ -60,7 +62,7 @@
 | `templates/email/_components.html` | Shared inline-safe HTML email macros for the refined lab-terminal shell, buttons, and detail tables used by generated email templates. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
 | `templates/_karaoke_singers.html` | Shared registered-attendee/custom-name singer fieldset used by attendee and admin karaoke forms. |
-| `templates/karaoke_signup.html` | Attendee one-to-four singer selection plus three-step song details, exact-video selection, and review flow, personal workflow status/recovery, and synchronized public lineup. |
+| `templates/karaoke_signup.html` | Attendee one-to-four singer selection plus three-step song details, exact-video selection, live requester/co-singer workflow status/recovery, and synchronized public lineup. |
 | `templates/admin_karaoke.html` | Dedicated YouTube connection, review, attention, run-of-show, history, and stage operations workspace. |
 | `templates/_karaoke_workflow.html` | Shared karaoke media and seven-step workflow macros. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
@@ -69,6 +71,7 @@
 | `templates/display.html` | Standalone no-scroll live-display shell and layout JSON bootstrap for title, left games, center cards/spotlights, right bar/ready alerts, and music footer. |
 | `ai-context/DJ_JUKEBOX_FEATURE.md` | Durable DJ feature state model, routes, MusicKit/Vault setup, visual acknowledgement flow, and recovery procedure. |
 | `ai-context/DJ_LIVE_SURFACES_CORRECTIVE_ACTION.md` | Completed cross-surface DJ song/artwork synchronization root-cause analysis, capacity-safe corrective design, affected surfaces, and verification record. |
+| `ai-context/KARAOKE_ATTENDEE_LIVE_STATUS_PROGRESS.md` | Attendee-safe karaoke polling, requester/co-singer status, centralized stage-transition invariants, security boundary, event-night operator contract, and verification record. |
 | `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` | Durable Two Truths and a Lie lifecycle, Redis model, scoring, attendee/admin/display behavior, verification, and rollout progress. |
 | `ai-context/ACCOUNT_MANAGEMENT_FEATURE.md` | Attendee account workspace behavior, access boundaries, persistence rules, and verification coverage. |
 | `ai-context/ROLE_VIEW_PREVIEW_FEATURE.md` | Admin role-view demo behavior, safety boundary, and regression coverage. |

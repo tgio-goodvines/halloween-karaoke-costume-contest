@@ -1,9 +1,9 @@
 {% macro stepper(entry, compact=false) -%}
 <ol class="karaoke-workflow{% if compact %} karaoke-workflow--compact{% endif %}" aria-label="Karaoke request workflow">
   {% for step in entry.steps %}
-    <li class="karaoke-workflow__step karaoke-workflow__step--{{ step.state }}" aria-current="{{ 'step' if step.state == 'current' else 'false' }}">
-      <span class="karaoke-workflow__marker" aria-hidden="true">{% if step.state == 'complete' %}✓{% elif step.state == 'attention' %}!{% elif step.state == 'current' %}●{% else %}○{% endif %}</span>
-      <span>{{ step.label }}</span>
+    <li class="karaoke-workflow__step karaoke-workflow__step--{{ step.state }}" data-karaoke-workflow-step="{{ step.key }}" aria-current="{{ 'step' if step.state == 'current' else 'false' }}">
+      <span class="karaoke-workflow__marker" data-karaoke-workflow-marker aria-hidden="true">{% if step.state == 'complete' %}✓{% elif step.state == 'attention' %}!{% elif step.state == 'current' %}●{% else %}○{% endif %}</span>
+      <span data-karaoke-workflow-label>{{ step.label }}</span>
     </li>
   {% endfor %}
 </ol>

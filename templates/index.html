@@ -26,6 +26,27 @@
   </section>
 {% endif %}
 
+{% if party_day_has_arrived and karaoke_attendee %}
+  {% set karaoke_primary = karaoke_attendee.primary %}
+  <section
+    class="karaoke-attendee-alert{% if karaoke_primary %} karaoke-attendee-alert--{{ karaoke_primary.status.tone }}{% endif %}"
+    data-karaoke-live-widget
+    data-karaoke-state-url="{{ karaoke_data_url }}"
+    data-karaoke-alert
+    role="status"
+    aria-live="polite"
+    {% if not karaoke_primary %}hidden{% endif %}
+  >
+    <div>
+      <p class="admin-panel__eyebrow">Your karaoke status</p>
+      <h2 data-karaoke-alert-label>{{ karaoke_primary.status.label if karaoke_primary else '' }}</h2>
+      <p data-karaoke-alert-detail>{{ karaoke_primary.status.detail if karaoke_primary else '' }}</p>
+      <small data-karaoke-alert-song>{% if karaoke_primary %}{{ karaoke_primary.singer_label }} · “{{ karaoke_primary.song_title }}” by {{ karaoke_primary.artist }}{% endif %}</small>
+    </div>
+    <a class="contest-banner__button" href="{{ url_for('party_karaoke') }}">Open Karaoke</a>
+  </section>
+{% endif %}
+
 {% if party_day_has_arrived and ready_drink_orders %}
   <section class="contest-banner contest-banner--winner">
     <div class="contest-banner__body">
@@ -172,19 +193,17 @@
     </div>
     <div>
       <h2>Karaoke Signups</h2>
-      {% if karaoke_signups %}
-        <p class="summary-count">{{ karaoke_signups|length }} song{{ 's' if karaoke_signups|length != 1 else '' }} in the lineup.</p>
-        <ul>
-          {% for signup in karaoke_signups[-3:] %}
-            <li>
-              <strong>{{ signup.singer_label }}</strong> &mdash; "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-        <a class="button" href="{{ url_for('party_karaoke') }}">View Karaoke Lineup</a>
-      {% else %}
-        <p>No karaoke signups yet. <a href="{{ url_for('party_karaoke') }}">Choose a song!</a></p>
-      {% endif %}
+      <p class="summary-count" data-karaoke-lineup-count{% if not karaoke_attendee.lineup %} hidden{% endif %}>{{ karaoke_attendee.lineup|length }} song{{ 's' if karaoke_attendee.lineup|length != 1 else '' }} in the active lineup.</p>
+      <ol data-karaoke-public-lineup data-karaoke-lineup-limit="3"{% if not karaoke_attendee.lineup %} hidden{% endif %}>
+        {% for signup in karaoke_attendee.lineup[:3] %}
+          <li data-karaoke-lineup-entry="{{ signup.id }}">
+            <strong>{{ signup.singer_label }}</strong> will sing “{{ signup.song_title }}”{% if signup.artist %} by {{ signup.artist }}{% endif %}
+            <span class="karaoke-lineup-status karaoke-lineup-status--{{ signup.status_key }}">{{ signup.status_label }}</span>
+          </li>
+        {% endfor %}
+      </ol>
+      <p data-karaoke-lineup-empty{% if karaoke_attendee.lineup %} hidden{% endif %}>No karaoke signups yet. <a href="{{ url_for('party_karaoke') }}">Choose a song!</a></p>
+      <a class="button" href="{{ url_for('party_karaoke') }}">View Karaoke Lineup</a>
     </div>
   </section>
 {% endif %}
@@ -193,5 +212,6 @@
 {% block scripts %}
 {{ super() }}
 {% if party_day_has_arrived and jukebox %}<script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>{% endif %}
+{% if party_day_has_arrived %}<script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-live-status') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='slides.js') }}"></script>
 {% endblock %}

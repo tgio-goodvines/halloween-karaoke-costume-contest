@@ -27,6 +27,11 @@ in normal browser windows and on mobile phone browsers.
 
 ## Progress
 
+- Complete: attendee karaoke live status.
+  - Added responsive personal status banners to `/party` and `/party/karaoke`.
+  - Urgent Called/Up Next alerts stack cleanly on phones, stage badges wrap
+    beneath long lineup labels, and polling updates do not disturb the signup
+    form.
 - Complete: live display scaling.
   - Added display sizing CSS variables and browser-height/width breakpoints.
   - Added long/dense display card classes from `static/display.js`.

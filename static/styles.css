@@ -6032,3 +6032,73 @@ textarea,
   .display-admin__card-summary { grid-template-columns: auto minmax(0, 1fr); }
   .display-admin__edit-label { grid-column: 1 / -1; justify-self: stretch; text-align: center; }
 }
+
+/* Live attendee karaoke status */
+.karaoke-attendee-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1.25rem;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid rgba(255, 49, 49, 0.58);
+  border-top: 2px solid #ff3131;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 49, 49, 0.16), rgba(26, 26, 26, 0.94) 58%);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34), 0 0 24px rgba(255, 49, 49, 0.1);
+}
+
+.karaoke-attendee-alert[hidden] { display: none; }
+.karaoke-attendee-alert > div { min-width: 0; }
+.karaoke-attendee-alert h2 { margin: 0.15rem 0 0.35rem; }
+.karaoke-attendee-alert p,
+.karaoke-attendee-alert small { display: block; margin: 0; overflow-wrap: anywhere; }
+.karaoke-attendee-alert small { margin-top: 0.45rem; color: #d4d4d8; }
+.karaoke-attendee-alert--urgent { border-color: #ff5555; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34), 0 0 34px rgba(255, 49, 49, 0.3); }
+.karaoke-attendee-alert--live { border-color: #ff3131; background: linear-gradient(135deg, rgba(255, 49, 49, 0.25), rgba(26, 26, 26, 0.96) 62%); }
+.karaoke-attendee-alert--success { border-color: rgba(94, 227, 155, 0.58); border-top-color: #5ee39b; }
+.karaoke-attendee-alert--pending { border-color: rgba(255, 180, 84, 0.58); border-top-color: #ffb454; }
+.karaoke-attendee-alert--attention { border-color: rgba(255, 85, 85, 0.7); }
+.karaoke-attendee-alert--muted { border-color: rgba(161, 161, 170, 0.35); border-top-color: #71717a; }
+
+.karaoke-request--attendee .contest-status {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.karaoke-request--attendee .contest-status strong { color: #fff; }
+.karaoke-request--attendee .contest-status span { color: #d4d4d8; }
+.karaoke-request--attendee [data-karaoke-status-tone="urgent"],
+.karaoke-request--attendee [data-karaoke-status-tone="live"] { border-color: rgba(255, 49, 49, 0.72); background: rgba(255, 49, 49, 0.12); }
+.karaoke-request--attendee [data-karaoke-status-tone="success"] { border-color: rgba(94, 227, 155, 0.48); }
+.karaoke-request--attendee [data-karaoke-status-tone="pending"] { border-color: rgba(255, 180, 84, 0.48); }
+.karaoke-request--attendee [data-karaoke-status-tone="attention"] { border-color: rgba(255, 85, 85, 0.58); }
+.karaoke-participation-label { color: #ffb4b4; font-size: 0.82rem; font-weight: 700; }
+
+.karaoke-lineup-status {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.45rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(94, 227, 155, 0.42);
+  border-radius: 999px;
+  color: #8ff0bd;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.karaoke-lineup-status--called,
+.karaoke-lineup-status--up_next { border-color: rgba(255, 180, 84, 0.64); color: #ffc879; background: rgba(255, 180, 84, 0.09); }
+.karaoke-lineup-status--on_stage { border-color: rgba(255, 49, 49, 0.72); color: #ff8a8a; background: rgba(255, 49, 49, 0.13); }
+
+@media (max-width: 620px) {
+  .karaoke-attendee-alert { align-items: stretch; flex-direction: column; border-radius: 14px; }
+  .karaoke-attendee-alert .contest-banner__button { width: 100%; text-align: center; }
+  .karaoke-lineup-status { margin: 0.35rem 0 0; width: fit-content; }
+}

@@ -4594,6 +4594,24 @@ class RedisStateTests(unittest.TestCase):
             main.find_karaoke_signup("manual-karaoke").workflow["performance_status"],
         )
 
+    def test_manual_attendee_signup_is_immediately_ready_for_stage(self):
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            response = attendee.post(
+                "/party/karaoke",
+                data={
+                    "name": "Jamie",
+                    "song_title": "Monster Mash",
+                    "artist": "Bobby Pickett",
+                    "youtube_link": "",
+                },
+            )
+            payload = attendee.get("/api/party/karaoke-data").get_json()
+
+        self.assertEqual(302, response.status_code)
+        self.assertEqual("ready", payload["primary"]["status"]["key"])
+        self.assertEqual("Ready", payload["lineup"][0]["status_label"])
+
     def test_admin_approval_verifies_and_inserts_playlist_item(self):
         fake_youtube = self.enable_youtube_karaoke()
         with main.app.test_client() as attendee:
@@ -4792,6 +4810,212 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("on_stage", main.karaoke_state["stage_mode"])
         self.assertEqual("karaoke_on_stage", main.live_display_event_override["type"])
         self.assertNotIn("embed", json.dumps(main.live_display_event_override).lower())
+
+    def test_complete_and_advance_atomically_calls_next_singer(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+            self.submit_youtube_karaoke_request(attendee, video_id="abc123DEF46")
+        first_id, second_id = [entry.id for entry in main.karaoke_signups]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            for entry_id in (first_id, second_id):
+                self.assertEqual(
+                    200,
+                    admin.post(
+                        f"/api/admin/karaoke/entries/{entry_id}/approve"
+                    ).status_code,
+                )
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": first_id},
+            )
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "mark_karaoke_on_stage", "entry_id": first_id},
+            )
+            completed = admin.post(
+                "/admin/karaoke",
+                data={"action": "complete_karaoke_and_advance", "entry_id": first_id},
+            )
+
+        self.assertEqual(200, completed.status_code)
+        self.assertEqual(
+            "completed",
+            main.find_karaoke_signup(first_id).workflow["performance_status"],
+        )
+        self.assertEqual(
+            "called",
+            main.find_karaoke_signup(second_id).workflow["performance_status"],
+        )
+        self.assertEqual(second_id, main.karaoke_state["current_singer_id"])
+        self.assertEqual("called", main.karaoke_state["stage_mode"])
+        self.assertEqual("karaoke_call", main.live_display_event_override["type"])
+
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            payload = attendee.get("/api/party/karaoke-data").get_json()
+        self.assertEqual(second_id, payload["primary"]["id"])
+        self.assertEqual("called", payload["primary"]["status"]["key"])
+
+    def test_moving_non_current_karaoke_entry_preserves_active_stage(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+            self.submit_youtube_karaoke_request(attendee, video_id="abc123DEF46")
+        first_id, second_id = [entry.id for entry in main.karaoke_signups]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            for entry_id in (first_id, second_id):
+                admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": first_id},
+            )
+            moved = admin.post(
+                "/admin/karaoke",
+                data={"action": "move_karaoke_to_end", "entry_id": second_id},
+            )
+
+        self.assertEqual(200, moved.status_code)
+        self.assertEqual(first_id, main.karaoke_state["current_singer_id"])
+        self.assertEqual("called", main.karaoke_state["stage_mode"])
+        self.assertEqual("called", main.find_karaoke_signup(first_id).workflow["performance_status"])
+        self.assertEqual("karaoke_call", main.live_display_event_override["type"])
+
+    def test_show_singer_card_does_not_repeat_or_change_stage_transition(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": entry_id},
+            )
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "mark_karaoke_on_stage", "entry_id": entry_id},
+            )
+            history_count = len(main.find_karaoke_signup(entry_id).history)
+            shown = admin.post(
+                "/admin/karaoke",
+                data={"action": "show_karaoke_singer_card", "entry_id": entry_id},
+            )
+
+        self.assertEqual(200, shown.status_code)
+        self.assertEqual("on_stage", main.find_karaoke_signup(entry_id).workflow["performance_status"])
+        self.assertEqual(history_count, len(main.find_karaoke_signup(entry_id).history))
+        self.assertEqual("karaoke_on_stage", main.live_display_event_override["type"])
+
+    def test_stop_karaoke_returns_called_singer_to_ready_queue(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": entry_id},
+            )
+            stopped = admin.post(
+                "/admin/karaoke",
+                data={"action": "stop_karaoke_party"},
+            )
+
+        self.assertEqual(200, stopped.status_code)
+        signup = main.find_karaoke_signup(entry_id)
+        self.assertEqual("waiting", signup.workflow["performance_status"])
+        self.assertEqual("", signup.workflow["called_at"])
+        self.assertFalse(main.karaoke_state["party_started"])
+        self.assertIsNone(main.karaoke_state["current_singer_id"])
+        self.assertIsNone(main.live_display_event_override)
+
+    def test_registered_co_singer_receives_safe_live_karaoke_status(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.add_user_account(username="Morgan", user_id="user-2")
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as requester:
+            self.login_regular(requester, user_id="user-1", username="Jamie")
+            submitted = requester.post(
+                "/party/karaoke",
+                data={
+                    "singer_account_id": ["user-1", "user-2"],
+                    "singer_custom_name": ["", ""],
+                    "song_title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "youtube_video_id": "abc123DEF45",
+                    "youtube_link": "https://www.youtube.com/watch?v=abc123DEF45",
+                },
+            )
+        self.assertEqual(302, submitted.status_code)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": entry_id},
+            )
+
+        with main.app.test_client() as singer:
+            self.login_regular(singer, user_id="user-2", username="Morgan")
+            payload_response = singer.get("/api/party/karaoke-data")
+            karaoke_page = singer.get("/party/karaoke")
+
+        self.assertEqual(200, payload_response.status_code)
+        payload = payload_response.get_json()
+        self.assertEqual(1, len(payload["personal_entries"]))
+        self.assertEqual("singer", payload["personal_entries"][0]["relationship"])
+        self.assertFalse(payload["personal_entries"][0]["can_manage"])
+        self.assertEqual("called", payload["primary"]["status"]["key"])
+        self.assertNotIn("playlist_item_id", json.dumps(payload))
+        html = karaoke_page.get_data(as_text=True)
+        self.assertIn("You’re listed as a singer", html)
+        self.assertIn("You’ve been called to the stage", html)
+        self.assertNotIn("Cancel Request", html)
+
+    def test_next_registered_requester_receives_up_next_status(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as first:
+            self.login_regular(first, user_id="user-1", username="Jamie")
+            self.submit_youtube_karaoke_request(first)
+        with main.app.test_client() as second:
+            self.login_regular(second, user_id="user-2", username="Morgan")
+            self.submit_youtube_karaoke_request(second, video_id="abc123DEF46")
+        first_id, second_id = [entry.id for entry in main.karaoke_signups]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            for entry_id in (first_id, second_id):
+                admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
+            admin.post(
+                "/admin/karaoke",
+                data={"action": "call_karaoke_singer", "entry_id": first_id},
+            )
+
+        with main.app.test_client() as second:
+            self.login_regular(second, user_id="user-2", username="Morgan")
+            payload = second.get("/api/party/karaoke-data").get_json()
+            overview = second.get("/party").get_data(as_text=True)
+
+        self.assertEqual(second_id, payload["primary"]["id"])
+        self.assertEqual("up_next", payload["primary"]["status"]["key"])
+        self.assertIn("You’re up next", overview)
+        self.assertIn("Up next", overview)
 
     def test_admin_lineup_reorder_marks_playlist_order_for_resynchronization(self):
         self.enable_youtube_karaoke()

@@ -1036,7 +1036,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertIsNone(state["dj_state"]["current_command"])
         self.assertIn("Connect the live display", response.get_data(as_text=True))
 
-    def test_attendee_can_submit_song_request_and_admin_approval_randomly_inserts_it_without_command(self):
+    def test_attendee_song_request_approval_preserves_fifo_priority_metadata(self):
         main.event_experience_mode = "party_day"
         main.dj_playlist = [
             main.normalize_dj_song(
@@ -1044,30 +1044,26 @@ class RedisStateTests(unittest.TestCase):
             )
         ]
         self.save_current_state()
-        original_randbelow = main.secrets.randbelow
-        main.secrets.randbelow = lambda upper: upper - 1
-        try:
-            with main.app.test_client() as client:
-                self.login_regular(client)
-                request_response = client.post(
-                    "/party/jukebox/requests",
-                    data={
-                        "title": "Superstition",
-                        "artist": "Stevie Wonder",
-                        "apple_music_id": "1440823671",
-                        "album": "Talking Book",
-                        "artwork_url": "https://example.test/superstition.jpg",
-                        "duration_ms": "267000",
-                    },
-                )
-                request_id = self.redis_state()["dj_song_requests"][0]["id"]
-                self.login_admin(client)
-                approve_response = client.post(
-                    "/admin/dj",
-                    data={"action": "approve_dj_song_request", "request_id": request_id},
-                )
-        finally:
-            main.secrets.randbelow = original_randbelow
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            request_response = client.post(
+                "/party/jukebox/requests",
+                data={
+                    "title": "Superstition",
+                    "artist": "Stevie Wonder",
+                    "apple_music_id": "1440823671",
+                    "album": "Talking Book",
+                    "artwork_url": "https://example.test/superstition.jpg",
+                    "duration_ms": "267000",
+                },
+            )
+            request_record = self.redis_state()["dj_song_requests"][0]
+            request_id = request_record["id"]
+            self.login_admin(client)
+            approve_response = client.post(
+                "/admin/dj",
+                data={"action": "approve_dj_song_request", "request_id": request_id},
+            )
 
         state = self.redis_state()
         self.assertEqual(302, request_response.status_code)
@@ -1075,7 +1071,14 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual([], state["dj_song_requests"])
         self.assertEqual(["Thriller", "Superstition"], [song["title"] for song in state["dj_playlist"]])
         self.assertIsNone(state["dj_state"]["current_command"])
-        self.assertIn("playlist position 2", approve_response.get_data(as_text=True))
+        approved_song = state["dj_playlist"][1]
+        self.assertEqual("attendee_request", approved_song["source"])
+        self.assertEqual("pending", approved_song["priority_status"])
+        self.assertEqual(request_id, approved_song["request_id"])
+        self.assertEqual("Jamie", approved_song["requester_name"])
+        self.assertEqual(request_record["requested_at"], approved_song["requested_at"])
+        self.assertTrue(state["dj_state"]["priority_sync_pending"])
+        self.assertIn("lead the next Play or Shuffle queue", approve_response.get_data(as_text=True))
 
     def test_rejected_song_request_is_removed_without_changing_playlist(self):
         main.dj_playlist = [
@@ -1103,6 +1106,266 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertEqual([], state["dj_song_requests"])
         self.assertEqual(["Thriller"], [song["title"] for song in state["dj_playlist"]])
+
+    def test_play_and_shuffle_keep_fifo_priority_requests_ahead_of_regular_songs(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "regular-a", "apple_music_id": "catalog-a", "title": "Regular A", "artist": "Artist"}
+            ),
+            main.normalize_dj_song(
+                {
+                    "id": "priority-new",
+                    "apple_music_id": "catalog-new",
+                    "title": "Priority New",
+                    "artist": "Artist",
+                    "priority_status": "pending",
+                    "requested_at": "2026-08-23T02:00:00Z",
+                }
+            ),
+            main.normalize_dj_song(
+                {"id": "regular-b", "apple_music_id": "catalog-b", "title": "Regular B", "artist": "Artist"}
+            ),
+            main.normalize_dj_song(
+                {
+                    "id": "priority-old",
+                    "apple_music_id": "catalog-old",
+                    "title": "Priority Old",
+                    "artist": "Artist",
+                    "priority_status": "pending",
+                    "requested_at": "2026-08-23T01:00:00Z",
+                }
+            ),
+        ]
+
+        play_plan = main.build_dj_queue_plan("play_playlist")
+        selected_plan = main.build_dj_queue_plan("play_song", "regular-b")
+        original_system_random = main.random.SystemRandom
+
+        class ReverseShuffle:
+            @staticmethod
+            def shuffle(values):
+                values.reverse()
+
+        main.random.SystemRandom = ReverseShuffle
+        try:
+            shuffle_plan = main.build_dj_queue_plan("shuffle_playlist")
+        finally:
+            main.random.SystemRandom = original_system_random
+
+        self.assertEqual(
+            ["priority-old", "priority-new", "regular-a", "regular-b"],
+            play_plan["queue_order"],
+        )
+        self.assertEqual(
+            ["regular-b", "priority-old", "priority-new", "regular-a"],
+            selected_plan["queue_order"],
+        )
+        self.assertEqual(
+            ["priority-old", "priority-new", "regular-b", "regular-a"],
+            shuffle_plan["queue_order"],
+        )
+
+    def test_ready_receiver_gets_non_interrupting_priority_sync_and_confirms_up_next(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "current", "apple_music_id": "catalog-current", "title": "Current", "artist": "Artist"}
+            ),
+            main.normalize_dj_song(
+                {"id": "regular", "apple_music_id": "catalog-regular", "title": "Regular", "artist": "Artist"}
+            ),
+            main.normalize_dj_song(
+                {
+                    "id": "request",
+                    "apple_music_id": "catalog-request",
+                    "title": "Requested",
+                    "artist": "Guest Artist",
+                    "source": "attendee_request",
+                    "requester_name": "Jamie",
+                    "requested_at": "2026-08-23T01:00:00Z",
+                    "priority_status": "pending",
+                }
+            ),
+        ]
+        main.dj_state["desired"]["base_queue_order"] = ["current", "regular"]
+        main.mark_dj_priority_sync_needed()
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+                "current_song_id": "current",
+                "queue_order": ["current", "regular"],
+                "current_queue_index": 0,
+                "queue_revision": 4,
+            }
+        )
+
+        command = main.dj_state["current_command"]
+        self.assertEqual("sync_priority_queue", command["action"])
+        self.assertEqual("current", command["song_id"])
+        self.assertEqual(["current", "request", "regular"], command["queue_order"])
+        self.assertEqual("playing", main.dj_state["receiver"]["playback_status"])
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+                "current_song_id": "current",
+                "queue_order": ["current", "request", "regular"],
+                "current_queue_index": 0,
+                "queue_revision": command["revision"],
+                "priority_revision": command["priority_revision"],
+                "acknowledged_command_id": command["id"],
+                "command_succeeded": True,
+                "clear_error": True,
+            }
+        )
+
+        view = main.dj_view_state()
+        self.assertFalse(main.dj_state["priority_sync_pending"])
+        self.assertEqual("Current", view["current_song"]["title"])
+        self.assertEqual("Requested", view["next_song"]["title"])
+        self.assertEqual("confirmed", view["priority_sync_status"])
+
+    def test_failed_priority_sync_remains_pending_until_admin_retry_and_ready_heartbeat(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "current", "apple_music_id": "catalog-current", "title": "Current", "artist": "Artist"}
+            ),
+            main.normalize_dj_song(
+                {
+                    "id": "request",
+                    "apple_music_id": "catalog-request",
+                    "title": "Requested",
+                    "artist": "Guest Artist",
+                    "priority_status": "pending",
+                    "requested_at": "2026-08-23T01:00:00Z",
+                }
+            ),
+        ]
+        main.dj_state["desired"]["base_queue_order"] = ["current"]
+        main.mark_dj_priority_sync_needed()
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+                "current_song_id": "current",
+                "queue_order": ["current"],
+                "current_queue_index": 0,
+            }
+        )
+        failed_command = dict(main.dj_state["current_command"])
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "error",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+                "current_song_id": "current",
+                "queue_order": ["current"],
+                "current_queue_index": 0,
+                "acknowledged_command_id": failed_command["id"],
+                "command_succeeded": False,
+                "error": "MusicKit did not confirm the requested priority queue order.",
+            }
+        )
+
+        self.assertTrue(main.dj_state["priority_sync_pending"])
+        self.assertIsNone(main.dj_state["current_command"])
+        self.assertIn("did not confirm", main.dj_state["priority_sync_error"])
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            retry_response = client.post("/admin/dj", data={"action": "retry_dj_priority_sync"})
+
+        self.assertEqual(200, retry_response.status_code)
+        self.assertIsNone(main.dj_state["current_command"])
+        self.assertEqual("", main.dj_state["priority_sync_error"])
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+                "current_song_id": "current",
+                "queue_order": ["current"],
+                "current_queue_index": 0,
+            }
+        )
+        retry_command = main.dj_state["current_command"]
+        self.assertEqual("sync_priority_queue", retry_command["action"])
+        self.assertEqual(["current", "request"], retry_command["queue_order"])
+
+    def test_priority_request_becomes_playing_then_served_from_receiver_confirmation(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {
+                    "id": "request",
+                    "apple_music_id": "catalog-request",
+                    "title": "Requested",
+                    "artist": "Artist",
+                    "priority_status": "pending",
+                    "requested_at": "2026-08-23T01:00:00Z",
+                }
+            ),
+            main.normalize_dj_song(
+                {"id": "regular", "apple_music_id": "catalog-regular", "title": "Regular", "artist": "Artist"}
+            ),
+        ]
+
+        main.record_dj_receiver_state({"current_song_id": "request", "playback_status": "playing"})
+        self.assertEqual("playing", main.find_dj_song("request")["priority_status"])
+        self.assertEqual([], main.pending_dj_priority_songs())
+
+        main.record_dj_receiver_state({"current_song_id": "regular", "playback_status": "playing"})
+        request_song = main.find_dj_song("request")
+        self.assertEqual("served", request_song["priority_status"])
+        self.assertTrue(request_song["served_at"])
+
+    def test_approval_reuses_existing_catalog_song_instead_of_creating_ambiguous_duplicate(self):
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {"id": "existing", "apple_music_id": "catalog-same", "title": "Existing", "artist": "Artist"}
+            )
+        ]
+        main.dj_song_requests = [
+            main.normalize_dj_song_request(
+                {
+                    "id": "request-1",
+                    "requester_id": "user-1",
+                    "requester_name": "Jamie",
+                    "requested_at": "2026-08-23T01:00:00Z",
+                    "song": {"apple_music_id": "catalog-same", "title": "Existing", "artist": "Artist"},
+                }
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/dj",
+                data={"action": "approve_dj_song_request", "request_id": "request-1"},
+            )
+
+        state = self.redis_state()
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, len(state["dj_playlist"]))
+        self.assertEqual("existing", state["dj_playlist"][0]["id"])
+        self.assertEqual("pending", state["dj_playlist"][0]["priority_status"])
 
     def test_admin_song_request_queue_fragment_requires_admin_and_contains_requests(self):
         main.dj_song_requests = [
@@ -4441,6 +4704,34 @@ class RedisStateTests(unittest.TestCase):
                 main.save_state_to_redis()
                 self.assertEqual(main.STATE_SCHEMA_VERSION, self.redis_state()["schema_version"])
 
+    def test_schema_twelve_dj_state_upgrades_to_priority_defaults_in_v13(self):
+        snapshot = main.snapshot_state()
+        snapshot["schema_version"] = 12
+        snapshot["dj_playlist"] = [
+            {
+                "id": "legacy-song",
+                "apple_music_id": "legacy-catalog",
+                "title": "Legacy Song",
+                "artist": "Legacy Artist",
+                "enabled": True,
+            }
+        ]
+        snapshot["dj_state"] = {
+            "command_revision": 2,
+            "desired": {"playback_status": "stopped", "song_id": "", "queue_order": [], "shuffle_enabled": False},
+            "receiver": {"status": "offline", "queue_order": [], "current_queue_index": -1},
+        }
+        self.fake_redis.set(main.redis_key("state"), json.dumps(snapshot))
+
+        self.assertTrue(main.load_state_from_redis())
+        self.assertEqual("admin", main.dj_playlist[0]["source"])
+        self.assertEqual("none", main.dj_playlist[0]["priority_status"])
+        self.assertEqual([], main.dj_state["desired"]["base_queue_order"])
+        self.assertFalse(main.dj_state["priority_sync_pending"])
+
+        main.save_state_to_redis()
+        self.assertEqual(13, self.redis_state()["schema_version"])
+
     def test_youtube_search_budget_blocks_new_uncached_queries_at_configured_limit(self):
         self.enable_youtube_karaoke()
         main.app.config["YOUTUBE_SEARCH_DAILY_BUDGET"] = 1
@@ -4623,7 +4914,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("signup", game["phase"])
         self.assertEqual({}, game["participants"])
         main.save_state_to_redis()
-        self.assertEqual(12, self.redis_state()["schema_version"])
+        self.assertEqual(13, self.redis_state()["schema_version"])
         self.assertIn("games_state", self.redis_state())
         self.assertEqual(
             {
@@ -4814,7 +5105,7 @@ class RedisStateTests(unittest.TestCase):
                 self.assertIn(b"Generated Game Result Cards", display_page.data)
                 self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
                 persisted = self.redis_state()
-                self.assertEqual(12, persisted["schema_version"])
+                self.assertEqual(13, persisted["schema_version"])
                 self.assertTrue(persisted["games_state"][game_key]["simulation"]["is_simulated"])
                 self.assertEqual({}, persisted["user_accounts"])
 

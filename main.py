@@ -323,7 +323,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 12
+STATE_SCHEMA_VERSION = 13
 
 
 @dataclass
@@ -462,10 +462,16 @@ DJ_COMMAND_ACTIONS = {
     "stop",
     "next",
     "previous",
+    "sync_priority_queue",
     "reset",
 }
+DJ_PRIORITY_STATUSES = {"none", "pending", "playing", "served"}
 DEFAULT_DJ_STATE: dict[str, object] = {
     "command_revision": 0,
+    "priority_revision": 0,
+    "priority_sync_pending": False,
+    "priority_sync_attempted_revision": 0,
+    "priority_sync_error": "",
     "current_command": None,
     "last_command": None,
     "last_reset": None,
@@ -479,6 +485,7 @@ DEFAULT_DJ_STATE: dict[str, object] = {
         "queue_order": [],
         "current_queue_index": -1,
         "queue_revision": 0,
+        "priority_revision": 0,
         "playback_position_seconds": 0,
         "last_seen_at": "",
         "last_error": "",
@@ -487,6 +494,7 @@ DEFAULT_DJ_STATE: dict[str, object] = {
         "playback_status": "stopped",
         "song_id": "",
         "queue_order": [],
+        "base_queue_order": [],
         "shuffle_enabled": False,
     },
 }
@@ -2168,6 +2176,13 @@ def normalize_dj_song(raw_song: object) -> dict[str, object] | None:
     except (TypeError, ValueError):
         duration_ms = 0
 
+    source = str(raw_song.get("source", "admin") or "admin").strip()
+    if source not in {"admin", "attendee_request", "admin_priority"}:
+        source = "admin"
+    priority_status = str(raw_song.get("priority_status", "none") or "none").strip()
+    if priority_status not in DJ_PRIORITY_STATUSES:
+        priority_status = "none"
+
     return {
         "id": str(raw_song.get("id", "") or uuid4().hex),
         "apple_music_id": apple_music_id,
@@ -2179,6 +2194,13 @@ def normalize_dj_song(raw_song: object) -> dict[str, object] | None:
         "explicit": bool(raw_song.get("explicit", False)),
         "enabled": bool(raw_song.get("enabled", True)),
         "created_at": str(raw_song.get("created_at", "") or _utc_now_iso()),
+        "source": source,
+        "request_id": str(raw_song.get("request_id", "") or "").strip()[:120],
+        "requester_name": str(raw_song.get("requester_name", "") or "").strip()[:80],
+        "requested_at": str(raw_song.get("requested_at", "") or "").strip(),
+        "approved_at": str(raw_song.get("approved_at", "") or "").strip(),
+        "priority_status": priority_status,
+        "served_at": str(raw_song.get("served_at", "") or "").strip(),
     }
 
 
@@ -2210,13 +2232,30 @@ def user_dj_song_requests(user_id: str) -> list[dict[str, object]]:
     return [request_entry for request_entry in dj_song_requests if request_entry.get("requester_id") == user_id]
 
 
+def public_dj_song(song: dict[str, object]) -> dict[str, object]:
+    return {
+        key: copy.deepcopy(song.get(key))
+        for key in (
+            "id",
+            "apple_music_id",
+            "title",
+            "artist",
+            "album",
+            "artwork_url",
+            "duration_ms",
+            "explicit",
+            "enabled",
+        )
+    }
+
+
 def attendee_jukebox_state(user_id: str) -> dict[str, object]:
     receiver = dj_state.get("receiver", {})
     current_song = find_dj_song(str(receiver.get("current_song_id", "") if isinstance(receiver, dict) else ""))
     return {
-        "now_playing": copy.deepcopy(current_song),
+        "now_playing": public_dj_song(current_song) if current_song else None,
         "playback_status": str(receiver.get("playback_status", "stopped") if isinstance(receiver, dict) else "stopped"),
-        "playlist": [copy.deepcopy(song) for song in dj_playlist if bool(song.get("enabled", True))],
+        "playlist": [public_dj_song(song) for song in dj_playlist if bool(song.get("enabled", True))],
         "pending_requests": copy.deepcopy(user_dj_song_requests(user_id)),
         "request_limit": MAX_DJ_SONG_REQUESTS_PER_ATTENDEE,
     }
@@ -2226,8 +2265,151 @@ def find_dj_song(song_id: str) -> dict[str, object] | None:
     return next((song for song in dj_playlist if str(song.get("id", "")) == song_id), None)
 
 
+def find_dj_song_by_apple_music_id(apple_music_id: str) -> dict[str, object] | None:
+    return next(
+        (
+            song
+            for song in dj_playlist
+            if str(song.get("apple_music_id", "")) == str(apple_music_id or "")
+        ),
+        None,
+    )
+
+
 def enabled_dj_song_ids() -> list[str]:
     return [str(song.get("id", "")) for song in dj_playlist if bool(song.get("enabled", True))]
+
+
+def pending_dj_priority_songs() -> list[dict[str, object]]:
+    pending = [
+        song
+        for song in dj_playlist
+        if bool(song.get("enabled", True)) and song.get("priority_status") == "pending"
+    ]
+    return sorted(
+        pending,
+        key=lambda song: (
+            str(song.get("requested_at", "") or song.get("approved_at", "") or song.get("created_at", "")),
+            str(song.get("approved_at", "") or ""),
+            str(song.get("id", "") or ""),
+        ),
+    )
+
+
+def build_dj_queue_plan(action: str, song_id: str = "") -> dict[str, object] | None:
+    """Build one priority-aware queue plan for every explicit start action."""
+    enabled_ids = enabled_dj_song_ids()
+    if not enabled_ids:
+        return None
+
+    priority_ids = [str(song.get("id", "")) for song in pending_dj_priority_songs()]
+    regular_ids = [candidate_id for candidate_id in enabled_ids if candidate_id not in priority_ids]
+
+    if action == "shuffle_playlist":
+        random.SystemRandom().shuffle(regular_ids)
+        queue_order = [*priority_ids, *regular_ids]
+    elif action == "play_playlist":
+        queue_order = [*priority_ids, *regular_ids]
+    elif action == "play_song":
+        selected = find_dj_song(song_id)
+        if not selected or not bool(selected.get("enabled", True)):
+            return None
+        queue_order = [
+            song_id,
+            *[candidate_id for candidate_id in priority_ids if candidate_id != song_id],
+            *[candidate_id for candidate_id in regular_ids if candidate_id != song_id],
+        ]
+        regular_ids = [candidate_id for candidate_id in regular_ids if candidate_id != song_id]
+    else:
+        return None
+
+    if not queue_order:
+        return None
+    return {
+        "song_id": str(queue_order[0]),
+        "queue_order": queue_order,
+        "base_queue_order": regular_ids,
+    }
+
+
+def mark_dj_priority_sync_needed() -> int:
+    revision = int(dj_state.get("priority_revision", 0) or 0) + 1
+    dj_state["priority_revision"] = revision
+    dj_state["priority_sync_pending"] = True
+    dj_state["priority_sync_error"] = ""
+    return revision
+
+
+def update_dj_priority_playback_status(current_song_id: str) -> bool:
+    """Move requested songs through pending -> playing -> served from receiver truth."""
+    changed = False
+    now = _utc_now_iso()
+    for song in dj_playlist:
+        song_id = str(song.get("id", "") or "")
+        status = str(song.get("priority_status", "none") or "none")
+        if status == "playing" and song_id != current_song_id:
+            song["priority_status"] = "served"
+            song["served_at"] = now
+            changed = True
+        if current_song_id and song_id == current_song_id and status == "pending":
+            song["priority_status"] = "playing"
+            changed = True
+    return changed
+
+
+def build_active_dj_queue_order() -> list[str]:
+    """Preserve the current track and rebuild only MusicKit's remaining queue."""
+    receiver = dj_state.get("receiver", {})
+    desired = dj_state.get("desired", {})
+    if not isinstance(receiver, dict) or not isinstance(desired, dict):
+        return []
+
+    current_song_id = str(receiver.get("current_song_id", "") or "")
+    current_song = find_dj_song(current_song_id)
+    if not current_song or not bool(current_song.get("enabled", True)):
+        return []
+
+    enabled_ids = enabled_dj_song_ids()
+    enabled_set = set(enabled_ids)
+    priority_ids = [
+        str(song.get("id", ""))
+        for song in pending_dj_priority_songs()
+        if str(song.get("id", "")) != current_song_id
+    ]
+    priority_set = set(priority_ids)
+
+    actual_order = receiver.get("queue_order", [])
+    if not isinstance(actual_order, list):
+        actual_order = []
+    try:
+        current_index = int(receiver.get("current_queue_index", -1))
+    except (TypeError, ValueError):
+        current_index = -1
+    if not (0 <= current_index < len(actual_order)):
+        current_index = next(
+            (index for index, candidate_id in enumerate(actual_order) if candidate_id == current_song_id),
+            -1,
+        )
+    played_ids = {
+        str(candidate_id)
+        for candidate_id in (actual_order[:current_index] if current_index > 0 else [])
+        if candidate_id
+    }
+
+    base_order = desired.get("base_queue_order", [])
+    if not isinstance(base_order, list) or not base_order:
+        base_order = desired.get("queue_order", [])
+    candidates = [str(candidate_id) for candidate_id in base_order if candidate_id]
+    candidates.extend(enabled_ids)
+    regular_remainder: list[str] = []
+    seen = {current_song_id, *priority_set, *played_ids}
+    for candidate_id in candidates:
+        if candidate_id in seen or candidate_id not in enabled_set:
+            continue
+        seen.add(candidate_id)
+        regular_remainder.append(candidate_id)
+
+    return [current_song_id, *priority_ids, *regular_remainder]
 
 
 def dj_receiver_is_online(receiver: dict[str, object] | None = None) -> bool:
@@ -2258,6 +2440,18 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
         state["command_revision"] = max(0, int(raw_state.get("command_revision", 0) or 0))
     except (TypeError, ValueError):
         state["command_revision"] = 0
+    try:
+        state["priority_revision"] = max(0, int(raw_state.get("priority_revision", 0) or 0))
+    except (TypeError, ValueError):
+        state["priority_revision"] = 0
+    state["priority_sync_pending"] = bool(raw_state.get("priority_sync_pending", False))
+    try:
+        state["priority_sync_attempted_revision"] = max(
+            0, int(raw_state.get("priority_sync_attempted_revision", 0) or 0)
+        )
+    except (TypeError, ValueError):
+        state["priority_sync_attempted_revision"] = 0
+    state["priority_sync_error"] = str(raw_state.get("priority_sync_error", "") or "").strip()[:500]
 
     raw_receiver = raw_state.get("receiver")
     if isinstance(raw_receiver, dict):
@@ -2285,6 +2479,10 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
         except (TypeError, ValueError):
             receiver["queue_revision"] = 0
         try:
+            receiver["priority_revision"] = max(0, int(raw_receiver.get("priority_revision", 0) or 0))
+        except (TypeError, ValueError):
+            receiver["priority_revision"] = 0
+        try:
             receiver["playback_position_seconds"] = max(0, int(raw_receiver.get("playback_position_seconds", 0) or 0))
         except (TypeError, ValueError):
             receiver["playback_position_seconds"] = 0
@@ -2299,19 +2497,36 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
         desired["song_id"] = str(raw_desired.get("song_id", "") or "")
         raw_queue_order = raw_desired.get("queue_order", [])
         desired["queue_order"] = [str(song_id) for song_id in raw_queue_order] if isinstance(raw_queue_order, list) else []
+        raw_base_queue_order = raw_desired.get("base_queue_order", [])
+        desired["base_queue_order"] = (
+            [str(song_id) for song_id in raw_base_queue_order]
+            if isinstance(raw_base_queue_order, list)
+            else []
+        )
         desired["shuffle_enabled"] = bool(raw_desired.get("shuffle_enabled", False))
 
     for key in ("current_command", "last_command"):
         raw_command = raw_state.get(key)
         if isinstance(raw_command, dict):
+            try:
+                command_revision = max(0, int(raw_command.get("revision", 0) or 0))
+            except (TypeError, ValueError):
+                command_revision = 0
+            try:
+                command_priority_revision = max(
+                    0, int(raw_command.get("priority_revision", 0) or 0)
+                )
+            except (TypeError, ValueError):
+                command_priority_revision = 0
             state[key] = {
                 "id": str(raw_command.get("id", "") or ""),
-                "revision": int(raw_command.get("revision", 0) or 0),
+                "revision": command_revision,
                 "action": str(raw_command.get("action", "") or ""),
                 "song_id": str(raw_command.get("song_id", "") or ""),
                 "queue_order": [str(song_id) for song_id in raw_command.get("queue_order", [])]
                 if isinstance(raw_command.get("queue_order"), list)
                 else [],
+                "priority_revision": command_priority_revision,
                 "requested_at": str(raw_command.get("requested_at", "") or ""),
                 "requested_by": str(raw_command.get("requested_by", "") or "")[:80],
                 "status": str(raw_command.get("status", "pending") or "pending"),
@@ -2342,22 +2557,15 @@ def queue_dj_command(action: str, song_id: str = "", requested_by: str = "Admin"
     if action == "reset":
         return queue_dj_workflow_reset(requested_by)
 
-    queue_order = enabled_dj_song_ids()
-    if action in {"play_song", "play_playlist", "shuffle_playlist"} and not queue_order:
-        return None
-
-    if action == "play_song":
-        song = find_dj_song(song_id)
-        if not song or not bool(song.get("enabled", True)):
-            return None
-        queue_order = [song_id] + [candidate_id for candidate_id in queue_order if candidate_id != song_id]
-    elif action == "shuffle_playlist":
-        random.SystemRandom().shuffle(queue_order)
-        song_id = queue_order[0]
-    elif action == "play_playlist":
-        song_id = queue_order[0]
-
     desired = dj_state["desired"]
+    queue_order = copy.deepcopy(desired.get("queue_order", []))
+    if action in {"play_song", "play_playlist", "shuffle_playlist"}:
+        plan = build_dj_queue_plan(action, song_id)
+        if not plan:
+            return None
+        song_id = str(plan["song_id"])
+        queue_order = copy.deepcopy(plan["queue_order"])
+        desired["base_queue_order"] = copy.deepcopy(plan["base_queue_order"])
     if action in {"play_song", "play_playlist", "shuffle_playlist", "next", "previous"}:
         desired["playback_status"] = "playing"
     elif action == "pause":
@@ -2378,6 +2586,7 @@ def queue_dj_command(action: str, song_id: str = "", requested_by: str = "Admin"
         "action": action,
         "song_id": song_id,
         "queue_order": copy.deepcopy(desired.get("queue_order", [])),
+        "priority_revision": int(dj_state.get("priority_revision", 0) or 0),
         "requested_at": _utc_now_iso(),
         "requested_by": requested_by,
         "status": "pending",
@@ -2386,6 +2595,50 @@ def queue_dj_command(action: str, song_id: str = "", requested_by: str = "Admin"
     }
     dj_state["current_command"] = command
     dj_state["last_reset"] = None
+    if action in {"play_song", "play_playlist", "shuffle_playlist"}:
+        dj_state["priority_sync_attempted_revision"] = int(dj_state.get("priority_revision", 0) or 0)
+    return command
+
+
+def maybe_queue_dj_priority_sync_command(requested_by: str = "Priority reconciliation") -> dict[str, object] | None:
+    """Queue one non-interrupting remainder replacement when the receiver is ready."""
+    if not bool(dj_state.get("priority_sync_pending", False)):
+        return None
+    if isinstance(dj_state.get("current_command"), dict):
+        return None
+    priority_revision = int(dj_state.get("priority_revision", 0) or 0)
+    attempted_revision = int(dj_state.get("priority_sync_attempted_revision", 0) or 0)
+    if attempted_revision >= priority_revision:
+        return None
+    if not dj_receiver_is_ready():
+        return None
+    receiver = dj_state.get("receiver", {})
+    if not isinstance(receiver, dict) or receiver.get("playback_status") not in {"playing", "paused"}:
+        return None
+
+    queue_order = build_active_dj_queue_order()
+    if not queue_order:
+        return None
+
+    revision = int(dj_state.get("command_revision", 0) or 0) + 1
+    command = {
+        "id": uuid4().hex,
+        "revision": revision,
+        "action": "sync_priority_queue",
+        "song_id": queue_order[0],
+        "queue_order": queue_order,
+        "priority_revision": priority_revision,
+        "requested_at": _utc_now_iso(),
+        "requested_by": requested_by,
+        "status": "pending",
+        "acknowledged_at": "",
+        "error": "",
+    }
+    dj_state["command_revision"] = revision
+    dj_state["current_command"] = command
+    dj_state["last_reset"] = None
+    dj_state["desired"]["queue_order"] = copy.deepcopy(queue_order)
+    dj_state["priority_sync_attempted_revision"] = priority_revision
     return command
 
 
@@ -2404,6 +2657,7 @@ def queue_dj_workflow_reset(requested_by: str = "Admin") -> dict[str, object]:
         "action": "reset",
         "song_id": "",
         "queue_order": [],
+        "priority_revision": int(dj_state.get("priority_revision", 0) or 0),
         "requested_at": requested_at,
         "requested_by": requested_by,
         "status": "pending",
@@ -2463,6 +2717,11 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
             receiver["queue_revision"] = max(0, int(payload.get("queue_revision", 0) or 0))
         except (TypeError, ValueError):
             receiver["queue_revision"] = 0
+    if "priority_revision" in payload:
+        try:
+            receiver["priority_revision"] = max(0, int(payload.get("priority_revision", 0) or 0))
+        except (TypeError, ValueError):
+            receiver["priority_revision"] = 0
     try:
         receiver["playback_position_seconds"] = max(0, int(payload.get("playback_position_seconds", 0) or 0))
     except (TypeError, ValueError):
@@ -2474,11 +2733,15 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
     elif bool(payload.get("clear_error", False)):
         receiver["last_error"] = ""
 
+    if "current_song_id" in payload:
+        update_dj_priority_playback_status(str(receiver.get("current_song_id", "") or ""))
+
     current_command = dj_state.get("current_command")
     acknowledged_id = str(payload.get("acknowledged_command_id", "") or "")
     if isinstance(current_command, dict) and acknowledged_id and acknowledged_id == current_command.get("id"):
         succeeded = bool(payload.get("command_succeeded", False))
         if current_command.get("action") == "reset":
+            update_dj_priority_playback_status("")
             reset_record = copy.deepcopy(dj_state.get("last_reset") or {})
             reset_record["status"] = "acknowledged" if succeeded else "failed"
             reset_record["acknowledged_at"] = _utc_now_iso()
@@ -2492,8 +2755,25 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
             dj_state["desired"]["playback_status"] = receiver["playback_status"]
             if receiver.get("current_song_id"):
                 dj_state["desired"]["song_id"] = receiver["current_song_id"]
+            command_priority_revision = int(current_command.get("priority_revision", 0) or 0)
+            if current_command.get("action") in {
+                "play_song",
+                "play_playlist",
+                "shuffle_playlist",
+                "sync_priority_queue",
+            } and command_priority_revision:
+                receiver["priority_revision"] = command_priority_revision
+                if command_priority_revision == int(dj_state.get("priority_revision", 0) or 0):
+                    dj_state["priority_sync_pending"] = False
+                    dj_state["priority_sync_error"] = ""
+        elif current_command.get("action") == "sync_priority_queue":
+            dj_state["priority_sync_error"] = current_command["error"]
         dj_state["last_command"] = copy.deepcopy(current_command)
         dj_state["current_command"] = None
+        maybe_queue_dj_priority_sync_command()
+        return
+
+    maybe_queue_dj_priority_sync_command()
 
 
 def dj_command_flow() -> list[dict[str, str]]:
@@ -2508,7 +2788,12 @@ def dj_command_flow() -> list[dict[str, str]]:
     command_error = ""
     if isinstance(current_command, dict):
         requested_state = "pending"
-        requested_detail = "DJ reset is waiting for the live display." if current_command.get("action") == "reset" else "Command saved in Redis."
+        if current_command.get("action") == "reset":
+            requested_detail = "DJ reset is waiting for the live display."
+        elif current_command.get("action") == "sync_priority_queue":
+            requested_detail = "MusicKit is updating the remaining queue without interrupting the current song."
+        else:
+            requested_detail = "Command saved in Redis."
         requested_at = parse_utc_iso(current_command.get("requested_at"))
         if requested_at and requested_at < datetime.now(timezone.utc) - timedelta(seconds=DJ_COMMAND_TIMEOUT_SECONDS):
             requested_state = "timed_out"
@@ -2567,11 +2852,68 @@ def dj_view_state() -> dict[str, object]:
         )
     next_song = None
     next_queue_index = current_queue_index + 1
-    if 0 <= next_queue_index < len(actual_queue_order):
+    next_queue_item_exists = 0 <= next_queue_index < len(actual_queue_order)
+    if next_queue_item_exists:
         next_song = find_dj_song(str(actual_queue_order[next_queue_index] or ""))
+    priority_songs = pending_dj_priority_songs()
+    priority_song = priority_songs[0] if priority_songs else None
+    priority_sync_pending = bool(view.get("priority_sync_pending", False))
+    priority_sync_error = str(view.get("priority_sync_error", "") or "")
+    current_command = view.get("current_command")
+    if isinstance(current_command, dict) and current_command.get("action") == "sync_priority_queue":
+        priority_sync_status = "updating"
+        priority_sync_message = "Updating MusicKit so the priority request plays next without interrupting the current song."
+    elif priority_sync_error:
+        priority_sync_status = "failed"
+        priority_sync_message = f"Priority queue update failed: {priority_sync_error}"
+    elif priority_sync_pending and not current_song:
+        priority_sync_status = "waiting_playback"
+        priority_sync_message = "The priority lane is saved and will lead the next Play or Shuffle queue."
+    elif priority_sync_pending and not dj_receiver_is_ready(receiver if isinstance(receiver, dict) else None):
+        priority_sync_status = "waiting_receiver"
+        priority_sync_message = "The priority lane is saved and will synchronize when the display receiver is ready."
+    elif priority_sync_pending:
+        priority_sync_status = "pending"
+        priority_sync_message = "The priority lane is waiting for MusicKit confirmation."
+    elif priority_song and next_song and priority_song.get("id") == next_song.get("id"):
+        priority_sync_status = "confirmed"
+        priority_sync_message = f"Confirmed Up Next: {priority_song.get('title', 'priority request')}."
+    elif priority_song:
+        priority_sync_status = "queued"
+        priority_sync_message = "The priority request is saved for the next queue start."
+    else:
+        priority_sync_status = "idle"
+        priority_sync_message = "No priority requests are waiting."
+
+    if next_song:
+        next_song_detail = " · ".join(
+            value for value in (str(next_song.get("artist", "") or ""), str(next_song.get("album", "") or "")) if value
+        )
+        next_song_meta = f"Queue position {next_queue_index + 1} of {len(actual_queue_order)}"
+    elif next_queue_item_exists:
+        next_song_detail = "MusicKit returned a queue item that could not be mapped to the saved playlist."
+        next_song_meta = "Unrecognized MusicKit queue item"
+    elif not current_song:
+        next_song_detail = (
+            f"Priority request waiting: {priority_song.get('title')} — {priority_song.get('artist')}."
+            if priority_song
+            else "Start Play or Shuffle to establish a confirmed MusicKit queue."
+        )
+        next_song_meta = "No active MusicKit queue"
+    elif priority_sync_pending and priority_song:
+        next_song_detail = f"Priority queue update pending: {priority_song.get('title')} — {priority_song.get('artist')}."
+        next_song_meta = "Waiting for MusicKit confirmation"
+    elif current_queue_index >= 0 and current_queue_index == len(actual_queue_order) - 1:
+        next_song_detail = "The current song is the final confirmed queue item."
+        next_song_meta = "End of the confirmed queue"
+    else:
+        next_song_detail = "MusicKit has not confirmed another queue item."
+        next_song_meta = "No confirmed queue successor"
     desired_song = find_dj_song(str(view.get("desired", {}).get("song_id", ""))) if isinstance(view.get("desired"), dict) else None
-    controls_ready = dj_receiver_is_ready(receiver if isinstance(receiver, dict) else None) and not isinstance(view.get("current_command"), dict)
-    if isinstance(view.get("current_command"), dict):
+    controls_ready = dj_receiver_is_ready(receiver if isinstance(receiver, dict) else None) and not isinstance(current_command, dict)
+    if isinstance(current_command, dict) and current_command.get("action") == "sync_priority_queue":
+        controls_message = "MusicKit is confirming the priority queue update."
+    elif isinstance(current_command, dict):
         controls_message = "Wait for the live display to confirm the pending command."
     elif not bool(receiver.get("online") if isinstance(receiver, dict) else False):
         controls_message = "Open the live display on the playback device to connect the receiver."
@@ -2583,6 +2925,13 @@ def dj_view_state() -> dict[str, object]:
         controls_message = "Receiver connected, Apple Music authorized, and audio output ready."
     view["current_song"] = copy.deepcopy(current_song)
     view["next_song"] = copy.deepcopy(next_song)
+    view["next_song_detail"] = next_song_detail
+    view["next_song_meta"] = next_song_meta
+    view["next_queue_item_unrecognized"] = bool(next_queue_item_exists and not next_song)
+    view["priority_songs"] = copy.deepcopy(priority_songs)
+    view["priority_song"] = copy.deepcopy(priority_song)
+    view["priority_sync_status"] = priority_sync_status
+    view["priority_sync_message"] = priority_sync_message
     view["desired_song"] = copy.deepcopy(desired_song)
     view["current_queue_position"] = current_queue_index + 1 if current_queue_index >= 0 else 0
     view["next_queue_position"] = next_queue_index + 1 if next_song else 0
@@ -7860,7 +8209,7 @@ def admin_portal(admin_view: str):
             "created_at": existing_created_at or _utc_now_iso(),
         }
 
-    def dj_song_from_form(existing_id: str | None = None, existing_created_at: str | None = None) -> dict[str, object] | None:
+    def dj_song_from_form(existing_song: dict[str, object] | None = None) -> dict[str, object] | None:
         raw_artwork_url = request.form.get("artwork_url", "").strip()
         normalized_artwork_url = safe_image_url(raw_artwork_url)
         title = request.form.get("title", "").strip()
@@ -7893,7 +8242,7 @@ def admin_portal(admin_view: str):
 
         return normalize_dj_song(
             {
-                "id": existing_id or uuid4().hex,
+                "id": str(existing_song.get("id", "") if existing_song else "") or uuid4().hex,
                 "title": title,
                 "artist": artist,
                 "apple_music_id": apple_music_id,
@@ -7902,7 +8251,14 @@ def admin_portal(admin_view: str):
                 "duration_ms": duration_ms,
                 "explicit": request.form.get("explicit") == "yes",
                 "enabled": request.form.get("enabled") == "yes",
-                "created_at": existing_created_at or _utc_now_iso(),
+                "created_at": str(existing_song.get("created_at", "") if existing_song else "") or _utc_now_iso(),
+                "source": str(existing_song.get("source", "admin") if existing_song else "admin"),
+                "request_id": str(existing_song.get("request_id", "") if existing_song else ""),
+                "requester_name": str(existing_song.get("requester_name", "") if existing_song else ""),
+                "requested_at": str(existing_song.get("requested_at", "") if existing_song else ""),
+                "approved_at": str(existing_song.get("approved_at", "") if existing_song else ""),
+                "priority_status": str(existing_song.get("priority_status", "none") if existing_song else "none"),
+                "served_at": str(existing_song.get("served_at", "") if existing_song else ""),
             }
         )
 
@@ -8610,27 +8966,108 @@ def admin_portal(admin_view: str):
                 request_entry = dj_song_requests.pop(request_index)
                 requested_song = request_entry.get("song", {})
                 if action == "approve_dj_song_request":
-                    playlist_song = normalize_dj_song(
-                        {
-                            **requested_song,
-                            "id": uuid4().hex,
-                            "created_at": _utc_now_iso(),
-                            "enabled": True,
-                        }
+                    approved_at = _utc_now_iso()
+                    existing_song = find_dj_song_by_apple_music_id(
+                        str(requested_song.get("apple_music_id", "") if isinstance(requested_song, dict) else "")
                     )
+                    priority_metadata = {
+                        "source": "attendee_request",
+                        "request_id": str(request_entry.get("id", "") or ""),
+                        "requester_name": str(request_entry.get("requester_name", "") or "")[:80],
+                        "requested_at": str(request_entry.get("requested_at", "") or approved_at),
+                        "approved_at": approved_at,
+                        "priority_status": "pending",
+                        "served_at": "",
+                        "enabled": True,
+                    }
+                    if existing_song:
+                        existing_song.update(priority_metadata)
+                        playlist_song = normalize_dj_song(existing_song)
+                        if playlist_song:
+                            existing_index = dj_playlist.index(existing_song)
+                            dj_playlist[existing_index] = playlist_song
+                    else:
+                        playlist_song = normalize_dj_song(
+                            {
+                                **requested_song,
+                                "id": uuid4().hex,
+                                "created_at": approved_at,
+                                **priority_metadata,
+                            }
+                        )
                     if playlist_song is None:
                         errors.append("Song request could not be converted into a playlist entry.")
                         dj_song_requests.insert(request_index, request_entry)
                     else:
-                        insertion_index = secrets.randbelow(len(dj_playlist) + 1)
-                        dj_playlist.insert(insertion_index, playlist_song)
-                        messages.append(
-                            f"Approved {playlist_song['title']} and added it at playlist position {insertion_index + 1}."
-                        )
+                        if not existing_song:
+                            dj_playlist.append(playlist_song)
+                        mark_dj_priority_sync_needed()
+                        sync_command = maybe_queue_dj_priority_sync_command(requested_by="Approved attendee request")
+                        if sync_command:
+                            messages.append(
+                                f"Approved {playlist_song['title']} and sent it to MusicKit as the next priority request."
+                            )
+                        elif dj_state.get("receiver", {}).get("current_song_id"):
+                            messages.append(
+                                f"Approved {playlist_song['title']}. Its priority queue update will run when the receiver is ready."
+                            )
+                        else:
+                            messages.append(
+                                f"Approved {playlist_song['title']}. It will lead the next Play or Shuffle queue."
+                            )
                         should_broadcast = True
                 else:
                     request_song = requested_song if isinstance(requested_song, dict) else {}
                     messages.append(f"Rejected {request_song.get('title', 'the song')} request from {request_entry.get('requester_name', 'a guest')}.")
+                    should_broadcast = True
+
+        elif action in {"prioritize_dj_song", "clear_dj_song_priority", "retry_dj_priority_sync"}:
+            if action == "retry_dj_priority_sync":
+                if not bool(dj_state.get("priority_sync_pending", False)):
+                    messages.append("The MusicKit priority queue is already synchronized.")
+                else:
+                    priority_revision = int(dj_state.get("priority_revision", 0) or 0)
+                    dj_state["priority_sync_attempted_revision"] = max(0, priority_revision - 1)
+                    dj_state["priority_sync_error"] = ""
+                    command = maybe_queue_dj_priority_sync_command(requested_by="Admin retry")
+                    messages.append(
+                        "Priority queue retry sent to MusicKit."
+                        if command
+                        else "Priority queue retry saved and will run when the receiver is ready."
+                    )
+                    should_broadcast = True
+            else:
+                song_id = request.form.get("song_id", "").strip()
+                song = find_dj_song(song_id)
+                if not song:
+                    errors.append("DJ song could not be found.")
+                elif action == "prioritize_dj_song":
+                    now = _utc_now_iso()
+                    song["source"] = song.get("source") if song.get("source") == "attendee_request" else "admin_priority"
+                    song["requester_name"] = str(song.get("requester_name", "") or "Admin priority")
+                    song["requested_at"] = str(song.get("requested_at", "") or now)
+                    song["approved_at"] = now
+                    song["priority_status"] = "pending"
+                    song["served_at"] = ""
+                    song["enabled"] = True
+                    mark_dj_priority_sync_needed()
+                    command = maybe_queue_dj_priority_sync_command(requested_by="Admin priority")
+                    messages.append(
+                        f"Prioritized {song['title']} and sent its queue update to MusicKit."
+                        if command
+                        else f"Prioritized {song['title']}; it will synchronize when the receiver is ready."
+                    )
+                    should_broadcast = True
+                else:
+                    song["priority_status"] = "served"
+                    song["served_at"] = _utc_now_iso()
+                    mark_dj_priority_sync_needed()
+                    command = maybe_queue_dj_priority_sync_command(requested_by="Admin priority removal")
+                    messages.append(
+                        f"Removed priority from {song['title']} and sent the updated queue to MusicKit."
+                        if command
+                        else f"Removed priority from {song['title']}; the queue will reconcile when the receiver is ready."
+                    )
                     should_broadcast = True
 
         elif action == "update_dj_song":
@@ -8639,12 +9076,17 @@ def admin_portal(admin_view: str):
             if song_index is None:
                 errors.append("DJ song could not be found.")
             else:
-                updated_song = dj_song_from_form(
-                    existing_id=song_id,
-                    existing_created_at=str(dj_playlist[song_index].get("created_at", "") or ""),
-                )
+                existing_song = dj_playlist[song_index]
+                updated_song = dj_song_from_form(existing_song=existing_song)
                 if updated_song:
                     dj_playlist[song_index] = updated_song
+                    queue_affecting_change = any(
+                        existing_song.get(field) != updated_song.get(field)
+                        for field in ("apple_music_id", "enabled", "priority_status")
+                    )
+                    if queue_affecting_change and dj_state.get("receiver", {}).get("current_song_id"):
+                        mark_dj_priority_sync_needed()
+                        maybe_queue_dj_priority_sync_command(requested_by="Admin playlist update")
                     messages.append(f"Updated {updated_song['title']} in the DJ playlist.")
                     should_broadcast = True
 
@@ -8661,6 +9103,9 @@ def admin_portal(admin_view: str):
                     desired["song_id"] = ""
                 if str(dj_state["receiver"].get("current_song_id", "")) == song_id:
                     queue_dj_command("stop", requested_by="Admin")
+                elif song_id in dj_state.get("receiver", {}).get("queue_order", []):
+                    mark_dj_priority_sync_needed()
+                    maybe_queue_dj_priority_sync_command(requested_by="Admin playlist deletion")
                 messages.append(f"Removed {removed_song['title']} from the DJ playlist.")
                 should_broadcast = True
 

@@ -37,6 +37,7 @@
   let actualQueueOrder = [];
   let currentQueueIndex = -1;
   let queueRevision = 0;
+  let priorityRevision = 0;
   let pendingTrackSelection = null;
   let eventMusic = null;
   let reportChain = Promise.resolve();
@@ -57,15 +58,18 @@
     ? Number(receiver().current_queue_index)
     : -1;
   queueRevision = Math.max(0, Number(receiver().queue_revision) || 0);
+  priorityRevision = Math.max(0, Number(receiver().priority_revision) || 0);
 
   const localSongIdForMediaItem = (item) => queueState.localSongIdForMediaItem(item, songs());
 
   const queueItems = (queueCandidate = music?.queue) => queueState.queueItems(queueCandidate);
 
-  const playbackSnapshot = (item = music?.nowPlayingItem) => {
+  const playbackSnapshot = (item = music?.nowPlayingItem, queueCandidate = music?.queue) => {
     const songId = localSongIdForMediaItem(item);
-    const items = queueItems();
-    if (items.length) actualQueueOrder = items.map(localSongIdForMediaItem);
+    const items = queueItems(queueCandidate);
+    if (queueCandidate?.items != null) {
+      actualQueueOrder = items.map(localSongIdForMediaItem);
+    }
     const reportedIndex = Number(music?.nowPlayingItemIndex);
     if (Number.isInteger(reportedIndex) && reportedIndex >= 0) {
       currentQueueIndex = reportedIndex;
@@ -164,6 +168,9 @@
       queue_revision: Object.prototype.hasOwnProperty.call(extra, 'queue_revision')
         ? Math.max(0, Number(extra.queue_revision) || 0)
         : queueRevision,
+      priority_revision: Object.prototype.hasOwnProperty.call(extra, 'priority_revision')
+        ? Math.max(0, Number(extra.priority_revision) || 0)
+        : priorityRevision,
       acknowledged_command_id: extra.acknowledged_command_id || '',
       command_succeeded: Boolean(extra.command_succeeded),
       clear_error: Boolean(extra.clear_error),
@@ -261,6 +268,17 @@
     }
   };
 
+  const waitForConfirmedQueue = async (performAction, currentSongId, expectedQueueOrder) => {
+    const returnedQueue = await performAction();
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const candidate = attempt === 0 && returnedQueue ? returnedQueue : music?.queue;
+      const snapshot = playbackSnapshot(music?.nowPlayingItem, candidate);
+      if (queueState.queueSyncConfirmed(snapshot, currentSongId, expectedQueueOrder)) return snapshot;
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    throw new Error('MusicKit did not confirm the requested priority queue order. The current song was left unchanged.');
+  };
+
   const onNowPlayingItemDidChange = async (event) => {
     if (!audioEnabled) return;
     const snapshot = playbackSnapshot(event?.item || music?.nowPlayingItem);
@@ -335,6 +353,7 @@
     actualQueueOrder = [];
     currentQueueIndex = -1;
     queueRevision = 0;
+    priorityRevision = 0;
     clearPendingTrackSelection(new Error('The DJ workflow was reset.'));
     if (stopError) throw stopError;
   };
@@ -351,6 +370,30 @@
     currentQueueIndex = -1;
     queueRevision = Math.max(0, Number(revision) || queueRevision + 1);
     return actualQueueOrder;
+  };
+
+  const syncPriorityQueue = async (command) => {
+    const currentSongId = String(command.song_id || playbackSongId || receiver().current_song_id || '');
+    const currentSnapshot = playbackSnapshot();
+    if (!currentSongId || currentSnapshot.songId !== currentSongId) {
+      throw new Error('MusicKit current-song state changed before the priority queue update could be applied.');
+    }
+    if (typeof music.playNext !== 'function') {
+      throw new Error('This MusicKit receiver does not support non-interrupting Play Next queue updates.');
+    }
+    const expectedQueueOrder = Array.isArray(command.queue_order) ? command.queue_order.map(String) : [];
+    const identifiers = queueState.priorityCatalogIdentifiers(expectedQueueOrder, currentSongId, songs());
+    if (!identifiers) {
+      throw new Error('A priority queue song is missing valid Apple Music metadata.');
+    }
+    const snapshot = await waitForConfirmedQueue(
+      () => music.playNext({ songs: identifiers }, true),
+      currentSongId,
+      expectedQueueOrder,
+    );
+    queueRevision = Math.max(0, Number(command.revision) || queueRevision + 1);
+    priorityRevision = Math.max(0, Number(command.priority_revision) || priorityRevision);
+    return snapshot;
   };
 
   const executeCommand = async () => {
@@ -411,6 +454,10 @@
         await queueSongs(command.queue_order, command.revision);
         snapshot = await waitForConfirmedTrack(() => music.play(), { allowSame: true });
         currentSongId = snapshot.songId;
+        priorityRevision = Math.max(0, Number(command.priority_revision) || priorityRevision);
+      } else if (action === 'sync_priority_queue') {
+        snapshot = await syncPriorityQueue(command);
+        currentSongId = snapshot.songId;
       } else if (action === 'pause') {
         await music.pause();
         snapshot = playbackSnapshot();
@@ -425,7 +472,9 @@
         currentSongId = snapshot.songId;
       }
 
-      const playbackStatus = action === 'pause' ? 'paused' : (action === 'stop' ? 'stopped' : 'playing');
+      const playbackStatus = action === 'pause'
+        ? 'paused'
+        : (action === 'stop' ? 'stopped' : (action === 'sync_priority_queue' ? (receiver().playback_status || 'playing') : 'playing'));
       playbackSongId = currentSongId;
       if (currentSongId) applyPlaybackSnapshot(snapshot);
       await report({
@@ -436,6 +485,7 @@
         queue_order: snapshot.queueOrder,
         current_queue_index: snapshot.queueIndex,
         queue_revision: queueRevision,
+        priority_revision: priorityRevision,
         error: '',
         clear_error: true,
       });

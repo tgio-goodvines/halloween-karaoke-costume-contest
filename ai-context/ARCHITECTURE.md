@@ -278,7 +278,14 @@ Now Playing and Up Next data from `dj_state.receiver.queue_order` and
 `current_queue_index`, never from a predicted saved-playlist position.
 The DJ admin workspace consumes the same derived songs, places playback
 controls beneath them, and gates those controls on live receiver,
-authorization, audio, and pending-command readiness. Region modes are `auto`, `always`, or `hidden`;
+authorization, audio, and pending-command readiness. Approved attendee songs
+carry a persisted priority lifecycle. `build_dj_queue_plan()` prepends the FIFO
+priority lane for Play/Shuffle while preserving a separate regular base order;
+`build_active_dj_queue_order()` preserves the confirmed current song and
+rebuilds only its remainder. A revisioned `sync_priority_queue` command uses
+MusicKit `playNext(..., true)` on the display and is acknowledged only after
+the resolved remainder matches. Offline/busy requests remain dirty until a
+ready receiver heartbeat can reconcile them. Region modes are `auto`, `always`, or `hidden`;
 the client toggles layout classes so unused tracks disappear and center grows.
 
 The center rotation is grouped and ordered by `display_config.source_order`;

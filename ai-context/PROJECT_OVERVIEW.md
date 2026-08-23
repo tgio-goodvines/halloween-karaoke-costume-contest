@@ -138,7 +138,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 12. The following globals in `main.py` are
+`halloween:state` with schema version 13. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
@@ -204,14 +204,17 @@ the process-local cache:
 - `contest_state`: contest started/stopped, voting open/closed, winner lock, scoreboard card visibility.
 - `karaoke_state`: whether karaoke has been started/stopped/reset and current singer metadata.
 - `display_update_version`: monotonic counter used by server-sent events.
-- `dj_playlist`: ordered Apple Music songs managed by admins.
+- `dj_playlist`: ordered Apple Music songs managed by admins, including
+  request provenance and the `pending -> playing -> served` priority lifecycle.
 - `dj_song_requests`: pending attendee Apple Music requests. Approval removes
-  the request and inserts the song at a random saved-playlist position;
+  the request and promotes the unique catalog song into a FIFO priority lane;
   rejection removes it without changing the playlist or current playback.
 - `dj_state`: Redis-persisted desired command, acknowledgement, live-display
   heartbeat, MusicKit/audio readiness, confirmed player state/current song,
   resolved MusicKit queue order/current index/revision, retained failure
-  details, and the latest DJ reset acknowledgement.
+  details, priority queue revision/retry state, and the latest DJ reset
+  acknowledgement. Approved priorities lead Play and Shuffle; an active
+  receiver replaces only the remainder after the current song.
 - `games_state`: five-game registry state. Two Truths and a Lie stores clues and
   identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
   trios, an admin-controlled public identity mode, private ballots, aggregate results,

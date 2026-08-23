@@ -42,11 +42,39 @@
     )
   );
 
+  const commandRemainder = (queueOrder, currentSongId) => {
+    const order = Array.isArray(queueOrder) ? queueOrder.map((songId) => String(songId || '')) : [];
+    const currentIndex = order.indexOf(String(currentSongId || ''));
+    return currentIndex >= 0 ? order.slice(currentIndex + 1) : [];
+  };
+
+  const queueSyncConfirmed = (snapshot, currentSongId, expectedQueueOrder) => {
+    if (!snapshot?.songId || snapshot.songId !== String(currentSongId || '')) return false;
+    if (!Array.isArray(snapshot.queueOrder) || snapshot.queueIndex < 0) return false;
+    if (snapshot.queueOrder[snapshot.queueIndex] !== snapshot.songId) return false;
+    const expectedRemainder = commandRemainder(expectedQueueOrder, currentSongId);
+    const actualRemainder = snapshot.queueOrder.slice(snapshot.queueIndex + 1);
+    return expectedRemainder.length === actualRemainder.length
+      && expectedRemainder.every((songId, index) => songId && actualRemainder[index] === songId);
+  };
+
+  const priorityCatalogIdentifiers = (queueOrder, currentSongId, songs) => {
+    const playlist = Array.isArray(songs) ? songs : [];
+    const remainder = commandRemainder(queueOrder, currentSongId);
+    const identifiers = remainder.map((songId) => (
+      playlist.find((song) => String(song?.id || '') === songId)?.apple_music_id || ''
+    ));
+    return identifiers.every(Boolean) ? identifiers.map(String) : null;
+  };
+
   return {
+    commandRemainder,
     localQueueOrder,
     localSongIdForMediaItem,
     mediaItemIdentifiers,
+    priorityCatalogIdentifiers,
     queueItems,
+    queueSyncConfirmed,
     selectionChanged,
   };
 });

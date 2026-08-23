@@ -52,14 +52,20 @@ the center stage reclaim its height.
 
 ## Redis State
 
-Schema version 5 stores DJ data inside the canonical `halloween:state` JSON
-document:
+The DJ model was introduced in schema version 5. Canonical schema version 13
+adds request provenance and priority synchronization state inside the
+`halloween:state` JSON document:
 
 - `dj_playlist`: ordered song dictionaries with stable app IDs, Apple Music
   catalog song ID, title, artist, album, artwork, duration, explicit flag,
-  enabled flag, and timestamp.
+  enabled flag, timestamp, source/request metadata, and priority status
+  (`none`, `pending`, `playing`, or `served`).
 - `dj_state.desired`: the most recently requested playback status, song,
-  playlist order, and shuffle mode.
+  full queue order, priority-free base order, and shuffle mode.
+- `dj_state.priority_revision`, `priority_sync_pending`,
+  `priority_sync_attempted_revision`, and `priority_sync_error`: durable queue
+  reconciliation state. A busy/offline receiver does not lose an approved
+  priority request; the next ready heartbeat can issue the pending sync once.
 - `dj_state.current_command`: the pending command with a UUID and monotonic
   revision. A pending command has not yet been confirmed by the display.
 - `dj_state.last_command`: the final success/failure acknowledgement and any
@@ -69,8 +75,9 @@ document:
   pending, acknowledged, or failed display acknowledgement.
 - `dj_state.receiver`: receiver identity, heartbeat, Apple Music/audio
   readiness, confirmed playback state/current song, MusicKit-resolved local
-  queue order/current index/revision, elapsed position, and the latest receiver
-  error. The resolved queue is distinct from `dj_state.desired.queue_order` so
+  queue order/current index/revision, confirmed priority revision, elapsed
+  position, and the latest receiver error. The resolved queue is distinct from
+  `dj_state.desired.queue_order` so
   a skipped or library-backed MusicKit item cannot silently move display state
   onto a different song.
 - `dj_song_requests`: pending attendee requests with requester identity,
@@ -80,10 +87,25 @@ document:
 
 Attendees can keep up to three pending requests and cannot request the same
 Apple Music song twice while it is pending. The admin DJ workspace resolves a
-request explicitly: approval atomically removes it and inserts an enabled
-playlist song at a random saved-playlist position; rejection removes it without
-changing the playlist. Neither decision sends a receiver command or changes the
-active MusicKit queue, preserving confirmed current playback.
+request explicitly. Approval atomically removes it, reuses an existing matching
+catalog song when present, preserves requester/request/approval metadata, and
+marks the song `pending` in an oldest-request-first priority lane. Rejection
+removes it without changing the playlist.
+
+**Play from Beginning** puts pending priorities before the saved regular-song
+order. **Shuffle & Play** keeps the same FIFO priority lane first and shuffles
+only regular songs. **Play This Song** remains an explicit host override, then
+places pending priorities before the other remaining songs.
+
+If a confirmed song is already playing or paused, approval increments the
+priority revision and issues `sync_priority_queue` when the receiver is ready.
+The display uses MusicKit JS `playNext({songs: remainder}, true)` to replace the
+remainder after the current item without changing the current song. It
+acknowledges only after MusicKit's resolved queue exactly matches the expected
+remainder. If the display is offline, busy, or stopped, the priority remains
+durable and leads the next explicit Play/Shuffle queue. Receiver-confirmed
+track changes advance priority status from `pending` to `playing` and then
+`served`, preventing a completed request from being prioritized repeatedly.
 
 The receiver becomes visually `offline` after 20 seconds without a heartbeat.
 The admin flow marks a pending command as `timed out` after 8 seconds without
@@ -107,6 +129,13 @@ playback controls sit beneath those cards and remain disabled until the display
 heartbeat is current, Apple Music is authorized, audio is enabled, and no
 command is already awaiting acknowledgement. Playlist editing and the reset
 workflow remain available independently.
+
+The Up Next card distinguishes no active queue, an actual confirmed end of
+queue, an unrecognized MusicKit item, and a priority update awaiting
+confirmation. A separate priority status row shows the oldest waiting request,
+receiver synchronization state, and a retry action after a failed queue update.
+Playlist rows label pending/playing requests and let an admin prioritize an
+existing song or remove a pending priority.
 
 When the display has completed Apple authorization and unlocked audio, the idle
 path is intentionally all green: **Admin request: Ready**, **Live display:
@@ -137,7 +166,9 @@ items map through direct IDs plus `catalogId`/`reportingId`. Next/Previous wait
 up to seven seconds for a changed song or queue index before failing visibly.
 Natural track advancement reports the same resolved queue/current index to
 Redis. Receiver reports are serialized so an older heartbeat cannot overwrite
-a newer track-change report.
+a newer track-change report. Priority synchronization feature-detects
+`playNext`, retains the current song/status, and polls the returned/current
+MusicKit Queue for an exact mapped remainder before acknowledging the command.
 
 ## MusicKit Setup
 
@@ -175,6 +206,9 @@ by MusicKit and is not persisted server-side.
   complete the Apple Music prompt there.
 - **Command failed/timed out:** the workspace displays the receiver’s message;
   correct setup and resend the desired command.
+- **Priority update failed:** correct any unavailable/missing catalog metadata,
+  then use **Retry Queue Update**. The request remains pending until a
+  receiver-confirmed track change starts it.
 - **Reset DJ Workflow:** use the confirmed danger action in `/admin/dj` to stop
   the receiver and clear transient playback, command, pairing/status, and error
   data while preserving the playlist. If the TV is offline, reset stays pending
@@ -186,11 +220,14 @@ by MusicKit and is not persisted server-side.
 ## Verification
 
 `tests/test_redis_state.py` covers DJ state serialization, playlist CRUD,
-readiness-gated commands, resolved queue/current/up-next views, failed-command
+readiness-gated commands, FIFO priority queue construction, request provenance,
+active non-interrupting priority synchronization/retry, request lifecycle,
+duplicate catalog reuse, resolved queue/current/up-next views, failed-command
 error retention, reset acknowledgement and playlist preservation, confirmed
 Now Playing payloads, and JSON CSRF/admin authorization.
 `tests/test_dj_queue_state.js` covers catalog/library identifier resolution,
-resolved queue order, unknown placeholders, and confirmation boundaries. Run:
+resolved queue order, priority remainder/catalog payload construction, unknown
+placeholders, and confirmation boundaries. Run:
 
 ```bash
 python -m compileall main.py

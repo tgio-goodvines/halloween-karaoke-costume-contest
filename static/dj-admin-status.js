@@ -89,14 +89,27 @@
       : 'Waiting for the live display receiver.');
     setText('[data-dj-current-meta]', `${titleize(receiver.playback_status || 'stopped')}${currentPosition ? ` · Queue ${currentPosition} of ${queueSize}` : ''}`);
     setText('[data-dj-next-title]', nextSong?.title || 'No confirmed next song');
-    setText('[data-dj-next-artist]', nextSong
+    setText('[data-dj-next-artist]', dj.next_song_detail || (nextSong
       ? [nextSong.artist, nextSong.album].filter(Boolean).join(' · ')
-      : 'MusicKit has not confirmed another queue item.');
-    setText('[data-dj-next-meta]', nextPosition
+      : 'MusicKit has not confirmed another queue item.'));
+    setText('[data-dj-next-meta]', dj.next_song_meta || (nextPosition
       ? `Queue position ${nextPosition} of ${queueSize}`
-      : 'End of the confirmed queue');
+      : 'No confirmed queue successor'));
     setArtwork('[data-dj-current-artwork-wrap]', '[data-dj-current-artwork]', currentSong);
     setArtwork('[data-dj-next-artwork-wrap]', '[data-dj-next-artwork]', nextSong);
+
+    const priorityStatus = root.querySelector('[data-dj-priority-status]');
+    if (priorityStatus) {
+      const status = dj.priority_sync_status || 'idle';
+      priorityStatus.className = `dj-priority-status dj-priority-status--${stateClass(status)}`;
+      priorityStatus.toggleAttribute('hidden', status === 'idle');
+      setText('[data-dj-priority-title]', dj.priority_song?.title
+        ? `Priority request: ${dj.priority_song.title}`
+        : 'Priority queue update');
+      setText('[data-dj-priority-message]', dj.priority_sync_message || 'No priority requests are waiting.');
+      const retry = priorityStatus.querySelector('[data-dj-priority-retry]');
+      if (retry) retry.toggleAttribute('hidden', status !== 'failed');
+    }
 
     const readiness = root.querySelector('[data-dj-controls-readiness]');
     if (readiness) {

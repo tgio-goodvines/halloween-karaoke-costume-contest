@@ -50,3 +50,38 @@ test('requires an actual song or queue-position change before confirming next', 
   assert.equal(queueState.selectionChanged({ songId: 'song-b', queueIndex: 1 }, 'song-b', 0), true);
   assert.equal(queueState.selectionChanged({ songId: 'song-b', queueIndex: 0 }, 'song-b', 0, true), true);
 });
+
+test('builds the non-interrupting remainder after the confirmed current song', () => {
+  assert.deepEqual(
+    queueState.commandRemainder(['song-b', 'song-a', 'song-c'], 'song-b'),
+    ['song-a', 'song-c'],
+  );
+  assert.deepEqual(queueState.commandRemainder(['song-a'], 'song-a'), []);
+  assert.deepEqual(
+    queueState.priorityCatalogIdentifiers(['song-b', 'song-a', 'song-c'], 'song-b', playlist),
+    ['catalog-a', 'catalog-c'],
+  );
+  assert.equal(
+    queueState.priorityCatalogIdentifiers(['song-b', 'missing'], 'song-b', playlist),
+    null,
+  );
+});
+
+test('confirms priority synchronization only from the exact resolved remainder', () => {
+  const expected = ['song-b', 'song-a', 'song-c'];
+  assert.equal(queueState.queueSyncConfirmed({
+    songId: 'song-b',
+    queueIndex: 1,
+    queueOrder: ['already-played', 'song-b', 'song-a', 'song-c'],
+  }, 'song-b', expected), true);
+  assert.equal(queueState.queueSyncConfirmed({
+    songId: 'song-b',
+    queueIndex: 1,
+    queueOrder: ['already-played', 'song-b', '', 'song-c'],
+  }, 'song-b', expected), false);
+  assert.equal(queueState.queueSyncConfirmed({
+    songId: 'song-a',
+    queueIndex: 2,
+    queueOrder: ['already-played', 'song-b', 'song-a', 'song-c'],
+  }, 'song-b', expected), false);
+});

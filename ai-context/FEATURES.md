@@ -92,7 +92,8 @@
   is enabled—an exact available, non-age-restricted YouTube video.
 - Party-day Jukebox at `/party/jukebox` shows confirmed Now Playing state and
   the DJ playlist, lets attendees search Apple Music, and submit up to three
-  pending song requests for DJ approval.
+  pending song requests for DJ approval. Approved requests retain provenance
+  and enter an oldest-request-first priority lane.
 - YouTube karaoke search is explicit-submit, paginated, Redis-cached, and
   protected by daily project/account safety budgets with direct-link fallback.
 - Attendees see personal seven-step workflow status and may replace or cancel
@@ -213,8 +214,13 @@
   the live display when connected, clears transient receiver/playback/command
   state only after acknowledgement, and preserves the saved playlist.
 - DJ workspace shows attendee song requests with approve/reject controls.
-  Approval inserts the song at a random saved-playlist position without
-  interrupting the display’s current MusicKit queue; rejection removes it.
+  Approval reuses a matching catalog song or adds a unique playlist entry,
+  keeps FIFO request metadata, and synchronizes it immediately after the
+  current MusicKit item without interrupting playback. Play from Beginning and
+  Shuffle both keep pending requests ahead of regular songs; Shuffle randomizes
+  only the regular lane. Offline/busy synchronization remains pending for the
+  next ready receiver heartbeat, and playlist rows offer manual priority and
+  retry controls.
 - Admins use the same `/logout` action as attendees; logout clears the current
   browser session rather than a role-specific slice of it.
 - Add, edit, delete, move up, and move down costume signups.

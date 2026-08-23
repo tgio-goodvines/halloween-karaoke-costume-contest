@@ -184,7 +184,10 @@ display-update broadcasts.
 `main.py` is the entire backend. Its main responsibilities are:
 
 - Flask app setup and route definitions.
-- Dataclasses: `CostumeSignup`, `KaraokeSignup`.
+- Dataclasses: `CostumeSignup`, `KaraokeSignup`. Karaoke records canonically
+  store one to four `{account_id, name}` singer snapshots; schema-13 and older
+  single-name records normalize to one custom singer while the derived `name`
+  label remains in serialized payloads for compatibility.
 - Redis-backed state serialization/hydration, with process-local global caches.
 - Food/drink menu management, specialty drink limit enforcement, drink order
   lifecycle, bartender role checks, prep-time estimates, bartender tip settings,
@@ -396,15 +399,19 @@ locked winner.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
-- `karaoke_signup.html`: song-details-first three-step exact-video
+- `_karaoke_singers.html`: reusable one-to-four singer fieldset with registered
+  attendee choices, a custom-name path, and server-restored row state.
+- `karaoke_signup.html`: multi-singer, song-details-first three-step exact-video
   search/selection and review, direct-link fallback, attendee workflow status,
   pending recovery, and synchronized public lineup.
 - `admin_karaoke.html`: dedicated YouTube connection, review, run-of-show,
   reconciliation/history, and stage-control workspace.
 - `_karaoke_workflow.html`: shared media and seven-step workflow macros.
+- `karaoke-singers.js`: reusable singer-row add/remove/custom-name behavior,
+  duplicate checks, accessibility status, and combined singer-label updates.
 - `karaoke.js`: attendee song-detail validation, canonical search, pagination,
-  stale-result/selection invalidation, exact-video review, and direct-link
-  fallback.
+  stale-result/selection invalidation, multi-singer exact-video review, and
+  direct-link fallback.
 - `karaoke-admin.js`: asynchronous playlist mutations, admin replacement
   search, playlist loading, and background state refresh.
 - `costume_voting.html`: complete ballot form and post-vote state.

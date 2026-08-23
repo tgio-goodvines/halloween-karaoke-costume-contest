@@ -88,8 +88,11 @@
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.
 - Karaoke signup at `/party/karaoke` is attendee-accessible on the party date.
-- Karaoke signup validates name, song title, artist, and—when YouTube karaoke
-  is enabled—an exact available, non-age-restricted YouTube video.
+- Karaoke signup accepts one to four singers, defaulting the first singer to
+  the signed-in attendee. Each singer can be selected from registered party
+  accounts or entered as a custom name without creating a new account. It also
+  validates song title, artist, and—when YouTube karaoke is enabled—an exact
+  available, non-age-restricted YouTube video.
 - Party-day Jukebox at `/party/jukebox` shows confirmed Now Playing state and
   the DJ playlist, lets attendees search Apple Music, and submit up to three
   pending song requests for DJ approval. Approved requests retain provenance
@@ -134,8 +137,11 @@
 
 ## Karaoke Features
 
-- Guests first enter the singer name, song title, and artist. The attendee flow
-  builds a quota-safe `{song title} {artist} karaoke` YouTube search, presents
+- Guests first choose one to four singers, then enter the song title and
+  artist. The first singer defaults to the signed-in attendee; additional
+  singers come from a privacy-safe attendee-name dropdown or a custom-name
+  field. The attendee flow builds a quota-safe
+  `{song title} {artist} karaoke` YouTube search, presents
   exact versions with preview/select actions, and keeps the user-entered song
   card metadata independent from the chosen video's YouTube title/channel.
 - Editing the song title or artist invalidates stale results and selections.
@@ -157,9 +163,12 @@
   unmatched/manual playlist items. A separate local-only fallback is available
   for manual YouTube cleanup.
 - Playback stays in the official YouTube site. Stage controls update workflow
-  and live-display singer cards but never claim remote playback confirmation.
-- The legacy name/title/artist/optional-link workflow remains intact when
-  `HALLOWEEN_YOUTUBE_KARAOKE_ENABLED=false`.
+  and live-display singer cards with every singer represented, but never claim
+  remote playback confirmation. Attendee, dashboard, admin, countdown,
+  rotation, stage-override, API, and export surfaces share the same combined
+  singer label and structured singer list.
+- The legacy title/artist/optional-link workflow, including the multi-singer
+  editor, remains intact when `HALLOWEEN_YOUTUBE_KARAOKE_ENABLED=false`.
 - Admin can start, stop, and reset the Halloween karaoke party if at least one karaoke signup exists for start.
 - Starting karaoke sets a live-display override with countdown to 11:00 PM MST and the current lineup.
 - Stopping or resetting karaoke clears active karaoke state and karaoke-start live-display override without deleting the lineup.

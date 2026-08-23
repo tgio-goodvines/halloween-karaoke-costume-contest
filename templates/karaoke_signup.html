@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_karaoke_workflow.html" import stepper, media %}
+{% from "_karaoke_singers.html" import singer_fields %}
 {% set title = "Karaoke Signup" %}
 
 {% block content %}
@@ -45,8 +46,7 @@
           <p>We’ll use the song and artist to find matching karaoke versions on YouTube.</p>
         </div>
 
-        <label for="name">Singer name *</label>
-        <input type="text" id="name" name="name" value="{{ karaoke_form.name }}" maxlength="100" autocomplete="name" required>
+        {{ singer_fields(karaoke_form.singers, karaoke_attendees, karaoke_custom_singer_value, karaoke_max_singers) }}
 
         <label for="song_title">Song title *</label>
         <input type="text" id="song_title" name="song_title" value="{{ karaoke_form.song_title }}" maxlength="100" autocomplete="off" placeholder="Thriller" required>
@@ -109,7 +109,7 @@
           <p class="eyebrow">Step 3</p>
           <h3>Review your request</h3>
           <p data-karaoke-review-song>
-            <strong>{{ karaoke_form.name }}</strong> will sing “{{ karaoke_form.song_title }}” by {{ karaoke_form.artist }}.
+            <strong data-karaoke-review-singers>{% for row in karaoke_form.singers %}{{ row.name or row.custom_name }}{% if not loop.last %}{{ ', ' if loop.revindex > 2 else ' & ' }}{% endif %}{% endfor %}</strong> will sing “{{ karaoke_form.song_title }}” by {{ karaoke_form.artist }}.
           </p>
         </div>
         <div class="karaoke-selection{% if selected_youtube %} is-selected{% endif %}" data-karaoke-selection>
@@ -134,8 +134,7 @@
   {% else %}
     <form method="post" class="signup-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="name">Name *</label>
-      <input type="text" id="name" name="name" value="{{ karaoke_form.name }}" required>
+      {{ singer_fields(karaoke_form.singers, karaoke_attendees, karaoke_custom_singer_value, karaoke_max_singers) }}
 
       <label for="song_title">Song Title *</label>
       <input type="text" id="song_title" name="song_title" value="{{ karaoke_form.song_title }}" required>
@@ -156,7 +155,7 @@
   {% for entry in own_karaoke_requests %}
     <article class="karaoke-request">
       {{ media(entry) }}
-      <p><strong>{{ entry.name }}</strong> — “{{ entry.song_title }}” by {{ entry.artist }}</p>
+      <p><strong>{{ entry.singer_label }}</strong> — “{{ entry.song_title }}” by {{ entry.artist }}</p>
       {{ stepper(entry, true) }}
       {% if entry.workflow.approval_status == 'pending' %}
         <p class="contest-status">Awaiting host approval.</p>
@@ -194,7 +193,7 @@
     <ol>
       {% for signup in karaoke_signups[:8] %}
         <li>
-          <strong>{{ signup.name }}</strong> will sing "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
+          <strong>{{ signup.singer_label }}</strong> will sing "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
         </li>
       {% endfor %}
     </ol>
@@ -203,7 +202,7 @@
         <summary>Show {{ karaoke_signups|length - 8 }} more song{{ 's' if karaoke_signups|length - 8 != 1 else '' }}</summary>
         <ol start="9">
           {% for signup in karaoke_signups[8:] %}
-            <li><strong>{{ signup.name }}</strong> will sing "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}</li>
+            <li><strong>{{ signup.singer_label }}</strong> will sing "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}</li>
           {% endfor %}
         </ol>
       </details>
@@ -215,5 +214,6 @@
 {% endblock %}
 
 {% block scripts %}
+  <script src="{{ url_for('static', filename='karaoke-singers.js', v='20260823-multi-singer') }}"></script>
   {% if youtube_karaoke_enabled %}<script src="{{ url_for('static', filename='karaoke.js', v='20260730-song-details-search') }}"></script>{% endif %}
 {% endblock %}

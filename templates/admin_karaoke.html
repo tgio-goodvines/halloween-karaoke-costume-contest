@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_karaoke_workflow.html" import stepper, media %}
+{% from "_karaoke_singers.html" import singer_fields %}
 {% set title = "Karaoke Operations" %}
 
 {% block content %}
@@ -62,7 +63,7 @@
         <summary>Add a manual karaoke entry</summary>
         <form method="post">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add_karaoke">
-          <label>Stage name<input name="name" required></label>
+          {{ singer_fields(admin_new_karaoke_singer_rows, karaoke_attendees, karaoke_custom_singer_value, karaoke_max_singers) }}
           <label>Song title<input name="song_title" required></label>
           <label>Artist<input name="artist" required></label>
           <label>Optional YouTube link<input type="url" name="youtube_link" inputmode="url"></label>
@@ -164,7 +165,7 @@
         <header><div><p class="admin-panel__eyebrow">Needs attention</p><h3>Resolve before showtime</h3></div><span>{{ karaoke_admin.attention|length }}</span></header>
         {% for entry in karaoke_admin.attention %}
           <details class="karaoke-request karaoke-request--attention">
-            <summary><strong>{{ entry.name }} — {{ entry.song_title }}</strong><span>{{ entry.workflow.last_sync_error_message or entry.workflow.video_validation_status|replace('_', ' ')|title }}</span></summary>
+            <summary><strong>{{ entry.singer_label }} — {{ entry.song_title }}</strong><span>{{ entry.workflow.last_sync_error_message or entry.workflow.video_validation_status|replace('_', ' ')|title }}</span></summary>
             {{ stepper(entry) }}
             {% if entry.workflow.approval_status == 'approved' %}
               <button class="button button--primary" type="button" data-karaoke-api="{{ url_for('admin_karaoke_retry', entry_id=entry.id) }}">Retry / Reconcile Entry</button>
@@ -181,7 +182,7 @@
           {% for entry in karaoke_admin.pending %}
             <article class="karaoke-request">
               {{ media(entry) }}
-              <h4>{{ entry.name }} — “{{ entry.song_title }}” by {{ entry.artist }}</h4>
+              <h4>{{ entry.singer_label }} — “{{ entry.song_title }}” by {{ entry.artist }}</h4>
               {{ stepper(entry) }}
               <div class="karaoke-request__actions">
                 {% if entry.youtube.watch_url %}<a class="button" href="{{ entry.youtube.watch_url }}" target="_blank" rel="noopener">Preview on YouTube</a>{% endif %}
@@ -201,7 +202,7 @@
                   <summary>Edit singer and song labels</summary>
                   <form method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entry_id" value="{{ entry.id }}"><input type="hidden" name="action" value="update_karaoke">
-                    <label>Stage name<input name="name" required value="{{ entry.name }}"></label>
+                    {{ singer_fields(entry.singer_form_rows, karaoke_attendees, karaoke_custom_singer_value, karaoke_max_singers) }}
                     <label>Song title<input name="song_title" required value="{{ entry.song_title }}"></label>
                     <label>Artist<input name="artist" required value="{{ entry.artist }}"></label>
                     <button class="button" type="submit">Save Labels</button>
@@ -233,7 +234,7 @@
                 <details>
                   <summary>
                     <span class="admin-entry__rank">#{{ loop.index }}</span>
-                    <span><strong>{{ entry.name }}</strong><small>{{ entry.song_title }} by {{ entry.artist }}</small></span>
+                    <span><strong>{{ entry.singer_label }}</strong><small>{{ entry.song_title }} by {{ entry.artist }}</small></span>
                     {% if karaoke_admin.enabled %}<span class="karaoke-status karaoke-status--{{ entry.workflow.playlist_sync_status }}">{{ entry.workflow.playlist_sync_status|replace('_', ' ')|title }}</span>{% else %}<span class="karaoke-status">Manual</span>{% endif %}
                   </summary>
                   {{ media(entry) }}
@@ -263,7 +264,7 @@
                     {% else %}
                       <form method="post">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entry_id" value="{{ entry.id }}"><input type="hidden" name="action" value="update_karaoke">
-                        <label>Stage name<input name="name" required value="{{ entry.name }}"></label>
+                        {{ singer_fields(entry.singer_form_rows, karaoke_attendees, karaoke_custom_singer_value, karaoke_max_singers) }}
                         <label>Song title<input name="song_title" required value="{{ entry.song_title }}"></label>
                         <label>Artist<input name="artist" required value="{{ entry.artist }}"></label>
                         <label>YouTube link<input type="url" name="youtube_link" value="{{ entry.youtube_link }}" inputmode="url"></label>
@@ -290,7 +291,7 @@
       <details class="admin-section karaoke-history-section">
         <summary><strong>Completed and rejected history</strong><span>{{ karaoke_admin.history|length }} records</span></summary>
         {% for entry in karaoke_admin.history %}
-          <div class="karaoke-history-row"><strong>{{ entry.name }} — {{ entry.song_title }}</strong><span>{{ entry.workflow.performance_status|replace('_', ' ')|title if entry.workflow.approval_status == 'approved' else entry.workflow.approval_status|title }}</span></div>
+          <div class="karaoke-history-row"><strong>{{ entry.singer_label }} — {{ entry.song_title }}</strong><span>{{ entry.workflow.performance_status|replace('_', ' ')|title if entry.workflow.approval_status == 'approved' else entry.workflow.approval_status|title }}</span></div>
         {% else %}
           <p>No completed, skipped, rejected, or cancelled entries yet.</p>
         {% endfor %}
@@ -299,14 +300,14 @@
 
     <aside class="karaoke-stage">
       <p class="admin-panel__eyebrow">Stage controls</p>
-      <h3>{% if karaoke_admin.current %}{{ karaoke_admin.current.name }}{% else %}Stage standby{% endif %}</h3>
+      <h3>{% if karaoke_admin.current %}{{ karaoke_admin.current.singer_label }}{% else %}Stage standby{% endif %}</h3>
       {% if karaoke_admin.current %}
         <p>“{{ karaoke_admin.current.song_title }}” by {{ karaoke_admin.current.artist }}</p>
         {{ stepper(karaoke_admin.current, true) }}
       {% else %}
         <p>Call the next ready singer when the microphone and official YouTube tab are ready.</p>
       {% endif %}
-      {% if karaoke_admin.next %}<p class="karaoke-stage__next"><span>Next ready</span><strong>{{ karaoke_admin.next.name }}</strong><small>{{ karaoke_admin.next.song_title }}</small></p>{% endif %}
+      {% if karaoke_admin.next %}<p class="karaoke-stage__next"><span>Next ready</span><strong>{{ karaoke_admin.next.singer_label }}</strong><small>{{ karaoke_admin.next.song_title }}</small></p>{% endif %}
       <div class="karaoke-stage__actions">
         <form method="post">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -435,5 +436,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='karaoke-singers.js', v='20260823-multi-singer') }}"></script>
 <script src="{{ url_for('static', filename='karaoke-admin.js', v='20260730-queue-clear') }}"></script>
 {% endblock %}

@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
       elements.karaokeLineup.innerHTML = '';
       lineup.forEach((singer, index) => {
         const item = document.createElement('li');
-        item.textContent = `${index + 1}. ${singer.name || 'TBA'} · ${singer.song_title || 'Song TBA'}`;
+        item.textContent = `${index + 1}. ${singer.singer_label || singer.name || 'TBA'} · ${singer.song_title || 'Song TBA'}`;
         elements.karaokeLineup.appendChild(item);
       });
     }

@@ -1,0 +1,56 @@
+{% macro singer_fields(rows, attendees, custom_value, max_singers=4, legend='Singers *') %}
+  <fieldset class="karaoke-singers" data-karaoke-singers data-max-singers="{{ max_singers }}" data-custom-value="{{ custom_value }}">
+    <legend>{{ legend }}</legend>
+    <p class="karaoke-singers__help">Choose registered attendees or add someone who is not listed. One song can include up to {{ max_singers }} singers.</p>
+    <div class="karaoke-singers__rows" data-karaoke-singer-rows>
+      {% for row in rows %}
+        <div class="karaoke-singer-row" data-karaoke-singer-row>
+          <label>
+            <span>Singer {{ loop.index }}</span>
+            <select name="singer_account_id" data-karaoke-singer-select required>
+              <option value="">Choose an attendee</option>
+              {% for attendee in attendees %}
+                <option value="{{ attendee.account_id }}"{% if row.selection == attendee.account_id %} selected{% endif %}>{{ attendee.name }}</option>
+              {% endfor %}
+              <option value="{{ custom_value }}"{% if row.selection == custom_value %} selected{% endif %}>Someone not listed</option>
+            </select>
+          </label>
+          <label class="karaoke-singer-row__custom" data-karaoke-custom-label{% if row.selection != custom_value %} hidden{% endif %}>
+            <span>New singer name</span>
+            <input
+              type="text"
+              name="singer_custom_name"
+              value="{{ row.custom_name }}"
+              maxlength="100"
+              autocomplete="off"
+              data-karaoke-custom-name
+              {% if row.selection == custom_value %}required{% endif %}
+            >
+          </label>
+          <button class="button button--danger karaoke-singer-row__remove" type="button" data-karaoke-remove-singer{% if rows|length == 1 %} hidden{% endif %}>Remove</button>
+        </div>
+      {% endfor %}
+    </div>
+    <template data-karaoke-singer-template>
+      <div class="karaoke-singer-row" data-karaoke-singer-row>
+        <label>
+          <span>Singer</span>
+          <select name="singer_account_id" data-karaoke-singer-select required>
+            <option value="" selected>Choose an attendee</option>
+            {% for attendee in attendees %}<option value="{{ attendee.account_id }}">{{ attendee.name }}</option>{% endfor %}
+            <option value="{{ custom_value }}">Someone not listed</option>
+          </select>
+        </label>
+        <label class="karaoke-singer-row__custom" data-karaoke-custom-label hidden>
+          <span>New singer name</span>
+          <input type="text" name="singer_custom_name" maxlength="100" autocomplete="off" data-karaoke-custom-name>
+        </label>
+        <button class="button button--danger karaoke-singer-row__remove" type="button" data-karaoke-remove-singer>Remove</button>
+      </div>
+    </template>
+    <div class="karaoke-singers__actions">
+      <button class="button" type="button" data-karaoke-add-singer>Add Singer</button>
+      <span data-karaoke-singer-status role="status" aria-live="polite"></span>
+    </div>
+  </fieldset>
+{% endmacro %}

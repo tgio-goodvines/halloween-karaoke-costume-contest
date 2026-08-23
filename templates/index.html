@@ -177,7 +177,7 @@
         <ul>
           {% for signup in karaoke_signups[-3:] %}
             <li>
-              <strong>{{ signup.name }}</strong> &mdash; "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
+              <strong>{{ signup.singer_label }}</strong> &mdash; "{{ signup.song_title }}"{% if signup.artist %} by {{ signup.artist }}{% endif %}
             </li>
           {% endfor %}
         </ul>

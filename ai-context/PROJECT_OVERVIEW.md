@@ -138,13 +138,16 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 13. The following globals in `main.py` are
+`halloween:state` with schema version 14. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
 - `karaoke_signups`: list of `KaraokeSignup` dataclass instances with stable
-  IDs, requester identity, exact YouTube metadata, independent workflow state,
-  playlist item/revision/operation metadata, and bounded history.
+  IDs, one-to-four normalized singer snapshots, requester identity, exact
+  YouTube metadata, independent workflow state, playlist
+  item/revision/operation metadata, and bounded history. Registered singers
+  retain their account IDs and display-name snapshots; custom singers remain
+  local to the song request and do not create party accounts.
 - `youtube_karaoke`: non-secret host channel, event playlist, connection, and
   reconciliation metadata. API keys and OAuth credentials never enter Redis.
 - `costume_ballots`: maps `user_id` to `{costume_id: score}`.

@@ -4,7 +4,7 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, YouTube karaoke workflow/state/routes, schema-v13 request-priority/adaptive-display state, admin-controlled game-identity, and generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, YouTube karaoke workflow/state/routes, schema-v14 multi-singer/request-priority/adaptive-display state, admin-controlled game identity, generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
 | `youtube_karaoke.py` | YouTube URL/metadata normalization, Google API search and playlist client, bounded timeout/error translation, OAuth flow, and dedicated Vault refresh-token store. |
 | `party_games.py` | Five-game catalog, persisted-state normalization, game-level signed-in-name/anonymous-alias modes, Two Truths scoring, MMF plurality scoring, shared prompt-response-voting results, ties, and statistics. |
 | `requirements.txt` | Python dependencies including Flask, Redis, AWS/SES, Google YouTube/OAuth clients, hvac, and gunicorn. |
@@ -31,7 +31,8 @@
 | `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal path, confirmed Current/Up Next cards, priority synchronization diagnostics/retry state, readiness message, and playback-control availability without reloading forms. |
 | `static/dj-live-widgets.js` | Browser/Node-compatible confirmed-song renderer shared by `/party`, `/party/jukebox`, `/admin`, and `/admin/display`; normalizes safe/display payloads, updates text/artwork atomically, rejects stale responses, polls at five seconds, refreshes visible tabs, and optionally listens to authenticated display SSE. |
 | `static/jukebox.js` | Attendee jukebox catalog search, request submission, and playlist/personal-request rendering from the shared live-widget state event. |
-| `static/karaoke.js` | Attendee song-details-first YouTube search, pagination, stale-selection protection, exact-video review, and direct-link fallback. |
+| `static/karaoke.js` | Attendee song-details-first YouTube search, pagination, stale-selection protection, multi-singer review, exact-video review, and direct-link fallback. |
+| `static/karaoke-singers.js` | Reusable attendee/admin one-to-four singer editor behavior, custom-name toggles, duplicate validation, add/remove controls, and combined review labels. |
 | `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
@@ -58,7 +59,8 @@
 | `templates/email/password_reset.html` | Dark lab-terminal styled HTML email body for one-time password reset links. |
 | `templates/email/_components.html` | Shared inline-safe HTML email macros for the refined lab-terminal shell, buttons, and detail tables used by generated email templates. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
-| `templates/karaoke_signup.html` | Attendee three-step song details, exact-video selection, and review flow plus personal workflow status/recovery and synchronized public lineup. |
+| `templates/_karaoke_singers.html` | Shared registered-attendee/custom-name singer fieldset used by attendee and admin karaoke forms. |
+| `templates/karaoke_signup.html` | Attendee one-to-four singer selection plus three-step song details, exact-video selection, and review flow, personal workflow status/recovery, and synchronized public lineup. |
 | `templates/admin_karaoke.html` | Dedicated YouTube connection, review, attention, run-of-show, history, and stage operations workspace. |
 | `templates/_karaoke_workflow.html` | Shared karaoke media and seven-step workflow macros. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
@@ -165,6 +167,8 @@ These files are present locally but not tracked by Git at the time this context 
 ├── static/
 │   ├── display.css
 │   ├── display.js
+│   ├── karaoke-singers.js
+│   ├── karaoke.js
 │   ├── slides.js
 │   └── styles.css
 ├── tests/
@@ -184,6 +188,7 @@ These files are present locally but not tracked by Git at the time this context 
     ├── halloween_login.html
     ├── halloween_register.html
     ├── index.html
+    ├── _karaoke_singers.html
     ├── karaoke_signup.html
     ├── menu.html
     └── rsvp.html

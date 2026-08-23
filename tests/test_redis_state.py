@@ -4286,6 +4286,199 @@ class RedisStateTests(unittest.TestCase):
             html.index("Choose your YouTube version"),
         )
 
+    def test_karaoke_page_defaults_to_registered_requester_and_hides_account_details(self):
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie-private@example.com")
+        self.add_user_account(username="Morgan", user_id="user-2", email="morgan-private@example.com")
+        self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client, user_id="user-1", username="Jamie")
+            response = client.get("/party/karaoke")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Choose registered attendees", html)
+        self.assertIn('<option value="user-1" selected>Jamie</option>', html)
+        self.assertIn('<option value="user-2">Morgan</option>', html)
+        self.assertIn("Someone not listed", html)
+        self.assertNotIn("jamie-private@example.com", html)
+        self.assertNotIn("morgan-private@example.com", html)
+
+    def test_youtube_karaoke_submission_accepts_four_registered_and_custom_singers(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.add_user_account(username="Morgan", user_id="user-2")
+        self.enable_youtube_karaoke()
+
+        with main.app.test_client() as client:
+            self.login_regular(client, user_id="user-1", username="Jamie")
+            response = client.post(
+                "/party/karaoke",
+                data={
+                    "singer_account_id": ["user-1", "user-2", main.KARAOKE_CUSTOM_SINGER_VALUE, main.KARAOKE_CUSTOM_SINGER_VALUE],
+                    "singer_custom_name": ["", "", "Alex", "Sam"],
+                    "song_title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "youtube_video_id": "abc123DEF45",
+                    "youtube_link": "https://www.youtube.com/watch?v=abc123DEF45",
+                },
+            )
+
+        self.assertEqual(302, response.status_code)
+        signup = main.karaoke_signups[0]
+        self.assertEqual(
+            [
+                {"account_id": "user-1", "name": "Jamie"},
+                {"account_id": "user-2", "name": "Morgan"},
+                {"account_id": "", "name": "Alex"},
+                {"account_id": "", "name": "Sam"},
+            ],
+            signup.singers,
+        )
+        self.assertEqual(["Jamie", "Morgan", "Alex", "Sam"], signup.singer_names)
+        self.assertEqual("Jamie, Morgan, Alex & Sam", signup.singer_label)
+        self.assertEqual(signup.singer_label, signup.name)
+        serialized = main.karaoke_signup_to_dict(signup)
+        self.assertEqual(signup.singers, serialized["singers"])
+        self.assertEqual(signup.singer_label, serialized["singer_label"])
+
+    def test_karaoke_singer_validation_rejects_duplicates_unknown_accounts_and_five_singers(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.enable_youtube_karaoke()
+        common = {
+            "song_title": "Thriller",
+            "artist": "Michael Jackson",
+            "youtube_video_id": "abc123DEF45",
+            "youtube_link": "https://www.youtube.com/watch?v=abc123DEF45",
+        }
+        cases = (
+            ([], [], "at least one singer"),
+            ([main.KARAOKE_CUSTOM_SINGER_VALUE], [""], "Enter a name for singer 1"),
+            (["user-1", "user-1"], ["", ""], "already included"),
+            (["missing-account"], [""], "not a registered attendee"),
+            (
+                [main.KARAOKE_CUSTOM_SINGER_VALUE] * 5,
+                ["One", "Two", "Three", "Four", "Five"],
+                "at most 4 singers",
+            ),
+        )
+
+        for selections, custom_names, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                with main.app.test_client() as client:
+                    self.login_regular(client, user_id="user-1", username="Jamie")
+                    response = client.post(
+                        "/party/karaoke",
+                        data={
+                            **common,
+                            "singer_account_id": selections,
+                            "singer_custom_name": custom_names,
+                        },
+                    )
+                self.assertEqual(200, response.status_code)
+                self.assertIn(expected_error, response.get_data(as_text=True))
+                self.assertEqual([], main.karaoke_signups)
+
+    def test_legacy_karaoke_name_migrates_to_structured_singer_list(self):
+        snapshot = main.snapshot_state()
+        snapshot["schema_version"] = 13
+        snapshot["karaoke_signups"] = [
+            {
+                "id": "legacy-karaoke",
+                "name": "Legacy Singer",
+                "song_title": "Monster Mash",
+                "artist": "Bobby Pickett",
+            }
+        ]
+        self.fake_redis.set(main.redis_key("state"), json.dumps(snapshot))
+
+        self.assertTrue(main.load_state_from_redis())
+        signup = main.karaoke_signups[0]
+        self.assertEqual([{"account_id": "", "name": "Legacy Singer"}], signup.singers)
+        self.assertEqual("Legacy Singer", signup.singer_label)
+        main.save_state_to_redis()
+        persisted = self.redis_state()["karaoke_signups"][0]
+        self.assertEqual([{"account_id": "", "name": "Legacy Singer"}], persisted["singers"])
+        self.assertEqual(main.STATE_SCHEMA_VERSION, self.redis_state()["schema_version"])
+
+    def test_multi_singer_label_reaches_admin_dashboard_display_stage_and_export(self):
+        workflow = main.normalize_karaoke_workflow({}, has_video=True)
+        workflow.update(
+            {
+                "video_validation_status": "verified",
+                "approval_status": "approved",
+                "playlist_sync_status": "synced",
+            }
+        )
+        signup = main.KaraokeSignup(
+            id="karaoke-group",
+            name="Jamie, Morgan & Alex",
+            song_title="Thriller",
+            artist="Michael Jackson",
+            youtube=main.normalize_karaoke_youtube({"video_id": "abc123DEF45"}),
+            workflow=workflow,
+            singers=[
+                {"account_id": "user-1", "name": "Jamie"},
+                {"account_id": "user-2", "name": "Morgan"},
+                {"account_id": "", "name": "Alex"},
+            ],
+        )
+        main.karaoke_signups = [signup]
+        main.ensure_signup_ids()
+
+        display_entry = next(
+            entry for entry in main.build_rotation_entries() if entry["id"] == "karaoke:karaoke-group"
+        )
+        self.assertEqual("Jamie, Morgan & Alex", display_entry["primary"])
+        self.assertEqual("Jamie, Morgan & Alex", main.build_karaoke_stage_override(signup, "call")["highlight"])
+        exported = main.build_karaoke_lineup_export()["lineup"][0]
+        self.assertEqual(["Jamie", "Morgan", "Alex"], exported["singer_names"])
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin_page = admin.get("/admin/karaoke")
+            start = admin.post("/admin/karaoke", data={"action": "start_karaoke_party"})
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            dashboard = attendee.get("/party")
+
+        for response in (admin_page, dashboard):
+            self.assertIn("Jamie, Morgan &amp; Alex", response.get_data(as_text=True))
+        self.assertEqual(200, start.status_code)
+        lineup = main.live_display_event_override["karaoke"]["lineup"][0]
+        self.assertEqual("Jamie, Morgan & Alex", lineup["singer_label"])
+        self.assertEqual(["Jamie", "Morgan", "Alex"], lineup["singer_names"])
+
+    def test_admin_can_replace_manual_karaoke_singer_roster(self):
+        main.karaoke_signups = [
+            main.KaraokeSignup(
+                id="manual-karaoke",
+                name="Jamie",
+                song_title="Thriller",
+                artist="Michael Jackson",
+            )
+        ]
+        main.registered_users = {"user-1": "Jamie", "user-2": "Morgan"}
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(
+                "/admin/karaoke",
+                data={
+                    "action": "update_karaoke",
+                    "entry_id": "manual-karaoke",
+                    "singer_account_id": ["user-1", "user-2", main.KARAOKE_CUSTOM_SINGER_VALUE],
+                    "singer_custom_name": ["", "", "Alex"],
+                    "song_title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "youtube_link": "",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        signup = main.karaoke_signups[0]
+        self.assertEqual("Jamie, Morgan & Alex", signup.singer_label)
+        self.assertEqual(3, len(signup.singers))
+
     def test_attendee_karaoke_validation_preserves_details_and_verified_video(self):
         self.enable_youtube_karaoke()
 
@@ -4777,7 +4970,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(main.dj_state["priority_sync_pending"])
 
         main.save_state_to_redis()
-        self.assertEqual(13, self.redis_state()["schema_version"])
+        self.assertEqual(main.STATE_SCHEMA_VERSION, self.redis_state()["schema_version"])
 
     def test_youtube_search_budget_blocks_new_uncached_queries_at_configured_limit(self):
         self.enable_youtube_karaoke()
@@ -4961,7 +5154,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("signup", game["phase"])
         self.assertEqual({}, game["participants"])
         main.save_state_to_redis()
-        self.assertEqual(13, self.redis_state()["schema_version"])
+        self.assertEqual(main.STATE_SCHEMA_VERSION, self.redis_state()["schema_version"])
         self.assertIn("games_state", self.redis_state())
         self.assertEqual(
             {
@@ -5152,7 +5345,7 @@ class RedisStateTests(unittest.TestCase):
                 self.assertIn(b"Generated Game Result Cards", display_page.data)
                 self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
                 persisted = self.redis_state()
-                self.assertEqual(13, persisted["schema_version"])
+                self.assertEqual(main.STATE_SCHEMA_VERSION, persisted["schema_version"])
                 self.assertTrue(persisted["games_state"][game_key]["simulation"]["is_simulated"])
                 self.assertEqual({}, persisted["user_accounts"])
 

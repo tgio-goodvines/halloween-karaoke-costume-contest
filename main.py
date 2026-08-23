@@ -323,7 +323,10 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 13
+STATE_SCHEMA_VERSION = 14
+KARAOKE_MAX_SINGERS = 4
+KARAOKE_SINGER_NAME_MAX_LENGTH = 100
+KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
 
 
 @dataclass
@@ -346,6 +349,15 @@ class KaraokeSignup:
     youtube: dict[str, object] = field(default_factory=dict)
     workflow: dict[str, object] = field(default_factory=dict)
     history: list[dict[str, object]] = field(default_factory=list)
+    singers: list[dict[str, str]] = field(default_factory=list)
+
+    @property
+    def singer_names(self) -> list[str]:
+        return karaoke_singer_names(self)
+
+    @property
+    def singer_label(self) -> str:
+        return karaoke_singer_label(self)
 
 
 @dataclass
@@ -812,6 +824,194 @@ def broadcast_display_update() -> None:
         display_update_condition.notify_all()
 
 
+def normalize_karaoke_singers(
+    raw_singers: object,
+    legacy_name: object = "",
+) -> list[dict[str, str]]:
+    source = raw_singers if isinstance(raw_singers, list) else []
+    singers: list[dict[str, str]] = []
+    seen_account_ids: set[str] = set()
+    seen_names: set[str] = set()
+
+    for raw_singer in source[:KARAOKE_MAX_SINGERS]:
+        if not isinstance(raw_singer, dict):
+            continue
+        account_id = str(raw_singer.get("account_id", "") or "").strip()[:120]
+        name = " ".join(str(raw_singer.get("name", "") or "").split())[
+            :KARAOKE_SINGER_NAME_MAX_LENGTH
+        ]
+        if not name:
+            continue
+        normalized_name = name.casefold()
+        if (account_id and account_id in seen_account_ids) or normalized_name in seen_names:
+            continue
+        singers.append({"account_id": account_id, "name": name})
+        if account_id:
+            seen_account_ids.add(account_id)
+        seen_names.add(normalized_name)
+
+    if not singers:
+        name = " ".join(str(legacy_name or "").split())[:KARAOKE_SINGER_NAME_MAX_LENGTH]
+        if name:
+            singers.append({"account_id": "", "name": name})
+    return singers
+
+
+def karaoke_singer_names(signup_or_singers: KaraokeSignup | object) -> list[str]:
+    if isinstance(signup_or_singers, KaraokeSignup):
+        singers = normalize_karaoke_singers(signup_or_singers.singers, signup_or_singers.name)
+    else:
+        singers = normalize_karaoke_singers(signup_or_singers)
+    return [str(singer["name"]) for singer in singers]
+
+
+def format_karaoke_singer_names(names: list[str]) -> str:
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} & {names[1]}"
+    return f"{', '.join(names[:-1])} & {names[-1]}"
+
+
+def karaoke_singer_label(signup_or_singers: KaraokeSignup | object) -> str:
+    return format_karaoke_singer_names(karaoke_singer_names(signup_or_singers))
+
+
+def karaoke_attendee_options() -> list[dict[str, str]]:
+    attendees: dict[str, str] = {
+        str(account.get("id", "") or "").strip(): " ".join(
+            str(account.get("username", "") or "").split()
+        )[:KARAOKE_SINGER_NAME_MAX_LENGTH]
+        for account in user_accounts.values()
+        if str(account.get("id", "") or "").strip()
+        and str(account.get("username", "") or "").strip()
+    }
+    for account_id, name in registered_users.items():
+        clean_id = str(account_id or "").strip()
+        clean_name = " ".join(str(name or "").split())[:KARAOKE_SINGER_NAME_MAX_LENGTH]
+        if clean_id and clean_name:
+            attendees.setdefault(clean_id, clean_name)
+    return [
+        {"account_id": account_id, "name": name}
+        for account_id, name in sorted(
+            attendees.items(),
+            key=lambda item: (item[1].casefold(), item[0]),
+        )
+    ]
+
+
+def karaoke_singer_form_rows(
+    singers: object = None,
+    *,
+    default_account_id: str = "",
+    default_name: str = "",
+) -> list[dict[str, str]]:
+    normalized = normalize_karaoke_singers(singers)
+    if not normalized and default_name:
+        normalized = [
+            {
+                "account_id": default_account_id,
+                "name": " ".join(default_name.split())[:KARAOKE_SINGER_NAME_MAX_LENGTH],
+            }
+        ]
+    rows = []
+    for singer in normalized:
+        account_id = str(singer.get("account_id", "") or "")
+        rows.append(
+            {
+                "selection": account_id or KARAOKE_CUSTOM_SINGER_VALUE,
+                "custom_name": "" if account_id else str(singer.get("name", "") or ""),
+                "name": str(singer.get("name", "") or ""),
+            }
+        )
+    return rows or [{"selection": "", "custom_name": "", "name": ""}]
+
+
+def parse_karaoke_singers_from_form() -> tuple[
+    list[dict[str, str]],
+    list[dict[str, str]],
+    list[str],
+]:
+    selections = [str(value or "").strip() for value in request.form.getlist("singer_account_id")]
+    custom_names = [
+        " ".join(str(value or "").split())
+        for value in request.form.getlist("singer_custom_name")
+    ]
+
+    # Preserve compatibility with the original single-name form and older clients.
+    if not selections and not custom_names:
+        legacy_name = " ".join(request.form.get("name", "").split())
+        if legacy_name:
+            selections = [KARAOKE_CUSTOM_SINGER_VALUE]
+            custom_names = [legacy_name]
+
+    row_count = max(len(selections), len(custom_names))
+    selections.extend([""] * (row_count - len(selections)))
+    custom_names.extend([""] * (row_count - len(custom_names)))
+    rows = [
+        {
+            "selection": selections[index],
+            "custom_name": custom_names[index],
+            "name": "",
+        }
+        for index in range(row_count)
+    ]
+
+    errors: list[str] = []
+    if row_count == 0:
+        errors.append("Choose at least one singer.")
+        return [], [{"selection": "", "custom_name": "", "name": ""}], errors
+    if row_count > KARAOKE_MAX_SINGERS:
+        errors.append(f"A karaoke request can include at most {KARAOKE_MAX_SINGERS} singers.")
+
+    attendees = {
+        option["account_id"]: option["name"]
+        for option in karaoke_attendee_options()
+    }
+    singers: list[dict[str, str]] = []
+    seen_account_ids: set[str] = set()
+    seen_names: set[str] = set()
+    for index, row in enumerate(rows[:KARAOKE_MAX_SINGERS], start=1):
+        selection = row["selection"]
+        if selection == KARAOKE_CUSTOM_SINGER_VALUE:
+            name = row["custom_name"]
+            account_id = ""
+            if not name:
+                errors.append(f"Enter a name for singer {index}.")
+                continue
+        elif selection:
+            name = attendees.get(selection, "")
+            account_id = selection
+            if not name:
+                errors.append(f"Singer {index} is not a registered attendee. Choose another singer.")
+                continue
+        else:
+            errors.append(f"Choose singer {index} or select Someone not listed.")
+            continue
+
+        if len(name) > KARAOKE_SINGER_NAME_MAX_LENGTH:
+            errors.append(
+                f"Singer {index}'s name must be {KARAOKE_SINGER_NAME_MAX_LENGTH} characters or fewer."
+            )
+            continue
+        normalized_name = name.casefold()
+        if account_id and account_id in seen_account_ids:
+            errors.append(f"Singer {index} is already included in this request.")
+            continue
+        if normalized_name in seen_names:
+            errors.append(f"Singer {index}'s name is already included in this request.")
+            continue
+        singers.append({"account_id": account_id, "name": name})
+        row["name"] = name
+        if account_id:
+            seen_account_ids.add(account_id)
+        seen_names.add(normalized_name)
+
+    return singers, rows, errors
+
+
 def ensure_signup_ids() -> None:
     for signup in costume_signups:
         if not signup.id:
@@ -820,6 +1020,8 @@ def ensure_signup_ids() -> None:
     for signup in karaoke_signups:
         if not signup.id:
             signup.id = uuid4().hex
+        signup.singers = normalize_karaoke_singers(signup.singers, signup.name)
+        signup.name = karaoke_singer_label(signup)
         signup.youtube = normalize_karaoke_youtube(signup.youtube, signup.youtube_link)
         signup.workflow = normalize_karaoke_workflow(
             signup.workflow,
@@ -3546,6 +3748,9 @@ def karaoke_signup_view(signup: KaraokeSignup) -> dict[str, object]:
     )
     return {
         **karaoke_signup_to_dict(signup),
+        "singer_names": signup.singer_names,
+        "singer_label": signup.singer_label,
+        "singer_form_rows": karaoke_singer_form_rows(signup.singers),
         "workflow": workflow,
         "steps": karaoke_workflow_steps(signup),
         "ready": karaoke_entry_is_ready(signup),
@@ -3658,7 +3863,7 @@ def build_karaoke_stage_override(signup: KaraokeSignup, mode: str) -> dict[str, 
     return {
         "type": f"karaoke_{mode}",
         "title": title,
-        "highlight": signup.name,
+        "highlight": signup.singer_label,
         "message": message,
         "image_url": str(signup.youtube.get("thumbnail_url", "") or ""),
         "details": [
@@ -3770,9 +3975,14 @@ def verify_youtube_video(video_id_or_url: str) -> dict[str, object]:
 
 
 def karaoke_signup_to_dict(signup: KaraokeSignup) -> dict[str, object]:
+    singers = normalize_karaoke_singers(signup.singers, signup.name)
+    singer_label = karaoke_singer_label(singers)
     return {
         "id": signup.id,
-        "name": signup.name,
+        "name": singer_label,
+        "singers": copy.deepcopy(singers),
+        "singer_names": karaoke_singer_names(singers),
+        "singer_label": singer_label,
         "song_title": signup.song_title,
         "artist": signup.artist,
         "youtube_link": signup.youtube_link,
@@ -3791,9 +4001,10 @@ def karaoke_signup_from_dict(data: dict[str, object]) -> KaraokeSignup:
         data.get("workflow"),
         has_video=bool(youtube.get("video_id")),
     )
+    singers = normalize_karaoke_singers(data.get("singers"), data.get("name"))
     return KaraokeSignup(
         id=str(data.get("id", "") or uuid4().hex),
-        name=str(data.get("name", "") or ""),
+        name=karaoke_singer_label(singers),
         song_title=str(data.get("song_title", "") or ""),
         artist=str(data.get("artist", "") or ""),
         youtube_link=canonical_watch_url(str(youtube.get("video_id", "") or "")) or youtube_link,
@@ -3802,6 +4013,7 @@ def karaoke_signup_from_dict(data: dict[str, object]) -> KaraokeSignup:
         youtube=youtube,
         workflow=workflow,
         history=normalize_karaoke_history(data.get("history")),
+        singers=singers,
     )
 
 
@@ -5386,6 +5598,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
     active_orders = active_drink_orders()
     active_game_count = sum(1 for key in enabled_games if party_game_state(key).get("phase") == "active")
     public_karaoke = public_karaoke_signups()
+    public_karaoke_singer_count = sum(len(signup.singer_names) for signup in public_karaoke)
     grouped: dict[str, list[dict[str, object]]] = {source: [] for source in DISPLAY_SOURCE_KEYS}
 
     grouped["portal"].append(
@@ -5484,13 +5697,13 @@ def build_rotation_entries() -> List[dict[str, object]]:
             signup.id,
             category="Karaoke Stage",
             kind="profile",
-            primary=signup.name,
+            primary=signup.singer_label,
             secondary=f'Performing "{signup.song_title}"',
             tertiary=f"by {signup.artist}" if signup.artist else "",
             image_url=str(signup.youtube.get("thumbnail_url", "") or ""),
             facts=[
                 _display_fact("Queue", index + 1),
-                _display_fact("Performers", len(public_karaoke)),
+                _display_fact("Singers", public_karaoke_singer_count),
                 _display_fact("Stage", str(signup.workflow.get("performance_status", "waiting") or "waiting").replace("_", " ").title()),
             ],
             action={"label": "Reserve your song", "url": f"{PARTY_SITE_URL}/party/karaoke"},
@@ -8123,6 +8336,7 @@ def admin_portal(admin_view: str):
 
     errors: List[str] = []
     messages: List[str] = []
+    admin_new_karaoke_singer_rows = karaoke_singer_form_rows()
     global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, rsvp_notification_email
@@ -9550,21 +9764,21 @@ def admin_portal(admin_view: str):
                 request.form.get("entry_id"),
                 request.form.get("index"),
             )
-            name = request.form.get("name", "").strip()
+            singers, singer_rows, singer_errors = parse_karaoke_singers_from_form()
             song_title = request.form.get("song_title", "").strip()
             artist = request.form.get("artist", "").strip()
             youtube_link = request.form.get("youtube_link", "").strip()
 
-            if not name:
-                errors.append("Karaoke signup name is required.")
+            errors.extend(singer_errors)
             if not song_title:
                 errors.append("Song title is required.")
             if not artist:
                 errors.append("Artist is required.")
 
-            if index is not None and name and song_title and artist:
+            if index is not None and singers and song_title and artist and not singer_errors:
                 existing_signup = karaoke_signups[index]
-                existing_signup.name = name
+                existing_signup.singers = singers
+                existing_signup.name = karaoke_singer_label(singers)
                 existing_signup.song_title = song_title
                 existing_signup.artist = artist
                 if not app.config.get("YOUTUBE_KARAOKE_ENABLED"):
@@ -9575,7 +9789,7 @@ def admin_portal(admin_view: str):
                     "details_updated",
                     actor_name="admin",
                 )
-                messages.append(f"Updated karaoke signup for {name}.")
+                messages.append(f"Updated karaoke signup for {existing_signup.singer_label}.")
                 should_broadcast = True
 
         elif action == "delete_karaoke":
@@ -9602,29 +9816,31 @@ def admin_portal(admin_view: str):
                     should_broadcast = True
 
         elif action == "add_karaoke":
-            name = request.form.get("name", "").strip()
+            singers, singer_rows, singer_errors = parse_karaoke_singers_from_form()
+            admin_new_karaoke_singer_rows = singer_rows
             song_title = request.form.get("song_title", "").strip()
             artist = request.form.get("artist", "").strip()
             youtube_link = request.form.get("youtube_link", "").strip()
 
-            if not name:
-                errors.append("Karaoke signup name is required to add a new entry.")
+            errors.extend(singer_errors)
             if not song_title:
                 errors.append("Song title is required to add a new entry.")
             if not artist:
                 errors.append("Artist is required to add a new entry.")
 
-            if name and song_title and artist:
+            if singers and song_title and artist and not singer_errors:
+                singer_label = karaoke_singer_label(singers)
                 karaoke_signups.append(
                     KaraokeSignup(
                         id=uuid4().hex,
-                        name=name,
+                        name=singer_label,
                         song_title=song_title,
                         artist=artist,
                         youtube_link=youtube_link,
+                        singers=singers,
                     )
                 )
-                messages.append(f"Added karaoke signup for {name}.")
+                messages.append(f"Added karaoke signup for {singer_label}.")
                 should_broadcast = True
 
         elif action == "move_costume_up":
@@ -9880,7 +10096,10 @@ def admin_portal(admin_view: str):
                 lineup_entries = [
                     {
                         "id": signup.id,
-                        "name": signup.name,
+                        "name": signup.singer_label,
+                        "singers": copy.deepcopy(signup.singers),
+                        "singer_names": signup.singer_names,
+                        "singer_label": signup.singer_label,
                         "song_title": signup.song_title,
                         "artist": signup.artist,
                     }
@@ -9956,7 +10175,7 @@ def admin_portal(admin_view: str):
                 karaoke_state["stage_mode"] = "called"
                 refresh_karaoke_stage_selection()
                 live_display_event_override = build_karaoke_stage_override(signup, "call")
-                messages.append(f"Called {signup.name} to the karaoke stage.")
+                messages.append(f"Called {signup.singer_label} to the karaoke stage.")
                 should_broadcast = True
 
         elif action == "mark_karaoke_on_stage":
@@ -9979,7 +10198,7 @@ def admin_portal(admin_view: str):
                 karaoke_state["stage_mode"] = "on_stage"
                 refresh_karaoke_stage_selection()
                 live_display_event_override = build_karaoke_stage_override(signup, "on_stage")
-                messages.append(f"Marked {signup.name} on stage. Start the video in the official YouTube tab.")
+                messages.append(f"Marked {signup.singer_label} on stage. Start the video in the official YouTube tab.")
                 should_broadcast = True
 
         elif action in {"complete_karaoke_and_advance", "skip_karaoke_singer"}:
@@ -9994,7 +10213,7 @@ def admin_portal(admin_view: str):
                     signup.workflow["performance_status"] = "completed"
                     signup.workflow["completed_at"] = _utc_now_iso()
                     append_karaoke_history(signup, "performance_completed", actor_name="admin")
-                    messages.append(f"Completed {signup.name}'s karaoke performance.")
+                    messages.append(f"Completed {signup.singer_label}'s karaoke performance.")
                 else:
                     signup.workflow["performance_status"] = "skipped"
                     signup.workflow["completed_at"] = _utc_now_iso()
@@ -10004,7 +10223,7 @@ def admin_portal(admin_view: str):
                         detail=request.form.get("reason", "").strip(),
                         actor_name="admin",
                     )
-                    messages.append(f"Skipped {signup.name} and advanced the lineup.")
+                    messages.append(f"Skipped {signup.singer_label} and advanced the lineup.")
                 karaoke_state["current_singer_id"] = None
                 karaoke_state["stage_mode"] = "standby"
                 refresh_karaoke_stage_selection()
@@ -10066,7 +10285,7 @@ def admin_portal(admin_view: str):
                 )
                 karaoke_state["current_singer_id"] = None
                 refresh_karaoke_stage_selection()
-                messages.append(f"Updated {signup.name}'s karaoke lineup position.")
+                messages.append(f"Updated {signup.singer_label}'s karaoke lineup position.")
                 should_broadcast = True
 
         elif action == "stop_karaoke_party":
@@ -10189,6 +10408,10 @@ def admin_portal(admin_view: str):
         karaoke_admin=karaoke_admin_view_state(),
         karaoke_admin_state_url=url_for("admin_karaoke_state"),
         karaoke_admin_search_url=url_for("admin_karaoke_search"),
+        karaoke_attendees=karaoke_attendee_options(),
+        karaoke_custom_singer_value=KARAOKE_CUSTOM_SINGER_VALUE,
+        karaoke_max_singers=KARAOKE_MAX_SINGERS,
+        admin_new_karaoke_singer_rows=admin_new_karaoke_singer_rows,
         games_admin=all_games_admin_view(
             selected_admin_game,
             include_selected=admin_view == "games",
@@ -10316,8 +10539,13 @@ def party_karaoke():
     if not party_day_has_arrived():
         return redirect(url_for("party_dashboard"))
 
+    requester_id = str(session.get("user_id", "") or "").strip()
+    requester_name = str(session.get("username", "") or "").strip()
     karaoke_form = {
-        "name": str(session.get("username", "") or "").strip(),
+        "singers": karaoke_singer_form_rows(
+            default_account_id=requester_id,
+            default_name=requester_name,
+        ),
         "song_title": "",
         "artist": "",
         "youtube_link": "",
@@ -10325,14 +10553,15 @@ def party_karaoke():
     }
     selected_youtube: dict[str, object] | None = None
     if request.method == "POST":
-        name = request.form.get("name", "").strip() or str(session.get("username", "") or "").strip()
+        singers, singer_rows, singer_errors = parse_karaoke_singers_from_form()
+        singer_label = karaoke_singer_label(singers)
         song_title = request.form.get("song_title", "").strip()
         artist = request.form.get("artist", "").strip()
         youtube_link = request.form.get("youtube_link", "").strip()
         youtube_video_id = request.form.get("youtube_video_id", "").strip()
         karaoke_form.update(
             {
-                "name": name,
+                "singers": singer_rows,
                 "song_title": song_title,
                 "artist": artist,
                 "youtube_link": youtube_link,
@@ -10340,8 +10569,7 @@ def party_karaoke():
             }
         )
 
-        if not name:
-            errors.append("Name is required.")
+        errors.extend(singer_errors)
         if not song_title:
             errors.append("Song title is required.")
         if not artist:
@@ -10366,31 +10594,33 @@ def party_karaoke():
                     workflow["video_validation_status"] = "verified"
                     signup = KaraokeSignup(
                         id=uuid4().hex,
-                        requester_id=str(session.get("user_id", "") or ""),
+                        requester_id=requester_id,
                         requested_at=_utc_now_iso(),
-                        name=name,
+                        name=singer_label,
                         song_title=song_title,
                         artist=artist,
                         youtube_link=str(verified_video.get("watch_url", "") or ""),
                         youtube=normalize_karaoke_youtube(verified_video),
                         workflow=workflow,
+                        singers=singers,
                     )
                     append_karaoke_history(
                         signup,
                         "submitted",
-                        actor_id=str(session.get("user_id", "") or ""),
-                        actor_name=name,
+                        actor_id=requester_id,
+                        actor_name=requester_name,
                     )
                     append_karaoke_history(signup, "video_verified")
                 else:
                     signup = KaraokeSignup(
                         id=uuid4().hex,
-                        requester_id=str(session.get("user_id", "") or ""),
+                        requester_id=requester_id,
                         requested_at=_utc_now_iso(),
-                        name=name,
+                        name=singer_label,
                         song_title=song_title,
                         artist=artist,
                         youtube_link=youtube_link,
+                        singers=singers,
                     )
                 karaoke_signups.append(signup)
 
@@ -10405,7 +10635,7 @@ def party_karaoke():
     if request.args.get("success") == "1":
         submitted = True
 
-    user_id = str(session.get("user_id", "") or "")
+    user_id = requester_id
     return render_template(
         "karaoke_signup.html",
         errors=errors,
@@ -10421,6 +10651,9 @@ def party_karaoke():
         youtube_search_url=url_for("party_karaoke_search"),
         karaoke_form=karaoke_form,
         selected_youtube=selected_youtube,
+        karaoke_attendees=karaoke_attendee_options(),
+        karaoke_custom_singer_value=KARAOKE_CUSTOM_SINGER_VALUE,
+        karaoke_max_singers=KARAOKE_MAX_SINGERS,
         show_admin_link=False,
     )
 

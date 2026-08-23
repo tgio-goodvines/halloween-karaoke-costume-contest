@@ -4,7 +4,7 @@
 
   const searchUrl = root.dataset.searchUrl;
   const form = root.querySelector('[data-karaoke-selection-form]');
-  const nameInput = form?.elements.name;
+  const singerEditor = form?.querySelector('[data-karaoke-singers]');
   const songTitleInput = form?.elements.song_title;
   const artistInput = form?.elements.artist;
   const searchButton = root.querySelector('[data-karaoke-search]');
@@ -18,6 +18,7 @@
   const selection = root.querySelector('[data-karaoke-selection]');
   const review = root.querySelector('[data-karaoke-review]');
   const reviewSong = root.querySelector('[data-karaoke-review-song]');
+  const reviewSingers = root.querySelector('[data-karaoke-review-singers]');
   const submit = root.querySelector('[data-karaoke-submit]');
   const directLink = root.querySelector('[data-karaoke-link-fallback]');
   const detailsSection = root.querySelector('[data-karaoke-details]');
@@ -57,12 +58,14 @@
 
   const updateReviewSong = () => {
     if (!reviewSong) return;
-    reviewSong.replaceChildren();
-    const singer = document.createElement('strong');
-    singer.textContent = (nameInput?.value || '').trim() || 'Your singer';
+    if (reviewSingers) {
+      reviewSingers.textContent = singerEditor?.dataset.singerLabel || 'Your singers';
+    }
     const song = (songTitleInput?.value || '').trim() || 'your song';
     const artist = (artistInput?.value || '').trim() || 'the original artist';
-    reviewSong.append(singer, ` will sing “${song}” by ${artist}.`);
+    const singer = reviewSingers || document.createElement('strong');
+    if (!reviewSingers) singer.textContent = singerEditor?.dataset.singerLabel || 'Your singers';
+    reviewSong.replaceChildren(singer, ` will sing “${song}” by ${artist}.`);
   };
 
   const updateFindButton = () => {
@@ -74,7 +77,10 @@
   };
 
   const validateSongDetails = () => {
-    for (const input of [nameInput, songTitleInput, artistInput]) {
+    const singerInputs = Array.from(
+      form?.querySelectorAll('[data-karaoke-singer-select], [data-karaoke-custom-name]:required') || [],
+    );
+    for (const input of [...singerInputs, songTitleInput, artistInput]) {
       if (input && !input.checkValidity()) {
         input.reportValidity();
         input.focus();
@@ -299,7 +305,7 @@
       }
     });
   });
-  nameInput?.addEventListener('input', updateReviewSong);
+  form?.addEventListener('karaoke:singers-change', updateReviewSong);
 
   root.querySelector('[data-karaoke-use-link]')?.addEventListener('click', () => {
     if (!validateSongDetails()) return;

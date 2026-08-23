@@ -50,11 +50,25 @@ Deployment record:
   validation, pending workflow, replacement, cancellation, personal status,
   and synchronized public lineup.
 - Refined attendee signup into a song-details-first three-step builder. The
-  attendee enters singer/song/artist once, the app constructs
+  attendee chooses one to four singers and enters song/artist once, the app constructs
   `{song title} {artist} karaoke`, presents exact previewable versions, and
   shows a consolidated review card before submission. YouTube titles/channels
   no longer overwrite the attendee's song-card metadata, and editing the song
   details invalidates stale results or selections.
+- Upgraded the current canonical Redis schema from `13` to `14` for structured
+  one-to-four singer snapshots. The first singer defaults to the signed-in
+  attendee; additional singers can be selected from registered account display
+  names or entered as custom names. Legacy single-name records migrate to one
+  custom singer, while the derived compatibility `name` remains available.
+- Added a reusable attendee/admin singer editor with an Add Singer control,
+  per-row removal, a four-person cap, custom-name toggling, duplicate checks,
+  mobile layout, and server-side validation. Custom singers do not create
+  accounts; the signed-in requester remains the request owner.
+- Added structured `singers`, `singer_names`, and `singer_label` data to karaoke
+  views/exports and propagated the full singer label through personal/public
+  lineups, dashboard summaries, admin review/run-of-show/history/stage cards,
+  center rotation, kickoff countdowns, call/on-stage/completion overrides, and
+  operator messages.
 - Added dedicated `/admin/karaoke` connection health, playlist controls,
   metrics, admin search, pending review, attention recovery, run of show,
   ordering, history, and sticky stage controls.
@@ -110,6 +124,19 @@ Deployment record:
 
 ## Verification Completed
 
+- Multi-singer regression coverage passes for registered/custom combinations,
+  the four-person cap, duplicate and forged-account rejection, schema-13 legacy
+  migration, admin roster editing, serialization/export, dashboard/admin cards,
+  rotation cards, stage overrides, and kickoff countdown payloads.
+- The full Python suite passes with 163 tests and 19 subtests. Python compile,
+  JavaScript syntax checks, the DJ Node regression suites, and
+  `git diff --check` pass.
+- Browser QA passed for the manual and YouTube-enabled karaoke forms. It
+  covered default requester selection, registered-attendee choices, custom
+  singer fields, add/remove and renumbering, the four-row cap, duplicate
+  validation, review-label updates, selected-video preservation after singer
+  edits, the reusable admin editor, no console errors, and a 390x844 mobile
+  layout with no horizontal overflow.
 - Python compile, shell syntax, and `git diff --check` passed.
 - Full pytest suite passed: 119 tests plus 5 subtests.
 - Coverage includes schema 1-5 migration, cache/quota, URL and

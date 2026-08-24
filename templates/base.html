@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   {% set page_shell_class = body_class if body_class is defined and body_class else ('admin-page' if request.endpoint in ('admin_login', 'admin_portal', 'bartender_portal') else 'attendee-page') %}
-  <body class="{{ page_shell_class }}">
+  <body class="{{ page_shell_class }}" data-party-day="{{ 'true' if party_day_has_arrived else 'false' }}">
     <header class="site-header">
       <div class="container site-header__inner">
         <span class="site-header__status site-header__status--clearance" aria-hidden="true">
@@ -32,6 +32,7 @@
                 {% if not hide_party_nav and regular_authenticated %}
                   <a href="{{ url_for('party_dashboard') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Overview{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                   <a href="{{ url_for('party_account') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Account{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
+                  <a href="{{ url_for('party_results') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Results &amp; Rewards{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                   {% if party_day_has_arrived %}
                     <a href="{{ url_for('party_menu') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Menu{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     <a href="{{ url_for('party_drink_history') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Drink History{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>

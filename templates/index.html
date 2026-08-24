@@ -89,15 +89,24 @@
   </div>
 </section>
 
+{% if party_day_has_arrived %}
+  <section class="feature-action-grid" aria-label="Party night destinations">
+    <a class="feature-action-card" href="{{ url_for('party_menu') }}"><img src="{{ feature_art.menu }}" alt=""><span><strong>Menu</strong><small>Food and drink</small></span></a>
+    <a class="feature-action-card" href="{{ url_for('party_drink_history') }}"><img src="{{ feature_art.bar }}" alt=""><span><strong>Bar</strong><small>Live order status</small></span></a>
+    <a class="feature-action-card" href="{{ url_for('party_karaoke') }}"><img src="{{ feature_art.karaoke }}" alt=""><span><strong>Karaoke</strong><small>Queue and stage status</small></span></a>
+    <a class="feature-action-card" href="{{ url_for('party_jukebox') }}"><img src="{{ feature_art.jukebox }}" alt=""><span><strong>Jukebox</strong><small>Now playing and requests</small></span></a>
+  </section>
+{% endif %}
+
 {% if party_day_has_arrived and party_games_state.enabled %}
-  <section class="games-showcase" aria-labelledby="party-games-heading">
+  <section class="games-showcase" aria-labelledby="party-games-heading" data-games-live-widget data-games-state-url="{{ games_data_url }}">
     <div class="games-showcase__heading">
       <div>
         <p class="admin-panel__eyebrow">Tonight's experiments</p>
         <h2 id="party-games-heading">Party Games</h2>
-        <p>{% if party_games_state.active_count %}{{ party_games_state.active_count }} game{{ 's are' if party_games_state.active_count != 1 else ' is' }} live now.{% else %}Choose a game and opt in before the hosts start play.{% endif %}</p>
+        <p data-dashboard-game-summary>{% if party_games_state.active_count %}{{ party_games_state.active_count }} game{{ 's are' if party_games_state.active_count != 1 else ' is' }} live now.{% else %}Choose a game and opt in before the hosts start play.{% endif %}</p>
       </div>
-      <span>{{ party_games_state.participant_count }} game signup{{ 's' if party_games_state.participant_count != 1 else '' }}</span>
+      <div class="games-showcase__actions"><span>{{ party_games_state.participant_count }} game signup{{ 's' if party_games_state.participant_count != 1 else '' }}</span><a class="button" href="{{ url_for('party_results') }}">Live Games &amp; Results</a></div>
     </div>
     <div class="games-showcase__grid">
       {% for game in party_games_state.games %}
@@ -113,6 +122,13 @@
         </a>
       {% endfor %}
     </div>
+  </section>
+{% endif %}
+
+{% if not party_day_has_arrived %}
+  <section class="historical-results-callout feature-callout">
+    <img src="{{ url_for('static', filename='images/games/two-truths-and-a-lie.jpg') }}" alt="">
+    <div><p class="admin-panel__eyebrow">Party history</p><h2>Past Winners &amp; My Awards</h2><p>Revisit official results and see the achievements credited to your account.</p><a class="button" href="{{ url_for('party_results') }}">Open Results &amp; Rewards</a></div>
   </section>
 {% endif %}
 
@@ -150,8 +166,8 @@
     data-dj-payload-shape="jukebox"
     data-dj-state-url="{{ jukebox_data_url }}"
   >
-    <div class="jukebox-overview__artwork" data-live-dj-artwork-wrap{% if not jukebox.now_playing or not jukebox.now_playing.artwork_url %} hidden{% endif %}>
-      <img data-live-dj-artwork{% if jukebox.now_playing and jukebox.now_playing.artwork_url %} src="{{ jukebox.now_playing.artwork_url }}" alt="{{ jukebox.now_playing.title }} artwork"{% else %} alt=""{% endif %}>
+    <div class="jukebox-overview__artwork" data-live-dj-artwork-wrap>
+      <img data-live-dj-artwork src="{{ jukebox.now_playing.artwork_url if jukebox.now_playing and jukebox.now_playing.artwork_url else feature_art.jukebox }}"{% if jukebox.now_playing and jukebox.now_playing.artwork_url %} alt="{{ jukebox.now_playing.title }} artwork"{% else %} alt=""{% endif %}>
     </div>
     <div>
       <p class="admin-panel__eyebrow">Party jukebox · <span data-live-dj-status>{{ jukebox.playback_status|replace('_', ' ')|title }}</span></p>
@@ -226,5 +242,6 @@
 {{ super() }}
 {% if party_day_has_arrived and jukebox %}<script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>{% endif %}
 {% if party_day_has_arrived %}<script src="{{ url_for('static', filename='karaoke-live-status.js', v='20260823-dismissal-ledger') }}"></script>{% endif %}
+{% if party_games_state.enabled %}<script src="{{ url_for('static', filename='games-live-status.js') }}" defer></script>{% endif %}
 <script src="{{ url_for('static', filename='slides.js') }}"></script>
 {% endblock %}

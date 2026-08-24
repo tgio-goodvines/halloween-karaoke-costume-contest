@@ -118,7 +118,8 @@ interaction depends on guessing another attendee.
 
 ## State And Routes
 
-- Redis schema version is `12`.
+- Games were introduced in schema version `12`; the canonical app state is now
+  schema version `17` after recognition/history additions.
 - `games_state` contains all five independent game records.
 - Attendee hub: `GET /party/games?game=<slug>`.
 - Attendee enrollment under the admin-selected identity mode:
@@ -127,6 +128,20 @@ interaction depends on guessing another attendee.
 - Prompt response/vote: `POST /party/games/<slug>/response|vote`.
 - Admin operations continue through the focused `/admin/games` POST handler.
 - Aggregate/redacted download: `GET /admin/export/games`.
+
+## Realtime Results And Official History (2026-08-24)
+
+- `/party/results` and `/api/party/games-data` expose attendee-safe live status,
+  completion metrics, final scoreboards, official prior-year results, and the
+  signed-in account's awards. Overview/game widgets refresh every five seconds.
+- Every game finalization snapshots one durable draft archive. Hosts explicitly
+  publish the draft to official history and grant idempotent credits to all
+  linked tied winners. Simulation archives are permanently ineligible.
+- Winner/outcome cards use five dedicated trophy illustrations under
+  `static/images/games/winners/`; ordinary status and final-score cards retain
+  the original five game illustrations.
+- Full data model, privacy rules, recognition admin flow, and asset inventory
+  are documented in `GAME_RESULTS_REWARDS_RECOGNITION_PROGRESS.md`.
 
 ## Verification
 

@@ -1,0 +1,66 @@
+<section class="admin-section recognition-admin" data-view-key="recognition-workspace">
+  <div class="games-admin__heading">
+    <div><p class="admin-panel__eyebrow">Durable party history</p><h3>Recognition &amp; Achievements</h3><p>Retro-credit attendance, acknowledge previous winners, link legacy records, and publish verified results.</p></div>
+    <a class="button" href="{{ url_for('export_recognition') }}">Download Recognition Data</a>
+  </div>
+
+  <div class="game-admin-metrics">
+    <div><span>Event editions</span><strong>{{ event_editions|length }}</strong></div>
+    <div><span>Official results</span><strong>{{ result_archives|selectattr('status', 'equalto', 'official')|list|length }}</strong></div>
+    <div><span>Active credits</span><strong>{{ recognition_credits|rejectattr('revoked_at')|list|length }}</strong></div>
+    <div><span>Legacy unlinked</span><strong>{{ recognition_credits|rejectattr('account_id')|rejectattr('revoked_at')|list|length }}</strong></div>
+  </div>
+
+  <details class="admin-entry admin-entry--new">
+    <summary class="admin-entry__summary"><span class="admin-entry__rank">+</span><span class="admin-entry__summary-text"><strong>Add an event edition</strong><span>Required for prior-year attendance and winners</span></span></summary>
+    <form method="post" class="admin-entry__form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="admin-entry__fields"><label>Year<input name="year" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label><label>Title<input name="title" maxlength="160" placeholder="Qiana and Tony's Halloween Party"></label><label>Date label<input name="date" maxlength="80" placeholder="October 31, 2025"></label></div><button class="button button--primary" name="action" value="add_event_edition">Save Edition</button></form>
+  </details>
+
+  <details class="admin-entry admin-entry--new" open>
+    <summary class="admin-entry__summary"><span class="admin-entry__rank">+</span><span class="admin-entry__summary-text"><strong>Add recognition credit</strong><span>Attendance, winner, or custom award</span></span></summary>
+    <form method="post" class="admin-entry__form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="admin-entry__fields">
+        <label>Recognition type<select name="kind" required><option value="attendance">Attendance</option><option value="game_win">Game winner</option><option value="costume_win">Costume winner</option><option value="custom">Custom achievement</option></select></label>
+        <label>Party account<select name="account_id"><option value="">Legacy person without account</option>{% for account in user_accounts.values()|sort(attribute='username') %}<option value="{{ account.id }}">{{ account.username }}</option>{% endfor %}</select></label>
+        <label>Legacy recipient name<input name="recipient_name" maxlength="80" placeholder="Only needed without an account"></label>
+        <label>Public winner identity<input name="public_identity" maxlength="80" placeholder="Alias or credited name"></label>
+        <label>Halloween edition<select name="event_id"><option value="">Not edition-specific</option>{% for edition in event_editions.values()|sort(attribute='year', reverse=true) %}<option value="{{ edition.id }}">{{ edition.year }} · {{ edition.title }}</option>{% endfor %}</select></label>
+        <label>Competition key<input name="subject_key" maxlength="100" placeholder="costume_contest or game key"></label>
+        <label>Competition label<input name="subject_label" maxlength="160" placeholder="Two Truths and a Lie"></label>
+        <label>Custom achievement<select name="achievement_key"><option value="">Choose only for custom credit</option>{% for key, achievement in achievement_catalog.items() %}<option value="{{ key }}">{{ achievement.title }}</option>{% endfor %}</select></label>
+        <label>Admin note<textarea name="note" maxlength="500"></textarea></label>
+      </div>
+      <button class="button button--primary" name="action" value="add_recognition_credit">Add Credit</button>
+    </form>
+  </details>
+
+  <section class="admin-subsection">
+    <div class="game-admin-section-heading"><div><p class="admin-panel__eyebrow">Completed results</p><h4>Drafts and official history</h4></div></div>
+    <div class="admin-entry-list">
+      {% for archive in result_archives|sort(attribute='finalized_at', reverse=true) %}
+        <article class="admin-entry recognition-result-row"><div class="admin-entry__summary"><span class="admin-entry__rank">{{ archive.year }}</span><span class="admin-entry__summary-text"><strong>{{ archive.title }}</strong><span>{{ archive.kind|title }} · {{ 'Simulation' if archive.simulation else archive.status|title }}</span></span></div>{% if archive.status != 'official' and not archive.simulation %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="archive_id" value="{{ archive.id }}"><button class="button button--primary" name="action" value="publish_result_archive">Publish Official</button></form>{% endif %}</article>
+      {% else %}<p class="admin-empty">No completed result snapshots yet.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section class="admin-subsection">
+    <div class="game-admin-section-heading"><div><p class="admin-panel__eyebrow">Account collections</p><h4>Achievements by user</h4></div></div>
+    <div class="recognition-account-grid">
+      {% for account in user_accounts.values()|sort(attribute='username') %}{% set rewards = account_achievement_views.get(account.id, {}) %}
+        <article class="recognition-account-card"><h5>{{ account.username }}</h5><p>{{ rewards.attendance_count or 0 }} attended · {{ rewards.game_wins|length }} game wins · {{ rewards.costume_wins|length }} costume wins</p><div class="achievement-mini-list">{% for achievement in rewards.achievements %}<span><img src="{{ url_for('static', filename=achievement.image) }}" alt="">{{ achievement.title }}</span>{% else %}<small>No achievements</small>{% endfor %}</div></article>
+      {% else %}<p class="admin-empty">No party accounts exist yet.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section class="admin-subsection">
+    <div class="game-admin-section-heading"><div><p class="admin-panel__eyebrow">Audit ledger</p><h4>Recognition credits</h4></div></div>
+    <div class="admin-entry-list">
+      {% for credit in recognition_credits|sort(attribute='created_at', reverse=true) %}
+        <details class="admin-entry" data-view-key="recognition:{{ credit.id }}"><summary><strong>{{ credit.recipient_name }}</strong><span>{{ credit.year }} {{ credit.kind|replace('_', ' ')|title }}{% if credit.revoked_at %} · Revoked{% endif %}</span></summary><div class="admin-entry__form"><p><strong>Public identity:</strong> {{ credit.public_identity }}{% if credit.subject_label %} · {{ credit.subject_label }}{% endif %}</p>{% if credit.note %}<p>{{ credit.note }}</p>{% endif %}
+          {% if not credit.account_id %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="credit_id" value="{{ credit.id }}"><label>Link to account<select name="account_id" required><option value="">Choose account</option>{% for account in user_accounts.values()|sort(attribute='username') %}<option value="{{ account.id }}">{{ account.username }}</option>{% endfor %}</select></label><button class="button" name="action" value="link_recognition_credit">Link Credit</button></form>{% endif %}
+          {% if not credit.revoked_at %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="credit_id" value="{{ credit.id }}"><label>Revocation reason<input name="reason" maxlength="500"></label><button class="button button--danger" name="action" value="revoke_recognition_credit">Revoke Credit</button></form>{% else %}<p class="contest-status">Revoked {{ credit.revoked_at }}{% if credit.revoked_reason %}: {{ credit.revoked_reason }}{% endif %}</p>{% endif %}
+        </div></details>
+      {% else %}<p class="admin-empty">No recognition credits have been added.</p>{% endfor %}
+    </div>
+  </section>
+</section>

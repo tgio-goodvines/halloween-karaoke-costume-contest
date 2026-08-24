@@ -2886,6 +2886,69 @@ textarea:focus,
   }
 }
 
+/* Results, rewards, and cross-app feature artwork */
+.feature-page-art {
+  width: min(100%, 320px);
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(255, 49, 49, 0.5);
+  border-radius: 0.9rem;
+  object-fit: cover;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.46), 0 0 22px rgba(255, 49, 49, 0.12);
+}
+.section-heading-row > .feature-page-art { flex: 0 0 min(32%, 240px); }
+.results-rewards { display: grid; gap: 1.25rem; }
+.feature-hero { position: relative; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); height: clamp(260px, 38vw, 430px); overflow: hidden; border: 1px solid rgba(255, 49, 49, 0.55); border-radius: 1rem; background: #111; }
+.feature-hero__image, .feature-hero__veil, .feature-hero__body { grid-area: 1 / 1; }
+.feature-hero__image { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: cover; }
+.feature-hero__veil { background: linear-gradient(90deg, rgba(8, 8, 8, 0.96) 0%, rgba(8, 8, 8, 0.72) 54%, rgba(8, 8, 8, 0.12) 100%); }
+.feature-hero__body { z-index: 1; align-self: end; max-width: 760px; padding: clamp(1.2rem, 4vw, 3rem); }
+.feature-hero__body h2 { margin: 0.25rem 0 0.7rem; font-size: clamp(2rem, 6vw, 4.5rem); }
+.results-section { padding: clamp(1rem, 3vw, 1.8rem); border: 1px solid rgba(255, 255, 255, 0.13); border-radius: 1rem; background: rgba(25, 25, 25, 0.82); box-shadow: inset 0 1px rgba(255, 49, 49, 0.42); }
+.live-game-grid, .hall-of-fame-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 1rem; }
+.live-game-card, .history-card { overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.13); border-radius: 0.9rem; background: #151515; }
+.live-game-card__image, .history-card__image { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.live-game-card__body, .history-card > div { display: grid; gap: 0.65rem; padding: 1rem; }
+.live-game-card__body h4, .history-card h4 { margin: 0; }
+.live-game-card__winner { color: #fff; font-weight: 800; }
+.live-game-card__metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem; margin: 0; }
+.live-game-card__metrics div { padding: 0.55rem; border: 1px solid #3f3f46; border-radius: 0.6rem; background: rgba(0, 0, 0, 0.3); }
+.live-game-card__metrics dt { color: #a1a1aa; font-size: 0.72rem; text-transform: uppercase; }
+.live-game-card__metrics dd { margin: 0.2rem 0 0; color: #fff; font-weight: 800; }
+.compact-scoreboard { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.compact-scoreboard li { display: flex; justify-content: space-between; gap: 0.8rem; padding: 0.45rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.achievement-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 0.85rem; }
+.achievement-card { display: flex; align-items: center; gap: 0.9rem; padding: 0.9rem; border: 1px solid rgba(255, 49, 49, 0.35); border-radius: 0.9rem; background: radial-gradient(circle at 0 0, rgba(255, 49, 49, 0.15), transparent 62%), #151515; }
+.achievement-card img { width: 78px; height: 78px; flex: 0 0 78px; object-fit: contain; filter: drop-shadow(0 0 12px rgba(255, 49, 49, 0.24)); }
+.achievement-card h3, .achievement-card h4, .achievement-card p { margin: 0; }
+.achievement-card p, .achievement-progress, .achievement-years { color: #d4d4d8; }
+.achievement-mini-list { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.achievement-mini-list span { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.55rem; border: 1px solid #3f3f46; border-radius: 999px; font-size: 0.75rem; }
+.achievement-mini-list img { width: 24px; height: 24px; object-fit: contain; }
+.recognition-account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 0.75rem; }
+.recognition-account-card, .official-result-status { padding: 1rem; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 0.85rem; background: rgba(0, 0, 0, 0.24); }
+.recognition-account-card h5, .recognition-account-card p { margin: 0 0 0.6rem; }
+.official-result-status { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
+.official-result-status.is-official { border-color: rgba(95, 230, 155, 0.5); }
+.recognition-result-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.8rem; }
+.games-showcase__actions { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
+.feature-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; }
+.feature-action-card { position: relative; min-height: 180px; overflow: hidden; border: 1px solid rgba(255, 49, 49, 0.4); border-radius: 0.9rem; color: #fff; text-decoration: none; background: #101010; }
+.feature-action-card img { width: 100%; height: 100%; object-fit: cover; transition: transform 180ms ease; }
+.feature-action-card > span { position: absolute; inset: auto 0 0; display: grid; gap: 0.15rem; padding: 2.4rem 0.8rem 0.8rem; background: linear-gradient(transparent, rgba(0, 0, 0, 0.95)); }
+.feature-action-card strong { font-family: Georgia, serif; font-size: 1.25rem; text-shadow: 0 0 14px rgba(255, 49, 49, 0.55); }
+.feature-action-card small { color: #d4d4d8; }
+.feature-action-card:hover img, .feature-action-card:focus-visible img { transform: scale(1.035); }
+.historical-results-callout { display: grid; grid-template-columns: minmax(180px, 0.6fr) 1fr; gap: 1.2rem; align-items: center; overflow: hidden; padding: 1rem; border: 1px solid rgba(255, 49, 49, 0.4); border-radius: 1rem; background: #151515; }
+.historical-results-callout img { width: 100%; aspect-ratio: 16 / 9; border-radius: 0.75rem; object-fit: cover; }
+.game-live-status, .live-refresh-status { display: inline-flex; width: fit-content; padding: 0.4rem 0.7rem; border: 1px solid rgba(255, 49, 49, 0.46); border-radius: 999px; color: #ff8a8a; font-weight: 700; }
+@media (max-width: 640px) {
+  .feature-page-art, .section-heading-row > .feature-page-art { width: 100%; max-width: none; flex-basis: 100%; }
+  .historical-results-callout { grid-template-columns: 1fr; }
+  .official-result-status, .recognition-result-row { align-items: stretch; flex-direction: column; }
+  .feature-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feature-action-card { min-height: 145px; }
+}
+
 @media (max-width: 850px) {
   .karaoke-connection__facts,
   .karaoke-metrics {

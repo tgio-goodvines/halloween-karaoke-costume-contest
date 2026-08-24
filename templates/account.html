@@ -37,6 +37,19 @@
   </dl>
 </section>
 
+<section class="form-section account-achievements">
+  <div class="section-heading-row"><div><p class="eyebrow">Rewards</p><h2>My Achievements</h2><p>Attendance and official wins credited by the hosts stay with your stable account.</p></div><a class="button" href="{{ url_for('party_results') }}">Results &amp; Hall of Fame</a></div>
+  <div class="achievement-grid">
+    {% for achievement in achievements.achievements %}
+      <article class="achievement-card"><img src="{{ url_for('static', filename=achievement.image) }}" alt=""><div><h3>{{ achievement.title }}</h3><p>{{ achievement.description }}</p></div></article>
+    {% else %}
+      <p class="empty-state">No achievements have been credited yet.</p>
+    {% endfor %}
+  </div>
+  {% if achievements.attendance_years %}<p class="achievement-years"><strong>Attendance:</strong> {{ achievements.attendance_years|join(', ') }}</p>{% endif %}
+  {% if achievements.next_attendance %}<p class="achievement-progress">Next attendance award: {{ achievements.next_attendance.title }} · {{ achievements.attendance_count }} of {{ achievements.next_attendance.attendance_count }} parties.</p>{% endif %}
+</section>
+
 {% if errors %}
   <div class="errors">
     <ul>

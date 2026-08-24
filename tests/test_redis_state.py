@@ -321,6 +321,14 @@ class RedisStateTests(unittest.TestCase):
         main.karaoke_state.update(main.copy.deepcopy(main.DEFAULT_KARAOKE_STATE))
         main.youtube_karaoke = main.copy.deepcopy(main.DEFAULT_YOUTUBE_KARAOKE_STATE)
         main.games_state = main.copy.deepcopy(main.DEFAULT_GAMES_STATE)
+        main.event_editions = main.normalize_event_editions(
+            {},
+            current_year=str(main.app.config["PARTY_YEAR"]),
+            current_title=str(main.app.config["PARTY_TITLE"]),
+            current_date=str(main.app.config["PARTY_DATE_LABEL"]),
+        )
+        main.result_archives = []
+        main.recognition_credits = []
         main.party_details = main.copy.deepcopy(main.DEFAULT_PARTY_DETAILS)
 
     def login_regular(self, client, user_id="user-1", username="Jamie"):
@@ -6508,3 +6516,309 @@ class RedisStateTests(unittest.TestCase):
             if key.startswith(main.redis_key("state:backup:"))
         ]
         self.assertEqual(1, len(backup_keys))
+
+    def test_results_and_rewards_require_login_and_strip_private_winner_links(self):
+        self.add_user_account()
+        main.result_archives = [
+            {
+                "id": "2025-halloween:game:fill_in_the_blank",
+                "event_id": "2025-halloween",
+                "year": "2025",
+                "kind": "game",
+                "subject_key": "fill_in_the_blank",
+                "title": "Fill in the Blank",
+                "image_url": "/static/images/games/fill-in-the-blank.jpg",
+                "winner_image_url": "/static/images/games/winners/fill-in-the-blank-winner.jpg",
+                "status": "official",
+                "simulation": False,
+                "finalized_at": "2025-11-01T00:00:00Z",
+                "published_at": "2025-11-01T00:01:00Z",
+                "summary": {"winners": ["Specimen Seven"], "scores": []},
+                "winner_links": [{"account_id": "user-1", "public_identity": "Specimen Seven"}],
+            }
+        ]
+        main.recognition_credits = [
+            main.new_credit(
+                kind="game_win",
+                account_id="user-1",
+                recipient_name="Jamie",
+                public_identity="Specimen Seven",
+                event_id="2025-halloween",
+                year="2025",
+                subject_key="fill_in_the_blank",
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.assertEqual(302, client.get("/party/results").status_code)
+            self.assertEqual(302, client.get("/api/party/games-data").status_code)
+            self.login_regular(client)
+            page = client.get("/party/results")
+            response = client.get("/api/party/games-data")
+
+        self.assertEqual(200, page.status_code)
+        self.assertIn("Results &amp; Rewards", page.get_data(as_text=True))
+        self.assertIn("Specimen Seven", page.get_data(as_text=True))
+        self.assertEqual("no-store", response.headers["Cache-Control"])
+        archive = response.get_json()["archives"][0]
+        self.assertNotIn("winner_links", archive)
+        self.assertNotIn("user-1", json.dumps(archive))
+
+    def test_live_games_api_hides_real_identity_during_blind_voting(self):
+        self.add_user_account()
+        game = main.games_state[main.FILL_BLANK_GAME_KEY]
+        game.update(
+            {
+                "enabled": True,
+                "phase": "active",
+                "anonymous_mode": True,
+                "current_round_id": "round-1",
+                "current_round_index": 0,
+                "participants": {
+                    "user-1": {
+                        "player_id": "player-1",
+                        "display_name": "Secret Real Name",
+                        "alias": "Specimen Seven",
+                    }
+                },
+                "rounds": [
+                    {
+                        "id": "round-1",
+                        "prompt_text": "The haunted lab needs ___",
+                        "status": "voting",
+                        "responses": {
+                            "response-1": {
+                                "id": "response-1",
+                                "player_id": "player-1",
+                                "text": "a better alibi",
+                            }
+                        },
+                        "votes": {},
+                        "results": {},
+                    }
+                ],
+            }
+        )
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            payload = client.get("/api/party/games-data").get_json()
+
+        rendered = json.dumps(payload)
+        self.assertIn("a better alibi", rendered)
+        self.assertNotIn("Secret Real Name", rendered)
+
+    def test_publishing_official_tied_result_grants_idempotent_credits(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.add_user_account(username="Morgan", user_id="user-2", email="morgan@example.com")
+        main.result_archives = [
+            {
+                "id": "2026-halloween:game:wrong_answers_only",
+                "event_id": "2026-halloween",
+                "year": "2026",
+                "kind": "game",
+                "subject_key": "wrong_answers_only",
+                "title": "Wrong Answers Only",
+                "image_url": "/static/images/games/wrong-answers-only.jpg",
+                "winner_image_url": "/static/images/games/winners/wrong-answers-only-winner.jpg",
+                "status": "draft",
+                "simulation": False,
+                "finalized_at": "2026-11-01T00:00:00Z",
+                "published_at": "",
+                "summary": {"winners": ["Jamie", "Morgan"], "scores": []},
+                "winner_links": [
+                    {"account_id": "user-1", "public_identity": "Jamie"},
+                    {"account_id": "user-2", "public_identity": "Morgan"},
+                    {"account_id": "", "public_identity": "Legacy Winner"},
+                ],
+            }
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            first = client.post(
+                "/admin/recognition",
+                data={"action": "publish_result_archive", "archive_id": main.result_archives[0]["id"]},
+            )
+            second = client.post(
+                "/admin/recognition",
+                data={"action": "publish_result_archive", "archive_id": main.result_archives[0]["id"]},
+            )
+
+        self.assertEqual(200, first.status_code)
+        self.assertEqual(200, second.status_code)
+        self.assertEqual("official", main.result_archives[0]["status"])
+        self.assertEqual(2, len(main.recognition_credits))
+        self.assertEqual({"user-1", "user-2"}, {credit["account_id"] for credit in main.recognition_credits})
+
+    def test_simulated_result_cannot_be_published_as_official(self):
+        main.result_archives = [
+            {
+                "id": "2026-halloween:game:fill_in_the_blank",
+                "event_id": "2026-halloween",
+                "year": "2026",
+                "kind": "game",
+                "subject_key": "fill_in_the_blank",
+                "title": "Fill in the Blank",
+                "status": "draft",
+                "simulation": True,
+                "summary": {},
+                "winner_links": [],
+            }
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/recognition",
+                data={"action": "publish_result_archive", "archive_id": main.result_archives[0]["id"]},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("draft", main.result_archives[0]["status"])
+        self.assertIn("Simulated results cannot be published", response.get_data(as_text=True))
+
+    def test_admin_can_retro_credit_attendance_and_prevent_duplicates(self):
+        self.add_user_account()
+        main.event_editions["2025-halloween"] = {
+            "id": "2025-halloween",
+            "year": "2025",
+            "title": "Halloween Party 2025",
+            "date": "October 31",
+        }
+        self.save_current_state()
+        form = {
+            "action": "add_recognition_credit",
+            "kind": "attendance",
+            "account_id": "user-1",
+            "event_id": "2025-halloween",
+        }
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            first = client.post("/admin/recognition", data=form)
+            duplicate = client.post("/admin/recognition", data=form)
+            export = client.get("/admin/export/recognition")
+
+        self.assertEqual(200, first.status_code)
+        self.assertEqual(1, len(main.recognition_credits))
+        self.assertIn("already has credit", duplicate.get_data(as_text=True))
+        self.assertEqual(200, export.status_code)
+        self.assertIn("halloween-recognition-history.json", export.headers["Content-Disposition"])
+
+    def test_account_deletion_unlinks_but_preserves_historical_credit(self):
+        self.add_user_account()
+        credit = main.new_credit(
+            kind="costume_win",
+            account_id="user-1",
+            recipient_name="Jamie",
+            public_identity="The Vampire",
+            event_id="2025-halloween",
+            year="2025",
+            subject_key="costume_contest",
+        )
+        main.recognition_credits = [credit]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/accounts",
+                data={"action": "delete_user_account", "account_id": "user-1"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual({}, main.user_accounts)
+        self.assertEqual("", main.recognition_credits[0]["account_id"])
+        self.assertEqual("The Vampire", main.recognition_credits[0]["public_identity"])
+
+    def test_game_status_and_winner_cards_use_dedicated_artwork(self):
+        game = main.games_state[main.WRONG_ANSWERS_GAME_KEY]
+        game.update({"enabled": True, "phase": "signup"})
+        status_entry = main.build_game_stage_entries()[0]
+        self.assertEqual("/static/images/games/wrong-answers-only.jpg", status_entry["image_url"])
+
+        game.update(
+            {
+                "phase": "ended",
+                "participants": {
+                    "user-1": {
+                        "player_id": "player-1",
+                        "display_name": "Jamie",
+                        "alias": "Specimen Seven",
+                    }
+                },
+                "results": {
+                    "scores": [
+                        {
+                            "player_id": "player-1",
+                            "name": "Jamie",
+                            "alias": "Specimen Seven",
+                            "anonymous": False,
+                            "points": 4,
+                        }
+                    ],
+                    "winner_player_ids": ["player-1"],
+                },
+            }
+        )
+        winner_entry = main.build_game_stage_entries()[0]
+        result_cards = main.generated_game_result_entries(include_hidden=True)
+
+        self.assertEqual(
+            "/static/images/games/winners/wrong-answers-only-winner.jpg",
+            winner_entry["image_url"],
+        )
+        self.assertEqual(
+            "/static/images/games/winners/wrong-answers-only-winner.jpg",
+            next(card for card in result_cards if card["card_type"] == "Winner / Outcome")["image_url"],
+        )
+
+    def test_schema_seventeen_round_trip_preserves_archives_credits_and_costume_links(self):
+        self.add_user_account()
+        main.costume_signups = [
+            main.CostumeSignup(
+                name="Jamie",
+                costume="Vampire",
+                contact="jamie@example.com",
+                id="costume-1",
+                account_id="user-1",
+            )
+        ]
+        main.result_archives = [
+            {
+                "id": "2025-halloween:costume:contest",
+                "event_id": "2025-halloween",
+                "year": "2025",
+                "kind": "costume",
+                "subject_key": "costume_contest",
+                "title": "Costume Contest",
+                "status": "official",
+                "simulation": False,
+                "summary": {"winners": ["Jamie"]},
+                "winner_links": [{"account_id": "user-1", "public_identity": "Jamie"}],
+            }
+        ]
+        main.recognition_credits = [
+            main.new_credit(
+                kind="costume_win",
+                account_id="user-1",
+                recipient_name="Jamie",
+                event_id="2025-halloween",
+                year="2025",
+                subject_key="costume_contest",
+            )
+        ]
+
+        snapshot = main.snapshot_state()
+        self.reset_state()
+        main.apply_state_snapshot(snapshot)
+
+        self.assertEqual(17, snapshot["schema_version"])
+        self.assertEqual("user-1", main.costume_signups[0].account_id)
+        self.assertEqual("official", main.result_archives[0]["status"])
+        self.assertEqual("costume_win", main.recognition_credits[0]["kind"])

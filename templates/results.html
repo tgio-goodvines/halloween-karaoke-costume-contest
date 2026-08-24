@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% set title = "Live Games, Results & Rewards" %}
+
+{% block content %}
+<section class="results-rewards" data-games-live-widget data-games-state-url="{{ games_data_url }}">
+  <header class="results-hero feature-hero">
+    <img src="{{ url_for('static', filename='images/games/two-truths-and-a-lie.jpg') }}" alt="" class="feature-hero__image">
+    <div class="feature-hero__veil" aria-hidden="true"></div>
+    <div class="feature-hero__body">
+      <p class="admin-panel__eyebrow">Live status · Hall of Fame</p>
+      <h2>Results &amp; Rewards</h2>
+      <p>Follow tonight’s games as they happen, revisit official winners, and see the achievements attached to your party account.</p>
+    </div>
+  </header>
+
+  <section class="results-section" aria-labelledby="live-games-heading">
+    <div class="section-heading-row">
+      <div><p class="admin-panel__eyebrow">Updates every five seconds</p><h3 id="live-games-heading">Live Games</h3></div>
+      <span class="live-refresh-status" data-games-refresh-status role="status">Live</span>
+    </div>
+    <div class="live-game-grid" data-live-game-grid>
+      {% for game in results_payload.games %}
+        <article class="live-game-card" data-game-card="{{ game.key }}">
+          <img src="{{ game.winner_image_url if game.phase == 'ended' and game.winners else game.image_url }}" alt="" class="live-game-card__image">
+          <div class="live-game-card__body">
+            <span class="game-phase game-phase--{{ game.phase }}">{{ game.status_label }}</span>
+            <h4>{{ game.title }}</h4>
+            {% if game.winners %}<p class="live-game-card__winner">Winner{% if game.winners|length != 1 %}s{% endif %}: {{ game.winners|join(', ') }}</p>{% else %}<p>{{ game.description }}</p>{% endif %}
+            <dl class="live-game-card__metrics">{% for metric in game.metrics %}<div><dt>{{ metric.label }}</dt><dd>{{ metric.value }}</dd></div>{% endfor %}</dl>
+            {% if game.phase == 'ended' and game.scores %}<ol class="compact-scoreboard">{% for score in game.scores[:5] %}<li><span>#{{ score.rank }} {{ score.name }}</span><strong>{{ score.points }} pts</strong></li>{% endfor %}</ol>{% endif %}
+            {% if game.enabled and party_day_has_arrived %}<a class="button" href="{{ url_for('party_games', game=game.slug) }}">{{ 'See Full Results' if game.phase == 'ended' else 'Open Game' }}</a>{% endif %}
+          </div>
+        </article>
+      {% else %}
+        <p class="empty-state">No games are running yet. Official history remains available below.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="results-section" aria-labelledby="my-awards-heading">
+    <div class="section-heading-row"><div><p class="admin-panel__eyebrow">Your collection</p><h3 id="my-awards-heading">My Achievements</h3></div><a class="button" href="{{ url_for('party_account') }}">My Account</a></div>
+    <div class="achievement-grid" data-achievement-grid>
+      {% for achievement in results_payload.achievements.achievements %}
+        <article class="achievement-card">
+          <img src="{{ url_for('static', filename=achievement.image) }}" alt="">
+          <div><h4>{{ achievement.title }}</h4><p>{{ achievement.description }}</p></div>
+        </article>
+      {% else %}
+        <p class="empty-state">Your first achievement will appear after the hosts credit attendance or an official win.</p>
+      {% endfor %}
+    </div>
+    {% if results_payload.achievements.next_attendance %}
+      <p class="achievement-progress">Next attendance award: {{ results_payload.achievements.next_attendance.title }} · {{ results_payload.achievements.attendance_count }} of {{ results_payload.achievements.next_attendance.attendance_count }} parties.</p>
+    {% endif %}
+  </section>
+
+  <section class="results-section" aria-labelledby="hall-of-fame-heading">
+    <div class="section-heading-row"><div><p class="admin-panel__eyebrow">Official history</p><h3 id="hall-of-fame-heading">Hall of Fame</h3></div></div>
+    <div class="hall-of-fame-grid" data-history-grid>
+      {% for archive in results_payload.archives %}
+        <article class="history-card">
+          {% if archive.winner_image_url or archive.image_url %}<img src="{{ archive.winner_image_url or archive.image_url }}" alt="" class="history-card__image">{% endif %}
+          <div><span>{{ archive.year }} · {{ archive.kind|title }}</span><h4>{{ archive.title }}</h4>
+            {% if archive.summary.winners %}<p><strong>Winner{% if archive.summary.winners|length != 1 %}s{% endif %}:</strong> {{ archive.summary.winners|join(', ') }}</p>{% else %}<p>No positive-score winner was recorded.</p>{% endif %}
+            {% if archive.summary.scores %}<ol class="compact-scoreboard">{% for score in archive.summary.scores[:5] %}<li><span>#{{ score.rank }} {{ score.name }}</span><strong>{{ score.points }}</strong></li>{% endfor %}</ol>{% endif %}
+          </div>
+        </article>
+      {% else %}
+        <p class="empty-state">Official results will appear after the hosts publish a completed game or contest.</p>
+      {% endfor %}
+    </div>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='games-live-status.js') }}" defer></script>
+{% endblock %}

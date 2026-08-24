@@ -143,6 +143,18 @@
         </tbody></table></div>
         {% if admin_game.statistics.scores|length > 20 %}<p class="contest-status">Showing the top 20 of {{ admin_game.statistics.scores|length }} players. The complete result set is included in the game export.</p>{% endif %}
       {% else %}<p class="empty-state">No score data is available yet.</p>{% endif %}
+      {% if admin_game.phase == 'ended' and selected_game_archive %}
+        <div class="official-result-status{% if selected_game_archive.status == 'official' %} is-official{% endif %}">
+          <div>
+            <p class="admin-panel__eyebrow">Historical record</p>
+            <strong>{{ 'Official Hall of Fame result' if selected_game_archive.status == 'official' else 'Draft result saved' }}</strong>
+            <p>{% if selected_game_archive.simulation %}Simulated results can appear on the live display but can never grant achievements.{% elif selected_game_archive.status == 'official' %}This result survives game resets and its linked winners have recognition credit.{% else %}Publish after verifying the final standings to grant winner achievements and preserve this result across years.{% endif %}</p>
+          </div>
+          {% if selected_game_archive.status != 'official' and not selected_game_archive.simulation %}
+            <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="archive_id" value="{{ selected_game_archive.id }}"><button class="button button--primary" name="action" value="publish_result_archive">Publish Official Result</button></form>
+          {% endif %}
+        </div>
+      {% endif %}
     </section>
 
     {% if game_key == 'murder_marry_fuck' %}

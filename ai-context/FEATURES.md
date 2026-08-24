@@ -395,3 +395,29 @@ app state.
 - The single logout control is tucked into the disclosure navigation menu.
 - Square glowing lab panels, red/magenta/steel palette, mono controls, serif
   display headings, scanline texture, and matching generated HTML emails.
+- Dedicated generated jukebox, bar, menu, and karaoke artwork appears on the
+  party overview, dedicated attendee/operations pages, and live display. Album
+  and menu-item artwork takes precedence where content-specific media exists.
+- Five generated completed-game trophy images distinguish winner/outcome cards
+  from ordinary game-status and final-score cards.
+- Six transparent achievement emblems provide an activity-award-style
+  collection across Results & Rewards, Account, and admin Recognition views.
+
+## Results, History, And Recognition
+
+- `/party/results` provides signed-in attendees with five-second live status and
+  privacy-safe statistics for enabled/current games, completed standings, an
+  official cross-year Hall of Fame, and their personal achievements.
+- Results & Rewards remains accessible before and after party night; the shared
+  menu and party overview provide direct entry points.
+- Ending a game or locking a costume winner creates a durable draft archive.
+  Hosts publish it explicitly before it enters official history or grants
+  winner credit. Ties grant every linked winner; simulations never qualify.
+- Attendance across distinct event editions derives Returning Reveler,
+  Seasoned Spirit, and Halloween Legend awards. Official game/costume credits
+  derive champion awards and repeated game wins derive Multi-Game Master.
+- `/admin/recognition` manages prior editions, retroactive attendance and winner
+  credits, legacy unlinked recipients, official publication, linking,
+  revocation, per-account collections, and recognition JSON export.
+- Account deletion preserves historical public identity while unlinking credits,
+  archived winner links, and costume associations from the removed account.

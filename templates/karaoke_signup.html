@@ -35,6 +35,7 @@
   class="form-section karaoke-signup-page"
   {% if youtube_karaoke_enabled %}data-karaoke-signup data-search-url="{{ youtube_search_url }}"{% endif %}
 >
+  <img class="feature-page-art" src="{{ feature_art.karaoke }}" alt="">
   <h2>Karaoke Signup</h2>
   <p>{% if youtube_karaoke_enabled %}Find the exact YouTube karaoke video you want, then send it to the host for approval.{% else %}Pick your favorite song and we'll add you to the karaoke queue.{% endif %}</p>
 

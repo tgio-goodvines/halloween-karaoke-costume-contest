@@ -20,6 +20,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
 - `ai-context/KARAOKE_ATTENDEE_LIVE_STATUS_PROGRESS.md` - attendee-safe live karaoke status, schema-16 user-ID completion acknowledgement ledger, multi-song/co-singer notification behavior, stage-transition invariants, polling behavior, and verification.
 - `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` - Redis-backed party Games framework, Two Truths and a Lie lifecycle, attendee/admin/display behavior, scoring, and verification.
+- `ai-context/GAME_RESULTS_REWARDS_RECOGNITION_PROGRESS.md` - attendee-safe realtime game status, official cross-year result archives, achievements/retroactive recognition, artwork, and rollout verification.
 - `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` - adaptive TV layout, independent region rotations, admin control room, generated result-card controls, verification, and rollout notes.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
@@ -57,6 +58,18 @@ Important working notes:
   live-display rotation. Ended games support host-controlled
   previous/next result presentations. Game `game_*` event overrides can be
   cleared without changing costume, karaoke, DJ, or drink-notice state.
+- Signed-in attendees can always open `/party/results` for privacy-safe
+  five-second live game status, official cross-year results, and their account
+  achievements. Game/contest completion creates a draft archive; only explicit
+  host publication grants official winner credit. Simulations are ineligible.
+- `/admin/recognition` manages event editions, retroactive attendance/winner
+  credits, legacy recipients, link/revoke actions, per-account collections, and
+  export. Redis schema 17 stores editions, result archives, recognition credits,
+  and optional costume account links.
+- Winner/outcome cards use dedicated generated images under
+  `static/images/games/winners/`. Generated jukebox, bar, menu, and karaoke
+  feature art supplies shared page/display fallbacks while content-specific
+  album/drink images retain precedence.
 - `/admin/games?game=<game-key>` renders one detailed game console at a time;
   all other games remain visible through a compact status selector. Standard
   admin POST actions update the current workspace in place and preserve the

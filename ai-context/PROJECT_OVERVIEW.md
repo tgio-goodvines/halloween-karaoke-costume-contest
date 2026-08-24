@@ -143,10 +143,11 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 16. The following globals in `main.py` are
+`halloween:state` with schema version 17. The following globals in `main.py` are
 the process-local cache:
 
-- `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs.
+- `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
+  and an optional stable attendee account ID used for official winner credit.
 - `karaoke_signups`: list of `KaraokeSignup` dataclass instances with stable
   IDs, one-to-four normalized singer snapshots, requester identity, exact
   YouTube metadata, independent workflow state, playlist
@@ -217,6 +218,12 @@ the process-local cache:
   next, and stage-mode metadata. Stage transitions update this object and the
   selected entry workflow atomically so attendee and display status agree.
 - `display_update_version`: monotonic counter used by server-sent events.
+- `event_editions`: current and prior Halloween editions used to distinguish
+  attendance and results across years.
+- `result_archives`: durable draft/official game and costume result snapshots;
+  official history survives resets and is separated from mutable current play.
+- `recognition_credits`: auditable attendance, game-win, costume-win, and custom
+  credits with optional stable-account links and non-destructive revocation.
 - `dj_playlist`: ordered Apple Music songs managed by admins, including
   request provenance and the `pending -> playing -> served` priority lifecycle.
 - `dj_song_requests`: pending attendee Apple Music requests. Approval removes

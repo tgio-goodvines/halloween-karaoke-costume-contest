@@ -33,6 +33,7 @@
             <strong>Games</strong>
           </header>
           <div class="display-game-stage__content" data-fit-content>
+            <div class="display-game-stage__image" data-game-image-wrap hidden><img data-game-image alt=""></div>
             <p class="display-game-stage__status" data-game-status></p>
             <h2 data-game-title></h2>
             <p class="display-game-stage__primary" data-game-primary></p>
@@ -90,6 +91,7 @@
                 <span>Right stage</span>
                 <strong data-bar-heading>Bar queue</strong>
               </header>
+              <div class="display-bar-stage__image" data-bar-image-wrap hidden><img data-bar-image alt=""></div>
               <ol data-bar-orders></ol>
               <p class="display-bar-stage__overflow" data-bar-overflow hidden></p>
               <dl class="display-bar-summary" data-bar-summary hidden></dl>
@@ -117,7 +119,7 @@
       </main>
 
       <footer class="display-now-playing" data-dj-now-playing hidden>
-        <div class="display-now-playing__artwork" data-dj-artwork-wrap hidden><img data-dj-artwork alt=""></div>
+        <div class="display-now-playing__artwork" data-dj-artwork-wrap><img data-dj-artwork src="{{ feature_art.jukebox }}" alt=""></div>
         <div class="display-now-playing__copy">
           <span class="display-now-playing__label" data-dj-status>DJ standby</span>
           <strong data-dj-title>No confirmed song</strong>

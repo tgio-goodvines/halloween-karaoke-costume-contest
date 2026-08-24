@@ -85,6 +85,17 @@ from party_games import (
     prompt_round_for_game,
     two_truths_statistics,
 )
+from recognition import (
+    ACHIEVEMENT_CATALOG,
+    CREDIT_KINDS,
+    achievement_views,
+    credit_exists,
+    event_id_for_year,
+    new_credit,
+    normalize_event_editions,
+    normalize_recognition_credits,
+    normalize_result_archives,
+)
 
 
 def _config_int(name: str, default: int) -> int:
@@ -323,7 +334,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 16
+STATE_SCHEMA_VERSION = 17
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -337,6 +348,7 @@ class CostumeSignup:
     costume: str
     contact: str = ""
     id: str = ""
+    account_id: str = ""
 
 
 @dataclass
@@ -640,6 +652,7 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "bar": {"label": "Bar", "description": "Drink operations and bartender tipping."},
     "menu": {"label": "Menu", "description": "Food and drink availability."},
     "accounts": {"label": "Accounts", "description": "Party accounts and bartender access."},
+    "recognition": {"label": "Recognition", "description": "Attendance, achievements, and official winner history."},
 }
 
 ROLE_PREVIEW_OPTIONS: dict[str, dict[str, object]] = {
@@ -690,6 +703,14 @@ display_runtime: dict[str, object] = copy.deepcopy(DEFAULT_DISPLAY_RUNTIME)
 display_custom_cards: list[dict[str, object]] = []
 bartender_tip_settings: dict[str, object] = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
 games_state: dict[str, object] = copy.deepcopy(DEFAULT_GAMES_STATE)
+event_editions: dict[str, dict[str, str]] = normalize_event_editions(
+    {},
+    current_year=str(app.config["PARTY_YEAR"]),
+    current_title=str(app.config["PARTY_TITLE"]),
+    current_date=str(app.config["PARTY_DATE_LABEL"]),
+)
+result_archives: list[dict[str, object]] = []
+recognition_credits: list[dict[str, object]] = []
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -733,6 +754,8 @@ STATE_REFRESH_ENDPOINTS = {
     "party_karaoke_cancel",
     "party_karaoke_replace",
     "party_games",
+    "party_results",
+    "party_games_data",
     "party_costume_voting",
     "party_jukebox",
     "party_jukebox_data",
@@ -752,6 +775,7 @@ ADMIN_ENDPOINTS = {
     "export_costume_results",
     "export_karaoke_lineup",
     "export_games",
+    "export_recognition",
     "admin_dj_song_request_queue",
     "admin_karaoke_state",
     "admin_karaoke_search",
@@ -794,6 +818,8 @@ REGULAR_USER_ENDPOINTS = {
     "party_jukebox_catalog_search",
     "party_jukebox_request",
     "party_games",
+    "party_results",
+    "party_games_data",
     "party_game_opt_in",
     "party_game_submission",
     "party_game_guess",
@@ -3326,6 +3352,7 @@ def costume_signup_to_dict(signup: CostumeSignup) -> dict[str, str]:
         "name": signup.name,
         "costume": signup.costume,
         "contact": signup.contact,
+        "account_id": signup.account_id,
     }
 
 
@@ -3335,6 +3362,7 @@ def costume_signup_from_dict(data: dict[str, object]) -> CostumeSignup:
         name=str(data.get("name", "") or ""),
         costume=str(data.get("costume", "") or ""),
         contact=str(data.get("contact", "") or ""),
+        account_id=str(data.get("account_id", "") or ""),
     )
 
 
@@ -4553,6 +4581,9 @@ def snapshot_state() -> dict[str, object]:
         "display_custom_cards": copy.deepcopy(display_custom_cards),
         "bartender_tip_settings": copy.deepcopy(bartender_tip_settings),
         "games_state": copy.deepcopy(games_state),
+        "event_editions": copy.deepcopy(event_editions),
+        "result_archives": copy.deepcopy(result_archives),
+        "recognition_credits": copy.deepcopy(recognition_credits),
         "live_display_event_override": copy.deepcopy(live_display_event_override),
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
         "live_display_notice_queue": copy.deepcopy(live_display_notice_queue),
@@ -4573,6 +4604,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, display_custom_cards, display_update_version
     global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke, games_state
+    global event_editions, result_archives, recognition_credits
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -4697,6 +4729,14 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
 
     bartender_tip_settings = normalize_bartender_tip_settings(data.get("bartender_tip_settings", {}))
     games_state = normalize_games_state(data.get("games_state", {}))
+    event_editions = normalize_event_editions(
+        data.get("event_editions", {}),
+        current_year=str(app.config["PARTY_YEAR"]),
+        current_title=str(app.config["PARTY_TITLE"]),
+        current_date=str(app.config["PARTY_DATE_LABEL"]),
+    )
+    result_archives = normalize_result_archives(data.get("result_archives", []))
+    recognition_credits = normalize_recognition_credits(data.get("recognition_credits", []))
     account_names_by_id = {
         str(account.get("id", "")): str(account.get("username", "") or "")
         for account in user_accounts.values()
@@ -5596,6 +5636,334 @@ def game_catalog_views(user_id: str = "") -> list[dict[str, object]]:
     return views
 
 
+def current_event_id() -> str:
+    return event_id_for_year(app.config["PARTY_YEAR"])
+
+
+def static_asset_url(filename: object) -> str:
+    cleaned = str(filename or "").strip().lstrip("/")
+    return f"/static/{cleaned}" if cleaned else ""
+
+
+def game_art_url(game_key: str, *, winner: bool = False) -> str:
+    metadata = GAME_CATALOG[game_key]
+    filename = metadata.get("winner_image") if winner else metadata.get("image")
+    return static_asset_url(filename)
+
+
+FEATURE_ART: dict[str, str] = {
+    "jukebox": "/static/images/features/jukebox.jpg",
+    "bar": "/static/images/features/bar.jpg",
+    "menu": "/static/images/features/menu.jpg",
+    "karaoke": "/static/images/features/karaoke.jpg",
+}
+
+
+def game_public_score_rows(game_key: str, game: dict[str, object]) -> list[dict[str, object]]:
+    if game.get("phase") != "ended":
+        return []
+    results = game.get("results", {}) if isinstance(game.get("results"), dict) else {}
+    rows = []
+    for index, score in enumerate(results.get("scores", [])):
+        if not isinstance(score, dict):
+            continue
+        points = int(score.get("correct", score.get("points", 0)) or 0)
+        row = {
+            "rank": index + 1,
+            "name": str(score.get("name", score.get("alias", "Player")) or "Player")[:80],
+            "points": points,
+        }
+        if game_key == TWO_TRUTHS_GAME_KEY:
+            row["detail"] = f"{int(score.get('attempts', 0) or 0)} guesses · {float(score.get('accuracy', 0) or 0):g}% accuracy"
+        elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
+            row["detail"] = f"{int(score.get('completed_rounds', 0) or 0)} of {MMF_ROUND_COUNT} rounds"
+        else:
+            row["detail"] = "Anonymous alias" if score.get("anonymous") else "Party account name"
+        rows.append(row)
+    return rows
+
+
+def game_public_winner_names(game_key: str, game: dict[str, object]) -> list[str]:
+    return [
+        str(winner.get("name", winner.get("alias", "Player")) or "Player")[:80]
+        for winner in game_winners(game_key, game)
+    ]
+
+
+def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]:
+    game = party_game_state(game_key)
+    metadata = GAME_CATALOG[game_key]
+    phase = str(game.get("phase", "signup") or "signup")
+    participants = game.get("participants", {}) if isinstance(game.get("participants"), dict) else {}
+    view: dict[str, object] = {
+        "key": game_key,
+        "slug": metadata["slug"],
+        "title": metadata["title"],
+        "short_title": metadata["short_title"],
+        "description": metadata["description"],
+        "image_url": game_art_url(game_key),
+        "winner_image_url": game_art_url(game_key, winner=True),
+        "enabled": bool(game.get("enabled")),
+        "phase": phase,
+        "status_label": "Final results" if phase == "ended" else ("Live now" if phase == "active" else "Enrollment open"),
+        "participant_count": len(participants),
+        "participating": bool(user_id and user_id in participants),
+        "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
+        "metrics": [],
+        "winners": [],
+        "scores": [],
+        "rounds": [],
+    }
+    if game_key == TWO_TRUTHS_GAME_KEY:
+        stats = two_truths_statistics(game)
+        view["metrics"] = [
+            {"label": "Players", "value": stats.get("participant_count", 0)},
+            {"label": "Guesses", "value": stats.get("submitted_guesses", 0)},
+            {"label": "Possible", "value": stats.get("possible_guesses", 0)},
+            {"label": "Complete", "value": f"{stats.get('completion_percent', 0):g}%"},
+        ]
+    elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        completed = sum(len(participant.get("answers", {})) for participant in participants.values() if isinstance(participant, dict))
+        possible = len(participants) * MMF_ROUND_COUNT
+        view["metrics"] = [
+            {"label": "Players", "value": len(participants)},
+            {"label": "Rounds saved", "value": completed},
+            {"label": "Possible", "value": possible},
+            {"label": "Complete", "value": f"{round((completed / possible * 100) if possible else 0):g}%"},
+        ]
+    else:
+        current_round = prompt_round_for_game(game)
+        responses = current_round.get("responses", {}) if isinstance(current_round, dict) and isinstance(current_round.get("responses"), dict) else {}
+        votes = current_round.get("votes", {}) if isinstance(current_round, dict) and isinstance(current_round.get("votes"), dict) else {}
+        if current_round:
+            view["current_round"] = {
+                "number": next((index + 1 for index, item in enumerate(game.get("rounds", [])) if item.get("id") == current_round.get("id")), 1),
+                "phase": str(current_round.get("status", "submissions")),
+                "prompt": str(current_round.get("prompt_text", "") or "")[:240],
+                "blind_responses": [
+                    {"id": str(response.get("id", "")), "text": str(response.get("text", "") or "")[:280]}
+                    for response in responses.values()
+                    if isinstance(response, dict)
+                ] if current_round.get("status") in {"voting", "revealed"} else [],
+            }
+        view["metrics"] = [
+            {"label": "Players", "value": len(participants)},
+            {"label": "Rounds", "value": len(game.get("rounds", []))},
+            {"label": "Responses", "value": len(responses)},
+            {"label": "Votes", "value": len(votes)},
+        ]
+    if phase == "ended":
+        view["winners"] = game_public_winner_names(game_key, game)
+        view["scores"] = game_public_score_rows(game_key, game)
+        if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+            view["rounds"] = copy.deepcopy(game.get("results", {}).get("round_results", []))
+        elif game_key in PROMPT_GAME_KEYS:
+            identities = {
+                str(participant.get("player_id", "")): participant_public_name(
+                    participant,
+                    anonymous=bool(game.get("anonymous_mode")),
+                )
+                for participant in participants.values()
+                if isinstance(participant, dict)
+            }
+            public_rounds = []
+            for game_round in game.get("rounds", []):
+                if not isinstance(game_round, dict) or game_round.get("status") != "revealed":
+                    continue
+                results = game_round.get("results", {}) if isinstance(game_round.get("results"), dict) else {}
+                winner_ids = set(results.get("winner_response_ids", []))
+                public_rounds.append(
+                    {
+                        "prompt": str(game_round.get("prompt_text", "") or "")[:240],
+                        "vote_count": int(results.get("vote_count", 0) or 0),
+                        "responses": [
+                            {
+                                "text": str(response.get("text", "") or "")[:280],
+                                "votes": int(results.get("vote_counts", {}).get(response_id, 0) or 0),
+                                "winner": response_id in winner_ids,
+                                "winner_identity": identities.get(str(response.get("player_id", "")), "Player") if response_id in winner_ids else "",
+                            }
+                            for response_id, response in game_round.get("responses", {}).items()
+                            if isinstance(response, dict)
+                        ],
+                    }
+                )
+            view["rounds"] = public_rounds
+    revision_source = json.dumps(view, sort_keys=True, separators=(",", ":"))
+    view["revision"] = hashlib.sha256(revision_source.encode("utf-8")).hexdigest()[:16]
+    return view
+
+
+def game_winner_links(game_key: str, game: dict[str, object]) -> list[dict[str, str]]:
+    winners = game_winners(game_key, game)
+    links: list[dict[str, str]] = []
+    if game_key == TWO_TRUTHS_GAME_KEY:
+        for winner in winners:
+            user_id = str(winner.get("user_id", ""))
+            links.append({"account_id": user_id, "public_identity": str(winner.get("name", "Guest"))[:80]})
+        return links
+    winner_player_ids = {str(winner.get("player_id", "")) for winner in winners}
+    for account_id, participant in game.get("participants", {}).items():
+        if not isinstance(participant, dict) or str(participant.get("player_id", "")) not in winner_player_ids:
+            continue
+        links.append(
+            {
+                "account_id": str(account_id),
+                "public_identity": participant_public_name(participant, anonymous=bool(game.get("anonymous_mode"))),
+            }
+        )
+    return links
+
+
+def upsert_game_result_archive(game_key: str) -> dict[str, object] | None:
+    game = party_game_state(game_key)
+    if game.get("phase") != "ended":
+        return None
+    event_id = current_event_id()
+    archive_id = f"{event_id}:game:{game_key}"
+    existing = next((archive for archive in result_archives if archive.get("id") == archive_id), None)
+    if existing and existing.get("status") == "official":
+        return existing
+    archive = {
+        "id": archive_id,
+        "event_id": event_id,
+        "year": str(app.config["PARTY_YEAR"]),
+        "kind": "game",
+        "subject_key": game_key,
+        "title": GAME_CATALOG[game_key]["title"],
+        "image_url": game_art_url(game_key),
+        "winner_image_url": game_art_url(game_key, winner=True),
+        "status": str(existing.get("status", "draft")) if existing else "draft",
+        "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
+        "finalized_at": str(game.get("ended_at", "") or game.get("results", {}).get("finalized_at", "") or _utc_now_iso()),
+        "published_at": str(existing.get("published_at", "")) if existing else "",
+        "summary": safe_game_status_view(game_key),
+        "winner_links": game_winner_links(game_key, game),
+    }
+    if existing:
+        existing.clear()
+        existing.update(archive)
+        return existing
+    result_archives.append(archive)
+    return archive
+
+
+def upsert_costume_result_archive() -> dict[str, object] | None:
+    winner = contest_state.get("winner")
+    if not isinstance(winner, dict) or not contest_state.get("winner_locked"):
+        return None
+    event_id = current_event_id()
+    archive_id = f"{event_id}:costume:contest"
+    existing = next((archive for archive in result_archives if archive.get("id") == archive_id), None)
+    if existing and existing.get("status") == "official":
+        return existing
+    winning_signup = next((signup for signup in costume_signups if signup.id == winner.get("id")), None)
+    archive = {
+        "id": archive_id,
+        "event_id": event_id,
+        "year": str(app.config["PARTY_YEAR"]),
+        "kind": "costume",
+        "subject_key": "costume_contest",
+        "title": "Costume Contest",
+        "image_url": "",
+        "winner_image_url": "",
+        "status": str(existing.get("status", "draft")) if existing else "draft",
+        "simulation": False,
+        "finalized_at": _utc_now_iso(),
+        "published_at": str(existing.get("published_at", "")) if existing else "",
+        "summary": {
+            "winners": [str(winner.get("name", "Guest"))],
+            "scores": [
+                {
+                    "rank": index + 1,
+                    "name": str(entry.get("name", "Guest")),
+                    "points": round(float(entry.get("average", 0) or 0), 2),
+                    "detail": str(entry.get("costume", "")),
+                }
+                for index, entry in enumerate(rank_costume_entries(build_costume_scoreboard()[0])[:6])
+            ],
+        },
+        "winner_links": [
+            {
+                "account_id": str(winning_signup.account_id if winning_signup else ""),
+                "public_identity": str(winner.get("name", "Guest")),
+            }
+        ],
+    }
+    if existing:
+        existing.clear()
+        existing.update(archive)
+        return existing
+    result_archives.append(archive)
+    return archive
+
+
+def account_name_by_id(account_id: str) -> str:
+    return next(
+        (str(account.get("username", "")) for account in user_accounts.values() if str(account.get("id", "")) == account_id),
+        "",
+    )
+
+
+def publish_result_archive(archive: dict[str, object]) -> int:
+    if archive.get("simulation"):
+        raise ValueError("Simulated results cannot be published as official history.")
+    archive["status"] = "official"
+    archive["published_at"] = archive.get("published_at") or _utc_now_iso()
+    created = 0
+    kind = "game_win" if archive.get("kind") == "game" else "costume_win"
+    for winner in archive.get("winner_links", []):
+        if not isinstance(winner, dict):
+            continue
+        account_id = str(winner.get("account_id", "") or "")
+        public_identity = str(winner.get("public_identity", "") or "Guest")[:80]
+        if not account_id:
+            continue
+        recipient_name = account_name_by_id(account_id) or public_identity
+        if credit_exists(
+            recognition_credits,
+            kind=kind,
+            account_id=account_id,
+            event_id=str(archive.get("event_id", "")),
+            subject_key=str(archive.get("subject_key", "")),
+            source_ref=str(archive.get("id", "")),
+        ):
+            continue
+        recognition_credits.append(
+            new_credit(
+                kind=kind,
+                account_id=account_id,
+                recipient_name=recipient_name,
+                public_identity=public_identity,
+                event_id=str(archive.get("event_id", "")),
+                year=str(archive.get("year", "")),
+                subject_key=str(archive.get("subject_key", "")),
+                subject_label=str(archive.get("title", "")),
+                source_ref=str(archive.get("id", "")),
+            )
+        )
+        created += 1
+    return created
+
+
+def results_rewards_payload(user_id: str) -> dict[str, object]:
+    games = [
+        safe_game_status_view(game_key, user_id)
+        for game_key in GAME_CATALOG
+        if party_game_state(game_key).get("enabled") or party_game_state(game_key).get("phase") != "signup"
+    ]
+    archives = [copy.deepcopy(archive) for archive in result_archives if archive.get("status") == "official"]
+    for archive in archives:
+        archive.pop("winner_links", None)
+    archives.sort(key=lambda archive: (str(archive.get("year", "")), str(archive.get("published_at", ""))), reverse=True)
+    return {
+        "games": games,
+        "archives": archives,
+        "achievements": achievement_views(recognition_credits, user_id),
+        "display_update_version": display_update_version,
+    }
+
+
 def total_game_participations() -> int:
     return sum(len(party_game_state(game_key).get("participants", {})) for game_key in GAME_CATALOG)
 
@@ -5827,6 +6195,11 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
     outcome = game_outcome_entry(game_key)
     if outcome:
         slides.append({"type": "game_winner", "title": outcome["category"], "highlight": outcome["primary"], "message": outcome["secondary"], "details": [outcome["tertiary"]]})
+    for slide in slides:
+        slide["image_url"] = game_art_url(
+            game_key,
+            winner=str(slide.get("type", "")) == "game_winner",
+        )
     return slides
 
 
@@ -5991,6 +6364,7 @@ def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[
                 continue
             entry = _display_entry("games", f"{game_key}-{suffix}", **card)
             entry["kind"] = "result" if suffix == "winner" else "scoreboard"
+            entry["image_url"] = game_art_url(game_key, winner=suffix == "winner")
             entry["facts"] = [
                 _display_fact("Game", GAME_CATALOG[game_key]["short_title"]),
                 _display_fact("Players", len(game.get("participants", {}))),
@@ -6110,6 +6484,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
             category="Karaoke Stage",
             kind="action",
             primary="Reserve your karaoke song.",
+            image_url=FEATURE_ART["karaoke"],
             secondary="Use the party portal to queue the song you want to perform.",
             facts=[
                 _display_fact("In lineup", len(public_karaoke)),
@@ -6148,6 +6523,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 category="Party Games",
                 kind="action",
                 primary="Join tonight's party games.",
+                image_url=game_art_url(enabled_games[0]),
                 secondary="Open Games in the party portal to opt in, answer, and vote.",
                 tertiary="Available: " + " · ".join(GAME_CATALOG[key]["short_title"] for key in enabled_games),
                 facts=[
@@ -6168,6 +6544,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
             category="Bar Queue",
             kind="action",
             primary="Order event drinks from your phone.",
+            image_url=FEATURE_ART["menu"],
             secondary="Browse the menu, send available drinks to the bar, and watch the right stage for status.",
             tertiary="Completed drinks receive a ready alert here and by email.",
             facts=[
@@ -6240,6 +6617,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             "id": game_key,
             "game_key": game_key,
             "title": title,
+            "image_url": game_art_url(game_key),
             "phase": phase,
             "status_label": phase.replace("_", " ").title(),
             "primary": GAME_CATALOG[game_key]["description"],
@@ -6345,6 +6723,8 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Game champions"
 
+        if phase == "ended" and game_public_winner_names(game_key, game):
+            entry["image_url"] = game_art_url(game_key, winner=True)
         entries.append(entry)
         entries.extend(detail_entries)
 
@@ -6402,6 +6782,7 @@ def build_bar_stage() -> dict[str, object]:
             else None
         ),
         "action": {"label": "Order from your phone", "url": f"{PARTY_SITE_URL}/party/menu"},
+        "image_url": FEATURE_ART["bar"],
         "pickup_note": "Pick up completed drinks at the bar when your name appears here.",
     }
 
@@ -6673,6 +7054,7 @@ def inject_contest_state():
         },
         "party_title": app.config["PARTY_TITLE"],
         "party_year": app.config["PARTY_YEAR"],
+        "feature_art": FEATURE_ART,
     }
 
 
@@ -6858,6 +7240,8 @@ def party_dashboard():
         ready_drink_orders=ready_orders,
         jukebox=attendee_jukebox_state(user_id) if party_day else None,
         jukebox_data_url=url_for("party_jukebox_data") if party_day else "",
+        games_data_url=url_for("party_games_data"),
+        feature_art=FEATURE_ART,
         bartender_tip_settings=bartender_tip_settings,
         party_day_has_arrived=party_day,
         show_admin_link=False,
@@ -6958,6 +7342,7 @@ def party_account():
         created_at_label=created_at_label,
         profile_username=request.form.get("username", "") if profile_update_requested else str(account.get("username", "")),
         profile_email=request.form.get("email", "") if profile_update_requested else str(account.get("email", "")),
+        achievements=achievement_views(recognition_credits, account_id),
         show_admin_link=False,
     )
 
@@ -8446,6 +8831,27 @@ def exit_role_preview():
     return redirect(url_for("admin_portal", admin_view="public"))
 
 
+@app.route("/party/results")
+def party_results():
+    user_id = str(session.get("user_id", "") or "")
+    payload = results_rewards_payload(user_id)
+    return render_template(
+        "results.html",
+        results_payload=payload,
+        games_data_url=url_for("party_games_data"),
+        feature_art=FEATURE_ART,
+        show_admin_link=False,
+    )
+
+
+@app.route("/api/party/games-data")
+def party_games_data():
+    user_id = str(session.get("user_id", "") or "")
+    response = jsonify(results_rewards_payload(user_id))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/party/games")
 def party_games():
     if not party_day_has_arrived():
@@ -8533,6 +8939,7 @@ def party_games():
         statement_max_length=GAME_STATEMENT_MAX_LENGTH,
         response_max_length=GAME_RESPONSE_MAX_LENGTH,
         mmf_actions=MMF_ACTIONS,
+        games_data_url=url_for("party_games_data"),
         show_admin_link=False,
     )
 
@@ -9152,7 +9559,137 @@ def admin_portal(admin_view: str):
             "show_game_result_card",
         }
 
-        if action in display_actions:
+        recognition_actions = {
+            "publish_result_archive",
+            "add_event_edition",
+            "add_recognition_credit",
+            "revoke_recognition_credit",
+            "link_recognition_credit",
+        }
+
+        if action in recognition_actions:
+            if action == "publish_result_archive":
+                archive_id = str(request.form.get("archive_id", "") or "")
+                archive = next((entry for entry in result_archives if entry.get("id") == archive_id), None)
+                if not archive:
+                    errors.append("That result archive could not be found.")
+                elif archive.get("status") == "official":
+                    messages.append("That result is already official.")
+                else:
+                    try:
+                        write_state_backup_if_available("publish-official-result")
+                        award_count = publish_result_archive(archive)
+                    except ValueError as exc:
+                        errors.append(str(exc))
+                    else:
+                        messages.append(
+                            f"Published {archive.get('title', 'result')} as official history and granted {award_count} winner credit{'s' if award_count != 1 else ''}."
+                        )
+                        should_broadcast = True
+
+            elif action == "add_event_edition":
+                year = re.sub(r"[^0-9]", "", request.form.get("year", ""))[:4]
+                title = request.form.get("title", "").strip()[:160]
+                date_label = request.form.get("date", "").strip()[:80]
+                if len(year) != 4:
+                    errors.append("Enter a four-digit event year.")
+                else:
+                    event_id = event_id_for_year(year)
+                    event_editions[event_id] = {
+                        "id": event_id,
+                        "year": year,
+                        "title": title or f"Halloween Party {year}",
+                        "date": date_label,
+                    }
+                    messages.append(f"Saved the {year} Halloween edition.")
+                    should_broadcast = True
+
+            elif action == "add_recognition_credit":
+                kind = str(request.form.get("kind", "") or "")
+                account_id = str(request.form.get("account_id", "") or "")
+                account_name = account_name_by_id(account_id)
+                recipient_name = account_name or request.form.get("recipient_name", "").strip()[:80]
+                public_identity = request.form.get("public_identity", "").strip()[:80] or recipient_name
+                event_id = str(request.form.get("event_id", "") or "")
+                edition = event_editions.get(event_id, {})
+                subject_key = request.form.get("subject_key", "").strip()[:100]
+                subject_label = request.form.get("subject_label", "").strip()[:160]
+                achievement_key = request.form.get("achievement_key", "").strip()[:100]
+                if kind not in CREDIT_KINDS:
+                    errors.append("Select a valid recognition type.")
+                elif account_id and not account_name:
+                    errors.append("Select a valid party account.")
+                elif not recipient_name:
+                    errors.append("Select an account or enter a legacy recipient name.")
+                elif kind == "attendance" and not account_id:
+                    errors.append("Attendance credits must be linked to a party account.")
+                elif kind == "custom" and achievement_key not in ACHIEVEMENT_CATALOG:
+                    errors.append("Select a valid custom achievement.")
+                elif kind != "custom" and event_id not in event_editions:
+                    errors.append("Select the Halloween edition for this credit.")
+                elif kind == "attendance" and credit_exists(
+                    recognition_credits,
+                    kind=kind,
+                    account_id=account_id,
+                    event_id=event_id,
+                ):
+                    errors.append("That attendee already has credit for this Halloween edition.")
+                else:
+                    recognition_credits.append(
+                        new_credit(
+                            kind=kind,
+                            account_id=account_id,
+                            recipient_name=recipient_name,
+                            public_identity=public_identity,
+                            event_id=event_id,
+                            year=str(edition.get("year", "")),
+                            subject_key=subject_key,
+                            subject_label=subject_label,
+                            achievement_key=achievement_key,
+                            note=request.form.get("note", ""),
+                        )
+                    )
+                    messages.append(f"Added recognition credit for {recipient_name}.")
+                    should_broadcast = True
+
+            elif action == "revoke_recognition_credit":
+                credit_id = str(request.form.get("credit_id", "") or "")
+                credit = next((entry for entry in recognition_credits if entry.get("id") == credit_id), None)
+                if not credit:
+                    errors.append("That recognition credit could not be found.")
+                elif credit.get("revoked_at"):
+                    messages.append("That recognition credit is already revoked.")
+                else:
+                    credit["revoked_at"] = _utc_now_iso()
+                    credit["revoked_reason"] = request.form.get("reason", "").strip()[:500]
+                    messages.append(f"Revoked the recognition credit for {credit.get('recipient_name', 'guest')}.")
+                    should_broadcast = True
+
+            elif action == "link_recognition_credit":
+                credit_id = str(request.form.get("credit_id", "") or "")
+                account_id = str(request.form.get("account_id", "") or "")
+                credit = next((entry for entry in recognition_credits if entry.get("id") == credit_id), None)
+                account_name = account_name_by_id(account_id)
+                if not credit:
+                    errors.append("That recognition credit could not be found.")
+                elif not account_name:
+                    errors.append("Select a valid party account.")
+                elif credit_exists(
+                    recognition_credits,
+                    kind=str(credit.get("kind", "")),
+                    account_id=account_id,
+                    event_id=str(credit.get("event_id", "")),
+                    subject_key=str(credit.get("subject_key", "")),
+                    source_ref=str(credit.get("source_ref", "")),
+                ):
+                    errors.append("That account already has this recognition credit.")
+                else:
+                    credit["account_id"] = account_id
+                    credit["recipient_name"] = account_name
+                    messages.append(f"Linked the recognition credit to {account_name}.")
+                    should_broadcast = True
+
+        elif action in display_actions:
             if action == "update_display_layout":
                 enabled_sources = set(request.form.getlist("source_enabled"))
                 requested = {
@@ -9338,6 +9875,7 @@ def admin_portal(admin_view: str):
                             player_count=player_count,
                             generated_at=_utc_now_iso(),
                         )
+                        upsert_game_result_archive(game_key)
                         card_settings = display_config.setdefault("game_result_card_enabled", {})
                         card_settings[f"games:{game_key}-winner"] = True
                         card_settings[f"games:{game_key}-scores"] = True
@@ -9409,6 +9947,7 @@ def admin_portal(admin_view: str):
                         game["phase"] = "ended"
                         game["ended_at"] = finalized_at
                         game["results"] = calculate_mmf_results(game, finalized_at=finalized_at) if game_key == MURDER_MARRY_FUCK_GAME_KEY else calculate_prompt_results(game, finalized_at=finalized_at)
+                        upsert_game_result_archive(game_key)
                         write_state_backup_if_available(f"game-{game_key}-ended")
                         messages.append(f"{title} ended and its scores were finalized.")
                         should_broadcast = True
@@ -9561,7 +10100,7 @@ def admin_portal(admin_view: str):
                     elif not winner:
                         errors.append("This game does not have a positive-score winner.")
                     else:
-                        live_display_event_override = {"type": "game_winner", "title": winner["category"], "highlight": winner["primary"], "message": winner["secondary"], "details": [winner["tertiary"]]}
+                        live_display_event_override = {"type": "game_winner", "title": winner["category"], "highlight": winner["primary"], "message": winner["secondary"], "details": [winner["tertiary"]], "image_url": game_art_url(game_key, winner=True)}
                         messages.append(f"Live display paused on the {title} winner.")
                         should_broadcast = True
 
@@ -9572,7 +10111,7 @@ def admin_portal(admin_view: str):
                     elif not scoreboard:
                         errors.append("No final scores are available.")
                     else:
-                        live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]}
+                        live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]], "image_url": game_art_url(game_key)}
                         messages.append(f"Live display paused on the {title} results.")
                         should_broadcast = True
 
@@ -9816,18 +10355,22 @@ def admin_portal(admin_view: str):
             name = request.form.get("name", "").strip()
             costume = request.form.get("costume", "").strip()
             contact = request.form.get("contact", "").strip()
+            account_id = str(request.form.get("account_id", "") or "")
 
             if not name:
                 errors.append("Costume signup name is required.")
             if not costume:
                 errors.append("Costume description is required.")
+            if account_id and not account_name_by_id(account_id):
+                errors.append("Select a valid party account for the costume entry.")
 
-            if index is not None and name and costume:
+            if index is not None and name and costume and not errors:
                 costume_signups[index] = CostumeSignup(
                     id=costume_signups[index].id,
                     name=name,
                     costume=costume,
                     contact=contact,
+                    account_id=account_id,
                 )
                 messages.append(f"Updated costume signup for {name}.")
                 should_broadcast = True
@@ -10143,6 +10686,22 @@ def admin_portal(admin_view: str):
                 errors.append("User account could not be found.")
             else:
                 account = user_accounts.pop(account_key)
+                unlinked_credits = 0
+                for credit in recognition_credits:
+                    if str(credit.get("account_id", "")) != account_id:
+                        continue
+                    credit["account_id"] = ""
+                    credit["recipient_name"] = str(
+                        credit.get("recipient_name", "") or account.get("username", "Guest")
+                    )[:80]
+                    unlinked_credits += 1
+                for archive in result_archives:
+                    for winner_link in archive.get("winner_links", []):
+                        if isinstance(winner_link, dict) and str(winner_link.get("account_id", "")) == account_id:
+                            winner_link["account_id"] = ""
+                for signup in costume_signups:
+                    if signup.account_id == account_id:
+                        signup.account_id = ""
                 registered_users.pop(account_id, None)
                 submitted_costume_votes.discard(account_id)
                 costume_ballots.pop(account_id, None)
@@ -10152,7 +10711,12 @@ def admin_portal(admin_view: str):
                         or normalize_username(str(record.get("normalized_username", ""))) == account_key
                     ):
                         password_reset_tokens.pop(token_hash, None)
-                messages.append(f"Deleted account for {account.get('username')}.")
+                history_note = (
+                    f" Historical recognition preserved and unlinked ({unlinked_credits})."
+                    if unlinked_credits
+                    else ""
+                )
+                messages.append(f"Deleted account for {account.get('username')}.{history_note}")
 
         elif action == "delete_costume":
             index = parse_entry_index(
@@ -10172,19 +10736,23 @@ def admin_portal(admin_view: str):
             name = request.form.get("name", "").strip()
             costume = request.form.get("costume", "").strip()
             contact = request.form.get("contact", "").strip()
+            account_id = str(request.form.get("account_id", "") or "")
 
             if not name:
                 errors.append("Costume signup name is required to add a new entry.")
             if not costume:
                 errors.append("Costume description is required to add a new entry.")
+            if account_id and not account_name_by_id(account_id):
+                errors.append("Select a valid party account for the costume entry.")
 
-            if name and costume and not block_if_voting_locked("Adding costume signups"):
+            if name and costume and not errors and not block_if_voting_locked("Adding costume signups"):
                 costume_signups.append(
                     CostumeSignup(
                         id=uuid4().hex,
                         name=name,
                         costume=costume,
                         contact=contact,
+                        account_id=account_id,
                     )
                 )
                 messages.append(f"Added costume signup for {name}.")
@@ -10355,6 +10923,7 @@ def admin_portal(admin_view: str):
                 game["phase"] = "ended"
                 game["ended_at"] = finalized_at
                 game["results"] = calculate_two_truths_results(game, finalized_at=finalized_at)
+                upsert_game_result_archive(TWO_TRUTHS_GAME_KEY)
                 winners = two_truths_winners(game)
                 write_state_backup_if_available("two-truths-ended")
                 if winners:
@@ -10404,6 +10973,7 @@ def admin_portal(admin_view: str):
                     "highlight": names,
                     "message": "Tonight's mystery-game winner!" if len(winners) == 1 else "Tonight's mystery-game winners!",
                     "details": [f"{top_score} correct guess{'es' if top_score != 1 else ''}"],
+                    "image_url": game_art_url(TWO_TRUTHS_GAME_KEY, winner=True),
                 }
                 messages.append("Live display paused on the game winner card.")
                 should_broadcast = True
@@ -10425,6 +10995,7 @@ def admin_portal(admin_view: str):
                     "highlight": f"{len(game.get('participants', {}))} participants",
                     "message": "Final mystery-game standings",
                     "details": details,
+                    "image_url": game_art_url(TWO_TRUTHS_GAME_KEY),
                 }
                 messages.append("Live display paused on the final game results.")
                 should_broadcast = True
@@ -10797,6 +11368,7 @@ def admin_portal(admin_view: str):
                     create_scoreboard_card(top_entries) if top_entries else None
                 )
                 contest_state["show_scoreboard_card"] = False
+                upsert_costume_result_archive()
                 messages.append(
                     f"Locked in {leader['name']} as the costume contest champion."
                 )
@@ -10815,7 +11387,9 @@ def admin_portal(admin_view: str):
 
     costume_scores, costume_leader = build_costume_scoreboard()
     top_costume_rankings = rank_costume_entries(costume_scores)[:5]
-    selected_admin_game = str(request.args.get("game", "") or "") if admin_view == "games" else None
+    selected_admin_game = str(request.args.get("game", "") or TWO_TRUTHS_GAME_KEY) if admin_view == "games" else None
+    if selected_admin_game not in GAME_CATALOG:
+        selected_admin_game = TWO_TRUTHS_GAME_KEY if admin_view == "games" else None
 
     return render_template(
         "admin_karaoke.html" if admin_view == "karaoke" else "admin.html",
@@ -10886,6 +11460,25 @@ def admin_portal(admin_view: str):
             include_selected=admin_view == "games",
         ),
         game_result_cards=generated_game_result_entries(include_hidden=True),
+        selected_game_archive=next(
+            (
+                archive
+                for archive in result_archives
+                if admin_view == "games"
+                and archive.get("event_id") == current_event_id()
+                and archive.get("kind") == "game"
+                and archive.get("subject_key") == selected_admin_game
+            ),
+            None,
+        ),
+        event_editions=event_editions,
+        result_archives=result_archives,
+        recognition_credits=recognition_credits,
+        achievement_catalog=ACHIEVEMENT_CATALOG,
+        account_achievement_views={
+            str(account.get("id", "")): achievement_views(recognition_credits, str(account.get("id", "")))
+            for account in user_accounts.values()
+        },
     )
 
 
@@ -10957,6 +11550,22 @@ def export_games():
     )
 
 
+@app.route("/admin/export/recognition")
+def export_recognition():
+    if redis_state_available:
+        load_state_from_redis()
+    return send_json_export(
+        {
+            "schema_version": STATE_SCHEMA_VERSION,
+            "exported_at": _utc_now_iso(),
+            "event_editions": copy.deepcopy(event_editions),
+            "result_archives": copy.deepcopy(result_archives),
+            "recognition_credits": copy.deepcopy(recognition_credits),
+        },
+        "halloween-recognition-history.json",
+    )
+
+
 @app.route("/party/costumes", methods=["GET", "POST"])
 def party_costumes():
     errors: List[str] = []
@@ -10983,6 +11592,7 @@ def party_costumes():
                     name=name,
                     costume=costume,
                     contact=contact,
+                    account_id=str(session.get("user_id", "") or ""),
                 )
             )
             submitted = True

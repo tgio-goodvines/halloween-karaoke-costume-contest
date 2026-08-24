@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     karaokeCount: document.querySelector('[data-karaoke-count]'),
     gameCount: document.querySelector('[data-game-count]'),
     gameStage: document.querySelector('[data-game-stage]'),
+    gameImageWrap: document.querySelector('[data-game-image-wrap]'),
+    gameImage: document.querySelector('[data-game-image]'),
     gameStatus: document.querySelector('[data-game-status]'),
     gameTitle: document.querySelector('[data-game-title]'),
     gamePrimary: document.querySelector('[data-game-primary]'),
@@ -49,6 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
     barStage: document.querySelector('[data-bar-stage]'),
     barQueue: document.querySelector('[data-bar-queue]'),
     barHeading: document.querySelector('[data-bar-heading]'),
+    barImageWrap: document.querySelector('[data-bar-image-wrap]'),
+    barImage: document.querySelector('[data-bar-image]'),
     barOrders: document.querySelector('[data-bar-orders]'),
     barOverflow: document.querySelector('[data-bar-overflow]'),
     barSummary: document.querySelector('[data-bar-summary]'),
@@ -402,6 +406,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderGameEntry = (entry, count) => {
     const game = asObject(entry);
+    if (elements.gameImage && elements.gameImageWrap) {
+      if (game.image_url) {
+        elements.gameImage.src = game.image_url;
+        elements.gameImage.alt = `${game.title || 'Party game'} illustration`;
+        elements.gameImage.onerror = () => setHidden(elements.gameImageWrap, true);
+        setHidden(elements.gameImageWrap, false);
+      } else {
+        elements.gameImage.removeAttribute('src');
+        elements.gameImage.alt = '';
+        setHidden(elements.gameImageWrap, true);
+      }
+    }
     if (elements.gameStatus) elements.gameStatus.textContent = game.status_label || game.phase || '';
     if (elements.gameTitle) elements.gameTitle.textContent = game.title || 'Party Games';
     if (elements.gamePrimary) elements.gamePrimary.textContent = game.primary || '';
@@ -538,6 +554,18 @@ document.addEventListener('DOMContentLoaded', () => {
         { label: 'Drinks', value: Number(summary.available_drink_count) || 0 },
       ]);
       const feature = asObject(bar.featured_item);
+      if (elements.barImage && elements.barImageWrap) {
+        const imageUrl = feature.image_url || bar.image_url || '';
+        if (imageUrl) {
+          elements.barImage.src = imageUrl;
+          elements.barImage.alt = feature.name ? `${feature.name} image` : 'Bar illustration';
+          elements.barImage.onerror = () => setHidden(elements.barImageWrap, true);
+          setHidden(elements.barImageWrap, false);
+        } else {
+          elements.barImage.removeAttribute('src');
+          setHidden(elements.barImageWrap, true);
+        }
+      }
       const hasFeature = Boolean(feature.name);
       setHidden(elements.barFeature, !hasFeature);
       if (elements.barFeatureName) elements.barFeatureName.textContent = feature.name || '';

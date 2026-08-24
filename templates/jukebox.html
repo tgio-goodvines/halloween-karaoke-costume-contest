@@ -11,6 +11,7 @@
   data-search-url="{{ catalog_search_url }}"
 >
   <header class="jukebox-page__header">
+    <img class="feature-page-art" src="{{ feature_art.jukebox }}" alt="">
     <p class="admin-panel__eyebrow">Guest requests</p>
     <h2>Party Jukebox</h2>
     <p>See what is playing, browse the DJ playlist, and send up to {{ jukebox.request_limit }} requests for approval.</p>
@@ -20,8 +21,8 @@
   {% if request.args.get('request_error') %}<div class="flash flash--error"><p>{{ request.args.get('request_error') }}</p></div>{% endif %}
 
   <section class="jukebox-now-playing" data-jukebox-now-playing>
-    <div class="jukebox-now-playing__artwork" data-live-dj-artwork-wrap{% if not jukebox.now_playing or not jukebox.now_playing.artwork_url %} hidden{% endif %}>
-      <img data-live-dj-artwork{% if jukebox.now_playing and jukebox.now_playing.artwork_url %} src="{{ jukebox.now_playing.artwork_url }}" alt="{{ jukebox.now_playing.title }} artwork"{% else %} alt=""{% endif %}>
+    <div class="jukebox-now-playing__artwork" data-live-dj-artwork-wrap hidden>
+      <img data-live-dj-artwork alt="" src="{{ jukebox.now_playing.artwork_url if jukebox.now_playing and jukebox.now_playing.artwork_url else feature_art.jukebox }}">
     </div>
     <div>
       <p class="admin-panel__eyebrow" data-live-dj-status>{{ jukebox.playback_status|replace('_', ' ')|title }}</p>

@@ -4,9 +4,10 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed schema-v16 state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, YouTube karaoke workflow/state/routes, multi-singer/request-priority/adaptive-display state, stable-user karaoke completion acknowledgements, admin-controlled game identity, generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed schema-v17 state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, YouTube karaoke workflow/state/routes, multi-singer/request-priority/adaptive-display state, stable-user karaoke completion acknowledgements, admin-controlled game identity, official result/recognition actions, generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
 | `youtube_karaoke.py` | YouTube URL/metadata normalization, Google API search and playlist client, bounded timeout/error translation, OAuth flow, and dedicated Vault refresh-token store. |
 | `party_games.py` | Five-game catalog, persisted-state normalization, game-level signed-in-name/anonymous-alias modes, Two Truths scoring, MMF plurality scoring, shared prompt-response-voting results, ties, and statistics. |
+| `recognition.py` | Event-edition, result-archive, and recognition-credit normalization plus achievement catalog and derived account collection logic. |
 | `requirements.txt` | Python dependencies including Flask, Redis, AWS/SES, Google YouTube/OAuth clients, hvac, and gunicorn. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
 | `deploy/ec2_deploy_from_github.sh` | SSM-run EC2 deployment script that fetches the Vault-stored GitHub deploy key, checks out the exact commit SHA, installs the Halloween release, restarts only `halloween-party`, validates nginx, and checks GoodVines health. |
@@ -22,6 +23,12 @@
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, game-specific illustrated cards, header menu, menu cards, and bartender queue. |
 | `static/preserve-scroll.js` | Stable view-state restoration plus progressive same-origin admin POST handling that replaces the returned workspace in place and preserves anchor, disclosure, query, and focus state. |
 | `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
+| `static/images/games/winners/` | Five style-matched completed-game trophy illustrations for live winner/outcome cards. |
+| `static/images/features/` | Shared jukebox, bar, menu, and karaoke fallback/feature artwork. |
+| `static/images/achievements/` | Six transparent generated reward emblems used by attendee and admin collections. |
+| `static/games-live-status.js` | Five-second privacy-safe game/results/achievement polling renderer shared by the overview, game hub, and Results & Rewards page. |
+| `templates/results.html` | Signed-in live game status, personal achievements, and official Hall of Fame page. |
+| `templates/_admin_recognition.html` | Event-edition, retro credit, result publication, account collection, link/revoke, and export controls. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Fixed-viewport adaptive TV grid with title header, independent game/bar rails, dominant center cards, conditional music footer, density fitting, event spotlights, ready alerts, CTA, scoreboard, and karaoke layouts. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
@@ -73,6 +80,7 @@
 | `ai-context/DJ_LIVE_SURFACES_CORRECTIVE_ACTION.md` | Completed cross-surface DJ song/artwork synchronization root-cause analysis, capacity-safe corrective design, affected surfaces, and verification record. |
 | `ai-context/KARAOKE_ATTENDEE_LIVE_STATUS_PROGRESS.md` | Attendee-safe karaoke polling, requester/co-singer status, centralized stage-transition invariants, security boundary, event-night operator contract, and verification record. |
 | `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` | Durable Two Truths and a Lie lifecycle, Redis model, scoring, attendee/admin/display behavior, verification, and rollout progress. |
+| `ai-context/GAME_RESULTS_REWARDS_RECOGNITION_PROGRESS.md` | Realtime game status, durable official history, achievements, retroactive admin recognition, generated artwork, and release verification. |
 | `ai-context/ACCOUNT_MANAGEMENT_FEATURE.md` | Attendee account workspace behavior, access boundaries, persistence rules, and verification coverage. |
 | `ai-context/ROLE_VIEW_PREVIEW_FEATURE.md` | Admin role-view demo behavior, safety boundary, and regression coverage. |
 

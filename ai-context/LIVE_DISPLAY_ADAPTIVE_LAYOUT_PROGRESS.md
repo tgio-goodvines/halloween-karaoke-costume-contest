@@ -155,3 +155,17 @@ Verification covers the enriched payload/markup and populated three-stage
 browser layouts at 1920x1080, 1366x768, 1280x720, and 1024x768. At every size,
 the document matched the viewport and every visible region remained within its
 fixed no-scroll track.
+
+## Generated Status And Feature Artwork (2026-08-24)
+
+- Every game-stage status record now carries its original game illustration.
+  Ended records with a positive winner switch to a dedicated completed-game
+  trophy variant. Winner/outcome center cards and winner presentation slides use
+  the same dedicated art; neutral final-score cards retain original game art.
+- The bar rail has a generated bar fallback and switches to a featured drink or
+  ready-order item image when available.
+- Karaoke center cards use generated karaoke art. The DJ footer initializes
+  with generated jukebox art and replaces it with confirmed album artwork when
+  available.
+- Images remain optional at render time: client error handlers remove failed
+  media without hiding the underlying live status or results.

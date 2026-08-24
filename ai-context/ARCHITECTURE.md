@@ -504,3 +504,27 @@ SSE connections.
   temporary override types.
 - If adding admin actions, call `broadcast_display_update()` whenever display-relevant state changes.
 - If adding template pages, extend `base.html` unless the page is a full-screen display mode.
+
+## Results And Recognition Architecture (Schema 17)
+
+- `recognition.py` contains normalization and derived-achievement logic; route,
+  archive snapshot, and Redis mutation orchestration remains in `main.py`.
+- `event_editions`, `result_archives`, and `recognition_credits` are serialized
+  in the canonical state document. Current game/contest state is intentionally
+  independent from durable archives so reset operations cannot erase history.
+- `safe_game_status_view()` is the only source for attendee live game payloads
+  and archived game summaries. Do not place participant maps, account IDs,
+  blind-response authors, or MMF ballots in that view.
+- `GET /party/results` renders the initial safe snapshot; authenticated
+  `GET /api/party/games-data` refreshes it every five seconds with no-store
+  caching. It uses polling rather than another long-lived production SSE stream.
+- `upsert_game_result_archive()` runs after every completed-game finalization;
+  `upsert_costume_result_archive()` runs after winner lock. Both leave an
+  official archive immutable when current state is reset or simulated again.
+- `publish_result_archive()` rejects simulation, marks the draft official, and
+  creates source-referenced idempotent winner credits only for valid linked
+  accounts. Public payloads always remove internal `winner_links`.
+- Achievement progress is derived at read time from active credits and distinct
+  event IDs. Revocation preserves the audit row but removes it from derivation.
+- Account deletion clears stable links from credits, result archives, and
+  costume entries while retaining historical name/public-identity snapshots.

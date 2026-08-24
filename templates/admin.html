@@ -43,6 +43,10 @@
     </div>
   {% endif %}
 
+  {% if admin_view == 'recognition' %}
+    {% include '_admin_recognition.html' %}
+  {% endif %}
+
   {% if admin_view == 'home' %}
     <section class="admin-home" aria-label="Tonight at a glance">
       <header class="admin-home__intro">
@@ -1236,7 +1240,7 @@
               <span class="admin-entry__rank">{{ 'Bar' if 'bartender' in account.roles else 'User' }}</span>
               <span class="admin-entry__summary-text">
                 <strong>{{ account.username }}</strong>
-                <span>{{ account.email }}</span>
+                <span>{{ account.email }} · {{ account_achievement_views.get(account.id, {}).get('achievements', [])|length }} achievement{{ '' if account_achievement_views.get(account.id, {}).get('achievements', [])|length == 1 else 's' }}</span>
               </span>
             </summary>
             <form method="post" class="admin-entry__form">
@@ -1276,6 +1280,7 @@
               </div>
               <button type="submit" name="action" value="reset_user_password" class="button">Reset Password</button>
             </form>
+            <a class="button" href="{{ url_for('admin_portal', admin_view='recognition') }}">Manage Recognition</a>
           </details>
         {% endfor %}
       </div>
@@ -1316,6 +1321,15 @@
               Contact Details
               <input type="text" name="contact" placeholder="Optional">
             </label>
+            <label>
+              Party Account
+              <select name="account_id">
+                <option value="">Legacy / no account</option>
+                {% for account in user_accounts.values()|sort(attribute='username') %}
+                  <option value="{{ account.id }}">{{ account.username }}</option>
+                {% endfor %}
+              </select>
+            </label>
           </div>
           <button type="submit" name="action" value="add_costume" class="button button--primary" {% if costume_lineup_locked %}disabled{% endif %}>Add Costume Signup</button>
         </form>
@@ -1348,6 +1362,15 @@
                   <label>
                     Contact Details
                     <input type="text" name="contact" value="{{ signup.contact }}" placeholder="Optional">
+                  </label>
+                  <label>
+                    Party Account
+                    <select name="account_id">
+                      <option value="">Legacy / no account</option>
+                      {% for account in user_accounts.values()|sort(attribute='username') %}
+                        <option value="{{ account.id }}"{% if signup.account_id == account.id %} selected{% endif %}>{{ account.username }}</option>
+                      {% endfor %}
+                    </select>
                   </label>
                 </div>
                 <div class="admin-entry__actions">

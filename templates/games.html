@@ -2,11 +2,12 @@
 {% set title = "Party Games" %}
 
 {% block content %}
-<section class="games-shell">
+<section class="games-shell" data-games-live-widget data-games-state-url="{{ games_data_url }}" data-selected-game="{{ game_key }}">
   <header class="games-hero">
     <p class="admin-panel__eyebrow">Party games</p>
     <h2>Games</h2>
     <p>Opt in, play from your phone, and watch the hosts reveal the results.</p>
+    <p class="game-live-status" data-selected-game-live-status role="status">{{ game.phase|title }} · {{ game.participants|length }} player{{ '' if game.participants|length == 1 else 's' }}</p>
   </header>
 
   <nav class="games-tabs" aria-label="Available party games">
@@ -151,4 +152,9 @@
     {% endif %}
   </section>
 </section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='games-live-status.js') }}" defer></script>
 {% endblock %}

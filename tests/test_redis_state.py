@@ -5824,8 +5824,10 @@ class RedisStateTests(unittest.TestCase):
             exported = admin.get("/admin/export/games")
             winner_override = admin.post("/admin/games", data={"action": "show_two_truths_winner"})
             self.assertEqual("game_winner", main.live_display_event_override["type"])
+            self.assertEqual("background", main.live_display_event_override["media_treatment"])
             results_override = admin.post("/admin/games", data={"action": "show_two_truths_results"})
             self.assertEqual("game_results", main.live_display_event_override["type"])
+            self.assertEqual("background", main.live_display_event_override["media_treatment"])
             resumed = admin.post("/admin/games", data={"action": "resume_game_display"})
 
         self.assertEqual(200, ended.status_code)
@@ -6741,6 +6743,7 @@ class RedisStateTests(unittest.TestCase):
         game.update({"enabled": True, "phase": "signup"})
         status_entry = main.build_game_stage_entries()[0]
         self.assertEqual("/static/images/games/wrong-answers-only.jpg", status_entry["image_url"])
+        self.assertEqual("background", status_entry["media_treatment"])
 
         game.update(
             {
@@ -6768,6 +6771,7 @@ class RedisStateTests(unittest.TestCase):
         )
         winner_entry = main.build_game_stage_entries()[0]
         result_cards = main.generated_game_result_entries(include_hidden=True)
+        join_card = next(entry for entry in main.build_rotation_entries() if entry["id"] == "games:join")
 
         self.assertEqual(
             "/static/images/games/winners/wrong-answers-only-winner.jpg",
@@ -6776,6 +6780,11 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(
             "/static/images/games/winners/wrong-answers-only-winner.jpg",
             next(card for card in result_cards if card["card_type"] == "Winner / Outcome")["image_url"],
+        )
+        self.assertTrue(all(card["media_treatment"] == "background" for card in result_cards))
+        self.assertEqual("background", join_card["media_treatment"])
+        self.assertTrue(
+            all(slide["media_treatment"] == "background" for slide in main.build_game_presentation_slides(main.WRONG_ANSWERS_GAME_KEY))
         )
 
     def test_schema_seventeen_round_trip_preserves_archives_credits_and_costume_links(self):

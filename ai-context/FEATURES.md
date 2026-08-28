@@ -421,3 +421,10 @@ app state.
   revocation, per-account collections, and recognition JSON export.
 - Account deletion preserves historical public identity while unlinking credits,
   archived winner links, and costume associations from the removed account.
+
+## Live-Display Game Artwork
+
+- Game status, join, scoreboard, winner, and presentation cards use their game
+  illustration as a translucent full-card background with text layered above.
+- Winner states retain their dedicated trophy artwork. Non-game live-display
+  images keep their foreground-media layouts.

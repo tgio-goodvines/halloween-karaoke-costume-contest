@@ -130,3 +130,10 @@ Release uses the existing `main` GitHub Actions → AWS SSM →
 `halloween-party.service` path. The implementation commit, workflow run, public
 health checks, deployed page/asset checks, and GoodVines isolation result are
 reported in the deployment handoff for this change.
+
+## Live-Display Winner Art Refinement (2026-08-28)
+
+Game and winner illustrations on the live display use a translucent full-card
+background with layered contrast gradients. They no longer occupy a separate
+thumbnail column or image block. Dedicated trophy variants remain reserved for
+winner/outcome states, and attendee/admin page artwork is unchanged.

@@ -6200,6 +6200,7 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             game_key,
             winner=str(slide.get("type", "")) == "game_winner",
         )
+        slide["media_treatment"] = "background"
     return slides
 
 
@@ -6365,6 +6366,7 @@ def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[
             entry = _display_entry("games", f"{game_key}-{suffix}", **card)
             entry["kind"] = "result" if suffix == "winner" else "scoreboard"
             entry["image_url"] = game_art_url(game_key, winner=suffix == "winner")
+            entry["media_treatment"] = "background"
             entry["facts"] = [
                 _display_fact("Game", GAME_CATALOG[game_key]["short_title"]),
                 _display_fact("Players", len(game.get("participants", {}))),
@@ -6524,6 +6526,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 kind="action",
                 primary="Join tonight's party games.",
                 image_url=game_art_url(enabled_games[0]),
+                media_treatment="background",
                 secondary="Open Games in the party portal to opt in, answer, and vote.",
                 tertiary="Available: " + " · ".join(GAME_CATALOG[key]["short_title"] for key in enabled_games),
                 facts=[
@@ -6618,6 +6621,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             "game_key": game_key,
             "title": title,
             "image_url": game_art_url(game_key),
+            "media_treatment": "background",
             "phase": phase,
             "status_label": phase.replace("_", " ").title(),
             "primary": GAME_CATALOG[game_key]["description"],
@@ -10100,7 +10104,7 @@ def admin_portal(admin_view: str):
                     elif not winner:
                         errors.append("This game does not have a positive-score winner.")
                     else:
-                        live_display_event_override = {"type": "game_winner", "title": winner["category"], "highlight": winner["primary"], "message": winner["secondary"], "details": [winner["tertiary"]], "image_url": game_art_url(game_key, winner=True)}
+                        live_display_event_override = {"type": "game_winner", "title": winner["category"], "highlight": winner["primary"], "message": winner["secondary"], "details": [winner["tertiary"]], "image_url": game_art_url(game_key, winner=True), "media_treatment": "background"}
                         messages.append(f"Live display paused on the {title} winner.")
                         should_broadcast = True
 
@@ -10111,7 +10115,7 @@ def admin_portal(admin_view: str):
                     elif not scoreboard:
                         errors.append("No final scores are available.")
                     else:
-                        live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]], "image_url": game_art_url(game_key)}
+                        live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]], "image_url": game_art_url(game_key), "media_treatment": "background"}
                         messages.append(f"Live display paused on the {title} results.")
                         should_broadcast = True
 
@@ -10974,6 +10978,7 @@ def admin_portal(admin_view: str):
                     "message": "Tonight's mystery-game winner!" if len(winners) == 1 else "Tonight's mystery-game winners!",
                     "details": [f"{top_score} correct guess{'es' if top_score != 1 else ''}"],
                     "image_url": game_art_url(TWO_TRUTHS_GAME_KEY, winner=True),
+                    "media_treatment": "background",
                 }
                 messages.append("Live display paused on the game winner card.")
                 should_broadcast = True
@@ -10996,6 +11001,7 @@ def admin_portal(admin_view: str):
                     "message": "Final mystery-game standings",
                     "details": details,
                     "image_url": game_art_url(TWO_TRUTHS_GAME_KEY),
+                    "media_treatment": "background",
                 }
                 messages.append("Live display paused on the final game results.")
                 should_broadcast = True

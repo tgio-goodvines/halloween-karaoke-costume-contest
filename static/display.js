@@ -276,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
     secondary: override.message || '',
     tertiary: safeArray(override.details).join(' · '),
     image_url: override.image_url || '',
+    media_treatment: override.media_treatment || '',
     karaoke: override.karaoke,
     duration_seconds: 8,
     override_type: override.type || '',
@@ -283,10 +284,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderCenterEntry = (entry, { spotlight = false } = {}) => {
     const safeEntry = asObject(entry);
+    const hasImage = Boolean(safeEntry.image_url);
+    const hasBackgroundMedia = hasImage && safeEntry.media_treatment === 'background';
+    const hasForegroundMedia = hasImage && !hasBackgroundMedia;
     clearCenterExtras();
     elements.centerStage?.classList.toggle('is-spotlight', spotlight);
     elements.centerStage?.classList.toggle('is-scoreboard', Boolean(asObject(safeEntry.scoreboard).entries));
-    elements.centerStage?.classList.toggle('has-media', Boolean(safeEntry.image_url));
+    elements.centerStage?.classList.toggle('has-media', hasImage);
+    elements.centerStage?.classList.toggle('has-background-media', hasBackgroundMedia);
+    elements.centerStage?.classList.toggle('has-foreground-media', hasForegroundMedia);
     ['access', 'action', 'profile', 'status', 'result', 'scoreboard', 'announcement'].forEach((kind) => {
       elements.centerStage?.classList.toggle(`is-${kind}`, safeEntry.kind === kind);
     });
@@ -297,10 +303,26 @@ document.addEventListener('DOMContentLoaded', () => {
     setOptionalText(elements.centerTertiary, safeEntry.tertiary || '');
     if (elements.centerImage && elements.centerImageWrap) {
       if (safeEntry.image_url) {
-        elements.centerImage.src = safeEntry.image_url;
-        elements.centerImage.alt = safeEntry.primary ? `${safeEntry.primary} image` : 'Display image';
-        setHidden(elements.centerImageWrap, false);
+        const requestedSrc = safeEntry.image_url;
+        elements.centerImage.alt = hasBackgroundMedia ? '' : (safeEntry.primary ? `${safeEntry.primary} image` : 'Display image');
+        elements.centerImageWrap.setAttribute('aria-hidden', hasBackgroundMedia ? 'true' : 'false');
+        elements.centerImage.onload = () => {
+          if (elements.centerImage.getAttribute('src') !== requestedSrc) return;
+          setHidden(elements.centerImageWrap, false);
+          fitAll();
+        };
+        elements.centerImage.onerror = () => {
+          if (elements.centerImage.getAttribute('src') !== requestedSrc) return;
+          setHidden(elements.centerImageWrap, true);
+          elements.centerStage?.classList.remove('has-media', 'has-background-media', 'has-foreground-media');
+          fitAll();
+        };
+        setHidden(elements.centerImageWrap, true);
+        elements.centerImage.src = requestedSrc;
+        if (elements.centerImage.complete && elements.centerImage.naturalWidth) elements.centerImage.onload();
       } else {
+        elements.centerImage.onload = null;
+        elements.centerImage.onerror = null;
         elements.centerImage.removeAttribute('src');
         elements.centerImage.alt = '';
         setHidden(elements.centerImageWrap, true);
@@ -406,13 +428,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderGameEntry = (entry, count) => {
     const game = asObject(entry);
+    elements.gameStage?.classList.toggle('has-background-media', Boolean(game.image_url));
     if (elements.gameImage && elements.gameImageWrap) {
       if (game.image_url) {
-        elements.gameImage.src = game.image_url;
-        elements.gameImage.alt = `${game.title || 'Party game'} illustration`;
-        elements.gameImage.onerror = () => setHidden(elements.gameImageWrap, true);
-        setHidden(elements.gameImageWrap, false);
+        const requestedSrc = game.image_url;
+        elements.gameImage.alt = '';
+        elements.gameImage.onload = () => {
+          if (elements.gameImage.getAttribute('src') !== requestedSrc) return;
+          setHidden(elements.gameImageWrap, false);
+          fitAll();
+        };
+        elements.gameImage.onerror = () => {
+          if (elements.gameImage.getAttribute('src') !== requestedSrc) return;
+          setHidden(elements.gameImageWrap, true);
+          elements.gameStage?.classList.remove('has-background-media');
+          fitAll();
+        };
+        setHidden(elements.gameImageWrap, true);
+        elements.gameImage.src = requestedSrc;
+        if (elements.gameImage.complete && elements.gameImage.naturalWidth) elements.gameImage.onload();
       } else {
+        elements.gameImage.onload = null;
+        elements.gameImage.onerror = null;
         elements.gameImage.removeAttribute('src');
         elements.gameImage.alt = '';
         setHidden(elements.gameImageWrap, true);

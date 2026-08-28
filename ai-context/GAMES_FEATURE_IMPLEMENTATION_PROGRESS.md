@@ -216,3 +216,12 @@ interaction depends on guessing another attendee.
   logical focus, with ordinary forms preserved as the fallback.
 - Detailed design and verification live in
   `ai-context/ADMIN_GAMES_WORKSPACE_REORGANIZATION.md`.
+
+## Live-Display Artwork Composition (2026-08-28)
+
+Live-display game artwork now fills each game card as a translucent atmospheric
+background instead of a small bordered thumbnail. Original game art remains on
+signup, active, and final-score states; dedicated trophy art remains on ended
+winner states. The treatment covers the left game rail, center join/result
+cards, direct host winner/results spotlights, and every announcer presentation
+slide. Non-game image cards retain their foreground-media layout.

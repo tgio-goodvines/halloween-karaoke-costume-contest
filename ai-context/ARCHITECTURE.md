@@ -528,3 +528,12 @@ SSE connections.
   event IDs. Revocation preserves the audit row but removes it from derivation.
 - Account deletion clears stable links from credits, result archives, and
   costume entries while retaining historical name/public-identity snapshots.
+
+## Live-Display Media Treatment
+
+- Game-originated display entries declare `media_treatment: "background"`.
+  `static/display.js` maps that marker to explicit background/foreground media
+  classes, while `static/display.css` supplies the translucent cover layer and
+  contrast gradients.
+- The marker is derived display data only. It does not change Redis schema or
+  persisted display configuration. Entries without it retain foreground media.

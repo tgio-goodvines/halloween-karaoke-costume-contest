@@ -132,6 +132,8 @@ body.display-mode * { box-sizing: border-box; }
 }
 
 .display-game-stage {
+  position: relative;
+  isolation: isolate;
   grid-area: games;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -184,6 +186,8 @@ body.display-mode * { box-sizing: border-box; }
 .display-region-footer { color: #71717a; }
 
 .display-center-card {
+  position: relative;
+  isolation: isolate;
   align-self: stretch;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -192,7 +196,7 @@ body.display-mode * { box-sizing: border-box; }
   overflow: hidden;
 }
 
-.display-center-stage.has-media .display-center-card {
+.display-center-stage.has-foreground-media .display-center-card {
   grid-template-columns: minmax(8rem, 0.62fr) minmax(0, 1.38fr);
   gap: clamp(0.75rem, 1.7vw, 1.6rem);
   align-items: center;
@@ -214,6 +218,56 @@ body.display-mode * { box-sizing: border-box; }
   width: 100%;
   max-height: min(42vh, 28rem);
   object-fit: cover;
+}
+
+.display-center-stage.has-background-media .display-center-card {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-radius: 0.75rem;
+}
+
+.display-center-stage.has-background-media .display-center-card__media {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  align-self: stretch;
+  width: auto;
+  height: auto;
+  max-height: none;
+  border: 0;
+  border-radius: inherit;
+  background: #111;
+  box-shadow: none;
+}
+
+.display-center-stage.has-background-media .display-center-card__media::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    radial-gradient(circle at 50% 46%, rgba(7, 7, 8, 0.34), rgba(7, 7, 8, 0.56) 58%, rgba(7, 7, 8, 0.78) 100%),
+    linear-gradient(180deg, rgba(13, 13, 13, 0.22), rgba(13, 13, 13, 0.55));
+}
+
+.display-center-stage.has-background-media .display-center-card__media img {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  opacity: 0.34;
+  filter: saturate(0.78) contrast(1.12) brightness(0.78);
+}
+
+.display-center-stage.has-background-media.is-result .display-center-card__media img,
+.display-center-stage.has-background-media.is-spotlight .display-center-card__media img {
+  opacity: 0.46;
+}
+
+.display-center-stage.has-background-media .display-center-card__body {
+  position: relative;
+  z-index: 1;
+  width: min(68rem, 100%);
+  margin-inline: auto;
+  padding: clamp(0.8rem, 2.2cqi, 2rem);
 }
 
 .display-center-card__body {
@@ -378,9 +432,34 @@ body.display-mode * { box-sizing: border-box; }
 .display-center-progress span { display: block; width: 100%; height: 100%; background: #ff3131; box-shadow: 0 0 8px #ff3131; transform-origin: left; }
 @keyframes display-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
+.display-game-stage > :not(.display-game-stage__image) { position: relative; z-index: 1; }
 .display-game-stage__content { align-self: center; display: grid; align-content: center; min-height: 0; overflow: hidden; }
-.display-game-stage__image, .display-bar-stage__image { overflow: hidden; margin-bottom: clamp(0.45rem, 1vh, 0.75rem); border: 1px solid rgba(255, 49, 49, 0.42); border-radius: 0.7rem; }
-.display-game-stage__image img, .display-bar-stage__image img { display: block; width: 100%; height: clamp(74px, 14vh, 145px); object-fit: cover; }
+.display-game-stage__image {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #111;
+}
+.display-game-stage__image::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(180deg, rgba(13, 13, 13, 0.42), rgba(13, 13, 13, 0.6) 44%, rgba(13, 13, 13, 0.78)),
+    radial-gradient(circle at 50% 32%, rgba(196, 32, 32, 0.06), rgba(0, 0, 0, 0.42) 74%);
+}
+.display-game-stage__image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.32;
+  filter: saturate(0.76) contrast(1.12) brightness(0.78);
+}
+.display-bar-stage__image { overflow: hidden; margin-bottom: clamp(0.45rem, 1vh, 0.75rem); border: 1px solid rgba(255, 49, 49, 0.42); border-radius: 0.7rem; }
+.display-bar-stage__image img { display: block; width: 100%; height: clamp(74px, 14vh, 145px); object-fit: cover; }
 .display-game-stage__status { margin: 0 0 clamp(0.5rem, 1.2vh, 0.85rem); color: #ff8a8a; font: 700 clamp(0.56rem, 0.74vw, 0.76rem)/1.2 "Outfit", sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
 .display-game-stage__status::before { display: inline-block; width: 0.42rem; height: 0.42rem; margin-right: 0.38rem; border-radius: 50%; background: #ff3131; box-shadow: 0 0 8px #ff3131; content: ""; }
 .display-game-stage h2 { margin: 0 0 0.45rem; color: #fff; font: 800 var(--display-side-title)/1.05 "Outfit", sans-serif; overflow-wrap: anywhere; }
@@ -482,7 +561,6 @@ body.display-mode * { box-sizing: border-box; }
 .display-side.is-sparse { --display-side-title: clamp(1.2rem, 7.2cqi, 2.1rem); --display-side-copy: clamp(0.82rem, 4.5cqi, 1.3rem); }
 .display-side.is-dense .display-bar-feature { display: none !important; }
 .display-side.is-ultra-dense .display-game-stage__steps,
-.display-side.is-ultra-dense .display-game-stage__image,
 .display-side.is-ultra-dense .display-bar-stage__image,
 .display-center-stage.is-ultra-dense .display-action-steps { display: none !important; }
 .display-side.is-ultra-dense .display-bar-summary,
@@ -528,8 +606,8 @@ body.display-mode * { box-sizing: border-box; }
   .display-bar-action,
   .display-bar-pickup { display: none !important; }
   .display-game-stage__metrics { grid-template-columns: 1fr; }
-  .display-center-stage.has-media .display-center-card { grid-template-columns: 1fr; }
-  .display-center-card__media { display: none !important; }
+  .display-center-stage.has-foreground-media .display-center-card { grid-template-columns: 1fr; }
+  .display-center-stage.has-foreground-media .display-center-card__media { display: none !important; }
   .display-center-card__cta dl { grid-template-columns: 1fr; }
   .display-center-card__cta dl div { padding: 0.3rem; }
   .display-fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.25rem; }

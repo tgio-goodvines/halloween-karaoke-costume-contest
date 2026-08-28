@@ -169,3 +169,21 @@ fixed no-scroll track.
   available.
 - Images remain optional at render time: client error handlers remove failed
   media without hiding the underlying live status or results.
+
+## Full-Card Game Artwork Treatment (2026-08-28)
+
+- Game illustrations are atmospheric full-card backgrounds on the live display,
+  not bordered thumbnails. This covers the left game-status rail, Party Games
+  join card, winner/outcome and final-score cards, host Show Now overrides, and
+  previous/next result-presentation slides.
+- Game payloads use the additive `media_treatment: "background"` marker. The
+  browser distinguishes background from foreground media, so karaoke, menu,
+  drink, DJ, and custom-card images keep their existing presentation.
+- Edge-to-edge cover images use restrained opacity, desaturation, and layered
+  black/red gradients. Text and result modules render above the artwork;
+  winner/spotlight art receives a modest visibility lift.
+- Background art is decorative (`alt=""`/`aria-hidden`) and failed loads fall
+  back to the standard dark neon panel without an empty media region.
+- Background media consumes no measured layout height and remains available in
+  dense, ultra-dense, and narrow layouts. Only foreground media is suppressed
+  at the narrow live-display breakpoint.

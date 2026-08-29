@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 20. The following globals in `main.py` are
+`halloween:state` with schema version 21. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -180,6 +180,9 @@ the process-local cache:
   beverage type, specialty sequence/extra-request metadata, status, estimated
   ready time, created/started/completed timestamps, persistent optional
   `picked_up_at`, and completed prep duration.
+- `specialty_drink_allowances`: per-account bonus allowance and count-reset
+  baseline. Historical orders remain intact when an admin grants another drink
+  or resets current eligibility.
 - `bartender_tip_settings`: admin-managed bartender tip prompt settings with an
   enable flag, display name, note, QR/payment image URL, and optional Zelle,
   PayPal, Venmo, or Cash App handles.
@@ -258,15 +261,18 @@ the process-local cache:
   one-player session; a single prompt response becomes a one-point solo
   spotlight while Two Truths retains its two-player minimum.
 
-Drink orders move from `received` to `in_progress` to `complete`. Completed
+Drink orders move from `received` to `in_progress` to `complete`. Active
+bartender preparation resolves the latest non-empty menu ingredients and
+instructions, with the order snapshot as a deletion/fallback boundary. Completed
 orders track prep duration from `started_at` when available, and drink-ready
 events create a temporary 10-second live-display notice with the drink image.
 Drink notices render above active contest/karaoke/winner event overrides
 without replacing them. Notice expiration and attendee pickup acknowledgement
 affect presentation only: completed order records remain in night-long attendee
-and bartender history. The right display stage shows the active queue plus a
-rotating available menu promotion when work is queued; without an active queue
-it composes rotating food/drink promotions around completed-order history, and
+and bartender history. The right display stage shows completed drinks directly
+below any active queue and gives operational history priority over promotions.
+Without an active queue, it composes rotating food/drink promotions around
+completed-order history and
 collapses only when no notice, queue, history, or available menu item exists.
 
 DJ commands share the Redis snapshot and display-update broadcast architecture.

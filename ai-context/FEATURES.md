@@ -235,6 +235,10 @@
 - Admin can add, edit, and delete party account users, reset account passwords
   directly, and assign or remove the `bartender` role.
 - Admin can open the bartender view and see bar operations summary counts.
+- Admin can grant additional included specialty drinks to a specific account or
+  reset that account's current count without deleting its order history.
+- Admin can reset all bar orders/history from a confirmed danger-zone action;
+  menu items, accounts, and tip settings remain intact.
 - DJ workspace at `/admin/dj` has Apple Music playlist CRUD, reorder/enable
   controls, individual-song playback, play-from-beginning, shuffle, previous,
   pause, stop, and next controls.
@@ -307,8 +311,11 @@
   not merged into the attendee Menu & Orders workspace.
 - Drink orders progress from `received` to `in_progress` to `complete`.
 - Bartender Current Drink shows separate ingredient and ordered instruction
-  references; Up Next and backlog expose preparation details through compact
-  disclosures.
+  references in a full-width workbench; the sections split into columns only
+  when their actual container is wide enough. Up Next and backlog expose
+  preparation details through compact disclosures.
+- Active orders use the latest non-empty menu preparation reference and refresh
+  after an admin edit; completed orders retain their historical snapshot.
 - Bartender view labels specialty drink sequence numbers and flags after-11 PM
   4th+ specialty requests with a reminder to check availability.
 - Bartender operations are strict first-in, first-out. The workspace identifies
@@ -330,6 +337,9 @@
 - `/api/party/bar-queue` is regular-attendee and party-day protected. It returns
   aggregate queue metrics and account-scoped personal order status only;
   `/api/bartender-queue` remains separately protected for bartender/admin use.
+- Completed Tonight remains directly beneath the live-display queue whenever
+  completed drinks exist. Promotional content yields first when the fixed TV
+  rail needs more room.
 
 Important caveat: UI role passwords must be configured for normal use:
 `HALLOWEEN_ADMIN_PASSWORD` is the only UI password loaded from Vault. Regular

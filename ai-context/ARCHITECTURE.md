@@ -49,11 +49,12 @@
   rejects non-owners and non-completed orders, is idempotent, stores
   `picked_up_at`, and never removes the completed order.
 - `GET|POST /bartender` -> bartender/admin drink order queue with image and
-  ingredient reference; transitions orders to `in_progress` or `complete`.
+  ingredient/instruction reference; transitions orders to `in_progress` or `complete`.
   Active orders are strict FIFO with one Current Drink, one Up Next, and an
   ordered backlog. Only the current order can transition, and it must be
   started before completion; an already-in-progress legacy order remains
-  current.
+  current. Active preparation resolves current non-empty menu fields, falling
+  back to the immutable order snapshot.
 - `GET /api/bartender-queue` -> bartender/admin JSON endpoint that returns the
   rendered queue fragment plus a queue version. `static/bartender.js` polls it
   every few seconds so new drink orders appear on `/bartender` without a full
@@ -209,9 +210,9 @@ display-update broadcasts.
   single-name records normalize to one custom singer while the derived `name`
   label remains in serialized payloads for compatibility.
 - Redis-backed state serialization/hydration, with process-local global caches.
-- Food/drink menu management, specialty drink limit enforcement, drink order
-  lifecycle, bartender role checks, prep-time estimates, bartender tip settings,
-  and drink notification emails.
+- Food/drink menu management, per-account specialty allowance enforcement,
+  drink-order lifecycle/reset/wrap-up cleanup, bartender role checks, prep-time
+  estimates, bartender tip settings, and drink notification emails.
 - RSVP confirmation/update recipient collection, account welcome email,
   password reset email, and Amazon SES email sending when enabled.
 - Display update broadcasting via `threading.Condition`.
@@ -304,8 +305,9 @@ rotation. `build_bar_stage()` exposes only public active/completed-order fields
 plus the current/queued ready alerts. It derives queue positions,
 mixing/waiting counts, average prep time, available food/drink promotions,
 retained completion/pickup labels, and order guidance without exposing email,
-account IDs, or recipes. Active queues retain the queue-first presentation with
-a rotating bottom promotion. Idle layouts compose promotions above/below
+account IDs, or recipes. Active queues retain the queue-first presentation and
+show Completed Tonight directly below the queue; operational history suppresses
+promotions/summary content first when space is constrained. Idle layouts compose promotions above/below
 retained history, show three promotion zones when no history exists, center
 history when no menu is available, and collapse only when every bar-stage input
 is empty.
@@ -443,7 +445,8 @@ SSE connections.
   cleanup; the route no longer renders it.
 - `bartender.html`: bartender/admin drink order page shell with a live-refresh
   queue container.
-- `_bartender_queue.html`: shared bartender queue fragment with optional image,
+- `_bartender_queue.html`: shared bartender queue fragment with a full-width
+  current workbench and optional image,
   specialty sequence labels, extra specialty availability notes, separate
   normalized ingredient/ordered-instruction references, compact Up Next/backlog
   disclosures, and completed order history.
@@ -603,8 +606,9 @@ SSE connections.
 
 - `menu_items` and `drink_orders` add `instructions`; the existing `recipe`
   field remains the ingredient-only compatibility field.
-- New orders snapshot both fields. Later menu edits therefore do not alter an
-  active or historical order's preparation reference.
+- New orders snapshot both fields. Active orders overlay later non-empty menu
+  edits so corrections appear on the next queue poll; completed orders retain
+  their historical preparation reference.
 - When `instructions` is absent, normalization moves lines beginning with
   recognized preparation verbs into ordered instructions and keeps ambiguous
   lines as ingredients. Explicit schema-20 fields are never reclassified.
@@ -615,3 +619,7 @@ SSE connections.
   not expose either field.
 - Bartender fragment polling preserves order-keyed prep disclosures, scroll
   anchoring, and focus when the queue version changes.
+- Schema 21 stores account-keyed specialty bonuses and count baselines. Manual
+  bar reset clears active/completed orders, allowances, and drink-ready notices;
+  successful official wrap-up invokes the same cleanup and sanitizes retained
+  full-state backups after recap delivery succeeds.

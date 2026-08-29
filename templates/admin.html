@@ -992,6 +992,36 @@
     <div class="contest-actions">
       <a href="{{ url_for('bartender_portal') }}" class="button button--primary">Open Bartender View</a>
     </div>
+    <section class="admin-subsection" aria-labelledby="specialty-allowances-heading">
+      <h4 id="specialty-allowances-heading">Specialty Drink Allowances</h4>
+      <p>Grant extra included drinks or reset a guest’s current count without deleting their order history.</p>
+      <div class="admin-entry-list specialty-allowance-list">
+        {% for attendee in specialty_allowance_rows %}
+          <article class="admin-entry specialty-allowance-row">
+            <div class="specialty-allowance-row__summary">
+              <strong>{{ attendee.username }}</strong>
+              <span>{{ attendee.used }} used / {{ attendee.limit }} allowed · {{ attendee.remaining }} remaining</span>
+              <small>{{ attendee.total }} lifetime specialty order{{ 's' if attendee.total != 1 else '' }}{% if attendee.counted_from %} · count reset {{ format_time_label(attendee.counted_from) }}{% endif %}</small>
+            </div>
+            <div class="admin-entry__actions">
+              <form method="post" class="specialty-allowance-row__grant">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="account_id" value="{{ attendee.account_id }}">
+                <input type="number" name="grant_count" min="1" max="10" value="1" aria-label="Additional drinks for {{ attendee.username }}">
+                <button class="button button--small" name="action" value="grant_specialty_drink">Grant Extra</button>
+              </form>
+              <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="account_id" value="{{ attendee.account_id }}">
+                <button class="button button--small" name="action" value="reset_specialty_drink_count" onclick="return confirm('Reset this guest’s current specialty drink count to zero? Their order history will remain.')">Reset Count</button>
+              </form>
+            </div>
+          </article>
+        {% else %}
+          <p class="admin-empty">No party accounts are available.</p>
+        {% endfor %}
+      </div>
+    </section>
     <details class="admin-entry admin-entry--editable">
       <summary class="admin-entry__summary">
         <span class="admin-entry__rank">Tips</span>
@@ -1044,6 +1074,21 @@
           </label>
         </div>
         <button type="submit" name="action" value="update_bartender_tip_settings" class="button button--primary">Save Tip Settings</button>
+      </form>
+    </details>
+    <details class="admin-entry admin-entry--editable admin-entry--danger">
+      <summary class="admin-entry__summary">
+        <span class="admin-entry__rank">!</span>
+        <span class="admin-entry__summary-text">
+          <strong>Reset bar orders and history</strong>
+          <span>{{ drink_orders|length }} total · {{ active_drink_order_count }} active</span>
+        </span>
+      </summary>
+      <form method="post" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="confirm_reset" value="reset">
+        <p>This removes the active queue, completed history, pickup state, specialty counts and overrides, and drink-ready alerts. Menu items, accounts, and tip settings are preserved.</p>
+        <button type="submit" name="action" value="reset_bar_history" class="button button--danger" onclick="return confirm('Reset all bar orders and history? This clears active and completed orders for every guest.')">Reset All Bar Orders</button>
       </form>
     </details>
   </section>

@@ -23,13 +23,15 @@
   returning the rendered queue fragment and a deterministic queue version for
   real-time bartender page refreshes.
 - `/admin`: includes menu management, specialty/standard drink classification,
+  per-account specialty allowance controls, confirmed bar-history reset,
   bartender tip settings, bar operations summary, bartender-view link, and user
   role assignment.
 
 ## State
 
-The Redis state document stores these menu/order keys; schema 20 separates
-bartender preparation instructions while retaining schema-19 pickup acknowledgement:
+The Redis state document stores these menu/order keys; schema 21 adds persisted
+specialty allowance controls while retaining schema-20 preparation separation
+and schema-19 pickup acknowledgement:
 
 - `menu_items`: list of food/drink dictionaries with `id`, `name`, `category`,
   `description`, `image_url`, ingredient-only compatibility field `recipe`,
@@ -39,23 +41,29 @@ bartender preparation instructions while retaining schema-19 pickup acknowledgem
 - `drink_orders`: list of drink order dictionaries with attendee/account
   snapshot, menu item/ingredient/instruction snapshots, `drink_type`, `beverage_type`, `orderable`,
   `specialty_sequence_number`, `specialty_extra_request`,
+  `specialty_allowance_used`, `specialty_allowance_limit`,
   `specialty_extra_window_open`, `status`, `estimated_ready_at`, `created_at`,
   `started_at`, `completed_at`, optional `picked_up_at`, and
   `completed_seconds`.
+- `specialty_drink_allowances`: account-ID keyed `bonus_orders`, `counted_from`,
+  `updated_at`, and `updated_by` records. Resetting eligibility advances the
+  count baseline without deleting historical orders.
 - `bartender_tip_settings`: admin-managed tip prompt settings with `enabled`,
   `display_name`, `note`, `image_url`, and optional `zelle`, `paypal`,
   `venmo`, and `cash_app` handles.
 - `user_accounts[normalized_username]["roles"]`: account roles. Existing accounts hydrate to at least `["regular"]`; admins can add/remove `bartender`.
 
 Drink orders snapshot `item_name`, `item_image_url`, `recipe`, `instructions`, drink
-classification, and specialty sequence metadata at order time so active and
-historical orders are not changed unexpectedly by later menu edits.
+classification, and specialty sequence/allowance metadata at order time.
+Active bartender work resolves the latest non-empty menu preparation fields so
+admin corrections appear on the next poll; completed history retains snapshots.
 
 ## Specialty Drink Rules
 
-Attendees can order 3 specialty drinks from the bar during the main event
-window. After 11:00 PM local party time, additional specialty drink requests are
-allowed only while the drink remains available. Standard alcoholic and
+Attendees begin with 3 specialty drinks during the main event window. Admins can
+grant extra included drinks or reset one attendee's current count. After 11:00
+PM local party time, additional specialty drink requests are allowed only while
+the drink remains available. Standard alcoholic and
 non-alcoholic drinks do not count against the 3 specialty drink rule.
 
 The bartender queue labels specialty orders with their sequence number. 4th+
@@ -69,7 +77,8 @@ refreshes the queue fragment every few seconds through
 manual page reload.
 
 Admin-entered ingredients normalize to one item per line and instructions to
-one ordered step per line. Current Drink keeps both references expanded; Up
+one ordered step per line. Current Drink owns a full-width workbench and only
+splits prep into columns when the content container can support them; Up
 Next and backlog use compact prep disclosures. Schema-20 normalization moves
 legacy lines that begin with common preparation verbs into `instructions` only
 when that field is absent, retains ambiguous lines as ingredients, and writes
@@ -114,8 +123,9 @@ current notice lives in `live_display_notice_override`; subsequent notices use
 the bounded `live_display_notice_queue` and advance sequentially. The adaptive
 display renders the current notice across the full right stage with a bright
 neon red background without replacing the center rotation or an event
-spotlight. With active orders, the queue layout remains primary while available
-food/drink promotions rotate in the bottom zone. Without an active queue,
+spotlight. Completed Tonight renders directly under the queue whenever history
+exists. With active orders and history, operational content displaces menu
+promotions and summary tiles first. Without an active queue,
 promotions occupy top/middle/bottom around retained completed-order history;
 history-only layouts remain visible. The stage collapses only when no notice,
 active queue, completed history, or available menu item exists.
@@ -131,13 +141,13 @@ active queue, completed history, or available menu item exists.
 - `templates/drink_history.html`: retired template; the legacy route redirects
   to the consolidated My Orders view.
 - `templates/bartender.html`: bartender page shell and live queue container.
-- `templates/_bartender_queue.html`: active bartender queue, separate ingredient
-  and ordered instruction references, compact staged/backlog prep disclosures,
+- `templates/_bartender_queue.html`: full-width current bartender workbench,
+  responsive ingredient/instruction references, compact staged/backlog disclosures,
   status forms, and recent completed orders, shared by the full page and queue
   JSON endpoint.
 - `templates/admin.html`: menu CRUD with image URL preview, availability toggle,
   specialty/standard drink controls, orderable toggle, separate ingredients and
-  instructions, bartender tip
+  instructions, specialty allowance controls, full bar reset, bartender tip
   settings, user bartender role assignment, and bar operations summary.
 - `static/styles.css`: menu cards, order cards, bartender cards, admin image previews, and responsive behavior.
 - `static/bartender.js`: authenticated polling refresh for the bartender queue
@@ -160,7 +170,8 @@ specialty drink limit enforcement, consolidated order history/reorder behavior,
 legacy route compatibility, privacy-safe attendee queue payloads, bartender
 queue API refresh payloads, strict FIFO/current-only transitions, schema-20
 legacy prep migration/backup, separate ingredient/instruction rendering, tip QR rendering, ready-notice expiry, ready email
-sending, and live-display drink-ready override payloads. Bartender authorization
+sending, schema-21 allowance grant/reset, full bar cleanup, wrap-up backup
+sanitization, and live-display drink-ready override payloads. Bartender authorization
 and operational behavior remain separately covered.
 
 Schema-19 coverage additionally verifies pickup ownership/idempotence, retained
@@ -210,3 +221,24 @@ promotion inclusion/exclusion, and truly empty bar-stage collapse.
 - On the phone viewport, the decorative bartender hero was hidden, Current
   Drink began within the first viewport, and the three-order sample page was
   reduced from roughly 3,100px to 2,481px tall.
+
+## Schema-21 Bar Operations And Workbench Update (2026-08-29)
+
+- Current Drink now spans the bartender workspace. Artwork is a bounded side
+  rail when present; the preparation region uses container-based columns and
+  removes the nested ingredient/instruction card treatment.
+- Active orders resolve current non-empty menu preparation and include it in the
+  queue version, so edits refresh without rewriting completed history.
+- Admin Bar exposes per-account allowance grant/reset controls and a confirmed
+  full bar-order reset with a temporary recovery backup.
+- Official wrap-up stores privacy-safe bar aggregates, clears bar runtime state
+  only after all deliveries succeed, and sanitizes personal bar data from
+  retained state backups.
+- Completed Tonight now renders beneath an active live-display queue; history
+  rotates beyond capacity and displaces promotions/summary tiles first.
+- Verification passed with 218 Python tests plus 21 subtests, all 17 standalone
+  JavaScript tests, Python/JavaScript syntax checks, and whitespace validation.
+  Browser QA at 1280×720 confirmed current menu instructions, a 1,028px current
+  workbench, no horizontal overflow, accessible Admin Bar controls, and two
+  completed drinks visibly rendered beneath two active queue entries without
+  document overflow.

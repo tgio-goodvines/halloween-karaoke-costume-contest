@@ -1,7 +1,7 @@
 {% macro prep_reference(order) %}
   {% set ingredients = recipe_ingredients(order.recipe) %}
   {% set instructions = drink_instruction_steps(order.instructions) %}
-  <div class="bartender-card__prep-grid">
+  <div class="bartender-card__prep-grid" data-bartender-prep>
     {% if ingredients %}
       <section class="bartender-card__recipe" aria-label="Ingredients">
         <h5>Ingredients</h5>
@@ -46,7 +46,7 @@
         </p>
       {% elif order.drink_type == 'specialty' %}
         <p class="bartender-card__priority-note">
-          Included specialty order {{ order.specialty_sequence_number }} of 3.
+          Included specialty order {{ order.specialty_allowance_used }} of {{ order.specialty_allowance_limit }}.
         </p>
       {% endif %}
       <div class="bartender-card__timing">
@@ -94,7 +94,7 @@
   <div class="bartender-section-heading">
     <div>
       <h3>Drink Stages</h3>
-      <p class="contest-status">First come, first served. One drink is current and one is staged next.</p>
+      <p class="contest-status">First come, first served. The current drink gets the full preparation workspace.</p>
     </div>
     <span class="bartender-queue-count">{{ active_orders|length }} active</span>
   </div>
@@ -103,7 +103,7 @@
     <p class="bartender-queue-warning" role="status">{{ queue_warning }}</p>
   {% endif %}
 
-  <div class="bartender-stage-grid">
+  <div class="bartender-stage-stack">
     <section class="bartender-stage bartender-stage--current" aria-labelledby="bartender-current-heading">
       <h4 id="bartender-current-heading">Current Drink</h4>
       {% if current_order %}
@@ -113,14 +113,12 @@
       {% endif %}
     </section>
 
-    <section class="bartender-stage bartender-stage--next" aria-labelledby="bartender-next-heading">
-      <h4 id="bartender-next-heading">Up Next</h4>
-      {% if next_order %}
+    {% if next_order %}
+      <section class="bartender-stage bartender-stage--next" aria-labelledby="bartender-next-heading">
+        <h4 id="bartender-next-heading">Up Next</h4>
         {{ drink_card(next_order, 'Prepare for this drink next', false, true) }}
-      {% else %}
-        <p class="admin-empty">No next drink is waiting.</p>
-      {% endif %}
-    </section>
+      </section>
+    {% endif %}
   </div>
 
   <p class="contest-status">Average completion time: about {{ (average_completion_seconds / 60)|round(0, 'ceil')|int }} minutes.</p>

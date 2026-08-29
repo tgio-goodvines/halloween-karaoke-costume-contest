@@ -602,13 +602,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setHidden(container, !container.children.length);
   };
 
-  const renderCompletedHistory = (completedOrders, visible) => {
+  const renderCompletedHistory = (completedOrders, visible, capacity = 3) => {
     const orders = safeArray(completedOrders);
     setHidden(elements.barHistory, !visible || !orders.length);
     if (!visible || !orders.length || !elements.barHistoryOrders) return;
     if (elements.barHistoryCount) elements.barHistoryCount.textContent = `${orders.length} total`;
     elements.barHistoryOrders.replaceChildren();
-    rotationWindow(orders, barHistoryIndex, 3).forEach((order) => {
+    rotationWindow(orders, barHistoryIndex, capacity).forEach((order) => {
       const item = document.createElement('li');
       item.className = order.picked_up ? 'is-picked-up' : 'is-ready';
       const dot = document.createElement('span');
@@ -627,11 +627,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  const scheduleBarRotation = (bar, hasNotice, hasActiveQueue, promotionSlots) => {
+  const scheduleBarRotation = (bar, hasNotice, hasActiveQueue, promotionSlots, historySlots) => {
     const promotions = safeArray(bar.promotion_items);
     const completedOrders = safeArray(bar.completed_orders);
     const rotatesPromotions = promotions.length > promotionSlots;
-    const rotatesHistory = !hasActiveQueue && completedOrders.length > 3;
+    const rotatesHistory = completedOrders.length > historySlots;
     if (hasNotice || (!rotatesPromotions && !rotatesHistory)) {
       clearBarRotationTimer();
       return;
@@ -707,7 +707,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const completedOrders = safeArray(bar.completed_orders);
     const hasActiveQueue = activeOrders.length > 0;
     const hasHistory = completedOrders.length > 0;
-    const promotionSlots = hasActiveQueue ? 1 : (hasHistory ? 2 : 3);
+    const promotionSlots = hasActiveQueue ? (hasHistory ? 0 : 1) : (hasHistory ? 2 : 3);
+    const historySlots = hasActiveQueue ? 2 : 3;
     elements.barStage?.classList.toggle('is-idle', !hasNotice && !hasActiveQueue);
     elements.barStage?.classList.toggle('has-history', !hasNotice && !hasActiveQueue && hasHistory);
     if (elements.barStage) elements.barStage.dataset.presentation = hasNotice ? 'notice' : (hasActiveQueue ? 'queue' : 'idle');
@@ -773,25 +774,25 @@ document.addEventListener('DOMContentLoaded', () => {
         { label: 'Avg prep', value: summary.average_prep_label || 'About 8 min' },
         { label: 'Drinks', value: Number(summary.available_drink_count) || 0 },
       ]);
-      setHidden(elements.barSummary, !hasActiveQueue);
+      setHidden(elements.barSummary, !hasActiveQueue || hasHistory);
 
       const promotionWindow = rotationWindow(promotions, barPromotionIndex, promotionSlots);
       const topPromotionCount = hasActiveQueue ? 0 : (hasHistory ? 1 : Math.min(2, promotionWindow.length));
       renderPromotionCards(elements.barPromotionsTop, promotionWindow.slice(0, topPromotionCount));
       renderPromotionCards(elements.barPromotionsBottom, promotionWindow.slice(topPromotionCount));
-      renderCompletedHistory(completedOrders, !hasActiveQueue && hasHistory);
+      renderCompletedHistory(completedOrders, hasHistory, historySlots);
 
       const backgroundPromotion = hasActiveQueue
         ? promotionWindow[0]
         : (promotionWindow[Math.min(1, promotionWindow.length - 1)] || promotionWindow[0]);
       renderBarBackground(backgroundPromotion?.image_url || bar.image_url || '');
-      if (promotions.length) renderAction(elements.barAction, bar.action);
+      if (promotions.length && (!hasActiveQueue || !hasHistory)) renderAction(elements.barAction, bar.action);
       else setOptionalText(elements.barAction, '');
       setOptionalText(
         elements.barPickup,
         hasActiveQueue || hasHistory ? (bar.pickup_note || '') : '',
       );
-      scheduleBarRotation(bar, false, hasActiveQueue, promotionSlots);
+      scheduleBarRotation(bar, false, hasActiveQueue, promotionSlots, historySlots);
     }
     fitAll();
   };

@@ -260,3 +260,14 @@ fixed no-scroll track.
 - Final verification passed with 215 Python tests plus 21 subtests, all 17
   dependency-free JavaScript tests, Python/JavaScript syntax checks, and
   whitespace validation.
+
+## Queue-Visible Completed History (2026-08-29)
+
+- Completed Tonight is no longer suppressed by an active queue. It renders
+  immediately after queue/overflow content with two rows in queue mode and
+  three rows in idle mode.
+- History rotation now runs whenever completed records exceed the current
+  capacity. With both queue and history present, promotional cards, action text,
+  and summary facts yield first to keep the fixed rail no-scroll.
+- Browser verification at 1280×720 showed two active and two completed drinks in
+  the right stage with zero document overflow.

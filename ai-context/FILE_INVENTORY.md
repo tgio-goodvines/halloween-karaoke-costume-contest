@@ -4,7 +4,7 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed schema-v17 state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, YouTube karaoke workflow/state/routes, multi-singer/request-priority/adaptive-display state, stable-user karaoke completion acknowledgements, admin-controlled game identity, official result/recognition actions, generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed schema-v21 state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, per-account specialty allowances, bar reset/wrap-up cleanup, YouTube karaoke workflow/state/routes, multi-singer/request-priority/adaptive-display state, stable-user karaoke completion acknowledgements, admin-controlled game identity, official result/recognition actions, generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
 | `youtube_karaoke.py` | YouTube URL/metadata normalization, Google API search and playlist client, bounded timeout/error translation, OAuth flow, and dedicated Vault refresh-token store. |
 | `party_games.py` | Five-game catalog, persisted-state normalization, game-level signed-in-name/anonymous-alias modes, Two Truths scoring, MMF plurality scoring, shared prompt-response-voting results, ties, and statistics. |
 | `recognition.py` | Event-edition, result-archive, and recognition-credit normalization plus achievement catalog and derived account collection logic. |
@@ -59,7 +59,7 @@
 | `templates/_personal_drink_orders.html` | Account-scoped Ready/Preparing/Received/Previous order groups, persistent pickup acknowledgement, reorder controls, and one bartender-tip callout. |
 | `templates/drink_history.html` | Retired order-history template; `/party/drink-history` is now a compatibility route to the consolidated My Orders view. |
 | `templates/bartender.html` | Bartender/admin page shell for `/bartender`, with messages and the live-refresh FIFO queue container. |
-| `templates/_bartender_queue.html` | Shared bartender queue fragment with Current Drink, compact Up Next/backlog disclosures, separate ingredient and ordered instruction references, guarded transition forms, and completed order history. |
+| `templates/_bartender_queue.html` | Shared bartender queue fragment with a full-width Current Drink workbench, compact Up Next/backlog disclosures, responsive ingredient/instruction references, guarded transition forms, and completed order history. |
 | `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
 | `templates/halloween_login.html` | Public attendee account sign-in form. |
 | `templates/halloween_register.html` | Public attendee account registration form. |
@@ -80,7 +80,7 @@
 | `templates/_karaoke_workflow.html` | Shared karaoke media and seven-step workflow macros. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
-| `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, preserving existing CSRF-protected admin actions. |
+| `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, including specialty allowance and confirmed bar-history reset controls, preserving CSRF-protected admin actions. |
 | `templates/display.html` | Standalone no-scroll live-display shell and layout JSON bootstrap for title, left games, center cards/spotlights, right bar/ready alerts, and music footer. |
 | `ai-context/DJ_JUKEBOX_FEATURE.md` | Durable DJ feature state model, routes, MusicKit/Vault setup, visual acknowledgement flow, and recovery procedure. |
 | `ai-context/DJ_LIVE_SURFACES_CORRECTIVE_ACTION.md` | Completed cross-surface DJ song/artwork synchronization root-cause analysis, capacity-safe corrective design, affected surfaces, and verification record. |

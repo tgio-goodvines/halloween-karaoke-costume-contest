@@ -36,8 +36,9 @@ Provide a safe, test-friendly game reset and an end-of-party workflow that:
 4. credits confirmed attendees and linked winners with idempotent recognition;
 5. freezes the resulting jukebox playlist and privacy-safe party analytics;
 6. previews and sends personalized recap emails through Halloween SES;
-7. automatically erases mutable game data only after every official recap email
-   has been accepted by SES;
+7. automatically erases mutable game data, bar orders, specialty allowances,
+   and drink-ready notices only after every official recap email has been
+   accepted by SES;
 8. gives admins organized, per-edition historical game views and explicit data
    retention/deletion controls; and
 9. provides synthetic and current-database test emails that cannot finalize,
@@ -108,8 +109,10 @@ delivery status, retention choices, and cleanup status.
 | Detailed historical archives | Preserve | Preserve | Follow each game's retention choice |
 | Winner and attendance credits | Preserve | Preserve | Preserve unless their source archive is explicitly deleted |
 | Recaps, analytics, and delivery ledgers | Preserve | Preserve | Preserve |
-| Costume, karaoke, bar, accounts, and RSVP state | Preserve | Preserve | Preserve |
-| Mutable game data in Redis backups | Existing selected-reset behavior | Sanitize | Sanitize |
+| Costume, karaoke, accounts, and RSVP state | Preserve | Preserve | Preserve |
+| Bar orders, allowances, and drink-ready notices | Preserve | Preserve | Clear |
+| Privacy-safe bar aggregate snapshot | N/A | N/A | Preserve in wrap-up analytics |
+| Mutable game/bar data in Redis backups | Existing selected-reset behavior | Sanitize game data | Sanitize game and bar data |
 
 ## Proposed Code Organization
 
@@ -722,6 +725,7 @@ complete with evidence.
 | 2026-08-29 | 10 | GitHub Actions run `33259498419` | Validation passed twice. SSM rollout failed because ALB health replacement removed each selected instance during its service restart; public smoke step therefore did not run in the workflow. |
 | 2026-08-29 | 10 | SSM read-only verification on `i-00874dc476ea795e3` and `i-069299cb23a5a9979` | Both replacement instances reported `/opt/halloween/releases/98be60f46fb417032008c07f4f096e19f81f4f2e`, active `halloween-party`, and Redis DB 1 health `ok`. |
 | 2026-08-29 | 10 | Public smoke: Halloween apex/www, RSVP, party login, Wrap-Up/History auth redirects, and `appg-v.com/health` | Passed. Apex and www responses reached different healthy Halloween instances; GoodVines remained online at service version `73a1f39430cb730e50a7713cc16d06e670bcdf0b`. |
+| 2026-08-29 | Bar cleanup extension | `python -m pytest -q` | 218 passed, 21 subtests passed; allowance controls, manual reset, wrap-up cleanup, bar analytics, and backup sanitization are covered. |
 
 ## Known Risks And Mitigations
 

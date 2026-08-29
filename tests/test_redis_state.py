@@ -295,6 +295,7 @@ class RedisStateTests(unittest.TestCase):
         main.password_reset_tokens = {}
         main.menu_items = []
         main.drink_orders = []
+        main.specialty_drink_allowances = {}
         main.dj_playlist = []
         main.dj_song_requests = []
         main.dj_state = main.copy.deepcopy(main.DEFAULT_DJ_STATE)
@@ -3768,7 +3769,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(20, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(21, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])
@@ -3880,6 +3881,104 @@ class RedisStateTests(unittest.TestCase):
         attendee_state = main.attendee_bar_queue_state("user-1")
         self.assertEqual(1, attendee_state["personal_orders"][0]["queue_position"])
         self.assertEqual(0, attendee_state["personal_orders"][0]["orders_ahead"])
+
+    def test_bartender_active_order_uses_current_menu_preparation_and_version(self):
+        main.menu_items = [
+            {
+                "id": "drink-1",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "recipe": "2 oz tequila\n1 oz lime",
+                "instructions": "Shake with ice\nStrain over fresh ice",
+            }
+        ]
+        main.drink_orders = [
+            {
+                "id": "order-1",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "recipe": "Old ingredient snapshot",
+                "instructions": "",
+                "status": "received",
+                "created_at": "2026-07-06T00:01:00Z",
+            }
+        ]
+
+        first = main.bartender_queue_context()
+        self.assertEqual("2 oz tequila\n1 oz lime", first["current_order"]["recipe"])
+        self.assertEqual("Shake with ice\nStrain over fresh ice", first["current_order"]["instructions"])
+
+        main.menu_items[0]["instructions"] = "Stir slowly\nServe over one cube"
+        second = main.bartender_queue_context()
+        self.assertEqual("Stir slowly\nServe over one cube", second["current_order"]["instructions"])
+        self.assertNotEqual(first["queue_version"], second["queue_version"])
+        self.assertEqual("", main.drink_orders[0]["instructions"])
+
+    def test_admin_can_grant_and_reset_specialty_allowance_without_deleting_history(self):
+        main.specialty_extra_orders_are_open = lambda now=None: False
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        main.drink_orders = [
+            {
+                "id": f"order-{index}",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "drink_type": "specialty",
+                "specialty_sequence_number": index,
+                "status": "complete",
+                "created_at": f"2026-07-06T00:0{index}:00Z",
+            }
+            for index in range(1, 4)
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            grant = client.post(
+                "/admin/bar",
+                data={"action": "grant_specialty_drink", "account_id": "user-1", "grant_count": "2"},
+            )
+            reset = client.post(
+                "/admin/bar",
+                data={"action": "reset_specialty_drink_count", "account_id": "user-1"},
+            )
+
+        self.assertIn("Granted 2 additional specialty drinks", grant.get_data(as_text=True))
+        self.assertIn("Reset the current specialty drink count", reset.get_data(as_text=True))
+        self.assertEqual(3, len(main.drink_orders))
+        usage = main.specialty_drink_usage("user-1")
+        self.assertEqual(0, usage["used"])
+        self.assertEqual(3, usage["limit"])
+        self.assertEqual(3, usage["total"])
+
+    def test_admin_bar_reset_clears_orders_allowances_and_drink_notices_only(self):
+        main.drink_orders = [
+            {"id": "active", "user_id": "user-1", "item_name": "Fizz", "status": "received"},
+            {"id": "done", "user_id": "user-1", "item_name": "Punch", "status": "complete"},
+        ]
+        main.specialty_drink_allowances = {"user-1": {"bonus_orders": 2}}
+        main.live_display_event_override = {"type": "winner", "title": "Winner"}
+        main.live_display_notice_override = {"type": "drink_ready", "title": "Ready"}
+        main.live_display_notice_queue = [{"type": "drink_ready", "title": "Next"}]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/bar",
+                data={"action": "reset_bar_history", "confirm_reset": "reset"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("Reset 2 bar orders", response.get_data(as_text=True))
+        self.assertEqual([], main.drink_orders)
+        self.assertEqual({}, main.specialty_drink_allowances)
+        self.assertIsNone(main.live_display_notice_override)
+        self.assertEqual([], main.live_display_notice_queue)
+        self.assertEqual("winner", main.live_display_event_override["type"])
 
     def test_bartender_current_next_flow_blocks_out_of_order_work(self):
         account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
@@ -7533,6 +7632,24 @@ class RedisStateTests(unittest.TestCase):
 
     def test_party_wrapup_finalizes_sends_personalized_recaps_and_cleans_games(self):
         self.prepare_real_wrapup_state()
+        main.drink_orders = [
+            {
+                "id": "bar-order-1",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "item_name": "Witch Margarita",
+                "drink_type": "specialty",
+                "status": "complete",
+                "created_at": "2026-07-06T01:00:00Z",
+                "completed_at": "2026-07-06T01:02:00Z",
+                "completed_seconds": 120,
+            }
+        ]
+        main.specialty_drink_allowances = {"user-1": {"bonus_orders": 1}}
+        main.live_display_notice_override = {"type": "drink_ready", "title": "Ready"}
+        self.save_current_state()
+        backup_key = main.redis_key("state:backup:wrapup-bar-data")
+        self.fake_redis.setex(backup_key, 3600, json.dumps(main.snapshot_state()))
         fake_ses = FakeSESClient()
         main.create_ses_client = lambda: fake_ses
         main.app.config["EMAIL_UPDATES_ENABLED"] = True
@@ -7550,6 +7667,7 @@ class RedisStateTests(unittest.TestCase):
             wrapup = main.current_event_wrapup()
             self.assertEqual("finalized", wrapup["status"])
             self.assertEqual(2, len(wrapup["personal_summaries"]))
+            self.assertEqual(1, wrapup["analytics_snapshot"]["bar"]["total_orders"])
             sent = admin.post("/admin/wrapup", data={"action": "send_party_recap"})
 
         self.assertEqual(200, finalized.status_code)
@@ -7558,6 +7676,12 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("complete", main.current_event_wrapup()["status"])
         self.assertEqual({}, main.two_truths_game()["participants"])
         self.assertFalse(main.two_truths_game()["enabled"])
+        self.assertEqual([], main.drink_orders)
+        self.assertEqual({}, main.specialty_drink_allowances)
+        self.assertIsNone(main.live_display_notice_override)
+        sanitized_backup = json.loads(self.fake_redis.store[backup_key])
+        self.assertEqual([], sanitized_backup["drink_orders"])
+        self.assertEqual({}, sanitized_backup["specialty_drink_allowances"])
         self.assertTrue(
             any(
                 archive.get("status") == "official"

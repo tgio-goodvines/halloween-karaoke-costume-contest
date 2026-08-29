@@ -353,7 +353,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 20
+STATE_SCHEMA_VERSION = 21
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -673,7 +673,7 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "menu": {"label": "Menu", "description": "Food and drink availability."},
     "accounts": {"label": "Accounts", "description": "Party accounts and bartender access."},
     "recognition": {"label": "Recognition", "description": "Attendance, achievements, and official winner history."},
-    "wrapup": {"label": "Wrap-Up", "description": "Finalize results, award attendance, test and send the party recap, then clean up games."},
+    "wrapup": {"label": "Wrap-Up", "description": "Finalize results, award attendance, send the party recap, then clean up game and bar data."},
     "game_history": {"label": "Game History", "description": "Review official results, retained game detail, analytics, and retention controls."},
 }
 
@@ -696,6 +696,7 @@ karaoke_completion_acknowledgements: dict[str, dict[str, str]] = {}
 password_reset_tokens: dict[str, dict[str, object]] = {}
 menu_items: list[dict[str, object]] = []
 drink_orders: list[dict[str, object]] = []
+specialty_drink_allowances: dict[str, dict[str, object]] = {}
 dj_playlist: list[dict[str, object]] = []
 dj_song_requests: list[dict[str, object]] = []
 dj_state: dict[str, object] = copy.deepcopy(DEFAULT_DJ_STATE)
@@ -2089,6 +2090,30 @@ def normalize_bartender_tip_settings(raw_settings: object) -> dict[str, object]:
     return settings
 
 
+def normalize_specialty_drink_allowances(raw_allowances: object) -> dict[str, dict[str, object]]:
+    if not isinstance(raw_allowances, dict):
+        return {}
+    normalized: dict[str, dict[str, object]] = {}
+    for raw_account_id, raw_allowance in raw_allowances.items():
+        account_id = str(raw_account_id or "").strip()
+        if not account_id or not isinstance(raw_allowance, dict):
+            continue
+        try:
+            bonus_orders = max(0, min(99, int(raw_allowance.get("bonus_orders", 0) or 0)))
+        except (TypeError, ValueError):
+            bonus_orders = 0
+        counted_from = str(raw_allowance.get("counted_from", "") or "")
+        if counted_from and not parse_utc_iso(counted_from):
+            counted_from = ""
+        normalized[account_id] = {
+            "bonus_orders": bonus_orders,
+            "counted_from": counted_from,
+            "updated_at": str(raw_allowance.get("updated_at", "") or ""),
+            "updated_by": str(raw_allowance.get("updated_by", "") or "Admin")[:80],
+        }
+    return normalized
+
+
 def menu_item_to_dict(item: dict[str, object]) -> dict[str, object]:
     category = normalize_menu_category(item.get("category"))
     drink_type = normalize_drink_type(item.get("drink_type"))
@@ -2145,6 +2170,18 @@ def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
         specialty_sequence_number = int(data.get("specialty_sequence_number", 0) or 0)
     except (TypeError, ValueError):
         specialty_sequence_number = 0
+    try:
+        specialty_allowance_used = int(
+            data.get("specialty_allowance_used", specialty_sequence_number) or 0
+        )
+    except (TypeError, ValueError):
+        specialty_allowance_used = specialty_sequence_number
+    try:
+        specialty_allowance_limit = int(
+            data.get("specialty_allowance_limit", SPECIALTY_DRINK_INCLUDED_LIMIT) or 0
+        )
+    except (TypeError, ValueError):
+        specialty_allowance_limit = SPECIALTY_DRINK_INCLUDED_LIMIT
 
     if "instructions" in data:
         recipe = normalize_drink_recipe(data.get("recipe", ""))
@@ -2166,7 +2203,9 @@ def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
         "beverage_type": normalize_beverage_type(data.get("beverage_type")),
         "orderable": bool(data.get("orderable", True)),
         "specialty_sequence_number": specialty_sequence_number,
-        "specialty_extra_request": bool(data.get("specialty_extra_request", specialty_sequence_number > SPECIALTY_DRINK_INCLUDED_LIMIT)),
+        "specialty_allowance_used": specialty_allowance_used,
+        "specialty_allowance_limit": specialty_allowance_limit,
+        "specialty_extra_request": bool(data.get("specialty_extra_request", specialty_allowance_used > specialty_allowance_limit)),
         "specialty_extra_window_open": bool(data.get("specialty_extra_window_open", specialty_sequence_number > SPECIALTY_DRINK_INCLUDED_LIMIT)),
         "status": status,
         "estimated_ready_at": str(data.get("estimated_ready_at", "") or ""),
@@ -2198,7 +2237,35 @@ def user_specialty_drink_orders(user_id: str) -> list[dict[str, object]]:
 
 
 def user_specialty_drink_count(user_id: str) -> int:
-    return len(user_specialty_drink_orders(user_id))
+    return specialty_drink_usage(user_id)["used"]
+
+
+def specialty_drink_usage(user_id: str) -> dict[str, object]:
+    all_orders = user_specialty_drink_orders(user_id)
+    allowance = specialty_drink_allowances.get(user_id, {})
+    counted_from = parse_utc_iso(allowance.get("counted_from"))
+    used_orders = all_orders
+    if counted_from:
+        used_orders = [
+            order
+            for order in all_orders
+            if (parse_utc_iso(order.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc)) >= counted_from
+        ]
+    try:
+        bonus_orders = max(0, int(allowance.get("bonus_orders", 0) or 0))
+    except (TypeError, ValueError):
+        bonus_orders = 0
+    limit = SPECIALTY_DRINK_INCLUDED_LIMIT + bonus_orders
+    used = len(used_orders)
+    return {
+        "user_id": user_id,
+        "used": used,
+        "limit": limit,
+        "remaining": max(0, limit - used),
+        "bonus_orders": bonus_orders,
+        "counted_from": str(allowance.get("counted_from", "") or ""),
+        "total": len(all_orders),
+    }
 
 
 def can_order_menu_item(user_id: str, item: dict[str, object] | None) -> tuple[bool, str]:
@@ -2212,11 +2279,11 @@ def can_order_menu_item(user_id: str, item: dict[str, object] | None) -> tuple[b
         return False, "That drink is available at the bar and does not need a portal order."
 
     if normalize_drink_type(item.get("drink_type")) == "specialty":
-        specialty_count = user_specialty_drink_count(user_id)
-        if specialty_count >= SPECIALTY_DRINK_INCLUDED_LIMIT and not specialty_extra_orders_are_open():
+        usage = specialty_drink_usage(user_id)
+        if int(usage["used"]) >= int(usage["limit"]) and not specialty_extra_orders_are_open():
             return (
                 False,
-                "You have used tonight's 3 specialty drink orders. More specialty requests open after 11:00 PM if supplies last.",
+                f"You have used tonight's {usage['limit']} specialty drink orders. More specialty requests open after 11:00 PM if supplies last.",
             )
 
     return True, ""
@@ -2225,9 +2292,12 @@ def can_order_menu_item(user_id: str, item: dict[str, object] | None) -> tuple[b
 def create_drink_order(user_id: str, account: dict[str, object], item: dict[str, object]) -> dict[str, object]:
     estimated_ready_at = estimate_drink_ready_at()
     drink_type = normalize_drink_type(item.get("drink_type"))
+    specialty_usage = specialty_drink_usage(user_id)
     specialty_sequence_number = (
-        user_specialty_drink_count(user_id) + 1 if drink_type == "specialty" else 0
+        int(specialty_usage["total"]) + 1 if drink_type == "specialty" else 0
     )
+    specialty_allowance_used = int(specialty_usage["used"]) + 1 if drink_type == "specialty" else 0
+    specialty_allowance_limit = int(specialty_usage["limit"]) if drink_type == "specialty" else 0
     return {
         "id": uuid4().hex,
         "user_id": user_id,
@@ -2242,7 +2312,9 @@ def create_drink_order(user_id: str, account: dict[str, object], item: dict[str,
         "beverage_type": normalize_beverage_type(item.get("beverage_type")),
         "orderable": bool(item.get("orderable", True)),
         "specialty_sequence_number": specialty_sequence_number,
-        "specialty_extra_request": drink_type == "specialty" and specialty_sequence_number > SPECIALTY_DRINK_INCLUDED_LIMIT,
+        "specialty_allowance_used": specialty_allowance_used,
+        "specialty_allowance_limit": specialty_allowance_limit,
+        "specialty_extra_request": drink_type == "specialty" and specialty_allowance_used > specialty_allowance_limit,
         "specialty_extra_window_open": specialty_extra_orders_are_open(),
         "status": "received",
         "estimated_ready_at": estimated_ready_at,
@@ -2252,6 +2324,80 @@ def create_drink_order(user_id: str, account: dict[str, object], item: dict[str,
         "picked_up_at": "",
         "completed_seconds": None,
     }
+
+
+def effective_drink_preparation(order: dict[str, object]) -> dict[str, object]:
+    """Use current menu prep for active work while retaining historical snapshots."""
+    effective = copy.deepcopy(order)
+    if order.get("status") == "complete":
+        return effective
+    item = find_menu_item(str(order.get("menu_item_id", "") or ""))
+    if not item:
+        return effective
+    current_recipe = normalize_drink_recipe(item.get("recipe", ""))
+    current_instructions = normalize_drink_instructions(item.get("instructions", ""))
+    if current_recipe:
+        effective["recipe"] = current_recipe
+    if current_instructions:
+        effective["instructions"] = current_instructions
+    return effective
+
+
+def specialty_allowance_admin_rows() -> list[dict[str, object]]:
+    rows = []
+    for account in user_accounts.values():
+        account_id = str(account.get("id", "") or "")
+        if not account_id:
+            continue
+        rows.append(
+            {
+                "account_id": account_id,
+                "username": str(account.get("username", "Guest") or "Guest"),
+                **specialty_drink_usage(account_id),
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda row: (-int(row["used"]), str(row["username"]).casefold()),
+    )
+
+
+def bar_wrapup_snapshot() -> dict[str, object]:
+    completed = [order for order in drink_orders if order.get("status") == "complete"]
+    specialty = [
+        order
+        for order in drink_orders
+        if normalize_drink_type(order.get("drink_type")) == "specialty"
+    ]
+    return {
+        "total_orders": len(drink_orders),
+        "completed_orders": len(completed),
+        "specialty_orders": len(specialty),
+        "unique_ordering_accounts": len(
+            {str(order.get("user_id", "")) for order in drink_orders if order.get("user_id")}
+        ),
+        "average_prep_seconds": average_drink_completion_seconds(),
+    }
+
+
+def clear_bar_runtime_state() -> dict[str, int]:
+    global live_display_notice_override
+    counts = {
+        "orders": len(drink_orders),
+        "active_orders": len(active_drink_orders()),
+        "completed_orders": sum(1 for order in drink_orders if order.get("status") == "complete"),
+        "allowances": len(specialty_drink_allowances),
+        "notices": len(live_display_notice_queue)
+        + (1 if live_display_notice_override and live_display_notice_override.get("type") == "drink_ready" else 0),
+    }
+    drink_orders.clear()
+    specialty_drink_allowances.clear()
+    if live_display_notice_override and live_display_notice_override.get("type") == "drink_ready":
+        live_display_notice_override = None
+    live_display_notice_queue[:] = [
+        notice for notice in live_display_notice_queue if notice.get("type") != "drink_ready"
+    ]
+    return counts
 
 
 def ready_order_is_visible_on_dashboard(order: dict[str, object], now: datetime | None = None) -> bool:
@@ -4693,6 +4839,7 @@ def snapshot_state() -> dict[str, object]:
         "password_reset_tokens": copy.deepcopy(password_reset_tokens),
         "menu_items": copy.deepcopy(menu_items),
         "drink_orders": copy.deepcopy(drink_orders),
+        "specialty_drink_allowances": copy.deepcopy(specialty_drink_allowances),
         "dj_playlist": copy.deepcopy(dj_playlist),
         "dj_song_requests": copy.deepcopy(dj_song_requests),
         "dj_state": copy.deepcopy(dj_state),
@@ -4739,7 +4886,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global user_accounts, karaoke_completion_acknowledgements, costume_ballots, submitted_costume_votes
     global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, display_custom_cards, display_update_version
-    global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke, games_state
+    global password_reset_tokens, menu_items, drink_orders, specialty_drink_allowances, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke, games_state
     global event_editions, result_archives, recognition_credits, event_wrapups, game_data_archives, test_email_audit
 
     raw_costume_signups = data.get("costume_signups", [])
@@ -4846,6 +4993,10 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
                 order = normalize_drink_order(raw_order)
                 if order:
                     drink_orders.append(order)
+
+    specialty_drink_allowances = normalize_specialty_drink_allowances(
+        data.get("specialty_drink_allowances", {})
+    )
 
     raw_dj_playlist = data.get("dj_playlist", [])
     dj_playlist = []
@@ -5114,6 +5265,48 @@ def sanitize_game_data_in_state_backups(
             if current_ttl > 0:
                 ttl = current_ttl
         prepared.append((key, ttl, json.dumps(sanitized, sort_keys=True)))
+
+    for key, ttl, payload in prepared:
+        redis_client.setex(key, ttl, payload)
+    return len(prepared)
+
+
+def sanitize_bar_data_in_state_backups() -> int:
+    """Remove personal bar history and transient allowance state from retained backups."""
+    if not redis_state_available:
+        return 0
+
+    prepared: list[tuple[str, int, str]] = []
+    for raw_key in redis_client.scan_iter(match=redis_key("state:backup:*")):
+        key = raw_key.decode("utf-8") if isinstance(raw_key, bytes) else str(raw_key)
+        raw_payload = redis_client.get(key)
+        if not raw_payload:
+            continue
+        try:
+            payload = json.loads(raw_payload)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Unable to sanitize malformed state backup {key}.") from exc
+        payload["drink_orders"] = []
+        payload["specialty_drink_allowances"] = {}
+        notice = payload.get("live_display_notice_override")
+        if isinstance(notice, dict) and notice.get("type") == "drink_ready":
+            payload["live_display_notice_override"] = None
+        legacy_notice = payload.get("live_display_override")
+        if isinstance(legacy_notice, dict) and legacy_notice.get("type") == "drink_ready":
+            payload["live_display_override"] = copy.deepcopy(payload.get("live_display_event_override"))
+        queue = payload.get("live_display_notice_queue", [])
+        payload["live_display_notice_queue"] = [
+            entry
+            for entry in queue
+            if isinstance(entry, dict) and entry.get("type") != "drink_ready"
+        ] if isinstance(queue, list) else []
+        ttl = STATE_BACKUP_TTL_SECONDS
+        ttl_reader = getattr(redis_client, "ttl", None)
+        if callable(ttl_reader):
+            current_ttl = int(ttl_reader(key) or 0)
+            if current_ttl > 0:
+                ttl = current_ttl
+        prepared.append((key, ttl, json.dumps(payload, sort_keys=True)))
 
     for key, ttl, payload in prepared:
         redis_client.setex(key, ttl, payload)
@@ -6368,6 +6561,7 @@ def build_current_recap_payload(
         "new_achievements": [],
         "personal_summary": {},
     }
+    payload["analytics_snapshot"]["bar"] = bar_wrapup_snapshot()
     if personalization_account_id:
         account = party_account_by_id(personalization_account_id)
         if account:
@@ -6656,7 +6850,7 @@ def send_party_recap_message(
 def cleanup_completed_wrapup(wrapup: dict[str, object]) -> tuple[bool, str]:
     global result_archives, recognition_credits
     if not all_deliveries_sent(wrapup):
-        return False, "Every official recap email must be sent before game cleanup."
+        return False, "Every official recap email must be sent before party data cleanup."
     before_cleanup = snapshot_state()
     wrapup_id = str(wrapup.get("event_id", ""))
     timestamp = _utc_now_iso()
@@ -6691,6 +6885,8 @@ def cleanup_completed_wrapup(wrapup: dict[str, object]) -> tuple[bool, str]:
             game_keys=set(GAME_CATALOG),
             delete_official_for=delete_all,
         )
+        clear_bar_runtime_state()
+        sanitize_bar_data_in_state_backups()
     except (redis.RedisError, RuntimeError) as exc:
         apply_state_snapshot(before_cleanup)
         restored_wrapup = event_wrapups.get(wrapup_id)
@@ -9694,6 +9890,7 @@ def render_party_menu_workspace(
         if can_order_menu_item(user_id, item)[0]
     }
     queue_state = attendee_bar_queue_state(user_id)
+    specialty_usage = specialty_drink_usage(user_id)
 
     return render_template(
         "menu.html",
@@ -9704,8 +9901,8 @@ def render_party_menu_workspace(
         drink_orders=orders,
         order_groups=order_groups,
         reorderable_item_ids=reorderable_item_ids,
-        specialty_drink_count=user_specialty_drink_count(user_id),
-        specialty_drink_limit=SPECIALTY_DRINK_INCLUDED_LIMIT,
+        specialty_drink_count=specialty_usage["used"],
+        specialty_drink_limit=specialty_usage["limit"],
         specialty_extra_orders_open=specialty_extra_orders_are_open(),
         bartender_tip_settings=bartender_tip_settings,
         bartender_tip_methods=bartender_tip_methods(),
@@ -9825,7 +10022,7 @@ def party_bartender_tip():
 
 
 def bartender_queue_context() -> dict[str, object]:
-    active_orders = ordered_active_drink_orders()
+    active_orders = [effective_drink_preparation(order) for order in ordered_active_drink_orders()]
     completed_orders = sorted(
         [order for order in drink_orders if order.get("status") == "complete"],
         key=lambda order: (
@@ -9849,6 +10046,8 @@ def bartender_queue_context() -> dict[str, object]:
             "created_at": str(order.get("created_at", "")),
             "item_name": str(order.get("item_name", "")),
             "username": str(order.get("username", "")),
+            "recipe": str(order.get("recipe", "")),
+            "instructions": str(order.get("instructions", "")),
         }
         for order in [*active_orders, *completed_orders]
     ]
@@ -10390,7 +10589,7 @@ def admin_portal(admin_view: str):
     global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, rsvp_notification_email
-    global bartender_tip_settings, dj_song_requests, result_archives, recognition_credits
+    global bartender_tip_settings, specialty_drink_allowances, dj_song_requests, result_archives, recognition_credits
 
     ensure_costume_votes_alignment()
 
@@ -10954,7 +11153,7 @@ def admin_portal(admin_view: str):
                 if not wrapup or wrapup.get("status") == "draft":
                     errors.append("Finalize the party wrap-up before sending official recaps.")
                 elif wrapup.get("status") == "complete":
-                    messages.append("The official recap and game cleanup are already complete.")
+                    messages.append("The official recap and party data cleanup are already complete.")
                 else:
                     write_state_backup_if_available("party-recap-send")
                     pending = [
@@ -11068,7 +11267,7 @@ def admin_portal(admin_view: str):
                                 )
                             elif final_status == "cleanup_failed":
                                 errors.append(
-                                    "All official recaps were sent, but game cleanup needs a retry: "
+                                    "All official recaps were sent, but party data cleanup needs a retry: "
                                     f"{delivery_error}"
                                 )
                             else:
@@ -11086,9 +11285,9 @@ def admin_portal(admin_view: str):
                 else:
                     cleanup_success, cleanup_error = cleanup_completed_wrapup(wrapup)
                     if cleanup_success:
-                        messages.append("Game cleanup completed. Official retained history remains available.")
+                        messages.append("Game and bar cleanup completed. Official retained history remains available.")
                     else:
-                        errors.append(f"Game cleanup still needs attention: {cleanup_error}")
+                        errors.append(f"Party data cleanup still needs attention: {cleanup_error}")
                     should_broadcast = True
 
             elif action == "delete_detailed_game_history":
@@ -12075,6 +12274,58 @@ def admin_portal(admin_view: str):
             if updated_tip_settings:
                 bartender_tip_settings = updated_tip_settings
                 messages.append("Bartender tip settings updated.")
+
+        elif action in {"grant_specialty_drink", "reset_specialty_drink_count"}:
+            account_id = str(request.form.get("account_id", "") or "").strip()
+            account = party_account_by_id(account_id)
+            if not account:
+                errors.append("That party account could not be found.")
+            elif action == "grant_specialty_drink":
+                try:
+                    grant_count = int(request.form.get("grant_count", "1") or 1)
+                except ValueError:
+                    grant_count = 0
+                if not 1 <= grant_count <= 10:
+                    errors.append("Grant between 1 and 10 additional specialty drinks.")
+                else:
+                    allowance = specialty_drink_allowances.setdefault(
+                        account_id,
+                        {"bonus_orders": 0, "counted_from": "", "updated_at": "", "updated_by": "Admin"},
+                    )
+                    allowance["bonus_orders"] = int(allowance.get("bonus_orders", 0) or 0) + grant_count
+                    allowance["updated_at"] = _utc_now_iso()
+                    allowance["updated_by"] = str(session.get("username", "Admin") or "Admin")[:80]
+                    messages.append(
+                        f"Granted {grant_count} additional specialty drink{'s' if grant_count != 1 else ''} to {account.get('username')}."
+                    )
+            else:
+                specialty_drink_allowances[account_id] = {
+                    "bonus_orders": 0,
+                    "counted_from": _utc_now_iso(),
+                    "updated_at": _utc_now_iso(),
+                    "updated_by": str(session.get("username", "Admin") or "Admin")[:80],
+                }
+                messages.append(f"Reset the current specialty drink count for {account.get('username')}.")
+
+        elif action == "reset_bar_history":
+            if request.form.get("confirm_reset") != "reset":
+                errors.append("Confirm the bar reset before continuing.")
+            else:
+                before_reset = snapshot_state()
+                try:
+                    backup_key = write_state_backup_if_available("bar-reset")
+                    cleared = clear_bar_runtime_state()
+                except (RuntimeError, redis.RedisError) as exc:
+                    apply_state_snapshot(before_reset)
+                    errors.append(f"Bar history could not be reset: {exc}")
+                else:
+                    recovery_note = " A temporary recovery backup was saved." if backup_key else ""
+                    messages.append(
+                        f"Reset {cleared['orders']} bar order{'s' if cleared['orders'] != 1 else ''}, "
+                        f"including {cleared['active_orders']} active and {cleared['completed_orders']} completed."
+                        f"{recovery_note}"
+                    )
+                    should_broadcast = True
 
         elif action == "update_party_details":
             updated_details = {
@@ -13078,8 +13329,10 @@ def admin_portal(admin_view: str):
         ),
         specialty_limit_user_count=sum(
             1 for account in user_accounts.values()
-            if user_specialty_drink_count(str(account.get("id", ""))) >= SPECIALTY_DRINK_INCLUDED_LIMIT
+            if specialty_drink_usage(str(account.get("id", "")))["remaining"] == 0
+            and specialty_drink_usage(str(account.get("id", "")))["used"] > 0
         ),
+        specialty_allowance_rows=specialty_allowance_admin_rows(),
         bartender_tip_settings=bartender_tip_settings,
         bartender_tip_methods=bartender_tip_methods(),
         user_accounts=user_accounts,

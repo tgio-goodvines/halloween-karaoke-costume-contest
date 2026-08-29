@@ -6654,9 +6654,8 @@ body {
   background: rgba(255, 49, 49, 0.1);
 }
 
-.bartender-stage-grid {
+.bartender-stage-stack {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   margin-top: 1rem;
 }
@@ -6678,15 +6677,15 @@ body {
 }
 
 .bartender-card--stage {
+  grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
+}
+
+.bartender-card--stage:not(:has(.bartender-card__media)) {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.bartender-card--stage .bartender-card__media {
-  aspect-ratio: 16 / 9;
-  height: auto;
-  min-height: 0;
-  border-right: 0;
-  border-bottom: 1px solid rgba(255, 49, 49, 0.35);
+.bartender-card--stage .bartender-card__body {
+  container-type: inline-size;
 }
 
 .bartender-card__stage-label {
@@ -6712,21 +6711,39 @@ body {
 
 .bartender-card__prep-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 49, 49, 0.35);
 }
 
-.bartender-card__recipe,
-.bartender-card__instructions {
+.bartender-card__prep-grid > .bartender-card__recipe,
+.bartender-card__prep-grid > .bartender-card__instructions {
   min-width: 0;
-  padding: 0.85rem;
-  border: 1px solid rgba(255, 49, 49, 0.28);
-  background: rgba(0, 0, 0, 0.24);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .bartender-card__instructions {
-  border-color: rgba(255, 138, 138, 0.48);
-  background: rgba(255, 49, 49, 0.07);
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 138, 138, 0.3);
+}
+
+@container (min-width: 42rem) {
+  .bartender-card__prep-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 1.5rem;
+  }
+
+  .bartender-card__instructions {
+    padding: 0 0 0 1.5rem;
+    border-top: 0;
+    border-left: 1px solid rgba(255, 138, 138, 0.38);
+  }
 }
 
 .bartender-recipe-list {
@@ -6776,7 +6793,7 @@ body {
 }
 
 .bartender-card--compact .bartender-card__media {
-  max-height: 130px;
+  max-height: 150px;
 }
 
 .bartender-card__no-recipe {
@@ -6825,10 +6842,40 @@ body {
   font-size: 0.82rem;
 }
 
-@media (max-width: 820px) {
-  .bartender-stage-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.specialty-allowance-list {
+  margin-top: 0.75rem;
+}
+
+.specialty-allowance-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.specialty-allowance-row__summary {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.specialty-allowance-row__summary span,
+.specialty-allowance-row__summary small {
+  color: var(--muted);
+}
+
+.specialty-allowance-row__grant {
+  display: flex;
+  align-items: end;
+  gap: 0.45rem;
+}
+
+.specialty-allowance-row__grant input {
+  width: 4.5rem;
+}
+
+.admin-entry--danger {
+  border-color: rgba(255, 49, 49, 0.58);
 }
 
 @media (max-width: 620px) {
@@ -6845,12 +6892,20 @@ body {
     max-height: 150px;
   }
 
-  .bartender-card--compact .bartender-card__media {
-    max-height: 105px;
+  .bartender-card--stage {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .bartender-card__prep-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .bartender-card--stage .bartender-card__media {
+    aspect-ratio: 16 / 7;
+    height: auto;
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 49, 49, 0.35);
+  }
+
+  .bartender-card--compact .bartender-card__media {
+    max-height: 105px;
   }
 
   .bartender-section-heading {
@@ -6868,5 +6923,13 @@ body {
 
   .bartender-backlog__item > .order-card__status {
     grid-column: 2;
+  }
+
+  .specialty-allowance-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .specialty-allowance-row .admin-entry__actions {
+    justify-content: flex-start;
   }
 }

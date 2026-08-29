@@ -119,7 +119,10 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    Attendees can browse food/drink cards, order available drinks, review grouped
    personal order history, reorder eligible drinks, and follow a privacy-safe
    live bar summary with aggregate queue counts and only their own order
-   positions. Specialty drinks are limited to 3 included attendee orders;
+   positions. Completed orders can be acknowledged with `I Picked It Up` from
+   the dashboard, My Orders, or the live bar summary; acknowledgement removes
+   the temporary ready emphasis but never removes order history. Specialty
+   drinks are limited to 3 included attendee orders;
    after 11:00 PM, 4th+ specialty requests are allowed while supplies remain.
    `/party/drink-history` remains a compatibility redirect to the My Orders
    view. Bartender operations remain separate at `/bartender`.
@@ -144,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 17. The following globals in `main.py` are
+`halloween:state` with schema version 19. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -173,7 +176,8 @@ the process-local cache:
   orderable flag, and created timestamp.
 - `drink_orders`: attendee drink orders with account/menu snapshots, drink type,
   beverage type, specialty sequence/extra-request metadata, status, estimated
-  ready time, created/started/completed timestamps, and completed prep duration.
+  ready time, created/started/completed timestamps, persistent optional
+  `picked_up_at`, and completed prep duration.
 - `bartender_tip_settings`: admin-managed bartender tip prompt settings with an
   enable flag, display name, note, QR/payment image URL, and optional Zelle,
   PayPal, Venmo, or Cash App handles.
@@ -256,7 +260,12 @@ Drink orders move from `received` to `in_progress` to `complete`. Completed
 orders track prep duration from `started_at` when available, and drink-ready
 events create a temporary 10-second live-display notice with the drink image.
 Drink notices render above active contest/karaoke/winner event overrides
-without replacing them.
+without replacing them. Notice expiration and attendee pickup acknowledgement
+affect presentation only: completed order records remain in night-long attendee
+and bartender history. The right display stage shows the active queue plus a
+rotating available menu promotion when work is queued; without an active queue
+it composes rotating food/drink promotions around completed-order history, and
+collapses only when no notice, queue, history, or available menu item exists.
 
 DJ commands share the Redis snapshot and display-update broadcast architecture.
 The `/admin/dj` workspace visibly distinguishes an admin request from the

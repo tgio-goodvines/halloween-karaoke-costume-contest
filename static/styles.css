@@ -4542,7 +4542,7 @@ li,
   color: var(--primary);
   font-size: clamp(2.25rem, 8vw, 5rem);
   letter-spacing: 0;
-  line-height: 0.95;
+  line-height: 1.04;
 }
 
 .rsvp-details article,
@@ -5619,7 +5619,7 @@ textarea,
 .game-showcase-card__body strong {
   font-family: "Cormorant Garamond", Georgia, serif;
   font-size: clamp(1.45rem, 2.6vw, 2rem);
-  line-height: 0.96;
+  line-height: 1.08;
   text-shadow: 0 0 18px color-mix(in srgb, var(--game-accent) 42%, transparent);
 }
 
@@ -6022,6 +6022,39 @@ textarea,
   .game-admin-section-heading .contest-actions { width: 100%; }
   .game-admin-section-heading .contest-actions form,
   .game-admin-section-heading .contest-actions .button { width: 100%; }
+}
+
+/* Drink pickup acknowledgement */
+.contest-banner__actions,
+.order-card__body > form,
+.bar-status-order > form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin: 0;
+}
+
+.contest-banner__actions {
+  justify-content: flex-end;
+}
+
+.bar-status-order > form {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 620px) {
+  .contest-banner__actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .contest-banner__actions > *,
+  .contest-banner__actions .button,
+  .contest-banner__actions .contest-banner__button {
+    flex: 1 1 100%;
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6526,5 +6559,213 @@ textarea,
 
   .status-badge {
     align-self: flex-start;
+  }
+}
+
+/* Readable text rhythm and the FIFO bartender workbench. */
+:root {
+  --app-word-spacing: 0.04em;
+}
+
+body {
+  line-height: 1.55;
+  word-spacing: var(--app-word-spacing);
+}
+
+:is(p, li, label, summary, button, a, th, td, small) {
+  word-spacing: var(--app-word-spacing);
+}
+
+:is(h1, h2, h3, h4, h5, h6, legend, strong) {
+  word-spacing: 0.05em;
+}
+
+:is(input, select, textarea, code, pre, kbd, samp) {
+  word-spacing: normal;
+}
+
+.admin-entry__summary-text,
+.feature-action-card > span,
+.karaoke-history li,
+.display-admin__status-grid article,
+.admin-stats article {
+  row-gap: 0.3rem;
+}
+
+.bartender-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bartender-section-heading h3,
+.bartender-section-heading p,
+.bartender-stage > h4 {
+  margin-top: 0;
+}
+
+.bartender-queue-count {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid rgba(255, 49, 49, 0.48);
+  border-radius: 999px;
+  color: #ff8a8a;
+  background: rgba(255, 49, 49, 0.12);
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.bartender-queue-warning {
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid #ff8a8a;
+  background: rgba(255, 49, 49, 0.1);
+}
+
+.bartender-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.bartender-stage {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.bartender-stage--current {
+  border-color: rgba(255, 49, 49, 0.76);
+  box-shadow: 0 0 28px rgba(255, 49, 49, 0.2);
+}
+
+.bartender-card--stage {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bartender-card--stage .bartender-card__media {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: 0;
+  border-right: 0;
+  border-bottom: 1px solid rgba(255, 49, 49, 0.35);
+}
+
+.bartender-card__stage-label {
+  color: #ff8a8a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bartender-card__timing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.bartender-card__recipe h5 {
+  margin-bottom: 0.55rem;
+}
+
+.bartender-recipe-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.bartender-recipe-list li {
+  padding-left: 0.2rem;
+}
+
+.bartender-card__no-recipe {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.bartender-backlog {
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bartender-backlog__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.bartender-backlog__position {
+  display: grid;
+  place-items: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  border: 1px solid rgba(255, 49, 49, 0.48);
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 800;
+}
+
+.bartender-backlog__copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.bartender-backlog__copy > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.bartender-backlog__recipe summary {
+  color: #ff8a8a;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.bartender-backlog__recipe .bartender-recipe-list {
+  margin-top: 0.55rem;
+}
+
+@media (max-width: 820px) {
+  .bartender-stage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .bartender-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bartender-queue-count {
+    align-self: flex-start;
+  }
+
+  .bartender-backlog__item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .bartender-backlog__item > .order-card__status {
+    grid-column: 2;
   }
 }

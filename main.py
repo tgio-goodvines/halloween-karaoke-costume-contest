@@ -353,7 +353,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 18
+STATE_SCHEMA_VERSION = 19
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -548,6 +548,7 @@ DEFAULT_DRINK_ESTIMATE_SECONDS = 8 * 60
 DRINK_READY_OVERRIDE_SECONDS = 10
 DISPLAY_NOTICE_QUEUE_LIMIT = 12
 DRINK_READY_DASHBOARD_SECONDS = 5 * 60
+BAR_PROMOTION_INTERVAL_SECONDS = 8
 SPECIALTY_DRINK_INCLUDED_LIMIT = 3
 SPECIALTY_EXTRA_ORDER_HOUR = 23
 DRINK_ORDER_STATUSES = ("received", "in_progress", "complete")
@@ -748,6 +749,7 @@ STATE_MUTATION_ENDPOINTS = {
     "bartender_portal",
     "party_menu",
     "party_drink_history",
+    "party_drink_pickup",
     "party_costumes",
     "party_costume_voting",
     "party_jukebox_request",
@@ -768,6 +770,7 @@ STATE_REFRESH_ENDPOINTS = {
     "party_dashboard",
     "party_menu",
     "party_drink_history",
+    "party_drink_pickup",
     "party_bar_queue_data",
     "party_bartender_tip",
     "bartender_portal",
@@ -830,6 +833,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_dashboard",
     "party_menu",
     "party_drink_history",
+    "party_drink_pickup",
     "party_bar_queue_data",
     "party_bartender_tip",
     "party_costumes",
@@ -2000,6 +2004,30 @@ def beverage_type_label(raw_type: object) -> str:
     return "Non-alcoholic" if normalize_beverage_type(raw_type) == "non_alcoholic" else "Alcoholic"
 
 
+def recipe_ingredients(raw_recipe: object) -> list[str]:
+    """Return a safe, display-ready ingredient list from legacy recipe text."""
+    if isinstance(raw_recipe, (list, tuple)):
+        raw_lines = [str(value or "") for value in raw_recipe]
+    else:
+        recipe_text = str(raw_recipe or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not recipe_text:
+            return []
+        raw_lines = recipe_text.split("\n")
+        if len(raw_lines) == 1 and ";" in recipe_text:
+            raw_lines = recipe_text.split(";")
+
+    ingredients: list[str] = []
+    for raw_line in raw_lines:
+        ingredient = re.sub(r"^\s*(?:(?:[-*•]+)|(?:\d+[.)]))\s+", "", str(raw_line or "")).strip()
+        if ingredient:
+            ingredients.append(ingredient)
+    return ingredients
+
+
+def normalize_drink_recipe(raw_recipe: object) -> str:
+    return "\n".join(recipe_ingredients(raw_recipe))
+
+
 def normalize_bartender_tip_settings(raw_settings: object) -> dict[str, object]:
     settings = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
     if not isinstance(raw_settings, dict):
@@ -2022,7 +2050,7 @@ def menu_item_to_dict(item: dict[str, object]) -> dict[str, object]:
         "category": category,
         "description": str(item.get("description", "") or "").strip(),
         "image_url": safe_image_url(str(item.get("image_url", "") or "")),
-        "recipe": str(item.get("recipe", "") or "").strip(),
+        "recipe": normalize_drink_recipe(item.get("recipe", "")),
         "available": bool(item.get("available", True)),
         "drink_type": drink_type if category == "drink" else "standard",
         "beverage_type": beverage_type if category == "drink" else "non_alcoholic",
@@ -2071,7 +2099,7 @@ def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
         "menu_item_id": menu_item_id,
         "item_name": item_name,
         "item_image_url": safe_image_url(str(data.get("item_image_url", "") or "")),
-        "recipe": str(data.get("recipe", "") or "").strip(),
+        "recipe": normalize_drink_recipe(data.get("recipe", "")),
         "drink_type": normalize_drink_type(data.get("drink_type")),
         "beverage_type": normalize_beverage_type(data.get("beverage_type")),
         "orderable": bool(data.get("orderable", True)),
@@ -2083,6 +2111,7 @@ def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
         "created_at": str(data.get("created_at", "") or _utc_now_iso()),
         "started_at": str(data.get("started_at", "") or ""),
         "completed_at": str(data.get("completed_at", "") or ""),
+        "picked_up_at": str(data.get("picked_up_at", "") or ""),
         "completed_seconds": completed_seconds,
     }
 
@@ -2145,7 +2174,7 @@ def create_drink_order(user_id: str, account: dict[str, object], item: dict[str,
         "menu_item_id": str(item.get("id", "")),
         "item_name": str(item.get("name", "")),
         "item_image_url": str(item.get("image_url", "") or ""),
-        "recipe": str(item.get("recipe", "") or ""),
+        "recipe": normalize_drink_recipe(item.get("recipe", "")),
         "drink_type": drink_type,
         "beverage_type": normalize_beverage_type(item.get("beverage_type")),
         "orderable": bool(item.get("orderable", True)),
@@ -2157,12 +2186,15 @@ def create_drink_order(user_id: str, account: dict[str, object], item: dict[str,
         "created_at": _utc_now_iso(),
         "started_at": "",
         "completed_at": "",
+        "picked_up_at": "",
         "completed_seconds": None,
     }
 
 
 def ready_order_is_visible_on_dashboard(order: dict[str, object], now: datetime | None = None) -> bool:
     if order.get("status") != "complete":
+        return False
+    if order.get("picked_up_at"):
         return False
     completed_at = parse_utc_iso(order.get("completed_at"))
     if not completed_at:
@@ -2186,12 +2218,20 @@ def bartender_tip_methods(settings: dict[str, object] | None = None) -> list[dic
     ]
 
 
-def drink_order_priority_bucket(order: dict[str, object]) -> int:
-    if order.get("status") == "in_progress":
-        return 0
-    if bool(order.get("specialty_extra_request")):
-        return 2
-    return 1
+def drink_order_fifo_sort_key(order: dict[str, object]) -> tuple[datetime, str]:
+    created_at = parse_utc_iso(order.get("created_at")) or datetime.max.replace(tzinfo=timezone.utc)
+    return created_at, str(order.get("id", ""))
+
+
+def ordered_active_drink_orders() -> list[dict[str, object]]:
+    """Return the operational queue with an already-started legacy drink preserved."""
+    fifo_orders = sorted(active_drink_orders(), key=drink_order_fifo_sort_key)
+    in_progress_orders = [order for order in fifo_orders if order.get("status") == "in_progress"]
+    if not in_progress_orders:
+        return fifo_orders
+
+    current_order = in_progress_orders[0]
+    return [current_order, *[order for order in fifo_orders if order is not current_order]]
 
 
 def completed_drink_order_durations() -> list[int]:
@@ -7110,6 +7150,42 @@ def _display_available_drinks() -> list[dict[str, object]]:
     ]
 
 
+def _display_available_menu_promotions() -> list[dict[str, object]]:
+    drinks = [
+        item for item in menu_items
+        if item.get("category") == "drink" and item.get("available")
+    ]
+    food = [
+        item for item in menu_items
+        if item.get("category") == "food" and item.get("available")
+    ]
+    interleaved: list[dict[str, object]] = []
+    for index in range(max(len(drinks), len(food))):
+        if index < len(drinks):
+            interleaved.append(drinks[index])
+        if index < len(food):
+            interleaved.append(food[index])
+
+    return [
+        {
+            "id": str(item.get("id", "")),
+            "category": str(item.get("category", "drink")),
+            "category_label": "Food" if item.get("category") == "food" else "Drink",
+            "name": str(item.get("name", "") or ""),
+            "description": str(item.get("description", "") or ""),
+            "image_url": safe_image_url(str(item.get("image_url", "") or "")),
+            "orderable": bool(item.get("orderable")) if item.get("category") == "drink" else False,
+            "availability_label": (
+                "Order from your phone"
+                if item.get("category") == "drink" and item.get("orderable")
+                else ("Available at the bar" if item.get("category") == "drink" else "Available tonight")
+            ),
+        }
+        for item in interleaved
+        if str(item.get("name", "") or "")
+    ]
+
+
 def game_result_card_is_enabled(card_id: str) -> bool:
     configured = display_config.get("game_result_card_enabled", {})
     if not isinstance(configured, dict):
@@ -7554,10 +7630,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
 
 
 def build_bar_stage() -> dict[str, object]:
-    orders = sorted(
-        active_drink_orders(),
-        key=lambda order: (drink_order_priority_bucket(order), str(order.get("created_at", ""))),
-    )
+    orders = ordered_active_drink_orders()
     maximum = _bounded_int(display_config.get("max_bar_orders"), 4, 1, 8)
     public_orders = [
         {
@@ -7571,33 +7644,58 @@ def build_bar_stage() -> dict[str, object]:
         }
         for index, order in enumerate(orders[:maximum])
     ]
-    available_drinks = _display_available_drinks()
-    featured_drink = available_drinks[0] if available_drinks else None
+    promotions = _display_available_menu_promotions()
+    completed_orders = sorted(
+        [order for order in drink_orders if order.get("status") == "complete"],
+        key=lambda order: (
+            parse_utc_iso(order.get("completed_at"))
+            or parse_utc_iso(order.get("created_at"))
+            or datetime.min.replace(tzinfo=timezone.utc),
+            str(order.get("id", "")),
+        ),
+        reverse=True,
+    )
+    public_completed_orders = [
+        {
+            "id": str(order.get("id", "")),
+            "name": str(order.get("username", "") or "Guest"),
+            "drink": str(order.get("item_name", "") or "Drink"),
+            "completed_label": format_time_label(order.get("completed_at")) or "Tonight",
+            "picked_up": bool(order.get("picked_up_at")),
+            "picked_up_label": format_time_label(order.get("picked_up_at")),
+        }
+        for order in completed_orders
+    ]
     mode = str(display_config.get("bar_mode", "auto"))
-    visible = mode != "hidden" and (mode == "always" or bool(public_orders) or bool(live_display_notice_override))
+    has_notice = bool(live_display_notice_override)
+    visible = mode != "hidden" and (
+        mode == "always"
+        or bool(public_orders)
+        or bool(public_completed_orders)
+        or bool(promotions)
+        or has_notice
+    )
     return {
         "visible": visible,
+        "presentation": "notice" if has_notice else ("queue" if public_orders else "idle"),
         "orders": public_orders,
         "active_count": len(orders),
         "overflow_count": max(0, len(orders) - len(public_orders)),
+        "completed_orders": public_completed_orders,
+        "completed_count": len(public_completed_orders),
         "notice": copy.deepcopy(live_display_notice_override),
         "queued_notice_count": len(live_display_notice_queue),
+        "promotion_items": promotions,
+        "promotion_interval_seconds": BAR_PROMOTION_INTERVAL_SECONDS,
         "summary": {
             "mixing_count": sum(1 for order in orders if order.get("status") == "in_progress"),
             "waiting_count": sum(1 for order in orders if order.get("status") == "received"),
             "average_prep_label": _display_duration_label(average_drink_completion_seconds()),
-            "available_drink_count": len(available_drinks),
+            "available_drink_count": sum(1 for item in promotions if item.get("category") == "drink"),
+            "available_food_count": sum(1 for item in promotions if item.get("category") == "food"),
         },
-        "featured_item": (
-            {
-                "name": str(featured_drink.get("name", "") or ""),
-                "description": str(featured_drink.get("description", "") or ""),
-                "image_url": safe_image_url(str(featured_drink.get("image_url", "") or "")),
-            }
-            if featured_drink
-            else None
-        ),
-        "action": {"label": "Order from your phone", "url": f"{PARTY_SITE_URL}/party/menu"},
+        "featured_item": copy.deepcopy(promotions[0]) if promotions else None,
+        "action": {"label": "Browse Menu & Orders", "url": f"{PARTY_SITE_URL}/party/menu"},
         "image_url": FEATURE_ART["bar"],
         "media_treatment": "background",
         "media_tone": "feature",
@@ -7858,6 +7956,7 @@ def inject_contest_state():
         "drink_order_status_label": drink_order_status_label,
         "drink_type_label": drink_type_label,
         "beverage_type_label": beverage_type_label,
+        "recipe_ingredients": recipe_ingredients,
         "party_day_has_arrived": party_day_has_arrived(),
         "party_games_state": {
             "available": party_day_has_arrived() and bool(enabled_views),
@@ -9443,6 +9542,22 @@ def reorder_attendee_drink(
     return order, ""
 
 
+def acknowledge_attendee_drink_pickup(
+    user_id: str,
+    order_id: str,
+) -> tuple[dict[str, object] | None, str]:
+    order = find_drink_order(order_id)
+    if not order or str(order.get("user_id", "")) != user_id:
+        return None, "That drink order could not be found."
+    if order.get("status") != "complete":
+        return None, "Only a completed drink can be marked as picked up."
+
+    if not order.get("picked_up_at"):
+        order["picked_up_at"] = _utc_now_iso()
+        broadcast_display_update()
+    return order, ""
+
+
 def group_attendee_drink_orders(user_id: str) -> dict[str, list[dict[str, object]]]:
     groups: dict[str, list[dict[str, object]]] = {
         "ready": [],
@@ -9479,6 +9594,8 @@ def render_party_menu_workspace(
         page_messages.append("Your drink order was sent to the bar.")
     if request.args.get("reordered") == "1":
         page_messages.append("Your reorder was sent to the bar.")
+    if request.args.get("picked_up") == "1":
+        page_messages.append("Pickup confirmed. Your completed order remains in My Orders.")
 
     orders = user_drink_orders(user_id)
     order_groups = group_attendee_drink_orders(user_id)
@@ -9553,6 +9670,28 @@ def party_menu():
     return render_party_menu_workspace(user_id)
 
 
+@app.route("/party/drink-orders/<order_id>/pickup", methods=["POST"])
+def party_drink_pickup(order_id: str):
+    user_id = str(session.get("user_id", "") or "")
+    account = current_user_account()
+    if not user_id or not account:
+        return redirect(url_for("party_login", next=url_for("party_menu", view="orders")))
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
+
+    order, pickup_error = acknowledge_attendee_drink_pickup(user_id, order_id)
+    if not order:
+        return render_party_menu_workspace(
+            user_id,
+            errors=[pickup_error],
+            active_view="orders",
+        )
+
+    if request.form.get("return_view") == "dashboard":
+        return redirect(url_for("party_dashboard"))
+    return redirect(url_for("party_menu", view="orders", picked_up="1"))
+
+
 @app.route("/party/drink-history", methods=["GET", "POST"])
 def party_drink_history():
     user_id = str(session.get("user_id", "") or "")
@@ -9597,18 +9736,21 @@ def party_bartender_tip():
 
 
 def bartender_queue_context() -> dict[str, object]:
-    sorted_orders = sorted(
-        drink_orders,
+    active_orders = ordered_active_drink_orders()
+    completed_orders = sorted(
+        [order for order in drink_orders if order.get("status") == "complete"],
         key=lambda order: (
-            {"in_progress": 0, "received": 1, "complete": 3}.get(str(order.get("status")), 4),
-            drink_order_priority_bucket(order),
-            str(order.get("created_at", "")),
+            parse_utc_iso(order.get("completed_at"))
+            or parse_utc_iso(order.get("created_at"))
+            or datetime.min.replace(tzinfo=timezone.utc),
+            str(order.get("id", "")),
         ),
-    )
-    recent_completed = [
-        order for order in sorted_orders if order.get("status") == "complete"
-    ][-12:]
-    active_orders = [order for order in sorted_orders if order.get("status") != "complete"]
+        reverse=True,
+    )[:12]
+    current_order = active_orders[0] if active_orders else None
+    next_order = active_orders[1] if len(active_orders) > 1 else None
+    remaining_orders = active_orders[2:]
+    in_progress_count = sum(1 for order in active_orders if order.get("status") == "in_progress")
     version_source = [
         {
             "id": str(order.get("id", "")),
@@ -9619,7 +9761,7 @@ def bartender_queue_context() -> dict[str, object]:
             "item_name": str(order.get("item_name", "")),
             "username": str(order.get("username", "")),
         }
-        for order in sorted_orders
+        for order in [*active_orders, *completed_orders]
     ]
     queue_version = hashlib.sha256(
         json.dumps(version_source, sort_keys=True).encode("utf-8")
@@ -9627,7 +9769,15 @@ def bartender_queue_context() -> dict[str, object]:
 
     return {
         "active_orders": active_orders,
-        "completed_orders": list(reversed(recent_completed)),
+        "current_order": current_order,
+        "next_order": next_order,
+        "remaining_orders": remaining_orders,
+        "completed_orders": completed_orders,
+        "queue_warning": (
+            "Multiple drinks were already marked in progress. Finish them in the displayed order; new drinks will remain FIFO."
+            if in_progress_count > 1
+            else ""
+        ),
         "average_completion_seconds": average_drink_completion_seconds(),
         "queue_version": queue_version,
     }
@@ -9673,6 +9823,10 @@ def attendee_bar_queue_state(user_id: str) -> dict[str, object]:
                 "queue_position": 0,
                 "orders_ahead": 0,
                 "ready": True,
+                "pickup_url": url_for(
+                    "party_drink_pickup",
+                    order_id=str(order.get("id", "")),
+                ),
             },
         )
 
@@ -9708,15 +9862,19 @@ def bartender_portal():
         order_id = request.form.get("order_id", "").strip()
         requested_status = request.form.get("status", "").strip()
         order = find_drink_order(order_id)
+        queue_context = bartender_queue_context()
+        current_order = queue_context.get("current_order")
 
         if not order:
             errors.append("That drink order could not be found.")
         elif requested_status not in {"in_progress", "complete"}:
             errors.append("Choose a valid order status.")
+        elif not current_order or str(current_order.get("id", "")) != str(order.get("id", "")):
+            errors.append("Finish the current drink before moving to the next order.")
         elif requested_status == "in_progress" and order.get("status") != "received":
             errors.append("Only received orders can be started.")
-        elif requested_status == "complete" and order.get("status") not in {"received", "in_progress"}:
-            errors.append("Only active orders can be completed.")
+        elif requested_status == "complete" and order.get("status") != "in_progress":
+            errors.append("Start the current drink before marking it complete.")
 
         if not errors and order:
             now_iso = _utc_now_iso()
@@ -10197,7 +10355,8 @@ def admin_portal(admin_view: str):
         beverage_type = normalize_beverage_type(request.form.get("beverage_type", "alcoholic"))
         name = request.form.get("name", "").strip()
         description = request.form.get("description", "").strip()
-        recipe = request.form.get("recipe", "").strip()
+        raw_recipe = request.form.get("recipe", "")
+        recipe = normalize_drink_recipe(raw_recipe)
         orderable_values = request.form.getlist("orderable")
         orderable = True if not orderable_values else "yes" in orderable_values
 
@@ -10207,7 +10366,7 @@ def admin_portal(admin_view: str):
             errors.append("Menu item name must be 100 characters or fewer.")
         if len(description) > 500:
             errors.append("Menu item description must be 500 characters or fewer.")
-        if len(recipe) > 1200:
+        if len(raw_recipe) > 1200:
             errors.append("Drink recipe must be 1200 characters or fewer.")
         if category == "food" and recipe:
             recipe = ""

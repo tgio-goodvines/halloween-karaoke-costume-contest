@@ -1,76 +1,134 @@
-<section class="admin-section">
-  <h3>Active Orders</h3>
-  <p class="contest-status">Average completion time: about {{ (average_completion_seconds / 60)|round(0, 'ceil')|int }} minutes.</p>
+{% macro drink_card(order, stage_label, actionable=false) %}
+  <article class="bartender-card bartender-card--{{ order.status }} bartender-card--stage">
+    <div class="bartender-card__media">
+      {% if order.item_image_url %}
+        <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}">
+      {% else %}
+        <div class="menu-card__placeholder" aria-hidden="true">Drink</div>
+      {% endif %}
+    </div>
+    <div class="bartender-card__body">
+      <p class="bartender-card__stage-label">{{ stage_label }}</p>
+      <div class="menu-card__badges">
+        <span>{{ drink_order_status_label(order.status) }}</span>
+        <span>{{ drink_type_label(order.drink_type) }}</span>
+        <span>{{ beverage_type_label(order.beverage_type) }}</span>
+        {% if order.specialty_sequence_number %}
+          <span>Specialty #{{ order.specialty_sequence_number }}</span>
+        {% endif %}
+      </div>
+      <h4>{{ order.item_name }}</h4>
+      <p>For {{ order.username }}</p>
+      {% if order.specialty_extra_request %}
+        <p class="bartender-card__priority-note">
+          After-11 PM 4+ specialty request. Check drink availability before preparing.
+        </p>
+      {% elif order.drink_type == 'specialty' %}
+        <p class="bartender-card__priority-note">
+          Included specialty order {{ order.specialty_sequence_number }} of 3.
+        </p>
+      {% endif %}
+      <div class="bartender-card__timing">
+        {% if order.created_at %}<span>Ordered {{ format_time_label(order.created_at) }}</span>{% endif %}
+        {% if order.estimated_ready_at %}<span>Estimated ready {{ format_time_label(order.estimated_ready_at) }}</span>{% endif %}
+      </div>
+      {% set ingredients = recipe_ingredients(order.recipe) %}
+      {% if ingredients %}
+        <div class="bartender-card__recipe">
+          <h5>Ingredients</h5>
+          <ul class="bartender-recipe-list">
+            {% for ingredient in ingredients %}<li>{{ ingredient }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% else %}
+        <p class="bartender-card__no-recipe">No ingredient list provided.</p>
+      {% endif %}
+      {% if actionable %}
+        <div class="contest-actions">
+          {% if order.status == 'received' %}
+            <form method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="order_id" value="{{ order.id }}">
+              <input type="hidden" name="status" value="in_progress">
+              <button type="submit" class="button button--primary">Start Current Drink</button>
+            </form>
+          {% else %}
+            <form method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="order_id" value="{{ order.id }}">
+              <input type="hidden" name="status" value="complete">
+              <button type="submit" class="button">Mark Current Drink Complete</button>
+            </form>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </article>
+{% endmacro %}
 
-  {% if active_orders %}
-    <div class="bartender-grid">
-      {% for order in active_orders %}
-        <article class="bartender-card bartender-card--{{ order.status }}">
-          <div class="bartender-card__media">
-            {% if order.item_image_url %}
-              <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}">
-            {% else %}
-              <div class="menu-card__placeholder" aria-hidden="true">Drink</div>
-            {% endif %}
-          </div>
-          <div class="bartender-card__body">
-            <p class="order-card__status">{{ drink_order_status_label(order.status) }}</p>
-            <div class="menu-card__badges">
-              <span>{{ drink_type_label(order.drink_type) }}</span>
-              <span>{{ beverage_type_label(order.beverage_type) }}</span>
-              {% if order.specialty_sequence_number %}
-                <span>Specialty #{{ order.specialty_sequence_number }}</span>
-              {% endif %}
-            </div>
-            <h4>{{ order.item_name }}</h4>
-            <p>For {{ order.username }}</p>
-            {% if order.specialty_extra_request %}
-              <p class="bartender-card__priority-note">
-                After-11 PM 4+ specialty request. Check drink availability before preparing; included specialty orders stay ahead of this request.
-              </p>
-            {% elif order.drink_type == 'specialty' %}
-              <p class="bartender-card__priority-note">
-                Included specialty order {{ order.specialty_sequence_number }} of 3.
-              </p>
-            {% endif %}
-            {% if order.estimated_ready_at %}
-              <p class="rsvp-admin-item__meta">Estimated ready: {{ format_time_label(order.estimated_ready_at) }}</p>
-            {% endif %}
-            {% if order.status == 'in_progress' and order.recipe %}
-              <div class="bartender-card__recipe">
-                <h5>Recipe</h5>
-                <p>{{ order.recipe }}</p>
-              </div>
-            {% elif order.recipe %}
-              <details class="bartender-card__recipe">
-                <summary>Recipe reference</summary>
-                <p>{{ order.recipe }}</p>
+<section class="admin-section bartender-stages">
+  <div class="bartender-section-heading">
+    <div>
+      <h3>Drink Stages</h3>
+      <p class="contest-status">First come, first served. One drink is current and one is staged next.</p>
+    </div>
+    <span class="bartender-queue-count">{{ active_orders|length }} active</span>
+  </div>
+
+  {% if queue_warning %}
+    <p class="bartender-queue-warning" role="status">{{ queue_warning }}</p>
+  {% endif %}
+
+  <div class="bartender-stage-grid">
+    <section class="bartender-stage bartender-stage--current" aria-labelledby="bartender-current-heading">
+      <h4 id="bartender-current-heading">Current Drink</h4>
+      {% if current_order %}
+        {{ drink_card(current_order, 'Make this drink now', true) }}
+      {% else %}
+        <p class="admin-empty">No current drink. New orders will appear here.</p>
+      {% endif %}
+    </section>
+
+    <section class="bartender-stage bartender-stage--next" aria-labelledby="bartender-next-heading">
+      <h4 id="bartender-next-heading">Up Next</h4>
+      {% if next_order %}
+        {{ drink_card(next_order, 'Prepare for this drink next') }}
+      {% else %}
+        <p class="admin-empty">No next drink is waiting.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <p class="contest-status">Average completion time: about {{ (average_completion_seconds / 60)|round(0, 'ceil')|int }} minutes.</p>
+</section>
+
+{% if remaining_orders %}
+  <section class="admin-section">
+    <h3>Remaining Queue</h3>
+    <p class="contest-status">Later orders remain visible in the exact order they were received.</p>
+    <ol class="bartender-backlog">
+      {% for order in remaining_orders %}
+        <li class="bartender-backlog__item">
+          <span class="bartender-backlog__position">{{ loop.index + 2 }}</span>
+          <div class="bartender-backlog__copy">
+            <strong>{{ order.item_name }}</strong>
+            <span>For {{ order.username }}{% if order.created_at %} · Ordered {{ format_time_label(order.created_at) }}{% endif %}</span>
+            {% set ingredients = recipe_ingredients(order.recipe) %}
+            {% if ingredients %}
+              <details class="bartender-backlog__recipe">
+                <summary>Ingredients</summary>
+                <ul class="bartender-recipe-list">
+                  {% for ingredient in ingredients %}<li>{{ ingredient }}</li>{% endfor %}
+                </ul>
               </details>
             {% endif %}
-            <div class="contest-actions">
-              {% if order.status == 'received' %}
-                <form method="post">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="order_id" value="{{ order.id }}">
-                  <input type="hidden" name="status" value="in_progress">
-                  <button type="submit" class="button button--primary">Start Order</button>
-                </form>
-              {% endif %}
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="order_id" value="{{ order.id }}">
-                <input type="hidden" name="status" value="complete">
-                <button type="submit" class="button">Mark Complete</button>
-              </form>
-            </div>
           </div>
-        </article>
+          <span class="order-card__status">{{ drink_order_status_label(order.status) }}</span>
+        </li>
       {% endfor %}
-    </div>
-  {% else %}
-    <p class="admin-empty">No active drink orders yet.</p>
-  {% endif %}
-</section>
+    </ol>
+  </section>
+{% endif %}
 
 <section class="admin-section">
   <h3>Recently Completed</h3>

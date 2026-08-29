@@ -233,3 +233,30 @@ fixed no-scroll track.
   browser warnings or errors. The full Python run reached 191 passing tests and
   21 passing subtests; four unrelated drink-history/navigation assertions were
   temporarily failing against concurrent bar/menu consolidation work.
+
+## Dynamic Bar Stage And Pickup Retention (2026-08-29)
+
+- The right stage now derives a `notice`, `queue`, or `idle` presentation. An
+  active queue keeps the existing queue-first organization and rotates one
+  available food/drink promotion in the bottom zone.
+- With no active queue, retained completed orders occupy the middle while menu
+  promotions rotate above and below them. Menu-only state uses all three
+  vertical zones; history-only state stays visible; the rail collapses only
+  when notice, queue, completed history, and available menu are all empty.
+- Promotion input contains every available food and drink item, including
+  view-only/non-orderable drinks. Unavailable items are excluded. Rotation uses
+  a stable key so five-second SSE refreshes do not restart the interval.
+- Drink-ready notices fill the complete right stage for their temporary
+  duration with a vivid neon-red background and assertive alert semantics.
+  Queued notices remain FIFO and do not interrupt the center/event stage.
+- Schema 19 adds an optional `picked_up_at` timestamp. Attendees can acknowledge
+  pickup from the dashboard, My Orders, or privacy-safe live status. The ready
+  emphasis ends after acknowledgement (or the existing five-minute window),
+  while completed order history remains intact for the night.
+- Local browser QA at 1440x900 and 1280x720 verified the notice,
+  queue-independent rotation, history-plus-menu, menu-only, and fixed no-scroll
+  compositions. The full neon treatment was tuned against computed browser
+  styles; reduced-motion mode disables its pulse.
+- Final verification passed with 215 Python tests plus 21 subtests, all 17
+  dependency-free JavaScript tests, Python/JavaScript syntax checks, and
+  whitespace validation.

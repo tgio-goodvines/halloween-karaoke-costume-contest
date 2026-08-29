@@ -59,9 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
     barOrders: document.querySelector('[data-bar-orders]'),
     barOverflow: document.querySelector('[data-bar-overflow]'),
     barSummary: document.querySelector('[data-bar-summary]'),
-    barFeature: document.querySelector('[data-bar-feature]'),
-    barFeatureName: document.querySelector('[data-bar-feature-name]'),
-    barFeatureDescription: document.querySelector('[data-bar-feature-description]'),
+    barPromotionsTop: document.querySelector('[data-bar-promotions-top]'),
+    barPromotionsBottom: document.querySelector('[data-bar-promotions-bottom]'),
+    barHistory: document.querySelector('[data-bar-history]'),
+    barHistoryCount: document.querySelector('[data-bar-history-count]'),
+    barHistoryOrders: document.querySelector('[data-bar-history-orders]'),
     barAction: document.querySelector('[data-bar-action]'),
     barPickup: document.querySelector('[data-bar-pickup]'),
     readyNotice: document.querySelector('[data-ready-notice]'),
@@ -90,6 +92,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let gameEntryId = '';
   let gameTimer = null;
   let gameTimerEntryId = '';
+  let barPromotionIndex = 0;
+  let barPromotionItemId = '';
+  let barHistoryIndex = 0;
+  let barHistoryItemId = '';
+  let barRotationTimer = null;
+  let barRotationTimerKey = '';
   let noticeTimer = null;
   let karaokeTimer = null;
 
@@ -163,6 +171,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (gameTimer) window.clearTimeout(gameTimer);
     gameTimer = null;
     gameTimerEntryId = '';
+  };
+
+  const clearBarRotationTimer = () => {
+    if (barRotationTimer) window.clearTimeout(barRotationTimer);
+    barRotationTimer = null;
+    barRotationTimerKey = '';
   };
 
   const clearCenterExtras = () => {
@@ -555,6 +569,98 @@ document.addEventListener('DOMContentLoaded', () => {
     if (expiresAt > Date.now()) noticeTimer = window.setTimeout(fetchLatest, Math.max(100, expiresAt - Date.now() + 100));
   };
 
+  const rotationWindow = (items, startIndex, count) => {
+    const entries = safeArray(items);
+    if (!entries.length || count <= 0) return [];
+    const length = Math.min(entries.length, count);
+    return Array.from({ length }, (_, offset) => entries[(startIndex + offset) % entries.length]);
+  };
+
+  const preserveRotationIndex = (items, currentId, fallbackIndex) => {
+    const entries = safeArray(items);
+    if (!entries.length) return 0;
+    const preserved = entries.findIndex((item) => String(item.id || '') === String(currentId || ''));
+    return preserved >= 0 ? preserved : Math.min(fallbackIndex, entries.length - 1);
+  };
+
+  const renderPromotionCards = (container, promotions) => {
+    if (!container) return;
+    container.replaceChildren();
+    safeArray(promotions).forEach((promotion) => {
+      const card = document.createElement('article');
+      card.className = 'display-bar-promotion';
+      const label = document.createElement('span');
+      label.textContent = `${promotion.category_label || 'Menu'} · ${promotion.availability_label || 'Available tonight'}`;
+      const name = document.createElement('strong');
+      name.textContent = promotion.name || 'Tonight\'s menu';
+      const description = document.createElement('p');
+      description.textContent = promotion.description || 'Browse the full menu from your phone.';
+      card.append(label, name, description);
+      container.append(card);
+    });
+    container.style.setProperty('--bar-promotion-count', String(Math.max(1, container.children.length)));
+    setHidden(container, !container.children.length);
+  };
+
+  const renderCompletedHistory = (completedOrders, visible) => {
+    const orders = safeArray(completedOrders);
+    setHidden(elements.barHistory, !visible || !orders.length);
+    if (!visible || !orders.length || !elements.barHistoryOrders) return;
+    if (elements.barHistoryCount) elements.barHistoryCount.textContent = `${orders.length} total`;
+    elements.barHistoryOrders.replaceChildren();
+    rotationWindow(orders, barHistoryIndex, 3).forEach((order) => {
+      const item = document.createElement('li');
+      item.className = order.picked_up ? 'is-picked-up' : 'is-ready';
+      const dot = document.createElement('span');
+      const copy = document.createElement('div');
+      const name = document.createElement('strong');
+      const drink = document.createElement('small');
+      const status = document.createElement('em');
+      name.textContent = order.name || 'Guest';
+      drink.textContent = order.drink || 'Drink';
+      status.textContent = order.picked_up
+        ? `Picked up${order.picked_up_label ? ` · ${order.picked_up_label}` : ''}`
+        : `Ready · ${order.completed_label || 'Tonight'}`;
+      copy.append(name, drink);
+      item.append(dot, copy, status);
+      elements.barHistoryOrders.append(item);
+    });
+  };
+
+  const scheduleBarRotation = (bar, hasNotice, hasActiveQueue, promotionSlots) => {
+    const promotions = safeArray(bar.promotion_items);
+    const completedOrders = safeArray(bar.completed_orders);
+    const rotatesPromotions = promotions.length > promotionSlots;
+    const rotatesHistory = !hasActiveQueue && completedOrders.length > 3;
+    if (hasNotice || (!rotatesPromotions && !rotatesHistory)) {
+      clearBarRotationTimer();
+      return;
+    }
+    const key = [
+      hasActiveQueue ? 'queue' : 'idle',
+      barPromotionItemId,
+      barHistoryItemId,
+      promotions.map((item) => item.id).join(','),
+      completedOrders.map((item) => item.id).join(','),
+    ].join(':');
+    if (barRotationTimer && barRotationTimerKey === key) return;
+    clearBarRotationTimer();
+    barRotationTimerKey = key;
+    const seconds = boundedSeconds(bar.promotion_interval_seconds, 8);
+    barRotationTimer = window.setTimeout(() => {
+      barRotationTimer = null;
+      barRotationTimerKey = '';
+      const latestBar = asObject(layout.bar);
+      const latestPromotions = safeArray(latestBar.promotion_items);
+      const latestHistory = safeArray(latestBar.completed_orders);
+      if (latestPromotions.length) barPromotionIndex = (barPromotionIndex + 1) % latestPromotions.length;
+      if (latestHistory.length) barHistoryIndex = (barHistoryIndex + 1) % latestHistory.length;
+      barPromotionItemId = String(latestPromotions[barPromotionIndex]?.id || '');
+      barHistoryItemId = String(latestHistory[barHistoryIndex]?.id || '');
+      renderBar();
+    }, seconds * 1000);
+  };
+
   const renderBarBackground = (imageUrl) => {
     if (!elements.barImage || !elements.barImageWrap) return;
     const requestedSrc = String(imageUrl || '');
@@ -590,14 +696,25 @@ document.addEventListener('DOMContentLoaded', () => {
     setHidden(elements.barStage, !visible);
     shell.classList.toggle('has-bar', visible);
     if (!visible) {
-      elements.barStage?.classList.remove('is-ready');
+      elements.barStage?.classList.remove('is-ready', 'is-idle', 'has-history');
+      clearBarRotationTimer();
       renderBarBackground('');
       return;
     }
     const hasNotice = Object.keys(notice).length > 0;
+    const activeOrders = safeArray(bar.orders);
+    const promotions = safeArray(bar.promotion_items);
+    const completedOrders = safeArray(bar.completed_orders);
+    const hasActiveQueue = activeOrders.length > 0;
+    const hasHistory = completedOrders.length > 0;
+    const promotionSlots = hasActiveQueue ? 1 : (hasHistory ? 2 : 3);
+    elements.barStage?.classList.toggle('is-idle', !hasNotice && !hasActiveQueue);
+    elements.barStage?.classList.toggle('has-history', !hasNotice && !hasActiveQueue && hasHistory);
+    if (elements.barStage) elements.barStage.dataset.presentation = hasNotice ? 'notice' : (hasActiveQueue ? 'queue' : 'idle');
     setHidden(elements.readyNotice, !hasNotice);
     setHidden(elements.barQueue, hasNotice);
     if (hasNotice) {
+      clearBarRotationTimer();
       if (elements.readyName) elements.readyName.textContent = notice.highlight || 'Guest';
       if (elements.readyMessage) elements.readyMessage.textContent = notice.message || 'Your drink is ready at the bar.';
       if (elements.readyQueue) {
@@ -621,10 +738,18 @@ document.addEventListener('DOMContentLoaded', () => {
       scheduleNoticeRefresh(notice);
     } else {
       elements.barStage?.classList.remove('is-ready');
-      if (elements.barHeading) elements.barHeading.textContent = `Bar queue · ${Number(bar.active_count) || 0}`;
+      barPromotionIndex = preserveRotationIndex(promotions, barPromotionItemId, barPromotionIndex);
+      barHistoryIndex = preserveRotationIndex(completedOrders, barHistoryItemId, barHistoryIndex);
+      barPromotionItemId = String(promotions[barPromotionIndex]?.id || '');
+      barHistoryItemId = String(completedOrders[barHistoryIndex]?.id || '');
+      if (elements.barHeading) {
+        elements.barHeading.textContent = hasActiveQueue
+          ? `Bar queue · ${Number(bar.active_count) || 0}`
+          : (promotions.length ? 'Tonight\'s menu' : (hasHistory ? 'Drink history' : 'Bar standby'));
+      }
       if (elements.barOrders) {
-        elements.barOrders.innerHTML = '';
-        safeArray(bar.orders).forEach((order) => {
+        elements.barOrders.replaceChildren();
+        activeOrders.forEach((order) => {
           const item = document.createElement('li');
           item.className = order.status === 'in_progress' ? 'is-mixing' : '';
           const dot = document.createElement('span');
@@ -637,9 +762,10 @@ document.addEventListener('DOMContentLoaded', () => {
           item.append(dot, copy, status);
           elements.barOrders.appendChild(item);
         });
+        setHidden(elements.barOrders, !hasActiveQueue);
       }
       const overflow = Number(bar.overflow_count) || 0;
-      setOptionalText(elements.barOverflow, overflow ? `+${overflow} more active order${overflow === 1 ? '' : 's'}` : '');
+      setOptionalText(elements.barOverflow, hasActiveQueue && overflow ? `+${overflow} more active order${overflow === 1 ? '' : 's'}` : '');
       const summary = asObject(bar.summary);
       renderFacts(elements.barSummary, [
         { label: 'Mixing', value: Number(summary.mixing_count) || 0 },
@@ -647,14 +773,25 @@ document.addEventListener('DOMContentLoaded', () => {
         { label: 'Avg prep', value: summary.average_prep_label || 'About 8 min' },
         { label: 'Drinks', value: Number(summary.available_drink_count) || 0 },
       ]);
-      const feature = asObject(bar.featured_item);
-      renderBarBackground(feature.image_url || bar.image_url || '');
-      const hasFeature = Boolean(feature.name);
-      setHidden(elements.barFeature, !hasFeature);
-      if (elements.barFeatureName) elements.barFeatureName.textContent = feature.name || '';
-      if (elements.barFeatureDescription) elements.barFeatureDescription.textContent = feature.description || 'Available to order from your phone.';
-      renderAction(elements.barAction, bar.action);
-      setOptionalText(elements.barPickup, bar.pickup_note || '');
+      setHidden(elements.barSummary, !hasActiveQueue);
+
+      const promotionWindow = rotationWindow(promotions, barPromotionIndex, promotionSlots);
+      const topPromotionCount = hasActiveQueue ? 0 : (hasHistory ? 1 : Math.min(2, promotionWindow.length));
+      renderPromotionCards(elements.barPromotionsTop, promotionWindow.slice(0, topPromotionCount));
+      renderPromotionCards(elements.barPromotionsBottom, promotionWindow.slice(topPromotionCount));
+      renderCompletedHistory(completedOrders, !hasActiveQueue && hasHistory);
+
+      const backgroundPromotion = hasActiveQueue
+        ? promotionWindow[0]
+        : (promotionWindow[Math.min(1, promotionWindow.length - 1)] || promotionWindow[0]);
+      renderBarBackground(backgroundPromotion?.image_url || bar.image_url || '');
+      if (promotions.length) renderAction(elements.barAction, bar.action);
+      else setOptionalText(elements.barAction, '');
+      setOptionalText(
+        elements.barPickup,
+        hasActiveQueue || hasHistory ? (bar.pickup_note || '') : '',
+      );
+      scheduleBarRotation(bar, false, hasActiveQueue, promotionSlots);
     }
     fitAll();
   };

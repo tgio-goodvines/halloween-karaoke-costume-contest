@@ -68,7 +68,14 @@
         {{ ready_drink_orders[0].item_name }} is ready for pickup at the bar.
       </p>
     </div>
-    <a class="contest-banner__button" href="{{ url_for('party_menu', view='orders') }}">View Orders</a>
+    <div class="contest-banner__actions">
+      <form method="post" action="{{ url_for('party_drink_pickup', order_id=ready_drink_orders[0].id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="return_view" value="dashboard">
+        <button class="button button--primary" type="submit">I Picked It Up</button>
+      </form>
+      <a class="contest-banner__button" href="{{ url_for('party_menu', view='orders') }}">View Orders</a>
+    </div>
   </section>
 {% endif %}
 

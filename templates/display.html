@@ -101,19 +101,23 @@
                 <span>Right stage</span>
                 <strong data-bar-heading>Bar queue</strong>
               </header>
+              <div class="display-bar-promotions display-bar-promotions--top" data-bar-promotions-top hidden></div>
               <ol data-bar-orders></ol>
               <p class="display-bar-stage__overflow" data-bar-overflow hidden></p>
               <dl class="display-bar-summary" data-bar-summary hidden></dl>
-              <article class="display-bar-feature" data-bar-feature hidden>
-                <span>Available tonight</span>
-                <strong data-bar-feature-name></strong>
-                <p data-bar-feature-description></p>
-              </article>
+              <section class="display-bar-history" data-bar-history hidden>
+                <div class="display-bar-history__heading">
+                  <span>Completed tonight</span>
+                  <strong data-bar-history-count></strong>
+                </div>
+                <ol data-bar-history-orders></ol>
+              </section>
+              <div class="display-bar-promotions display-bar-promotions--bottom" data-bar-promotions-bottom hidden></div>
               <p class="display-bar-action" data-bar-action></p>
               <small class="display-bar-pickup" data-bar-pickup></small>
             </div>
           </div>
-          <div class="display-ready-notice" data-ready-notice hidden>
+          <div class="display-ready-notice" data-ready-notice role="alert" aria-live="assertive" aria-atomic="true" hidden>
             <div class="display-ready-notice__content" data-fit-content>
               <span class="display-pill">Drink ready</span>
               <h2 data-ready-name></h2>

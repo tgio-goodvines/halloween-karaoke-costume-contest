@@ -44,10 +44,16 @@
   label, and only the current account's active/recent-ready order details and
   approximate queue positions. It excludes other attendee identities, recipes,
   and operational actions. `static/bar-status.js` polls it every five seconds.
+- `POST /party/drink-orders/<order_id>/pickup` -> account-scoped, party-day
+  pickup acknowledgement. It accepts dashboard or My Orders return context,
+  rejects non-owners and non-completed orders, is idempotent, stores
+  `picked_up_at`, and never removes the completed order.
 - `GET|POST /bartender` -> bartender/admin drink order queue with image and
-  recipe reference; transitions orders to `in_progress` or `complete`. Active
-  queue sorting keeps in-progress orders first, then normal/included orders,
-  then first-come-first-served 4th+ specialty requests.
+  ingredient reference; transitions orders to `in_progress` or `complete`.
+  Active orders are strict FIFO with one Current Drink, one Up Next, and an
+  ordered backlog. Only the current order can transition, and it must be
+  started before completion; an already-in-progress legacy order remains
+  current.
 - `GET /api/bartender-queue` -> bartender/admin JSON endpoint that returns the
   rendered queue fragment plus a queue version. `static/bartender.js` polls it
   every few seconds so new drink orders appear on `/bartender` without a full
@@ -294,10 +300,15 @@ That function increments `display_update_version` and notifies `display_update_c
 
 `build_game_stage_entries()` produces privacy-safe per-game summaries, current
 clues/prompts/responses, and ended results for an independent left-stage
-rotation. `build_bar_stage()` exposes only public active-order fields plus the
-current/queued ready alerts. It also derives queue positions, mixing/waiting
-counts, average prep time, available-drink count, a featured public menu item,
-and order/pickup guidance without exposing email, account IDs, or recipes.
+rotation. `build_bar_stage()` exposes only public active/completed-order fields
+plus the current/queued ready alerts. It derives queue positions,
+mixing/waiting counts, average prep time, available food/drink promotions,
+retained completion/pickup labels, and order guidance without exposing email,
+account IDs, or recipes. Active queues retain the queue-first presentation with
+a rotating bottom promotion. Idle layouts compose promotions above/below
+retained history, show three promotion zones when no history exists, center
+history when no menu is available, and collapse only when every bar-stage input
+is empty.
 `build_music_footer()` provides receiver-confirmed
 Now Playing and Up Next data from `dj_state.receiver.queue_order` and
 `current_queue_index`, never from a predicted saved-playlist position.
@@ -390,7 +401,8 @@ SSE connections.
 - Applying display entries to the card DOM.
 - Switching between default, CTA, and scoreboard layouts.
 - Rendering structured fact grids, action steps, game instructions, bar
-  summaries, featured items, and pickup details.
+  summaries, rotating menu promotions, retained completed history, and pickup
+  details.
 - Measuring inner content occupancy and applying sparse/dense/ultra-dense
   classes; `static/display.css` combines those classes with container-relative
   type sizing so cards can expand as well as compact.
@@ -399,7 +411,8 @@ SSE connections.
 - Fetching latest display data.
 - Connecting and reconnecting to SSE updates.
 - Rendering event override content.
-- Rendering drink-ready notice images above event overrides or normal rotation.
+- Rendering drink-ready notices as full-right-stage neon red alerts above event
+  overrides or normal rotation.
 - Running karaoke countdown timers and karaoke panel rotation.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.
@@ -416,21 +429,23 @@ SSE connections.
   drink order status cards, and signup summaries. It renders pre-party RSVP
   details/updates before the party date and event-night sections on the party
   date. Completed ready-drink notices are shown for 5 minutes after
-  `completed_at`; older completed orders remain in drink history.
+  `completed_at` or until acknowledged; older completed orders remain in drink
+  history and can still be acknowledged.
 - `menu.html`: consolidated Menu & Orders shell with summary chips, query-backed
-  view rail, privacy-safe live queue summary, and selected catalog/history
-  partial.
+  view rail, privacy-safe live queue summary with pickup actions, and selected
+  catalog/history partial.
 - `_menu_catalog.html`: attendee food/drink cards, badges, availability, and
   drink-order forms.
 - `_personal_drink_orders.html`: status-grouped account-bound order history,
-  reorder controls, and the single bartender-tip callout.
+  persistent pickup acknowledgement, reorder controls, and the single
+  bartender-tip callout.
 - `drink_history.html`: retired template retained only until compatibility
   cleanup; the route no longer renders it.
 - `bartender.html`: bartender/admin drink order page shell with a live-refresh
   queue container.
 - `_bartender_queue.html`: shared bartender queue fragment with image, specialty
-  sequence labels, extra specialty availability notes, recipe reference, and
-  completed order history.
+  sequence labels, extra specialty availability notes, normalized ingredient
+  lists, Current/Up Next/backlog stages, and completed order history.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
@@ -568,3 +583,17 @@ SSE connections.
   full-state backups, and leaves the frozen recap ledger intact.
 - Historical exports strip winner links, attendee IDs, delivery destinations,
   private MMF ballots, and blind-voter authorship.
+
+## Schema 19 Drink Pickup Architecture
+
+- Schema 19 adds optional `picked_up_at` to every drink order. Legacy orders
+  normalize the field to an empty value.
+- Pickup acknowledgement is account-scoped and idempotent. It changes only the
+  presentation state of an already completed order; it cannot transition or
+  delete the order.
+- Dashboard and live-bar ready prominence ends after five minutes or upon
+  acknowledgement, whichever happens first. Full My Orders and bartender
+  completion history remain retained according to the existing event-history
+  rules.
+- Temporary `drink_ready` notice expiry/advancement is independent of drink
+  order retention and never mutates completed order history.

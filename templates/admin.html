@@ -133,7 +133,7 @@
     <div class="display-admin__status-grid">
       <article><span>Center stage</span><strong>{% if live_override %}Spotlight{% elif display_runtime.pinned_card_id %}Pinned{% elif display_runtime.center_paused %}Paused{% else %}Rotating{% endif %}</strong><small>{{ display_layout.center.entries|length }} available cards</small></article>
       <article><span>Left stage</span><strong>{% if display_layout.games.visible %}{{ display_layout.games.entries|length }} Game{{ 's' if display_layout.games.entries|length != 1 else '' }}{% else %}Collapsed{% endif %}</strong><small>{% if display_config.pinned_game_key %}Pinned{% else %}Automatic rotation{% endif %}</small></article>
-      <article><span>Right stage</span><strong>{% if display_layout.bar.visible %}{{ display_layout.bar.active_count }} Active{% else %}Collapsed{% endif %}</strong><small>{% if display_layout.bar.notice %}Ready alert showing{% else %}Drink queue{% endif %}</small></article>
+      <article><span>Right stage</span><strong>{% if display_layout.bar.visible %}{{ display_layout.bar.active_count }} Active · {{ display_layout.bar.completed_count }} Complete{% else %}Collapsed{% endif %}</strong><small>{% if display_layout.bar.notice %}Ready alert showing{% elif display_layout.bar.active_count %}Drink queue{% elif display_layout.bar.completed_count %}Completed history{% else %}Menu rotation{% endif %}</small></article>
       <article><span>Music footer</span><strong data-live-dj-music-visible>{% if display_layout.music.visible %}Visible{% else %}Collapsed{% endif %}</strong><small>{{ display_config.music_mode|title }} mode</small></article>
     </div>
 
@@ -172,7 +172,7 @@
           <label>Center rotation seconds<input type="number" name="center_interval_seconds" min="4" max="30" value="{{ display_config.center_interval_seconds }}"></label>
           <label>Game rotation seconds<input type="number" name="game_interval_seconds" min="5" max="30" value="{{ display_config.game_interval_seconds }}"></label>
           <label>Left game stage<select name="game_mode"><option value="auto"{% if display_config.game_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.game_mode == 'always' %} selected{% endif %}>Always when games exist</option><option value="hidden"{% if display_config.game_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
-          <label>Right bar stage<select name="bar_mode"><option value="auto"{% if display_config.bar_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.bar_mode == 'always' %} selected{% endif %}>Always</option><option value="hidden"{% if display_config.bar_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
+          <label>Right bar stage<select name="bar_mode"><option value="auto"{% if display_config.bar_mode == 'auto' %} selected{% endif %}>Automatic — queue, history, or menu</option><option value="always"{% if display_config.bar_mode == 'always' %} selected{% endif %}>Always</option><option value="hidden"{% if display_config.bar_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
           <label>Music footer<select name="music_mode"><option value="auto"{% if display_config.music_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.music_mode == 'always' %} selected{% endif %}>Always</option><option value="hidden"{% if display_config.music_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
           <label>Display density<select name="density"><option value="compact"{% if display_config.density == 'compact' %} selected{% endif %}>Compact</option><option value="standard"{% if display_config.density == 'standard' %} selected{% endif %}>Standard</option><option value="large"{% if display_config.density == 'large' %} selected{% endif %}>Large</option></select></label>
           <label>Visible bar orders<input type="number" name="max_bar_orders" min="1" max="8" value="{{ display_config.max_bar_orders }}"></label>
@@ -1099,8 +1099,9 @@
             <textarea name="description" maxlength="500"></textarea>
           </label>
           <label>
-            Drink Recipe
-            <textarea name="recipe" maxlength="1200" placeholder="Ingredients and prep notes for bartenders"></textarea>
+            Drink Ingredients
+            <textarea name="recipe" maxlength="1200" placeholder="One ingredient per line, for example:&#10;2 oz tequila&#10;1 oz lime juice&#10;0.5 oz simple syrup"></textarea>
+            <span class="form-helper">Enter one ingredient per line. This list is visible only to bartenders and admins.</span>
           </label>
           <label class="form-check">
             <input type="checkbox" name="available" value="yes" checked>
@@ -1172,8 +1173,9 @@
                   <textarea name="description" maxlength="500">{{ item.description }}</textarea>
                 </label>
                 <label>
-                  Drink Recipe
-                  <textarea name="recipe" maxlength="1200">{{ item.recipe }}</textarea>
+                  Drink Ingredients
+                  <textarea name="recipe" maxlength="1200" placeholder="One ingredient per line">{{ item.recipe }}</textarea>
+                  <span class="form-helper">Enter one ingredient per line. Existing paragraph recipes remain compatible until edited.</span>
                 </label>
                 <label class="form-check">
                   <input type="checkbox" name="available" value="yes" {% if item.available %}checked{% endif %}>

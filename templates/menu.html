@@ -67,6 +67,8 @@
     data-bar-status
     data-bar-status-url="{{ bar_queue_data_url }}"
     data-bar-status-version="{{ bar_queue.queue_version }}"
+    data-bar-csrf-token="{{ csrf_token() }}"
+    data-bar-return-view="{{ active_view }}"
     aria-labelledby="bar-status-heading"
   >
     <div class="bar-status__heading">
@@ -98,6 +100,13 @@
                 {{ order.orders_ahead }} order{{ 's' if order.orders_ahead != 1 else '' }} ahead · {{ order.estimated_ready_label }}
               {% endif %}
             </small>
+            {% if order.ready %}
+              <form method="post" action="{{ order.pickup_url }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="return_view" value="{{ active_view }}">
+                <button type="submit" class="button button--small">I Picked It Up</button>
+              </form>
+            {% endif %}
           </article>
         {% endfor %}
       {% else %}

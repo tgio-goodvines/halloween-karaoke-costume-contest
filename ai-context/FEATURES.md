@@ -49,6 +49,10 @@
   dashboard ready-drink cards. The consolidated workspace groups Ready for
   Pickup, Being Prepared, Order Received, and Previous Orders; ready dashboard
   notices expire after 5 minutes without deleting the underlying order.
+- Ready orders expose `I Picked It Up` on the dashboard, My Orders, and the
+  privacy-safe live bar status. Acknowledgement stores `picked_up_at`, removes
+  the temporary ready emphasis, and leaves the completed order in Previous
+  Orders for the rest of the event history.
 - The Menu & Orders workspace supports account-scoped history and reordering
   currently available/orderable drinks. `/party/drink-history` redirects to
   its My Orders view for compatibility.
@@ -306,15 +310,22 @@
   the recipe visible.
 - Bartender view labels specialty drink sequence numbers and flags after-11 PM
   4th+ specialty requests with a reminder to check availability.
-- Bartender active queue sorting keeps in-progress orders first, then
-  normal/included orders for attendees still within their 3 specialty drinks,
-  then first-come-first-served 4th+ specialty requests.
+- Bartender operations are strict first-in, first-out. The workspace identifies
+  one Current Drink and one Up Next order, retains the remaining arrival order,
+  and prevents starting or completing a later order before the current one.
+  A legacy already-in-progress drink remains current after migration.
+- Drink recipes normalize into one ingredient per line and render as readable
+  ingredient lists for bartenders; attendee and live-display payloads continue
+  to exclude recipes.
 - Completed orders track prep duration and feed future estimated ready times.
 - Drink order confirmation emails include estimated ready time when Halloween
   email sending is enabled.
 - Completing a drink sends a ready email, updates attendee dashboard/menu order
   cards, and creates a temporary live-display drink-ready override with the
   drink image.
+- Completion history remains durable independently of the temporary display
+  notice. Pickup acknowledgement records an attendee timestamp but does not
+  delete or reset the completed order.
 - `/api/party/bar-queue` is regular-attendee and party-day protected. It returns
   aggregate queue metrics and account-scoped personal order status only;
   `/api/bartender-queue` remains separately protected for bartender/admin use.
@@ -358,10 +369,16 @@ app state.
   and the party portal link.
 - Multiple enabled games rotate independently on the left stage; admins may pin
   one game without pausing center-stage cards.
-- The right stage appears only for active drink orders or ready alerts in auto
-  mode. It exposes only guest display name, drink, public status, and estimate.
+- In auto mode, the right stage appears for a ready alert, active drink orders,
+  retained completed history, or available food/drink menu items. Active queues
+  keep their operational layout and rotate a menu promotion at the bottom.
+  Without a queue, promotions occupy the top/middle/bottom around completed
+  history; history-only layouts center the history, and a truly empty stage
+  collapses. Public order data is limited to guest display name, drink, status,
+  completion/pickup label, and estimate.
 - Drink-ready alerts temporarily replace the right-stage queue and queued alerts
-  play sequentially; center/event spotlights continue independently.
+  play sequentially. The alert fills the whole right stage with a bright neon
+  red treatment while center/event spotlights continue independently.
 - DJ Now Playing, progress, connection/audio state, and Up Next live in the
   conditional footer.
 - Center and game intervals are configurable, while custom cards can set their

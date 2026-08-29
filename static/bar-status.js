@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const statusUrl = statusElement.dataset.barStatusUrl || '/api/party/bar-queue';
+  const csrfToken = statusElement.dataset.barCsrfToken || '';
+  const returnView = statusElement.dataset.barReturnView || 'menu';
   let queueVersion = statusElement.dataset.barStatusVersion || '';
   let requestSequence = 0;
   let appliedSequence = 0;
@@ -56,6 +58,25 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       card.append(summary, detail);
+      if (order.ready && order.pickup_url) {
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = String(order.pickup_url);
+        const csrf = document.createElement('input');
+        csrf.type = 'hidden';
+        csrf.name = 'csrf_token';
+        csrf.value = csrfToken;
+        const destination = document.createElement('input');
+        destination.type = 'hidden';
+        destination.name = 'return_view';
+        destination.value = returnView;
+        const button = document.createElement('button');
+        button.type = 'submit';
+        button.className = 'button button--small';
+        button.textContent = 'I Picked It Up';
+        form.append(csrf, destination, button);
+        card.append(form);
+      }
       container.append(card);
     });
   };

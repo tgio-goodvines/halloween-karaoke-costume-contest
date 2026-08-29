@@ -2647,6 +2647,103 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Morgan", main.live_display_notice_override["highlight"])
         self.assertEqual([], main.live_display_notice_queue)
 
+    def test_bar_stage_rotates_available_menu_and_retains_safe_completed_history(self):
+        main.menu_items = [
+            {
+                "id": "drink-orderable",
+                "name": "Witch Margarita",
+                "category": "drink",
+                "description": "A smoky citrus specialty.",
+                "image_url": "https://example.test/witch.jpg",
+                "recipe": "Private recipe",
+                "available": True,
+                "orderable": True,
+            },
+            {
+                "id": "food-1",
+                "name": "Mummy Dogs",
+                "category": "food",
+                "description": "Wrapped and ready.",
+                "image_url": "https://example.test/mummy.jpg",
+                "recipe": "",
+                "available": True,
+                "orderable": False,
+            },
+            {
+                "id": "drink-bar",
+                "name": "Sparkling Water",
+                "category": "drink",
+                "description": "Grab one at the bar.",
+                "image_url": "",
+                "recipe": "Private stock note",
+                "available": True,
+                "orderable": False,
+            },
+            {
+                "id": "unavailable-food",
+                "name": "Gone Cookies",
+                "category": "food",
+                "description": "",
+                "image_url": "",
+                "recipe": "",
+                "available": False,
+                "orderable": False,
+            },
+        ]
+        main.drink_orders = [
+            {
+                "id": "complete-1",
+                "user_id": "private-user-id",
+                "username": "Jamie",
+                "email": "private@example.com",
+                "menu_item_id": "drink-orderable",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": "Private recipe",
+                "status": "complete",
+                "created_at": "2026-08-29T20:00:00Z",
+                "completed_at": "2026-08-29T20:05:00Z",
+                "picked_up_at": "2026-08-29T20:06:00Z",
+            },
+            {
+                "id": "complete-2",
+                "user_id": "another-private-user-id",
+                "username": "Morgan",
+                "email": "another-private@example.com",
+                "menu_item_id": "drink-bar",
+                "item_name": "Sparkling Water",
+                "item_image_url": "",
+                "recipe": "Private stock note",
+                "status": "complete",
+                "created_at": "2026-08-29T20:10:00Z",
+                "completed_at": "2026-08-29T20:15:00Z",
+                "picked_up_at": "",
+            },
+        ]
+
+        bar = main.build_bar_stage()
+        serialized = json.dumps(bar)
+
+        self.assertTrue(bar["visible"])
+        self.assertEqual("idle", bar["presentation"])
+        self.assertEqual(
+            ["drink-orderable", "food-1", "drink-bar"],
+            [item["id"] for item in bar["promotion_items"]],
+        )
+        self.assertEqual(2, bar["completed_count"])
+        self.assertEqual("Morgan", bar["completed_orders"][0]["name"])
+        self.assertFalse(bar["completed_orders"][0]["picked_up"])
+        self.assertTrue(bar["completed_orders"][1]["picked_up"])
+        self.assertNotIn("Gone Cookies", serialized)
+        self.assertNotIn("private@example.com", serialized)
+        self.assertNotIn("private-user-id", serialized)
+        self.assertNotIn("Private recipe", serialized)
+
+        main.menu_items = []
+        self.assertTrue(main.build_bar_stage()["visible"])
+        main.drink_orders = []
+        self.assertFalse(main.build_bar_stage()["visible"])
+
     def test_live_display_renders_enriched_space_utilization_regions(self):
         with main.app.test_client() as client:
             self.login_admin(client)
@@ -2664,7 +2761,9 @@ class RedisStateTests(unittest.TestCase):
             "data-game-focus-items",
             "data-game-feature",
             "data-bar-summary",
-            "data-bar-feature",
+            "data-bar-promotions-top",
+            "data-bar-history",
+            "data-bar-promotions-bottom",
             "data-bar-action",
         ):
             self.assertIn(marker, body)
@@ -3581,7 +3680,89 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("Your Drink Is Ready", overview_response.get_data(as_text=True))
         self.assertIn("old-ready-order", history_response.get_data(as_text=True))
 
-    def test_bartender_queue_prioritizes_included_orders_before_extra_specialty_requests(self):
+    def test_attendee_can_acknowledge_pickup_without_removing_completed_history(self):
+        self.add_user_account(username="Jamie", user_id="user-1")
+        self.add_user_account(username="Morgan", user_id="user-2", email="morgan@example.com")
+        completed_at = main._utc_now_iso()
+        main.drink_orders = [
+            {
+                "id": "ready-order",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": "Private recipe",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "status": "complete",
+                "estimated_ready_at": "",
+                "created_at": completed_at,
+                "started_at": completed_at,
+                "completed_at": completed_at,
+                "picked_up_at": "",
+                "completed_seconds": 120,
+            }
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            overview_before = client.get("/party")
+            history_before = client.get("/party/menu?view=orders")
+            acknowledged = client.post(
+                "/party/drink-orders/ready-order/pickup",
+                data={"return_view": "orders"},
+            )
+            first_timestamp = self.redis_state()["drink_orders"][0]["picked_up_at"]
+            repeated = client.post(
+                "/party/drink-orders/ready-order/pickup",
+                data={"return_view": "dashboard"},
+            )
+            overview_after = client.get("/party")
+            history_after = client.get("/party/menu?view=orders")
+
+            self.login_regular(client, user_id="user-2", username="Morgan")
+            rejected = client.post(
+                "/party/drink-orders/ready-order/pickup",
+                data={"return_view": "orders"},
+            )
+
+        persisted_order = self.redis_state()["drink_orders"][0]
+        self.assertIn("Your Drink Is Ready", overview_before.get_data(as_text=True))
+        self.assertIn("I Picked It Up", overview_before.get_data(as_text=True))
+        self.assertIn("I Picked It Up", history_before.get_data(as_text=True))
+        self.assertEqual(302, acknowledged.status_code)
+        self.assertEqual(302, repeated.status_code)
+        self.assertTrue(first_timestamp)
+        self.assertEqual(first_timestamp, persisted_order["picked_up_at"])
+        self.assertEqual("complete", persisted_order["status"])
+        self.assertEqual("ready-order", persisted_order["id"])
+        self.assertNotIn("Your Drink Is Ready", overview_after.get_data(as_text=True))
+        self.assertIn("Pickup confirmed", history_after.get_data(as_text=True))
+        self.assertIn("ready-order", history_after.get_data(as_text=True))
+        self.assertEqual(200, rejected.status_code)
+        self.assertIn("could not be found", rejected.get_data(as_text=True))
+
+    def test_schema_19_backfills_pickup_timestamp_for_legacy_orders(self):
+        legacy_order = {
+            "id": "legacy-order",
+            "user_id": "user-1",
+            "username": "Jamie",
+            "item_name": "Witch Margarita",
+            "status": "complete",
+            "completed_at": "2026-08-29T20:05:00Z",
+        }
+        normalized = main.normalize_drink_order(legacy_order)
+
+        self.assertEqual(19, main.STATE_SCHEMA_VERSION)
+        self.assertIsNotNone(normalized)
+        self.assertEqual("", normalized["picked_up_at"])
+
+    def test_bartender_queue_uses_fifo_for_specialty_and_extra_requests(self):
         account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
         account["roles"] = ["regular", "bartender"]
         main.drink_orders = [
@@ -3640,9 +3821,142 @@ class RedisStateTests(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(200, response.status_code)
-        self.assertLess(body.index("First Witch Margarita"), body.index("Fourth Witch Margarita"))
+        self.assertLess(body.index("Fourth Witch Margarita"), body.index("First Witch Margarita"))
+        self.assertIn("Current Drink", body)
+        self.assertIn("Up Next", body)
         self.assertIn("After-11 PM 4+ specialty request", body)
         self.assertIn("Included specialty order 1 of 3", body)
+        queue_context = main.bartender_queue_context()
+        self.assertEqual(
+            ["extra-order", "included-order"],
+            [order["id"] for order in queue_context["active_orders"]],
+        )
+        self.assertEqual(
+            ["extra-order", "included-order"],
+            [order["id"] for order in main.build_bar_stage()["orders"]],
+        )
+        attendee_state = main.attendee_bar_queue_state("user-1")
+        self.assertEqual(1, attendee_state["personal_orders"][0]["queue_position"])
+        self.assertEqual(0, attendee_state["personal_orders"][0]["orders_ahead"])
+
+    def test_bartender_current_next_flow_blocks_out_of_order_work(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        account["roles"] = ["regular", "bartender"]
+        main.drink_orders = [
+            {
+                "id": f"order-{index}",
+                "user_id": f"user-{index}",
+                "username": name,
+                "email": f"guest{index}@example.com",
+                "menu_item_id": f"drink-{index}",
+                "item_name": drink,
+                "item_image_url": "",
+                "recipe": "2 oz spirit\n1 oz citrus",
+                "drink_type": "standard",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 0,
+                "status": "received",
+                "estimated_ready_at": "",
+                "created_at": f"2026-07-06T00:0{index}:00Z",
+                "started_at": "",
+                "completed_at": "",
+                "completed_seconds": None,
+            }
+            for index, name, drink in (
+                (1, "Jamie", "First Drink"),
+                (2, "Morgan", "Second Drink"),
+                (3, "Casey", "Third Drink"),
+            )
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["regular", "bartender"]
+
+            initial_response = client.get("/bartender")
+            blocked_response = client.post(
+                "/bartender",
+                data={"order_id": "order-2", "status": "in_progress"},
+            )
+            premature_complete_response = client.post(
+                "/bartender",
+                data={"order_id": "order-1", "status": "complete"},
+            )
+            start_response = client.post(
+                "/bartender",
+                data={"order_id": "order-1", "status": "in_progress"},
+            )
+            complete_response = client.post(
+                "/bartender",
+                data={"order_id": "order-1", "status": "complete"},
+            )
+
+        initial_body = initial_response.get_data(as_text=True)
+        self.assertLess(initial_body.index("First Drink"), initial_body.index("Second Drink"))
+        self.assertLess(initial_body.index("Second Drink"), initial_body.index("Third Drink"))
+        self.assertIn("Finish the current drink before moving to the next order", blocked_response.get_data(as_text=True))
+        self.assertIn("Start the current drink before marking it complete", premature_complete_response.get_data(as_text=True))
+        self.assertEqual("received", main.find_drink_order("order-2")["status"])
+        self.assertIn("Started First Drink", start_response.get_data(as_text=True))
+        self.assertIn("Marked First Drink ready", complete_response.get_data(as_text=True))
+        queue_context = main.bartender_queue_context()
+        self.assertEqual("order-2", queue_context["current_order"]["id"])
+        self.assertEqual("order-3", queue_context["next_order"]["id"])
+        self.assertEqual([], queue_context["remaining_orders"])
+
+    def test_bartender_recipes_render_as_normalized_ingredient_lists(self):
+        account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        account["roles"] = ["regular", "bartender"]
+        normalized_recipe = main.normalize_drink_recipe(
+            "- 2 oz tequila\r\n• 1 oz lime juice\n3) 0.5 oz simple syrup"
+        )
+        self.assertEqual(
+            "2 oz tequila\n1 oz lime juice\n0.5 oz simple syrup",
+            normalized_recipe,
+        )
+        self.assertEqual(
+            ["2 oz tequila", "1 oz lime juice", "0.5 oz simple syrup"],
+            main.recipe_ingredients(normalized_recipe),
+        )
+        main.drink_orders = [
+            {
+                "id": "order-1",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": normalized_recipe,
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "status": "received",
+                "estimated_ready_at": "",
+                "created_at": "2026-07-06T00:01:00Z",
+                "started_at": "",
+                "completed_at": "",
+                "completed_seconds": None,
+            }
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            with client.session_transaction() as session:
+                session["roles"] = ["regular", "bartender"]
+            response = client.get("/bartender")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn('<ul class="bartender-recipe-list">', body)
+        self.assertIn("<li>2 oz tequila</li>", body)
+        self.assertIn("<li>1 oz lime juice</li>", body)
+        self.assertIn("<li>0.5 oz simple syrup</li>", body)
 
     def test_bartender_queue_api_reflects_new_drink_orders(self):
         main.menu_items = [
@@ -7351,7 +7665,7 @@ class RedisStateTests(unittest.TestCase):
             )
         )
 
-    def test_schema_eighteen_round_trip_preserves_wrapup_archives_credits_and_costume_links(self):
+    def test_current_schema_round_trip_preserves_wrapup_archives_credits_and_costume_links(self):
         self.add_user_account()
         main.costume_signups = [
             main.CostumeSignup(
@@ -7406,7 +7720,7 @@ class RedisStateTests(unittest.TestCase):
         self.reset_state()
         main.apply_state_snapshot(snapshot)
 
-        self.assertEqual(18, snapshot["schema_version"])
+        self.assertEqual(main.STATE_SCHEMA_VERSION, snapshot["schema_version"])
         self.assertEqual("user-1", main.costume_signups[0].account_id)
         self.assertEqual("official", main.result_archives[0]["status"])
         self.assertEqual("costume_win", main.recognition_credits[0]["kind"])

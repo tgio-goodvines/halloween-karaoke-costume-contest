@@ -531,9 +531,14 @@ SSE connections.
 
 ## Live-Display Media Treatment
 
-- Game-originated display entries declare `media_treatment: "background"`.
-  `static/display.js` maps that marker to explicit background/foreground media
-  classes, while `static/display.css` supplies the translucent cover layer and
-  contrast gradients.
-- The marker is derived display data only. It does not change Redis schema or
-  persisted display configuration. Entries without it retain foreground media.
+- `static/display-media.js` provides the browser/Node-compatible media contract:
+  any center-stage entry with `image_url` uses background treatment unless it
+  explicitly opts into `media_treatment: "foreground"`.
+- Derived game, karaoke, menu/bar, and custom-card payloads still declare the
+  background treatment for clarity. `media_tone` selects bounded feature,
+  video, custom, or game contrast profiles in `static/display.css`.
+- The right bar rail and drink-ready notice share one decorative edge-to-edge
+  background layer. Confirmed DJ album art stays foreground because it identifies
+  the active track in a status dock rather than a content card.
+- Media treatment remains derived display data. It does not change Redis schema
+  or persisted display configuration.

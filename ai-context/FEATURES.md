@@ -426,5 +426,7 @@ app state.
 
 - Game status, join, scoreboard, winner, and presentation cards use their game
   illustration as a translucent full-card background with text layered above.
-- Winner states retain their dedicated trophy artwork. Non-game live-display
-  images keep their foreground-media layouts.
+- Winner states retain their dedicated trophy artwork. Karaoke, menu/bar,
+  drink-ready, and custom-card images use the same background-first live-display
+  treatment with source-specific contrast; DJ album art remains foreground in
+  the music status dock.

@@ -85,13 +85,13 @@
         </section>
 
         <aside class="display-side display-bar-stage" data-bar-stage hidden>
+          <div class="display-bar-stage__image" data-bar-image-wrap hidden aria-hidden="true"><img data-bar-image alt=""></div>
           <div class="display-bar-queue" data-bar-queue>
             <div class="display-bar-queue__content" data-fit-content>
               <header class="display-region-header">
                 <span>Right stage</span>
                 <strong data-bar-heading>Bar queue</strong>
               </header>
-              <div class="display-bar-stage__image" data-bar-image-wrap hidden><img data-bar-image alt=""></div>
               <ol data-bar-orders></ol>
               <p class="display-bar-stage__overflow" data-bar-overflow hidden></p>
               <dl class="display-bar-summary" data-bar-summary hidden></dl>
@@ -107,7 +107,6 @@
           <div class="display-ready-notice" data-ready-notice hidden>
             <div class="display-ready-notice__content" data-fit-content>
               <span class="display-pill">Drink ready</span>
-              <div class="display-ready-notice__image" data-ready-image-wrap hidden><img data-ready-image alt=""></div>
               <h2 data-ready-name></h2>
               <p data-ready-message></p>
               <ul class="display-ready-notice__details" data-ready-details hidden></ul>
@@ -138,6 +137,7 @@
     <script id="display-layout-data" type="application/json">{{ layout | tojson }}</script>
     <script id="dj-data" type="application/json">{{ dj | tojson }}</script>
     <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js" defer></script>
+    <script src="{{ url_for('static', filename='display-media.js') }}" defer></script>
     <script src="{{ url_for('static', filename='display.js') }}" defer></script>
     <script src="{{ url_for('static', filename='dj-queue-state.js') }}" defer></script>
     <script src="{{ url_for('static', filename='dj-display.js') }}" defer></script>

@@ -4231,12 +4231,15 @@ def build_karaoke_stage_override(signup: KaraokeSignup, mode: str) -> dict[str, 
         "complete": ("Karaoke", "Give it up for our singer!"),
     }
     title, message = labels.get(mode, labels["call"])
+    thumbnail_url = str(signup.youtube.get("thumbnail_url", "") or "")
     return {
         "type": f"karaoke_{mode}",
         "title": title,
         "highlight": signup.singer_label,
         "message": message,
-        "image_url": str(signup.youtube.get("thumbnail_url", "") or ""),
+        "image_url": thumbnail_url or FEATURE_ART["karaoke"],
+        "media_treatment": "background",
+        "media_tone": "video" if thumbnail_url else "feature",
         "details": [
             f'"{signup.song_title}"',
             f"by {signup.artist}",
@@ -6487,6 +6490,8 @@ def build_rotation_entries() -> List[dict[str, object]]:
             kind="action",
             primary="Reserve your karaoke song.",
             image_url=FEATURE_ART["karaoke"],
+            media_treatment="background",
+            media_tone="feature",
             secondary="Use the party portal to queue the song you want to perform.",
             facts=[
                 _display_fact("In lineup", len(public_karaoke)),
@@ -6506,7 +6511,9 @@ def build_rotation_entries() -> List[dict[str, object]]:
             primary=signup.singer_label,
             secondary=f'Performing "{signup.song_title}"',
             tertiary=f"by {signup.artist}" if signup.artist else "",
-            image_url=str(signup.youtube.get("thumbnail_url", "") or ""),
+            image_url=str(signup.youtube.get("thumbnail_url", "") or "") or FEATURE_ART["karaoke"],
+            media_treatment="background",
+            media_tone="video" if signup.youtube.get("thumbnail_url") else "feature",
             facts=[
                 _display_fact("Queue", index + 1),
                 _display_fact("Singers", public_karaoke_singer_count),
@@ -6548,6 +6555,8 @@ def build_rotation_entries() -> List[dict[str, object]]:
             kind="action",
             primary="Order event drinks from your phone.",
             image_url=FEATURE_ART["menu"],
+            media_treatment="background",
+            media_tone="feature",
             secondary="Browse the menu, send available drinks to the bar, and watch the right stage for status.",
             tertiary="Completed drinks receive a ready alert here and by email.",
             facts=[
@@ -6592,6 +6601,8 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 secondary=card.get("secondary", ""),
                 tertiary=card.get("tertiary", ""),
                 image_url=card.get("image_url", ""),
+                media_treatment="background",
+                media_tone="custom",
                 link=card.get("link", ""),
                 link_label=card.get("link_label", ""),
                 duration_seconds=card.get("duration_seconds", display_config.get("center_interval_seconds", 8)),
@@ -6787,6 +6798,8 @@ def build_bar_stage() -> dict[str, object]:
         ),
         "action": {"label": "Order from your phone", "url": f"{PARTY_SITE_URL}/party/menu"},
         "image_url": FEATURE_ART["bar"],
+        "media_treatment": "background",
+        "media_tone": "feature",
         "pickup_note": "Pick up completed drinks at the bar when your name appears here.",
     }
 
@@ -11143,6 +11156,9 @@ def admin_portal(admin_view: str):
                     "title": "Halloween Karaoke Party",
                     "highlight": "Showtime begins at 11:00 PM MST",
                     "message": "The lineup is getting ready. Countdown to the first singers!",
+                    "image_url": FEATURE_ART["karaoke"],
+                    "media_treatment": "background",
+                    "media_tone": "feature",
                     "karaoke": {
                         "lineup": lineup_entries,
                         "countdown_target": countdown_target.isoformat(),

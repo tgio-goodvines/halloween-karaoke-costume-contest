@@ -20,6 +20,7 @@
 | `tests/test_redis_state.py` | Redis/state/route/security tests plus DJ FIFO request priority/reconciliation/lifecycle coverage and fake-backed YouTube search, workflow, playlist, ordering, stage, OAuth-state, migration, and secret-exclusion coverage. |
 | `tests/test_dj_queue_state.js` | Dependency-free Node regression tests for MusicKit catalog/library identifier resolution, resolved queue ordering, priority remainder/catalog payload construction, and track/queue confirmation boundaries. |
 | `tests/test_dj_live_widgets.js` | Dependency-free Node regression tests for shared attendee/admin DJ payload normalization, atomic song/artwork lifecycle rendering, and stale/out-of-order response rejection. |
+| `tests/test_display_media.js` | Dependency-free Node regression tests for the live-display background-default media contract, explicit foreground opt-in, and bounded contrast tones. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, game-specific illustrated cards, header menu, menu cards, and bartender queue. |
 | `static/preserve-scroll.js` | Stable view-state restoration plus progressive same-origin admin POST handling that replaces the returned workspace in place and preserves anchor, disclosure, query, and focus state. |
 | `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
@@ -31,6 +32,7 @@
 | `templates/_admin_recognition.html` | Event-edition, retro credit, result publication, account collection, link/revoke, and export controls. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
 | `static/display.css` | Fixed-viewport adaptive TV grid with title header, independent game/bar rails, dominant center cards, conditional music footer, density fitting, event spotlights, ready alerts, CTA, scoreboard, and karaoke layouts. |
+| `static/display-media.js` | Browser/Node-compatible media policy helpers that make image-bearing live cards background-first while retaining explicit foreground exceptions and bounded contrast tones. |
 | `static/display.js` | Live-display client logic: card rotation, API polling, SSE reconnects, event override rendering, temporary notice rendering with optional images, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/dj-queue-state.js` | Browser/Node-compatible pure helpers for resolving MusicKit catalog and library item identifiers, preserving MusicKit queue order, building priority catalog remainders, and validating confirmed track/queue transitions. |
 | `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, resolved-queue capture, non-interrupting `playNext` priority reconciliation, event-confirmed track changes, retained authorization diagnostics, reset handling, serialized heartbeat/acknowledgement reporting, and Now Playing dock updates. |

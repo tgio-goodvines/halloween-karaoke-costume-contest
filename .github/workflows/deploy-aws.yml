@@ -45,14 +45,17 @@ jobs:
       - name: Compile Python
         run: python -m py_compile main.py
 
-      - name: Validate DJ receiver JavaScript
+      - name: Validate browser JavaScript
         run: |
+          node --check static/display-media.js
+          node --check static/display.js
           node --check static/dj-queue-state.js
           node --check static/dj-display.js
           node --check static/dj-admin-status.js
           node --check static/dj-live-widgets.js
           node --check static/jukebox.js
           node --check static/karaoke-live-status.js
+          node --test tests/test_display_media.js
           node --test tests/test_dj_queue_state.js
           node --test tests/test_dj_live_widgets.js
           node --test tests/test_karaoke_live_status.js

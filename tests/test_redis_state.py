@@ -915,6 +915,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(state_after_start["contest_state"]["contest_started"])
         self.assertFalse(state_after_start["contest_state"]["voting_open"])
         self.assertEqual("karaoke_start", state_after_start["live_display_event_override"]["type"])
+        self.assertEqual(main.FEATURE_ART["karaoke"], state_after_start["live_display_event_override"]["image_url"])
+        self.assertEqual("background", state_after_start["live_display_event_override"]["media_treatment"])
         self.assertEqual(200, stop_response.status_code)
         self.assertFalse(state_after_stop["karaoke_state"]["party_started"])
         self.assertIsNone(state_after_stop["karaoke_state"]["current_singer_id"])
@@ -6786,6 +6788,77 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(
             all(slide["media_treatment"] == "background" for slide in main.build_game_presentation_slides(main.WRONG_ANSWERS_GAME_KEY))
         )
+
+    def test_non_game_live_display_cards_use_full_background_artwork(self):
+        workflow = main.normalize_karaoke_workflow({}, has_video=True)
+        workflow.update(
+            {
+                "video_validation_status": "verified",
+                "approval_status": "approved",
+                "playlist_sync_status": "synced",
+            }
+        )
+        signup = main.KaraokeSignup(
+            id="karaoke-background",
+            name="Jamie",
+            song_title="Thriller",
+            artist="Michael Jackson",
+            youtube=main.normalize_karaoke_youtube(
+                {
+                    "video_id": "abc123DEF45",
+                    "thumbnail_url": "https://i.ytimg.com/vi/abc123DEF45/hqdefault.jpg",
+                }
+            ),
+            workflow=workflow,
+        )
+        main.karaoke_signups = [signup]
+        custom_card = main.normalize_display_custom_card(
+            {
+                "id": "custom-background",
+                "primary": "Costume judging starts soon",
+                "image_url": "https://example.test/announcement.jpg",
+                "enabled": True,
+            }
+        )
+        self.assertIsNotNone(custom_card)
+        main.display_custom_cards = [custom_card]
+
+        entries = {entry["id"]: entry for entry in main.build_rotation_entries()}
+        signup_entry = entries["karaoke:signup"]
+        performer_entry = entries["karaoke:karaoke-background"]
+        menu_entry = entries["bar:ordering"]
+        custom_entry = entries["custom:custom-background"]
+        stage_override = main.build_karaoke_stage_override(signup, "on_stage")
+        bar = main.build_bar_stage()
+
+        self.assertEqual(("background", "feature"), (signup_entry["media_treatment"], signup_entry["media_tone"]))
+        self.assertEqual(("background", "video"), (performer_entry["media_treatment"], performer_entry["media_tone"]))
+        self.assertEqual(("background", "feature"), (menu_entry["media_treatment"], menu_entry["media_tone"]))
+        self.assertEqual(("background", "custom"), (custom_entry["media_treatment"], custom_entry["media_tone"]))
+        self.assertEqual("background", stage_override["media_treatment"])
+        self.assertEqual("video", stage_override["media_tone"])
+        self.assertEqual("https://i.ytimg.com/vi/abc123DEF45/hqdefault.jpg", stage_override["image_url"])
+        self.assertEqual("background", bar["media_treatment"])
+        self.assertEqual(main.FEATURE_ART["bar"], bar["image_url"])
+
+    def test_karaoke_display_uses_feature_art_when_video_thumbnail_is_missing(self):
+        signup = main.KaraokeSignup(
+            id="karaoke-manual",
+            name="Morgan",
+            song_title="Monster Mash",
+            artist="Bobby Pickett",
+        )
+        main.karaoke_signups = [signup]
+
+        performer_entry = next(
+            entry for entry in main.build_rotation_entries() if entry["id"] == "karaoke:karaoke-manual"
+        )
+        stage_override = main.build_karaoke_stage_override(signup, "call")
+
+        self.assertEqual(main.FEATURE_ART["karaoke"], performer_entry["image_url"])
+        self.assertEqual("feature", performer_entry["media_tone"])
+        self.assertEqual(main.FEATURE_ART["karaoke"], stage_override["image_url"])
+        self.assertEqual("background", stage_override["media_treatment"])
 
     def test_schema_seventeen_round_trip_preserves_archives_credits_and_costume_links(self):
         self.add_user_account()

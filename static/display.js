@@ -62,8 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
     barAction: document.querySelector('[data-bar-action]'),
     barPickup: document.querySelector('[data-bar-pickup]'),
     readyNotice: document.querySelector('[data-ready-notice]'),
-    readyImageWrap: document.querySelector('[data-ready-image-wrap]'),
-    readyImage: document.querySelector('[data-ready-image]'),
     readyName: document.querySelector('[data-ready-name]'),
     readyMessage: document.querySelector('[data-ready-message]'),
     readyDetails: document.querySelector('[data-ready-details]'),
@@ -94,6 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const safeArray = (value) => (Array.isArray(value) ? value : []);
   const asObject = (value) => (value && typeof value === 'object' ? value : {});
+  const mediaHelpers = window.HalloweenDisplayMedia || {};
+  const mediaTreatmentFor = mediaHelpers.treatmentFor || ((entry) => (
+    entry?.image_url ? (entry.media_treatment === 'foreground' ? 'foreground' : 'background') : 'none'
+  ));
+  const mediaToneFor = mediaHelpers.toneFor || (() => 'feature');
   const setHidden = (element, hidden) => {
     if (!element) return;
     if (hidden) element.setAttribute('hidden', '');
@@ -277,6 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tertiary: safeArray(override.details).join(' · '),
     image_url: override.image_url || '',
     media_treatment: override.media_treatment || '',
+    media_tone: override.media_tone || '',
     karaoke: override.karaoke,
     duration_seconds: 8,
     override_type: override.type || '',
@@ -284,15 +288,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderCenterEntry = (entry, { spotlight = false } = {}) => {
     const safeEntry = asObject(entry);
-    const hasImage = Boolean(safeEntry.image_url);
-    const hasBackgroundMedia = hasImage && safeEntry.media_treatment === 'background';
-    const hasForegroundMedia = hasImage && !hasBackgroundMedia;
+    const mediaTreatment = mediaTreatmentFor(safeEntry);
+    const hasImage = mediaTreatment !== 'none';
+    const hasBackgroundMedia = mediaTreatment === 'background';
+    const hasForegroundMedia = mediaTreatment === 'foreground';
     clearCenterExtras();
     elements.centerStage?.classList.toggle('is-spotlight', spotlight);
     elements.centerStage?.classList.toggle('is-scoreboard', Boolean(asObject(safeEntry.scoreboard).entries));
     elements.centerStage?.classList.toggle('has-media', hasImage);
     elements.centerStage?.classList.toggle('has-background-media', hasBackgroundMedia);
     elements.centerStage?.classList.toggle('has-foreground-media', hasForegroundMedia);
+    if (elements.centerStage) elements.centerStage.dataset.mediaTone = hasImage ? mediaToneFor(safeEntry) : '';
     ['access', 'action', 'profile', 'status', 'result', 'scoreboard', 'announcement'].forEach((kind) => {
       elements.centerStage?.classList.toggle(`is-${kind}`, safeEntry.kind === kind);
     });
@@ -524,13 +530,45 @@ document.addEventListener('DOMContentLoaded', () => {
     if (expiresAt > Date.now()) noticeTimer = window.setTimeout(fetchLatest, Math.max(100, expiresAt - Date.now() + 100));
   };
 
+  const renderBarBackground = (imageUrl) => {
+    if (!elements.barImage || !elements.barImageWrap) return;
+    const requestedSrc = String(imageUrl || '');
+    elements.barStage?.classList.toggle('has-background-media', Boolean(requestedSrc));
+    if (!requestedSrc) {
+      elements.barImage.onload = null;
+      elements.barImage.onerror = null;
+      elements.barImage.removeAttribute('src');
+      setHidden(elements.barImageWrap, true);
+      return;
+    }
+    elements.barImage.alt = '';
+    elements.barImage.onload = () => {
+      if (elements.barImage.getAttribute('src') !== requestedSrc) return;
+      setHidden(elements.barImageWrap, false);
+      fitAll();
+    };
+    elements.barImage.onerror = () => {
+      if (elements.barImage.getAttribute('src') !== requestedSrc) return;
+      setHidden(elements.barImageWrap, true);
+      elements.barStage?.classList.remove('has-background-media');
+      fitAll();
+    };
+    setHidden(elements.barImageWrap, true);
+    elements.barImage.src = requestedSrc;
+    if (elements.barImage.complete && elements.barImage.naturalWidth) elements.barImage.onload();
+  };
+
   const renderBar = () => {
     const bar = asObject(layout.bar);
     const notice = asObject(bar.notice);
     const visible = Boolean(bar.visible);
     setHidden(elements.barStage, !visible);
     shell.classList.toggle('has-bar', visible);
-    if (!visible) return;
+    if (!visible) {
+      elements.barStage?.classList.remove('is-ready');
+      renderBarBackground('');
+      return;
+    }
     const hasNotice = Object.keys(notice).length > 0;
     setHidden(elements.readyNotice, !hasNotice);
     setHidden(elements.barQueue, hasNotice);
@@ -552,18 +590,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         setHidden(elements.readyDetails, !elements.readyDetails.children.length);
       }
-      if (elements.readyImage && elements.readyImageWrap) {
-        if (notice.image_url) {
-          elements.readyImage.src = notice.image_url;
-          elements.readyImage.alt = `${notice.highlight || 'Guest'} drink`;
-          setHidden(elements.readyImageWrap, false);
-        } else {
-          elements.readyImage.removeAttribute('src');
-          setHidden(elements.readyImageWrap, true);
-        }
-      }
+      const noticeImageUrl = notice.image_url || bar.image_url || '';
+      elements.barStage?.classList.add('is-ready');
+      renderBarBackground(noticeImageUrl);
       scheduleNoticeRefresh(notice);
     } else {
+      elements.barStage?.classList.remove('is-ready');
       if (elements.barHeading) elements.barHeading.textContent = `Bar queue · ${Number(bar.active_count) || 0}`;
       if (elements.barOrders) {
         elements.barOrders.innerHTML = '';
@@ -591,18 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { label: 'Drinks', value: Number(summary.available_drink_count) || 0 },
       ]);
       const feature = asObject(bar.featured_item);
-      if (elements.barImage && elements.barImageWrap) {
-        const imageUrl = feature.image_url || bar.image_url || '';
-        if (imageUrl) {
-          elements.barImage.src = imageUrl;
-          elements.barImage.alt = feature.name ? `${feature.name} image` : 'Bar illustration';
-          elements.barImage.onerror = () => setHidden(elements.barImageWrap, true);
-          setHidden(elements.barImageWrap, false);
-        } else {
-          elements.barImage.removeAttribute('src');
-          setHidden(elements.barImageWrap, true);
-        }
-      }
+      renderBarBackground(feature.image_url || bar.image_url || '');
       const hasFeature = Boolean(feature.name);
       setHidden(elements.barFeature, !hasFeature);
       if (elements.barFeatureName) elements.barFeatureName.textContent = feature.name || '';

@@ -170,20 +170,37 @@ fixed no-scroll track.
 - Images remain optional at render time: client error handlers remove failed
   media without hiding the underlying live status or results.
 
-## Full-Card Game Artwork Treatment (2026-08-28)
+## Full-Card Live Artwork Treatment (2026-08-28)
 
 - Game illustrations are atmospheric full-card backgrounds on the live display,
   not bordered thumbnails. This covers the left game-status rail, Party Games
   join card, winner/outcome and final-score cards, host Show Now overrides, and
   previous/next result-presentation slides.
-- Game payloads use the additive `media_treatment: "background"` marker. The
-  browser distinguishes background from foreground media, so karaoke, menu,
-  drink, DJ, and custom-card images keep their existing presentation.
+- Image-bearing center cards now default to full-card background treatment.
+  Explicit payload markers document the intended treatment for game, karaoke,
+  menu/bar, and custom-announcement cards, while `media_tone` selects bounded
+  feature, video, custom, or game contrast profiles. Only a deliberate
+  `media_treatment: "foreground"` opt-in can restore a split image treatment.
+- Karaoke signup, queued-performer, Up Next, Now Singing, completion, and kickoff
+  countdown cards all use full backgrounds. YouTube thumbnails receive a darker
+  video veil; manual entries fall back to the generated karaoke illustration.
+- The right bar rail uses its featured drink or generated bar illustration as
+  an edge-to-edge panel background. Drink-ready notices reuse that layer with
+  the ordered drink image when available and a stronger centered text veil.
+- Image-bearing custom announcements default to the same full-card treatment,
+  preventing newly created display cards from silently returning to thumbnails.
+- Confirmed DJ album art remains a foreground square because the music footer is
+  a status dock and the cover identifies the active track; it is not a card.
 - Edge-to-edge cover images use restrained opacity, desaturation, and layered
   black/red gradients. Text and result modules render above the artwork;
   winner/spotlight art receives a modest visibility lift.
 - Background art is decorative (`alt=""`/`aria-hidden`) and failed loads fall
   back to the standard dark neon panel without an empty media region.
 - Background media consumes no measured layout height and remains available in
-  dense, ultra-dense, and narrow layouts. Only foreground media is suppressed
-  at the narrow live-display breakpoint.
+  dense, ultra-dense, and narrow layouts. Bar and drink-ready artwork is no
+  longer removed by density or narrow-screen thumbnail suppression rules.
+- Verification passed with 194 Python tests plus 21 subtests, 17 dependency-free
+  JavaScript tests, Python/JavaScript syntax checks, deploy-script validation,
+  and local browser inspection of karaoke and bar background cards at the
+  standard 1440x900 live-display viewport. The document remained no-scroll and
+  browser console inspection reported no errors.

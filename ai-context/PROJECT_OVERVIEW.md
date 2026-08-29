@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 19. The following globals in `main.py` are
+`halloween:state` with schema version 20. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -171,10 +171,12 @@ the process-local cache:
   reset records with email, created/expiration timestamps, and used timestamp.
   Plaintext reset tokens are only sent in the emailed link and are not stored.
 - `menu_items`: admin-managed food/drink entries with stable IDs, category,
-  description, image URL, optional drink recipe, availability, drink type
+  description, image URL, optional ingredient recipe and separate bartender
+  instructions, availability, drink type
   (`standard`/`specialty`), beverage type (`alcoholic`/`non_alcoholic`),
   orderable flag, and created timestamp.
-- `drink_orders`: attendee drink orders with account/menu snapshots, drink type,
+- `drink_orders`: attendee drink orders with account/menu, ingredient, and
+  instruction snapshots, drink type,
   beverage type, specialty sequence/extra-request metadata, status, estimated
   ready time, created/started/completed timestamps, persistent optional
   `picked_up_at`, and completed prep duration.

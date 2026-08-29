@@ -443,9 +443,10 @@ SSE connections.
   cleanup; the route no longer renders it.
 - `bartender.html`: bartender/admin drink order page shell with a live-refresh
   queue container.
-- `_bartender_queue.html`: shared bartender queue fragment with image, specialty
-  sequence labels, extra specialty availability notes, normalized ingredient
-  lists, Current/Up Next/backlog stages, and completed order history.
+- `_bartender_queue.html`: shared bartender queue fragment with optional image,
+  specialty sequence labels, extra specialty availability notes, separate
+  normalized ingredient/ordered-instruction references, compact Up Next/backlog
+  disclosures, and completed order history.
 - `halloween_login.html`: attendee account sign-in form.
 - `halloween_register.html`: attendee account registration form.
 - `costume_signup.html`: costume entry form and submitted costume list.
@@ -597,3 +598,20 @@ SSE connections.
   rules.
 - Temporary `drink_ready` notice expiry/advancement is independent of drink
   order retention and never mutates completed order history.
+
+## Schema 20 Drink Preparation Architecture
+
+- `menu_items` and `drink_orders` add `instructions`; the existing `recipe`
+  field remains the ingredient-only compatibility field.
+- New orders snapshot both fields. Later menu edits therefore do not alter an
+  active or historical order's preparation reference.
+- When `instructions` is absent, normalization moves lines beginning with
+  recognized preparation verbs into ordered instructions and keeps ambiguous
+  lines as ingredients. Explicit schema-20 fields are never reclassified.
+- Loading a pre-schema-20 Redis document retains one raw 30-day backup at
+  `halloween:state:backup:schema20-drink-preparation` before applying the split.
+- Ingredients and instructions are available only to bartender/admin templates;
+  attendee queue APIs, live display builders, and generated attendee emails do
+  not expose either field.
+- Bartender fragment polling preserves order-keyed prep disclosures, scroll
+  anchoring, and focus when the queue version changes.

@@ -141,3 +141,15 @@ in normal browser windows and on mobile phone browsers.
   width matched viewport width, menu cards were one column on phone, no
   bartender forms/recipes/other-guest identity appeared, and live five-second
   polling produced no new console errors after the test server stabilized.
+
+## Bartender Preparation UX (2026-08-29)
+
+- Mobile bartender pages hide the decorative hero so Current Drink reaches the
+  working viewport sooner; missing drink artwork no longer creates a large
+  placeholder.
+- Current Drink keeps ingredients and ordered instructions expanded. Up Next
+  and backlog use compact, touch-safe prep disclosures to reduce duplication.
+- Preparation panels collapse from two columns to one below 620px, while staged
+  drink artwork uses bounded heights.
+- Live queue replacement restores open prep details, visible-order offset, and
+  keyboard focus by stable order ID.

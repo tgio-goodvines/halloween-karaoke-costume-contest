@@ -1052,7 +1052,7 @@
   {% if admin_view == 'menu' %}
   <section class="admin-section admin-section--menu">
     <h3>Food and Drink Menu</h3>
-    <p>Add menu images, descriptions, and drink recipes for guests and bartenders.</p>
+    <p>Manage guest-facing menu details and separate bartender preparation references.</p>
 
     <details class="admin-entry admin-entry--new">
       <summary class="admin-entry__summary">
@@ -1062,32 +1062,19 @@
           <span>Create food or drink options for the portal</span>
         </span>
       </summary>
-      <form method="post" class="admin-entry__form">
+      <form method="post" class="admin-entry__form" data-menu-item-form>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="admin-entry__fields">
+          <h4 class="menu-admin-fieldset-title">Guest-facing details</h4>
           <label>
             Name
             <input type="text" name="name" maxlength="100" required>
           </label>
           <label>
             Category
-            <select name="category">
+            <select name="category" data-menu-category>
               <option value="drink">Drink</option>
               <option value="food">Food</option>
-            </select>
-          </label>
-          <label>
-            Drink Type
-            <select name="drink_type">
-              <option value="standard">Standard</option>
-              <option value="specialty">Specialty</option>
-            </select>
-          </label>
-          <label>
-            Beverage Type
-            <select name="beverage_type">
-              <option value="alcoholic">Alcoholic</option>
-              <option value="non_alcoholic">Non-alcoholic</option>
             </select>
           </label>
           <label>
@@ -1098,16 +1085,36 @@
             Description
             <textarea name="description" maxlength="500"></textarea>
           </label>
-          <label>
-            Drink Ingredients
-            <textarea name="recipe" maxlength="1200" placeholder="One ingredient per line, for example:&#10;2 oz tequila&#10;1 oz lime juice&#10;0.5 oz simple syrup"></textarea>
-            <span class="form-helper">Enter one ingredient per line. This list is visible only to bartenders and admins.</span>
-          </label>
           <label class="form-check">
             <input type="checkbox" name="available" value="yes" checked>
             <span>Available tonight</span>
           </label>
-          <label class="form-check">
+          <h4 class="menu-admin-fieldset-title" data-menu-drink-fields>Bartender preparation</h4>
+          <label data-menu-drink-fields>
+            Drink Type
+            <select name="drink_type">
+              <option value="standard">Standard</option>
+              <option value="specialty">Specialty</option>
+            </select>
+          </label>
+          <label data-menu-drink-fields>
+            Beverage Type
+            <select name="beverage_type">
+              <option value="alcoholic">Alcoholic</option>
+              <option value="non_alcoholic">Non-alcoholic</option>
+            </select>
+          </label>
+          <label data-menu-drink-fields>
+            Drink Ingredients
+            <textarea name="recipe" maxlength="1200" placeholder="One ingredient per line, for example:&#10;2 oz tequila&#10;1 oz lime juice&#10;0.5 oz simple syrup"></textarea>
+            <span class="form-helper">Enter one ingredient per line. This list is visible only to bartenders and admins.</span>
+          </label>
+          <label data-menu-drink-fields>
+            Drink Instructions
+            <textarea name="instructions" maxlength="2400" placeholder="One preparation step per line, for example:&#10;Shake with ice&#10;Strain over fresh ice&#10;Garnish with a lime wheel"></textarea>
+            <span class="form-helper">Enter one preparation step per line. Steps appear in order for bartenders and admins only.</span>
+          </label>
+          <label class="form-check" data-menu-drink-fields>
             <input type="hidden" name="orderable" value="no">
             <input type="checkbox" name="orderable" value="yes" checked>
             <span>Can be ordered from portal</span>
@@ -1129,39 +1136,27 @@
                   {% if item.category == 'drink' %}{{ drink_type_label(item.drink_type) }} · {{ beverage_type_label(item.beverage_type) }} · {% endif %}
                   {% if item.available %}Available{% else %}Unavailable{% endif %}
                   {% if item.category == 'drink' %} · {% if item.orderable %}Orderable{% else %}Bar pickup{% endif %}{% endif %}
+                  {% if item.category == 'drink' %} · {{ recipe_ingredients(item.recipe)|length }} ingredients · {% if item.instructions %}Instructions set{% else %}Instructions missing{% endif %}{% endif %}
                 </span>
               </span>
             </summary>
             {% if item.image_url %}
               <img class="menu-admin-entry__image" src="{{ item.image_url }}" alt="{{ item.name }}">
             {% endif %}
-            <form method="post" class="admin-entry__form">
+            <form method="post" class="admin-entry__form" data-menu-item-form>
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="item_id" value="{{ item.id }}">
               <div class="admin-entry__fields">
+                <h4 class="menu-admin-fieldset-title">Guest-facing details</h4>
                 <label>
                   Name
                   <input type="text" name="name" maxlength="100" value="{{ item.name }}" required>
                 </label>
                 <label>
                   Category
-                  <select name="category">
+                  <select name="category" data-menu-category>
                     <option value="drink" {% if item.category == 'drink' %}selected{% endif %}>Drink</option>
                     <option value="food" {% if item.category == 'food' %}selected{% endif %}>Food</option>
-                  </select>
-                </label>
-                <label>
-                  Drink Type
-                  <select name="drink_type">
-                    <option value="standard" {% if item.drink_type == 'standard' %}selected{% endif %}>Standard</option>
-                    <option value="specialty" {% if item.drink_type == 'specialty' %}selected{% endif %}>Specialty</option>
-                  </select>
-                </label>
-                <label>
-                  Beverage Type
-                  <select name="beverage_type">
-                    <option value="alcoholic" {% if item.beverage_type == 'alcoholic' %}selected{% endif %}>Alcoholic</option>
-                    <option value="non_alcoholic" {% if item.beverage_type == 'non_alcoholic' %}selected{% endif %}>Non-alcoholic</option>
                   </select>
                 </label>
                 <label>
@@ -1172,16 +1167,36 @@
                   Description
                   <textarea name="description" maxlength="500">{{ item.description }}</textarea>
                 </label>
-                <label>
-                  Drink Ingredients
-                  <textarea name="recipe" maxlength="1200" placeholder="One ingredient per line">{{ item.recipe }}</textarea>
-                  <span class="form-helper">Enter one ingredient per line. Existing paragraph recipes remain compatible until edited.</span>
-                </label>
                 <label class="form-check">
                   <input type="checkbox" name="available" value="yes" {% if item.available %}checked{% endif %}>
                   <span>Available tonight</span>
                 </label>
-                <label class="form-check">
+                <h4 class="menu-admin-fieldset-title" data-menu-drink-fields>Bartender preparation</h4>
+                <label data-menu-drink-fields>
+                  Drink Type
+                  <select name="drink_type">
+                    <option value="standard" {% if item.drink_type == 'standard' %}selected{% endif %}>Standard</option>
+                    <option value="specialty" {% if item.drink_type == 'specialty' %}selected{% endif %}>Specialty</option>
+                  </select>
+                </label>
+                <label data-menu-drink-fields>
+                  Beverage Type
+                  <select name="beverage_type">
+                    <option value="alcoholic" {% if item.beverage_type == 'alcoholic' %}selected{% endif %}>Alcoholic</option>
+                    <option value="non_alcoholic" {% if item.beverage_type == 'non_alcoholic' %}selected{% endif %}>Non-alcoholic</option>
+                  </select>
+                </label>
+                <label data-menu-drink-fields>
+                  Drink Ingredients
+                  <textarea name="recipe" maxlength="1200" placeholder="One ingredient per line">{{ item.recipe }}</textarea>
+                  <span class="form-helper">Enter one ingredient per line. Legacy preparation directions have been separated when recognized.</span>
+                </label>
+                <label data-menu-drink-fields>
+                  Drink Instructions
+                  <textarea name="instructions" maxlength="2400" placeholder="One preparation step per line">{{ item.instructions }}</textarea>
+                  <span class="form-helper">Enter one preparation step per line. Steps appear in order for bartenders and admins only.</span>
+                </label>
+                <label class="form-check" data-menu-drink-fields>
                   <input type="hidden" name="orderable" value="no">
                   <input type="checkbox" name="orderable" value="yes" {% if item.orderable %}checked{% endif %}>
                   <span>Can be ordered from portal</span>
@@ -1189,7 +1204,7 @@
               </div>
               <div class="admin-entry__actions">
                 <button type="submit" name="action" value="update_menu_item" class="button button--primary">Save Menu Item</button>
-                <button type="submit" name="action" value="delete_menu_item" class="button button--danger">Remove</button>
+                <button type="submit" name="action" value="delete_menu_item" class="button button--danger" formnovalidate onclick="return confirm('Remove this menu item? This cannot be undone.');">Remove</button>
               </div>
             </form>
           </details>
@@ -1410,5 +1425,8 @@
   {% if admin_view == 'dj' %}
     <script src="{{ url_for('static', filename='dj-admin.js') }}"></script>
     <script src="{{ url_for('static', filename='dj-admin-status.js') }}"></script>
+  {% endif %}
+  {% if admin_view == 'menu' %}
+    <script src="{{ url_for('static', filename='menu-admin.js') }}"></script>
   {% endif %}
 {% endblock %}

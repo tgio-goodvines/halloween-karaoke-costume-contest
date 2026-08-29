@@ -353,7 +353,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 19
+STATE_SCHEMA_VERSION = 20
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -2028,6 +2028,55 @@ def normalize_drink_recipe(raw_recipe: object) -> str:
     return "\n".join(recipe_ingredients(raw_recipe))
 
 
+DRINK_INSTRUCTION_VERBS = (
+    "add",
+    "blend",
+    "build",
+    "combine",
+    "fill",
+    "finish",
+    "float",
+    "garnish",
+    "layer",
+    "muddle",
+    "pour",
+    "rim",
+    "roll",
+    "serve",
+    "shake",
+    "stir",
+    "strain",
+    "top",
+)
+
+
+def drink_instruction_steps(raw_instructions: object) -> list[str]:
+    """Return normalized bartender preparation steps without list markers."""
+    return recipe_ingredients(raw_instructions)
+
+
+def normalize_drink_instructions(raw_instructions: object) -> str:
+    return "\n".join(drink_instruction_steps(raw_instructions))
+
+
+def split_legacy_drink_recipe(raw_recipe: object) -> tuple[str, str]:
+    """Separate obvious preparation directions from a legacy recipe field."""
+    ingredients: list[str] = []
+    instructions: list[str] = []
+    instruction_pattern = re.compile(
+        rf"^(?:{'|'.join(DRINK_INSTRUCTION_VERBS)})\b",
+        re.IGNORECASE,
+    )
+
+    for line in recipe_ingredients(raw_recipe):
+        if instruction_pattern.search(line):
+            instructions.append(line)
+        else:
+            ingredients.append(line)
+
+    return "\n".join(ingredients), "\n".join(instructions)
+
+
 def normalize_bartender_tip_settings(raw_settings: object) -> dict[str, object]:
     settings = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
     if not isinstance(raw_settings, dict):
@@ -2044,13 +2093,19 @@ def menu_item_to_dict(item: dict[str, object]) -> dict[str, object]:
     category = normalize_menu_category(item.get("category"))
     drink_type = normalize_drink_type(item.get("drink_type"))
     beverage_type = normalize_beverage_type(item.get("beverage_type"))
+    if "instructions" in item:
+        recipe = normalize_drink_recipe(item.get("recipe", ""))
+        instructions = normalize_drink_instructions(item.get("instructions", ""))
+    else:
+        recipe, instructions = split_legacy_drink_recipe(item.get("recipe", ""))
     return {
         "id": str(item.get("id", "") or uuid4().hex),
         "name": str(item.get("name", "") or "").strip(),
         "category": category,
         "description": str(item.get("description", "") or "").strip(),
         "image_url": safe_image_url(str(item.get("image_url", "") or "")),
-        "recipe": normalize_drink_recipe(item.get("recipe", "")),
+        "recipe": recipe if category == "drink" else "",
+        "instructions": instructions if category == "drink" else "",
         "available": bool(item.get("available", True)),
         "drink_type": drink_type if category == "drink" else "standard",
         "beverage_type": beverage_type if category == "drink" else "non_alcoholic",
@@ -2091,6 +2146,12 @@ def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
     except (TypeError, ValueError):
         specialty_sequence_number = 0
 
+    if "instructions" in data:
+        recipe = normalize_drink_recipe(data.get("recipe", ""))
+        instructions = normalize_drink_instructions(data.get("instructions", ""))
+    else:
+        recipe, instructions = split_legacy_drink_recipe(data.get("recipe", ""))
+
     return {
         "id": order_id,
         "user_id": str(data.get("user_id", "") or ""),
@@ -2099,7 +2160,8 @@ def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
         "menu_item_id": menu_item_id,
         "item_name": item_name,
         "item_image_url": safe_image_url(str(data.get("item_image_url", "") or "")),
-        "recipe": normalize_drink_recipe(data.get("recipe", "")),
+        "recipe": recipe,
+        "instructions": instructions,
         "drink_type": normalize_drink_type(data.get("drink_type")),
         "beverage_type": normalize_beverage_type(data.get("beverage_type")),
         "orderable": bool(data.get("orderable", True)),
@@ -2175,6 +2237,7 @@ def create_drink_order(user_id: str, account: dict[str, object], item: dict[str,
         "item_name": str(item.get("name", "")),
         "item_image_url": str(item.get("image_url", "") or ""),
         "recipe": normalize_drink_recipe(item.get("recipe", "")),
+        "instructions": normalize_drink_instructions(item.get("instructions", "")),
         "drink_type": drink_type,
         "beverage_type": normalize_beverage_type(item.get("beverage_type")),
         "orderable": bool(item.get("orderable", True)),
@@ -4990,6 +5053,30 @@ def write_state_backup_if_available(reason: str) -> str | None:
         return None
 
 
+def backup_legacy_drink_preparation_state(data: dict[str, object]) -> str | None:
+    """Retain one raw pre-schema-20 snapshot before recipe fields are split."""
+    try:
+        schema_version = int(data.get("schema_version", 1) or 1)
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version >= 20:
+        return None
+
+    backup_key = redis_key("state:backup:schema20-drink-preparation")
+    if redis_client.exists(backup_key):
+        return backup_key
+
+    backup_payload = copy.deepcopy(data)
+    backup_payload["backup_reason"] = "schema20-drink-preparation"
+    backup_payload["backup_key"] = backup_key
+    redis_client.setex(
+        backup_key,
+        STATE_BACKUP_TTL_SECONDS,
+        json.dumps(backup_payload, sort_keys=True),
+    )
+    return backup_key
+
+
 def sanitize_game_data_in_state_backups(
     *,
     game_keys: set[str] | None = None,
@@ -5305,6 +5392,7 @@ def load_state_from_redis() -> bool:
     if not isinstance(parsed_state, dict):
         raise RuntimeError(f"Redis state at {redis_key('state')} must be a JSON object.")
 
+    backup_legacy_drink_preparation_state(parsed_state)
     apply_state_snapshot(parsed_state)
     return True
 
@@ -7957,6 +8045,7 @@ def inject_contest_state():
         "drink_type_label": drink_type_label,
         "beverage_type_label": beverage_type_label,
         "recipe_ingredients": recipe_ingredients,
+        "drink_instruction_steps": drink_instruction_steps,
         "party_day_has_arrived": party_day_has_arrived(),
         "party_games_state": {
             "available": party_day_has_arrived() and bool(enabled_views),
@@ -10357,6 +10446,8 @@ def admin_portal(admin_view: str):
         description = request.form.get("description", "").strip()
         raw_recipe = request.form.get("recipe", "")
         recipe = normalize_drink_recipe(raw_recipe)
+        raw_instructions = request.form.get("instructions", "")
+        instructions = normalize_drink_instructions(raw_instructions)
         orderable_values = request.form.getlist("orderable")
         orderable = True if not orderable_values else "yes" in orderable_values
 
@@ -10367,9 +10458,12 @@ def admin_portal(admin_view: str):
         if len(description) > 500:
             errors.append("Menu item description must be 500 characters or fewer.")
         if len(raw_recipe) > 1200:
-            errors.append("Drink recipe must be 1200 characters or fewer.")
-        if category == "food" and recipe:
+            errors.append("Drink ingredients must be 1200 characters or fewer.")
+        if len(raw_instructions) > 2400:
+            errors.append("Drink instructions must be 2400 characters or fewer.")
+        if category == "food":
             recipe = ""
+            instructions = ""
 
         if errors:
             return None
@@ -10381,6 +10475,7 @@ def admin_portal(admin_view: str):
             "description": description,
             "image_url": normalized_image_url,
             "recipe": recipe,
+            "instructions": instructions,
             "available": request.form.get("available") == "yes",
             "drink_type": drink_type if category == "drink" else "standard",
             "beverage_type": beverage_type if category == "drink" else "non_alcoholic",

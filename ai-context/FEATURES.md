@@ -225,7 +225,7 @@
   are enabled, admins can select which eligible RSVP and registered-user
   recipients receive each posted or resent update email through SES.
 - Admin can add, edit, remove, and disable food/drink menu items, including image
-  URLs, descriptions, drink recipes for bartender reference, specialty/standard
+  URLs, descriptions, separate ingredient and instruction references, specialty/standard
   classification, alcoholic/non-alcoholic classification, and whether a drink is
   orderable from the portal.
 - Admin can configure a bartender tip prompt with an enable switch, display
@@ -306,17 +306,18 @@
 - The shared dropdown keeps Bartender as a separate role-restricted item; it is
   not merged into the attendee Menu & Orders workspace.
 - Drink orders progress from `received` to `in_progress` to `complete`.
-- Bartender view shows drink image and recipe reference; in-progress orders keep
-  the recipe visible.
+- Bartender Current Drink shows separate ingredient and ordered instruction
+  references; Up Next and backlog expose preparation details through compact
+  disclosures.
 - Bartender view labels specialty drink sequence numbers and flags after-11 PM
   4th+ specialty requests with a reminder to check availability.
 - Bartender operations are strict first-in, first-out. The workspace identifies
   one Current Drink and one Up Next order, retains the remaining arrival order,
   and prevents starting or completing a later order before the current one.
   A legacy already-in-progress drink remains current after migration.
-- Drink recipes normalize into one ingredient per line and render as readable
-  ingredient lists for bartenders; attendee and live-display payloads continue
-  to exclude recipes.
+- Drink ingredients normalize into one ingredient per line and instructions
+  normalize into one ordered step per line. Both remain bartender/admin-only;
+  attendee and live-display payloads continue to exclude them.
 - Completed orders track prep duration and feed future estimated ready times.
 - Drink order confirmation emails include estimated ready time when Halloween
   email sending is enabled.

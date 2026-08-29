@@ -31,7 +31,8 @@
 | `static/bar-status.js` | Five-second visibility-aware attendee bar polling for aggregate queue counts and account-scoped personal order status, including safe pickup acknowledgement forms; it never consumes bartender-only queue HTML. |
 | `templates/results.html` | Signed-in live game status, personal achievements, and official Hall of Fame page. |
 | `templates/_admin_recognition.html` | Event-edition, retro credit, result publication, account collection, link/revoke, and export controls. |
-| `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
+| `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment, swaps changed markup, and preserves prep disclosures, scroll anchoring, and focus. |
+| `static/menu-admin.js` | Menu-admin category controller that hides and disables drink-only classification, ingredient, instruction, and ordering fields for food records and reinitializes after inline admin updates. |
 | `static/display.css` | Fixed-viewport adaptive TV grid with title header, independent game/bar rails, dominant center cards, conditional music footer, density fitting, full-stage neon ready alerts, rotating bar promotion/history compositions, CTA, scoreboard, and karaoke layouts. |
 | `static/display-media.js` | Browser/Node-compatible media policy helpers that make image-bearing live cards background-first while retaining explicit foreground exceptions and bounded contrast tones. |
 | `static/display.js` | Live-display client logic: center/game rotation, independent keyed bar promotion/history rotation, API polling, SSE reconnects, full-stage temporary notice rendering, scoreboard rendering, karaoke countdown and panel rotation. |
@@ -58,7 +59,7 @@
 | `templates/_personal_drink_orders.html` | Account-scoped Ready/Preparing/Received/Previous order groups, persistent pickup acknowledgement, reorder controls, and one bartender-tip callout. |
 | `templates/drink_history.html` | Retired order-history template; `/party/drink-history` is now a compatibility route to the consolidated My Orders view. |
 | `templates/bartender.html` | Bartender/admin page shell for `/bartender`, with messages and the live-refresh FIFO queue container. |
-| `templates/_bartender_queue.html` | Shared bartender queue fragment with Current Drink, Up Next, ordered backlog, normalized ingredient lists, guarded transition forms, and completed order history. |
+| `templates/_bartender_queue.html` | Shared bartender queue fragment with Current Drink, compact Up Next/backlog disclosures, separate ingredient and ordered instruction references, guarded transition forms, and completed order history. |
 | `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
 | `templates/halloween_login.html` | Public attendee account sign-in form. |
 | `templates/halloween_register.html` | Public attendee account registration form. |

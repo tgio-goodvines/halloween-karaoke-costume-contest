@@ -2606,6 +2606,7 @@ class RedisStateTests(unittest.TestCase):
             "item_name": "Witch Margarita",
             "item_image_url": "https://example.test/witch.jpg",
             "recipe": "Private bartender recipe",
+            "instructions": "Private bartender instructions",
             "status": "received",
             "estimated_ready_at": main._utc_now_iso(),
             "created_at": main._utc_now_iso(),
@@ -2644,6 +2645,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("https://tnq-halloween.com/party/menu", active_bar["action"]["url"])
         self.assertNotIn("email", active_bar["orders"][0])
         self.assertNotIn("recipe", active_bar["orders"][0])
+        self.assertNotIn("instructions", active_bar["orders"][0])
         self.assertEqual("Morgan", main.live_display_notice_override["highlight"])
         self.assertEqual([], main.live_display_notice_queue)
 
@@ -3103,7 +3105,8 @@ class RedisStateTests(unittest.TestCase):
                     "category": "drink",
                     "description": "Lime, smoke, and salt.",
                     "image_url": "https://example.test/witch.jpg",
-                    "recipe": "Shake tequila, lime, and syrup with ice.",
+                    "recipe": "2 oz tequila\n1 oz lime juice\n0.5 oz agave",
+                    "instructions": "Shake with ice\nStrain over fresh ice\nGarnish with lime",
                     "available": "yes",
                 },
             )
@@ -3121,6 +3124,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, role_response.status_code)
         self.assertEqual("Witch Margarita", state["menu_items"][0]["name"])
         self.assertEqual("https://example.test/witch.jpg", state["menu_items"][0]["image_url"])
+        self.assertEqual("2 oz tequila\n1 oz lime juice\n0.5 oz agave", state["menu_items"][0]["recipe"])
+        self.assertEqual("Shake with ice\nStrain over fresh ice\nGarnish with lime", state["menu_items"][0]["instructions"])
         self.assertIn("bartender", state["user_accounts"]["jamie"]["roles"])
 
     def test_admin_can_crud_user_accounts_and_reset_passwords(self):
@@ -3254,7 +3259,8 @@ class RedisStateTests(unittest.TestCase):
                 "category": "drink",
                 "description": "Lime, smoke, and salt.",
                 "image_url": "https://example.test/witch.jpg",
-                "recipe": "Shake tequila, lime, and syrup with ice.",
+                "recipe": "2 oz tequila\n1 oz lime juice",
+                "instructions": "Shake with ice\nStrain over fresh ice",
                 "available": True,
                 "created_at": "2026-07-06T00:00:00Z",
             },
@@ -3290,6 +3296,9 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(1, len(state["drink_orders"]))
         self.assertEqual("received", state["drink_orders"][0]["status"])
         self.assertEqual("https://example.test/witch.jpg", state["drink_orders"][0]["item_image_url"])
+        self.assertEqual("2 oz tequila\n1 oz lime juice", state["drink_orders"][0]["recipe"])
+        self.assertEqual("Shake with ice\nStrain over fresh ice", state["drink_orders"][0]["instructions"])
+        self.assertNotIn("Shake with ice", menu_html)
         self.assertEqual(1, len(fake_ses.sent_messages))
         self.assertIn("Drink order received", fake_ses.sent_messages[0]["Content"]["Simple"]["Body"]["Html"]["Data"])
 
@@ -3747,20 +3756,53 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, rejected.status_code)
         self.assertIn("could not be found", rejected.get_data(as_text=True))
 
-    def test_schema_19_backfills_pickup_timestamp_for_legacy_orders(self):
+    def test_schema_20_backfills_pickup_and_splits_legacy_drink_preparation(self):
         legacy_order = {
             "id": "legacy-order",
             "user_id": "user-1",
             "username": "Jamie",
             "item_name": "Witch Margarita",
+            "recipe": "2 oz tequila\n1 oz lime juice\nShake with ice\nStrain over fresh ice",
             "status": "complete",
             "completed_at": "2026-08-29T20:05:00Z",
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(19, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(20, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
+        self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])
+        self.assertEqual("Shake with ice\nStrain over fresh ice", normalized["instructions"])
+
+        explicit = main.normalize_menu_item(
+            {
+                "id": "drink-explicit",
+                "name": "Explicit Recipe",
+                "category": "drink",
+                "recipe": "2 oz gin\nGarnish",
+                "instructions": "Stir with ice",
+            }
+        )
+        self.assertEqual("2 oz gin\nGarnish", explicit["recipe"])
+        self.assertEqual("Stir with ice", explicit["instructions"])
+
+        legacy_state = main.snapshot_state()
+        legacy_state["schema_version"] = 19
+        legacy_state["menu_items"] = [
+            {
+                "id": "legacy-drink",
+                "name": "Legacy Drink",
+                "category": "drink",
+                "recipe": "2 oz rum\nShake with ice",
+            }
+        ]
+        self.fake_redis.set(main.redis_key("state"), json.dumps(legacy_state))
+        main.load_state_from_redis()
+        backup_key = main.redis_key("state:backup:schema20-drink-preparation")
+        backup = json.loads(self.fake_redis.store[backup_key])
+        self.assertEqual("2 oz rum\nShake with ice", backup["menu_items"][0]["recipe"])
+        self.assertEqual("2 oz rum", main.menu_items[0]["recipe"])
+        self.assertEqual("Shake with ice", main.menu_items[0]["instructions"])
 
     def test_bartender_queue_uses_fifo_for_specialty_and_extra_requests(self):
         account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
@@ -3931,6 +3973,7 @@ class RedisStateTests(unittest.TestCase):
                 "item_name": "Witch Margarita",
                 "item_image_url": "",
                 "recipe": normalized_recipe,
+                "instructions": "Shake with ice\nStrain over fresh ice\nGarnish with lime",
                 "drink_type": "specialty",
                 "beverage_type": "alcoholic",
                 "orderable": True,
@@ -3957,6 +4000,10 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("<li>2 oz tequila</li>", body)
         self.assertIn("<li>1 oz lime juice</li>", body)
         self.assertIn("<li>0.5 oz simple syrup</li>", body)
+        self.assertIn('<ol class="bartender-instruction-list">', body)
+        self.assertIn("<li>Shake with ice</li>", body)
+        self.assertIn("<li>Strain over fresh ice</li>", body)
+        self.assertIn("<li>Garnish with lime</li>", body)
 
     def test_bartender_queue_api_reflects_new_drink_orders(self):
         main.menu_items = [
@@ -4008,6 +4055,7 @@ class RedisStateTests(unittest.TestCase):
                 "item_name": "Witch Margarita",
                 "item_image_url": "",
                 "recipe": "Private Jamie recipe",
+                "instructions": "Private Jamie instructions",
                 "drink_type": "specialty",
                 "beverage_type": "alcoholic",
                 "orderable": True,
@@ -4028,6 +4076,7 @@ class RedisStateTests(unittest.TestCase):
                 "item_name": "Secret Martini",
                 "item_image_url": "",
                 "recipe": "Private Morgan recipe",
+                "instructions": "Private Morgan instructions",
                 "drink_type": "standard",
                 "beverage_type": "alcoholic",
                 "orderable": True,
@@ -4059,6 +4108,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("Morgan", serialized_payload)
         self.assertNotIn("Secret Martini", serialized_payload)
         self.assertNotIn("recipe", serialized_payload)
+        self.assertNotIn("instructions", serialized_payload)
+        self.assertNotIn("Private Jamie instructions", serialized_payload)
         self.assertNotIn("email", serialized_payload)
         self.assertNotIn("user_id", serialized_payload)
         self.assertEqual(302, protected_response.status_code)

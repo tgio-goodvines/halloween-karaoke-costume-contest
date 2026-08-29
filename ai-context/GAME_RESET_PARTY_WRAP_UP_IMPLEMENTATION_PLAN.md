@@ -2,8 +2,10 @@
 
 ## Status
 
-**Local implementation complete; commit, push, deploy, production email, and
-production verification intentionally not performed at the user's request.**
+**Implementation committed, pushed, and active in production on both API
+instances. Public Halloween and GoodVines isolation checks pass. Email/browser
+visual QA, a host-only production test email, and deployment-workflow hardening
+remain pending.**
 
 This file is both the implementation specification and the durable progress
 tracker. Update it in the same commit as each implementation milestone:
@@ -15,11 +17,12 @@ tracker. Update it in the same commit as each implementation milestone:
 - record exact test commands and results in the Verification Log; and
 - do not mark the project complete until every release gate is satisfied.
 
-**Current milestone:** Milestone 10 — local verification and handoff
+**Current milestone:** Milestone 10 — released with operational follow-up
 
-**Next action:** review the uncommitted local diff alongside parallel work, then
-perform browser/email visual QA and the normal release workflow only when the
-user explicitly authorizes commit, push, and deployment.
+**Next action:** harden the GitHub Actions rollout so a Halloween service restart
+cannot make the shared Auto Scaling Group replace an otherwise healthy API
+instance, then perform the remaining browser/email visual QA and optional
+host-only production test email.
 
 **Implemented Redis schema:** `18`.
 
@@ -611,11 +614,11 @@ pass.
 - [x] Run `git diff --check`.
 - [ ] Render/inspect HTML email at desktop and mobile widths.
 - [ ] Browser-QA Games, Wrap-Up, History, Results, and Account surfaces.
-- [ ] Verify unauthenticated/admin/CSRF boundaries.
+- [x] Verify unauthenticated/admin/CSRF boundaries.
 - [ ] Deploy through the existing GitHub Actions → AWS SSM path.
-- [ ] Verify Halloween health and GoodVines isolation.
+- [x] Verify Halloween health and GoodVines isolation.
 - [ ] Perform a reversible production test-email smoke test to the host only.
-- [ ] Record commit, workflow run, release path, and production verification.
+- [x] Record commit, workflow run, release path, and production verification.
 
 **Gate:** all acceptance criteria pass and the progress/status section is marked
 complete with evidence.
@@ -687,7 +690,7 @@ complete with evidence.
 | 7. Official delivery/retry | Complete | Per-recipient persistence and failed-only retry tests pass. |
 | 8. Automatic cleanup | Complete | Partial-failure preservation and all-success cleanup tests pass. |
 | 9. Game History workspace | Implemented; browser QA pending | Filter/export/detail/delete privacy tests pass. |
-| 10. Verification/release | Local checks complete; release deferred | 210 tests + 21 subtests pass; user prohibited commit/push/deploy. |
+| 10. Verification/release | Released; visual QA and rollout hardening pending | Commit `98be60f` is on `origin/main` and active on both API instances; 210 tests + 21 subtests and public health checks pass. |
 
 ## Decision Log
 
@@ -703,7 +706,8 @@ complete with evidence.
 | 2026-08-29 | Full-history deletion revokes source-linked winner credits with a reason. | Preserve the existing append-style recognition audit while immediately recalculating derived achievements. |
 | 2026-08-29 | Party Attendee reuses the Returning Reveler emblem for this local implementation. | Avoid introducing unreviewed generated artwork during a parallel dirty-worktree change; a dedicated emblem can replace the path later. |
 | 2026-08-29 | SES network calls release the request state lock; outcomes persist under short locks. | Avoid lock expiry during multi-recipient delivery and preserve completed outcomes across partial failure. |
-| 2026-08-29 | Do not commit, push, deploy, or send a production smoke email in this task. | Explicit user instruction while unrelated work is proceeding in parallel. |
+| 2026-08-29 | Initially do not commit, push, deploy, or send a production smoke email. | The user's initial parallel-work constraint; later superseded for commit/push/deploy by an explicit instruction, while the production test email remains unsent. |
+| 2026-08-29 | Treat replacement-instance bootstrap verification as the completed release after the SSM workflow raced Auto Scaling health replacement. | Both current instances independently reported release `98be60f46fb417032008c07f4f096e19f81f4f2e`, active service state, and healthy Redis-backed local responses; rerunning the unsafe rollout would cause more avoidable instance churn. |
 
 ## Verification Log
 
@@ -714,6 +718,10 @@ complete with evidence.
 | 2026-08-29 | 10 | `python -m compileall -q main.py party_wrapup.py recap_analytics.py recognition.py` | Passed. |
 | 2026-08-29 | 10 | Bundled Node `--check static/wrapup-admin.js` | Passed. |
 | 2026-08-29 | 10 | `python -m pytest -q` | 210 passed, 21 subtests passed in 37.73s. |
+| 2026-08-29 | 10 | Commit/push | `98be60f46fb417032008c07f4f096e19f81f4f2e` (`Add party wrap-up and consolidate menu orders`) pushed to `origin/main`; local `main` matches remote. |
+| 2026-08-29 | 10 | GitHub Actions run `33259498419` | Validation passed twice. SSM rollout failed because ALB health replacement removed each selected instance during its service restart; public smoke step therefore did not run in the workflow. |
+| 2026-08-29 | 10 | SSM read-only verification on `i-00874dc476ea795e3` and `i-069299cb23a5a9979` | Both replacement instances reported `/opt/halloween/releases/98be60f46fb417032008c07f4f096e19f81f4f2e`, active `halloween-party`, and Redis DB 1 health `ok`. |
+| 2026-08-29 | 10 | Public smoke: Halloween apex/www, RSVP, party login, Wrap-Up/History auth redirects, and `appg-v.com/health` | Passed. Apex and www responses reached different healthy Halloween instances; GoodVines remained online at service version `73a1f39430cb730e50a7713cc16d06e670bcdf0b`. |
 
 ## Known Risks And Mitigations
 
@@ -734,6 +742,12 @@ complete with evidence.
 - **Concurrent admin actions can race sending/cleanup.** Re-evaluate persisted
   state under the existing Redis lock at every transition and never hold the
   lock across SES network calls.
+- **The current SSM rollout restarts Halloween while an instance remains an
+  InService ELB target.** The brief health-check failure can trigger Auto
+  Scaling replacement. Drain or place one instance in Standby for deployment,
+  restore it, and wait for healthy target registration before advancing to the
+  next instance. The launch-template bootstrap kept this release available and
+  installed the exact requested SHA on both replacements.
 
 ## Out Of Scope For This Project
 

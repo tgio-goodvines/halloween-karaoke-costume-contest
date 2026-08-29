@@ -1,0 +1,73 @@
+{% from "email/_components.html" import shell, button %}
+{% macro bars(title, rows, color='#ff3131') -%}
+  {% if rows %}
+    <h3 style="margin: 26px 0 12px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 20px; text-transform: uppercase;">{{ title }}</h3>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top: 1px solid #3d3f43;">
+      {% for row in rows %}
+        <tr>
+          <td style="padding: 10px 10px 10px 0; color: #f6edf0; font-size: 13px; width: 34%; border-bottom: 1px solid #3d3f43;">{{ row.label }}</td>
+          <td style="padding: 10px 8px; border-bottom: 1px solid #3d3f43;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="background: #302b30; height: 12px;"><div style="width: {{ row.percent|default(0) }}%; min-width: {% if row.value %}4px{% else %}0{% endif %}; height: 12px; background: {{ color }};"></div></td></tr></table>
+          </td>
+          <td style="padding: 10px 0 10px 8px; color: #b9a8b0; font-size: 13px; text-align: right; white-space: nowrap; border-bottom: 1px solid #3d3f43;">{{ row.value_label|default(row.value) }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+{%- endmacro %}
+
+{% call shell(recap.title, "The Party Results Are In", "You are receiving this because the hosts confirmed your attendance at " ~ recap.title ~ ".") %}
+  {% if test_mode %}
+    <div style="margin: 0 0 22px; padding: 14px; border: 2px solid #ff3131; background: #38191e; color: #ffffff; font-weight: 700; line-height: 1.5; text-align: center;">TEST EMAIL — NOT THE OFFICIAL PARTY RECAP<br><span style="font-size: 12px; font-weight: 400;">Data source: {{ 'Generated Sample Data' if test_mode == 'sample' else 'Current Party Database' }}</span></div>
+  {% endif %}
+  <p style="margin: 0 0 20px; color: #f6edf0; font-size: 16px; line-height: 1.6;">Thanks for joining the experiment{% if recap.recipient_name %}, {{ recap.recipient_name }}{% endif %}. Here is what survived the lab.</p>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 0 0 24px;">
+    <tr>
+      <td style="width: 33%; padding: 12px; border: 1px solid #3d3f43; color: #b9a8b0; text-align: center;"><strong style="display: block; color: #ff3131; font-size: 24px;">{{ recap.analytics_snapshot.attendee_count|default(0) }}</strong>Attendees</td>
+      <td style="width: 33%; padding: 12px; border: 1px solid #3d3f43; color: #b9a8b0; text-align: center;"><strong style="display: block; color: #ff3131; font-size: 24px;">{{ recap.analytics_snapshot.games_played|default(0) }}</strong>Games</td>
+      <td style="width: 33%; padding: 12px; border: 1px solid #3d3f43; color: #b9a8b0; text-align: center;"><strong style="display: block; color: #ff3131; font-size: 24px;">{{ recap.analytics_snapshot.achievement_count|default(0) }}</strong>Achievements</td>
+    </tr>
+  </table>
+
+  <h2 style="margin: 24px 0 12px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Game Winners</h2>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    {% for game in recap.game_results %}
+      <tr><td style="padding: 10px 0; border-bottom: 1px solid #3d3f43; color: #b9a8b0;">{{ game.title }}</td><td style="padding: 10px 0 10px 12px; border-bottom: 1px solid #3d3f43; color: #f6edf0; font-weight: 700; text-align: right;">{{ game.winner_label }}</td></tr>
+    {% else %}
+      <tr><td style="padding: 10px 0; color: #b9a8b0;">No completed games yet.</td></tr>
+    {% endfor %}
+  </table>
+
+  {{ bars("Participation by Game", recap.analytics_snapshot.participation_by_game) }}
+
+  {% if recap.costume_result %}
+    <h2 style="margin: 26px 0 10px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Costume Champion</h2>
+    <p style="margin: 0 0 12px; color: #f6edf0; font-size: 18px; line-height: 1.5;"><strong>{{ recap.costume_result.winner }}</strong>{% if recap.costume_result.costume %} — {{ recap.costume_result.costume }}{% endif %}</p>
+  {% endif %}
+  {{ bars("Costume Leaderboard", recap.analytics_snapshot.costume_leaderboard, '#d9348b') }}
+
+  <h2 style="margin: 26px 0 10px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Jukebox DNA</h2>
+  <p style="margin: 0 0 14px; color: #b9a8b0; line-height: 1.5;">{{ recap.analytics_snapshot.playlist.track_count|default(0) }} tracks · {{ recap.analytics_snapshot.playlist.duration_label|default('0 min') }} · {{ recap.analytics_snapshot.playlist.unique_artist_count|default(0) }} artists · {{ recap.analytics_snapshot.playlist.guest_powered_percent|default(0) }}% guest-powered</p>
+  {{ bars("Playlist Sources", recap.analytics_snapshot.playlist.source_rows, '#748aa5') }}
+  {{ bars("Top Artists", recap.analytics_snapshot.playlist.top_artist_rows, '#d9348b') }}
+
+  {% if recap.playlist_snapshot %}
+    <h3 style="margin: 26px 0 12px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 20px; text-transform: uppercase;">Final Playlist</h3>
+    <ol style="margin: 0 0 24px; padding-left: 24px; color: #f6edf0; line-height: 1.7;">
+      {% for song in recap.playlist_snapshot %}<li>{% if song.apple_music_url %}<a href="{{ song.apple_music_url }}" style="color: #ebaeb6;">{{ song.title }}</a>{% else %}{{ song.title }}{% endif %} — {{ song.artist }}</li>{% endfor %}
+    </ol>
+  {% endif %}
+
+  {% if recap.new_achievements %}
+    <h2 style="margin: 26px 0 10px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Your New Achievements</h2>
+    <p style="margin: 0 0 22px; color: #f6edf0; line-height: 1.6;">{{ recap.new_achievements|join(' · ') }}</p>
+  {% endif %}
+
+  {% if recap.personal_summary %}
+    <h3 style="margin: 26px 0 12px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 20px; text-transform: uppercase;">Your Night</h3>
+    <p style="margin: 0 0 22px; color: #b9a8b0; line-height: 1.6;">{{ recap.personal_summary.games_joined|default(0) }} games joined · {{ recap.personal_summary.wins|default(0) }} wins · {{ recap.personal_summary.jukebox_requests|default(0) }} jukebox requests · {{ recap.personal_summary.karaoke_appearances|default(0) }} karaoke appearances</p>
+  {% endif %}
+
+  <p style="margin: 24px 0 0;">{{ button(results_url, "Results & Hall of Fame") }}</p>
+{% endcall %}

@@ -225,3 +225,15 @@ signup, active, and final-score states; dedicated trophy art remains on ended
 winner states. The treatment covers the left game rail, center join/result
 cards, direct host winner/results spotlights, and every announcer presentation
 slide. Non-game image cards retain their foreground-media layout.
+
+## Phrase-Free Reset And Wrap-Up Cleanup (2026-08-29)
+
+- Per-game Reset controls use a confirm popup and preserve enabled state,
+  official history, recap snapshots, and recognition.
+- Reset All Games clears all mutable play/simulation data, restores built-in
+  prompts and MMF rounds, disables every game, clears display artifacts, and
+  sanitizes retained state backups.
+- Official wrap-up performs the pristine global reset only after every frozen
+  attendee recap delivery succeeds. Partial delivery failure preserves games.
+- Detailed history stores Two Truths cards/guesses, MMF aggregates only, and
+  revealed prompt responses/totals without blind voter identity.

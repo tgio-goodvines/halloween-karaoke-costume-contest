@@ -47,6 +47,14 @@
     {% include '_admin_recognition.html' %}
   {% endif %}
 
+  {% if admin_view == 'wrapup' %}
+    {% include '_admin_wrapup.html' %}
+  {% endif %}
+
+  {% if admin_view == 'game_history' %}
+    {% include '_admin_game_history.html' %}
+  {% endif %}
+
   {% if admin_view == 'home' %}
     <section class="admin-home" aria-label="Tonight at a glance">
       <header class="admin-home__intro">

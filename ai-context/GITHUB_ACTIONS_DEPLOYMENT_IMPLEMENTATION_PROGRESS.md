@@ -106,12 +106,13 @@ user-data.
 
 - Launch template: `goodvines-api-lt`
 - Launch template ID: `lt-0f899847971a77126`
-- Halloween bootstrap version: `2`
-- ASG `goodvines-api-asg` is pinned to launch template version `2`.
+- Halloween bootstrap version: `6`
+- ASG `goodvines-api-asg` is pinned to launch template version `6`.
 - Version description:
-  `goodvines api bootstrap with halloween app install`
+  `Preserve v5 GoodVines bootstrap and restore Halloween app install`
 
-The version 2 user-data keeps the existing GoodVines bootstrap flow, then runs
+The version 6 user-data keeps the version 5 GoodVines bootstrap flow, including
+its Apple root-certificate and log-retention changes, then runs
 `install_halloween_app` after `start_services`. The Halloween bootstrap:
 
 - creates a dedicated `halloween` system user/group,
@@ -134,6 +135,21 @@ Redis.
 Important nuance: launch-template bootstrap fetches the current Halloween
 `main` branch at instance boot time. The GitHub Actions workflow still deploys
 the exact merged commit SHA for normal deployments.
+
+Corrective update on 2026-08-28:
+
+- Launch-template versions `3` through `5` omitted the Halloween installer and
+  nginx server block, causing intermittent public JSON `404` responses after a
+  version `5` replacement joined the load balancer.
+- The incomplete host and a concurrent version `5` replacement were repaired
+  with `deploy/ec2_deploy_from_github.sh` at release `d54ff9f`.
+- Version `6` was created from version `5` with the version `2` Halloween
+  installer restored and its smoke probes updated to `/health`.
+- Version `6` passed user-data syntax and structural checks; all non-user-data
+  launch settings match version `5`.
+- Both active hosts passed Halloween and GoodVines local route checks, and 12
+  consecutive public checks for each of `/`, `/rsvp`, `/party/login`, and
+  `/health` completed without failure.
 
 Post-update verification on 2026-07-06:
 

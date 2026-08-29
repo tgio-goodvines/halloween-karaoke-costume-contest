@@ -204,3 +204,32 @@ fixed no-scroll track.
   and local browser inspection of karaoke and bar background cards at the
   standard 1440x900 live-display viewport. The document remained no-scroll and
   browser console inspection reported no errors.
+
+## Left-Stage Vertical Composition (2026-08-29)
+
+- The independently rotating game rail now uses its full available height as a
+  three-zone composition: game identity and phase at the top, the current live
+  focus in a flexible middle region, and metrics/instructions/phone action
+  anchored above the rotation footer.
+- Game-stage payloads carry a derived `presentation` type plus `focus_label`,
+  `focus_items`, and `feature_text` fields. Signup, active play, mystery clues,
+  prompts, blind responses, reveals, and final results can therefore share one
+  renderer without repeating the same content in several modules.
+- Two Truths clue statements render as a dedicated focus list instead of being
+  duplicated as primary copy and instructions. Prompt-game response cards keep
+  the prompt as context and place the blind response in its own highlighted
+  focus surface. Ended prompt games no longer rotate stale round responses.
+- The top and bottom zones use restrained dark veils over the existing
+  full-card artwork. Required live focus, metrics, and action content retain
+  priority while dense and ultra-dense classes compact optional instructions.
+- These changes are isolated to `build_game_stage_entries()` and the left-stage
+  markup, renderer, and styles. Center rotation, bar rail, and DJ footer
+  behavior are unchanged, and no persisted state or schema migration is
+  required.
+- Focused verification passed for left-stage payload structure, privacy,
+  enriched display markup, Python compilation, JavaScript syntax, and all 17
+  dependency-free JavaScript tests. Browser QA at 1440x900, 1280x720, and
+  1024x768 confirmed top/bottom anchoring, zero rail/document overflow, and no
+  browser warnings or errors. The full Python run reached 191 passing tests and
+  21 passing subtests; four unrelated drink-history/navigation assertions were
+  temporarily failing against concurrent bar/menu consolidation work.

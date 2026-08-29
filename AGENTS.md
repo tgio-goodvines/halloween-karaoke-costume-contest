@@ -11,6 +11,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/UI_UX_DESIGN_SYSTEM.md` - current lab-terminal visual design system, palette, typography, surfaces, and implementation notes.
 - `ai-context/STYLING_REFINEMENT_PROGRESS.md` - attached-wireframe refinement progress across pages, live display, and generated emails.
 - `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
+- `ai-context/BAR_MENU_ORDER_CONSOLIDATION_PLAN.md` - completed Menu & Orders consolidation, attendee-safe queue status, legacy history compatibility, responsive verification, and preserved bartender boundary.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` - focused admin workspace architecture and the current scrolling/narrow-screen UX rules.
 - `ai-context/ADMIN_GAMES_WORKSPACE_REORGANIZATION.md` - selected-game admin architecture, lightweight game summaries, and no-jump inline admin actions.
@@ -21,10 +22,11 @@ Start future repo work by reading these persistent context files:
 - `ai-context/KARAOKE_ATTENDEE_LIVE_STATUS_PROGRESS.md` - attendee-safe live karaoke status, schema-16 user-ID completion acknowledgement ledger, multi-song/co-singer notification behavior, stage-transition invariants, polling behavior, and verification.
 - `ai-context/GAMES_FEATURE_IMPLEMENTATION_PROGRESS.md` - Redis-backed party Games framework, Two Truths and a Lie lifecycle, attendee/admin/display behavior, scoring, and verification.
 - `ai-context/GAME_RESULTS_REWARDS_RECOGNITION_PROGRESS.md` - attendee-safe realtime game status, official cross-year result archives, achievements/retroactive recognition, artwork, and rollout verification.
+- `ai-context/GAME_RESET_PARTY_WRAP_UP_IMPLEMENTATION_PLAN.md` - implementation-ready progress tracker for phrase-free game resets, wrap-up finalization, attendance/winner awards, analytics, recap test/official email, post-delivery cleanup, and historical retention controls.
 - `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` - adaptive TV layout, independent region rotations, admin control room, generated result-card controls, verification, and rollout notes.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
-- `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 2 details for automatic Halloween install on replacement API EC2 instances.
+- `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 6 details for automatic Halloween install on replacement API EC2 instances.
 - `ai-context/VAULT_ADMIN_TOKEN_RECOVERY.md` - operator-only note for using the services EC2 Vault init file without printing or committing root-token material.
 
 Important working notes:
@@ -46,7 +48,8 @@ Important working notes:
   default to signed-in names. Admins may switch each game to anonymous aliases
   while enrollment is open; attendees cannot choose their own mode. Blind
   voting and private MMF ballots remain private regardless of the admin setting.
-- `/party/menu` lets signed-in attendees view food/drink menu cards with images and order available drinks on the party date; food is currently view-only.
+- `/party/menu` is the party-day Menu & Orders workspace: signed-in attendees can browse food/drink cards, order available drinks, review/reorder grouped personal history, and see privacy-safe live bar totals plus only their own queue positions. `/party/drink-history` redirects to its My Orders view. Food remains view-only.
+- Keep `/bartender`, its separate bartender/admin dropdown item, operational queue controls, recipe visibility, and protected `/api/bartender-queue` workflow separate from the attendee Menu & Orders workspace.
 - Admin can manage food/drink menu items, image URLs, availability, and drink recipes from `/admin`; bartender access is assigned to existing party accounts through account roles.
 - `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.
 - Completing a drink order sends the ready email and creates a temporary 10-second live-display `drink_ready` notice with the drink image; attendees also see ready drink cards on `/party`. Drink-ready notices render above any active contest/karaoke/winner event override without replacing it.
@@ -64,8 +67,9 @@ Important working notes:
   host publication grants official winner credit. Simulations are ineligible.
 - `/admin/recognition` manages event editions, retroactive attendance/winner
   credits, legacy recipients, link/revoke actions, per-account collections, and
-  export. Redis schema 17 stores editions, result archives, recognition credits,
-  and optional costume account links.
+  export. Redis schema 18 stores editions, result archives, recognition credits,
+  optional costume account links, party wrap-ups, detailed game archives, and
+  recap test-email audit records.
 - Winner/outcome cards use dedicated generated images under
   `static/images/games/winners/`. Generated jukebox, bar, menu, and karaoke
   feature art supplies shared page/display fallbacks while content-specific
@@ -82,6 +86,6 @@ Important working notes:
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.
 - Responsive UX updates are complete: live-display cards scale for normal browser windows, attendee/admin pages are mobile-oriented, and admin add/edit forms are collapsed disclosure rows by default.
 - The active UI direction is the dark lab-terminal Halloween system documented in `ai-context/UI_UX_DESIGN_SYSTEM.md`; keep future page styling aligned with its square panels, mono controls, serif glowing headings, red/magenta/steel palette, and scanline texture.
-- GitHub Actions deployment to EC2 has succeeded, and future API ASG replacement instances should bootstrap Halloween automatically from launch template version `2`.
+- GitHub Actions deployment to EC2 has succeeded, and future API ASG replacement instances should bootstrap Halloween automatically from launch template version `6`.
 - Do not disrupt GoodVines when working on deployment: do not restart GoodVines services, edit GoodVines source directories, or change GoodVines nginx server blocks.
 - Keep changes compact and consistent with the existing Flask/Jinja/static-file structure unless a larger refactor is explicitly requested.

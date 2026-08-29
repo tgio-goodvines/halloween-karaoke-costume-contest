@@ -329,6 +329,9 @@ class RedisStateTests(unittest.TestCase):
         )
         main.result_archives = []
         main.recognition_credits = []
+        main.event_wrapups = {}
+        main.game_data_archives = {}
+        main.test_email_audit = []
         main.party_details = main.copy.deepcopy(main.DEFAULT_PARTY_DETAILS)
 
     def login_regular(self, client, user_id="user-1", username="Jamie"):
@@ -366,6 +369,82 @@ class RedisStateTests(unittest.TestCase):
 
     def save_current_state(self):
         main.save_state_to_redis()
+
+    def prepare_real_wrapup_state(self):
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        self.add_user_account(username="Morgan", user_id="user-2", email="morgan@example.com")
+        game = main.empty_two_truths_game_state(enabled=True)
+        game["participants"] = {
+            "user-1": {
+                "user_id": "user-1",
+                "submission_id": "submission-1",
+                "answer_name": "Jamie",
+                "truths": ["I host parties.", "I like data."],
+                "lie": "I dislike Halloween.",
+                "display_order": [0, 1, 2],
+            },
+            "user-2": {
+                "user_id": "user-2",
+                "submission_id": "submission-2",
+                "answer_name": "Morgan",
+                "truths": ["I sing karaoke.", "I make costumes."],
+                "lie": "I have never danced.",
+                "display_order": [0, 1, 2],
+            },
+        }
+        game["guesses"] = {
+            "user-1": {
+                "submission-2": {
+                    "guessed_name": "Morgan",
+                    "normalized_name": "morgan",
+                }
+            },
+            "user-2": {
+                "submission-1": {
+                    "guessed_name": "Jamie",
+                    "normalized_name": "jamie",
+                }
+            },
+        }
+        game["phase"] = "ended"
+        game["started_at"] = "2026-10-31T20:00:00Z"
+        game["ended_at"] = "2026-11-01T04:00:00Z"
+        game["results"] = main.calculate_two_truths_results(
+            game,
+            finalized_at=game["ended_at"],
+        )
+        main.games_state[main.TWO_TRUTHS_GAME_KEY] = game
+        main.costume_signups = [
+            main.CostumeSignup(
+                name="Jamie",
+                costume="Radioactive Vampire",
+                contact="jamie@example.com",
+                id="costume-1",
+                account_id="user-1",
+            )
+        ]
+        main.contest_state["winner_locked"] = True
+        main.contest_state["winner"] = {
+            "id": "costume-1",
+            "name": "Jamie",
+            "costume": "Radioactive Vampire",
+            "average": 9.5,
+            "count": 2,
+            "total": 19,
+        }
+        main.dj_playlist = [
+            main.normalize_dj_song(
+                {
+                    "id": "song-1",
+                    "title": "Thriller",
+                    "artist": "Michael Jackson",
+                    "apple_music_id": "269572838",
+                    "duration_ms": 357000,
+                    "enabled": True,
+                }
+            )
+        ]
+        self.save_current_state()
 
     def enable_youtube_karaoke(self):
         fake_youtube = FakeYouTubeService()
@@ -793,6 +872,7 @@ class RedisStateTests(unittest.TestCase):
             self.login_regular(client)
             dashboard_response = client.get("/party")
             menu_response = client.get("/party/menu")
+            bar_queue_response = client.get("/api/party/bar-queue")
             costume_response = client.get("/party/costumes")
             karaoke_response = client.get("/party/karaoke")
 
@@ -813,6 +893,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn('href="/party/costumes"', dashboard_body)
         self.assertNotIn('href="/party/karaoke"', dashboard_body)
         self.assertEqual("/party", menu_response.headers["Location"])
+        self.assertEqual(403, bar_queue_response.status_code)
         self.assertEqual("/party", costume_response.headers["Location"])
         self.assertEqual("/party", karaoke_response.headers["Location"])
 
@@ -2509,6 +2590,8 @@ class RedisStateTests(unittest.TestCase):
             game_keys,
         )
         self.assertTrue(payload["layout"]["games"]["visible"])
+        self.assertTrue(all(entry.get("presentation") for entry in payload["layout"]["games"]["entries"]))
+        self.assertTrue(all(entry.get("focus_label") for entry in payload["layout"]["games"]["entries"]))
         self.assertTrue(all(entry.get("steps") for entry in payload["layout"]["games"]["entries"]))
         self.assertTrue(all(entry.get("action_label") for entry in payload["layout"]["games"]["entries"]))
         self.assertNotIn("private@example.com", json.dumps(payload))
@@ -2577,6 +2660,9 @@ class RedisStateTests(unittest.TestCase):
             "data-center-action",
             "data-game-steps",
             "data-game-action",
+            "data-game-focus-label",
+            "data-game-focus-items",
+            "data-game-feature",
             "data-bar-summary",
             "data-bar-feature",
             "data-bar-action",
@@ -3320,11 +3406,14 @@ class RedisStateTests(unittest.TestCase):
 
         with main.app.test_client() as client:
             self.login_regular(client)
-            history_response = client.get("/party/drink-history")
+            history_redirect = client.get("/party/drink-history")
+            history_response = client.get("/party/menu?view=orders")
             reorder_response = client.post("/party/drink-history", data={"order_id": "order-1"})
 
         state = self.redis_state()
         history_html = history_response.get_data(as_text=True)
+        self.assertEqual(302, history_redirect.status_code)
+        self.assertIn("/party/menu?view=orders", history_redirect.headers["Location"])
         self.assertEqual(200, history_response.status_code)
         self.assertIn("Jamie", history_html)
         self.assertNotIn("Morgan", history_html)
@@ -3375,7 +3464,7 @@ class RedisStateTests(unittest.TestCase):
             )
             self.login_regular(client)
             overview_response = client.get("/party")
-            history_response = client.get("/party/drink-history")
+            history_response = client.get("/party/menu?view=orders")
             tip_response = client.get("/party/bartender-tip")
 
         state = self.redis_state()
@@ -3485,7 +3574,7 @@ class RedisStateTests(unittest.TestCase):
         with main.app.test_client() as client:
             self.login_regular(client)
             overview_response = client.get("/party")
-            history_response = client.get("/party/drink-history")
+            history_response = client.get("/party/menu?view=orders")
 
         self.assertEqual(200, overview_response.status_code)
         self.assertEqual(200, history_response.status_code)
@@ -3590,6 +3679,75 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(1, queue_payload["active_count"])
         self.assertIn("Witch Margarita", queue_payload["html"])
         self.assertIn("For Jamie", queue_payload["html"])
+
+    def test_attendee_bar_queue_is_live_account_scoped_and_privacy_safe(self):
+        main.event_experience_mode = "party_day"
+        self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
+        self.add_user_account(username="Morgan", user_id="user-2", email="morgan@example.com")
+        main.drink_orders = [
+            {
+                "id": "jamie-order",
+                "user_id": "user-1",
+                "username": "Jamie",
+                "email": "jamie@example.com",
+                "menu_item_id": "drink-1",
+                "item_name": "Witch Margarita",
+                "item_image_url": "",
+                "recipe": "Private Jamie recipe",
+                "drink_type": "specialty",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 1,
+                "status": "received",
+                "estimated_ready_at": "2026-07-06T00:08:00Z",
+                "created_at": "2026-07-06T00:01:00Z",
+                "started_at": "",
+                "completed_at": "",
+                "completed_seconds": None,
+            },
+            {
+                "id": "morgan-order",
+                "user_id": "user-2",
+                "username": "Morgan",
+                "email": "morgan@example.com",
+                "menu_item_id": "drink-2",
+                "item_name": "Secret Martini",
+                "item_image_url": "",
+                "recipe": "Private Morgan recipe",
+                "drink_type": "standard",
+                "beverage_type": "alcoholic",
+                "orderable": True,
+                "specialty_sequence_number": 0,
+                "status": "in_progress",
+                "estimated_ready_at": "2026-07-06T00:06:00Z",
+                "created_at": "2026-07-06T00:02:00Z",
+                "started_at": "2026-07-06T00:03:00Z",
+                "completed_at": "",
+                "completed_seconds": None,
+            },
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_regular(client)
+            safe_response = client.get("/api/party/bar-queue")
+            protected_response = client.get("/api/bartender-queue")
+
+        payload = safe_response.get_json()
+        serialized_payload = json.dumps(payload)
+        self.assertEqual(200, safe_response.status_code)
+        self.assertEqual(2, payload["active_count"])
+        self.assertEqual(1, payload["mixing_count"])
+        self.assertEqual(1, payload["waiting_count"])
+        self.assertEqual(1, len(payload["personal_orders"]))
+        self.assertEqual("Witch Margarita", payload["personal_orders"][0]["item_name"])
+        self.assertEqual(1, payload["personal_orders"][0]["orders_ahead"])
+        self.assertNotIn("Morgan", serialized_payload)
+        self.assertNotIn("Secret Martini", serialized_payload)
+        self.assertNotIn("recipe", serialized_payload)
+        self.assertNotIn("email", serialized_payload)
+        self.assertNotIn("user_id", serialized_payload)
+        self.assertEqual(302, protected_response.status_code)
 
     def test_bartender_can_complete_order_and_publish_ready_override(self):
         account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")
@@ -3989,7 +4147,7 @@ class RedisStateTests(unittest.TestCase):
             responses = [
                 client.get("/party/account"),
                 client.get("/party/menu"),
-                client.get("/party/drink-history"),
+                client.get("/party/drink-history", follow_redirects=True),
                 client.get("/party/jukebox"),
                 client.get("/party/costumes"),
                 client.get("/party/karaoke"),
@@ -4000,7 +4158,9 @@ class RedisStateTests(unittest.TestCase):
 
         dashboard_body = dashboard_response.get_data(as_text=True)
         self.assertEqual(200, dashboard_response.status_code)
-        for label in ("Account", "Menu", "Drink History", "Jukebox", "Costume", "Karaoke", "Bartender", "Admin"):
+        self.assertIn(">Menu &amp; Orders<", dashboard_body)
+        self.assertNotIn(">Drink History<", dashboard_body)
+        for label in ("Account", "Jukebox", "Costume", "Karaoke", "Bartender", "Admin"):
             self.assertIn(f">{label}<", dashboard_body)
         self.assertTrue(all(response.status_code == 200 for response in responses))
 
@@ -5775,6 +5935,58 @@ class RedisStateTests(unittest.TestCase):
         self.assertNotIn("answer_name", json.dumps(game_entry))
         self.assertNotIn('"lie":', json.dumps(game_entry).lower())
         self.assertNotIn('"truths":', json.dumps(game_entry).lower())
+        self.assertEqual("clue", game_entry["presentation"])
+        self.assertEqual("Three statements", game_entry["focus_label"])
+        self.assertEqual(3, len(game_entry["focus_items"]))
+        self.assertEqual([], game_entry["steps"])
+
+    def test_prompt_game_stage_separates_prompt_response_and_bottom_utility_data(self):
+        game = main.party_game_state(main.WRONG_ANSWERS_GAME_KEY)
+        game.update(
+            {
+                "enabled": True,
+                "phase": "active",
+                "current_round_id": "round-1",
+                "current_round_index": 0,
+                "participants": {
+                    "user-1": {
+                        "player_id": "player-1",
+                        "display_name": "Private Name",
+                        "alias": "Specimen Seven",
+                    }
+                },
+                "rounds": [
+                    {
+                        "id": "round-1",
+                        "prompt_text": "The haunted lab needs ___",
+                        "status": "voting",
+                        "responses": {
+                            "response-1": {
+                                "id": "response-1",
+                                "player_id": "player-1",
+                                "text": "a better alibi",
+                            }
+                        },
+                        "votes": {},
+                        "results": {},
+                    }
+                ],
+            }
+        )
+
+        entries = main.build_game_stage_entries()
+        summary = next(entry for entry in entries if entry["id"] == main.WRONG_ANSWERS_GAME_KEY)
+        response = next(entry for entry in entries if entry["id"] == f"{main.WRONG_ANSWERS_GAME_KEY}:response-1")
+
+        self.assertEqual("voting", summary["presentation"])
+        self.assertEqual("Current prompt", summary["focus_label"])
+        self.assertEqual("response", response["presentation"])
+        self.assertEqual("Blind response", response["focus_label"])
+        self.assertEqual("The haunted lab needs ___", response["primary"])
+        self.assertEqual("a better alibi", response["feature_text"])
+        self.assertEqual([], response["steps"])
+        self.assertEqual(3, len(response["metrics"]))
+        self.assertNotIn("Private Name", json.dumps(entries))
 
     def test_two_truths_lifecycle_guess_scoring_ties_overrides_export_and_reset(self):
         with main.app.test_client() as admin:
@@ -6860,7 +7072,286 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(main.FEATURE_ART["karaoke"], stage_override["image_url"])
         self.assertEqual("background", stage_override["media_treatment"])
 
-    def test_schema_seventeen_round_trip_preserves_archives_credits_and_costume_links(self):
+    def test_reset_all_games_is_phrase_free_and_sanitizes_retained_backups(self):
+        simulated = main.build_simulated_game_state(
+            main.TWO_TRUTHS_GAME_KEY,
+            main.two_truths_game(),
+            player_count=4,
+        )
+        main.games_state[main.TWO_TRUTHS_GAME_KEY] = simulated
+        main.result_archives = [
+            {
+                "id": "2025-halloween:game:two_truths_lie",
+                "event_id": "2025-halloween",
+                "year": "2025",
+                "kind": "game",
+                "subject_key": main.TWO_TRUTHS_GAME_KEY,
+                "title": "Two Truths and a Lie",
+                "status": "official",
+                "simulation": False,
+            }
+        ]
+        self.save_current_state()
+        backup_key = main.redis_key("state:backup:manual-before-reset")
+        self.fake_redis.setex(backup_key, 3600, json.dumps(main.snapshot_state()))
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            page = admin.get("/admin/games")
+            response = admin.post(
+                "/admin/games",
+                data={"action": "reset_all_games"},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn(b"Reset All Games", page.data)
+        self.assertNotIn(b"reset_confirmation", page.data)
+        self.assertTrue(all(not game["enabled"] for game in main.games_state.values()))
+        self.assertTrue(all(not game["participants"] for game in main.games_state.values()))
+        self.assertEqual("official", main.result_archives[0]["status"])
+        sanitized_backup = json.loads(self.fake_redis.store[backup_key])
+        self.assertEqual(
+            {},
+            sanitized_backup["games_state"][main.TWO_TRUTHS_GAME_KEY]["participants"],
+        )
+
+    def test_recap_test_with_current_database_has_no_official_side_effects(self):
+        self.prepare_real_wrapup_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(
+                "/admin/wrapup",
+                data={
+                    "action": "send_current_recap_test",
+                    "test_recipient": "host@example.com",
+                    "personalization_account_id": "user-1",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(1, len(fake_ses.sent_messages))
+        message = fake_ses.sent_messages[0]["Content"]["Simple"]
+        self.assertIn("[TEST]", message["Subject"]["Data"])
+        self.assertIn("Current Party Database", message["Body"]["Html"]["Data"])
+        self.assertEqual({}, main.event_wrapups)
+        self.assertEqual([], main.recognition_credits)
+        self.assertTrue(main.two_truths_game()["participants"])
+        self.assertTrue(main.test_email_audit[-1]["success"])
+
+    def test_wrapup_draft_saves_roster_and_retention_without_awarding_or_finalizing(self):
+        self.prepare_real_wrapup_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(
+                "/admin/wrapup",
+                data={
+                    "action": "save_wrapup_draft",
+                    "attendee_account_ids": ["user-1"],
+                    f"retention_{main.TWO_TRUTHS_GAME_KEY}": "detailed",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("draft", main.current_event_wrapup()["status"])
+        self.assertEqual(["user-1"], main.current_event_wrapup()["attendee_account_ids"])
+        self.assertEqual(
+            "detailed",
+            main.current_event_wrapup()["retention_policies"][main.TWO_TRUTHS_GAME_KEY],
+        )
+        self.assertEqual([], main.recognition_credits)
+        self.assertFalse(any(archive.get("status") == "official" for archive in main.result_archives))
+
+    def test_party_wrapup_finalizes_sends_personalized_recaps_and_cleans_games(self):
+        self.prepare_real_wrapup_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            finalized = admin.post(
+                "/admin/wrapup",
+                data={
+                    "action": "finalize_party_wrapup",
+                    "attendee_account_ids": ["user-1", "user-2"],
+                    f"retention_{main.TWO_TRUTHS_GAME_KEY}": "detailed",
+                },
+            )
+            wrapup = main.current_event_wrapup()
+            self.assertEqual("finalized", wrapup["status"])
+            self.assertEqual(2, len(wrapup["personal_summaries"]))
+            sent = admin.post("/admin/wrapup", data={"action": "send_party_recap"})
+
+        self.assertEqual(200, finalized.status_code)
+        self.assertEqual(200, sent.status_code)
+        self.assertEqual(2, len(fake_ses.sent_messages))
+        self.assertEqual("complete", main.current_event_wrapup()["status"])
+        self.assertEqual({}, main.two_truths_game()["participants"])
+        self.assertFalse(main.two_truths_game()["enabled"])
+        self.assertTrue(
+            any(
+                archive.get("status") == "official"
+                and archive.get("subject_key") == main.TWO_TRUTHS_GAME_KEY
+                for archive in main.result_archives
+            )
+        )
+        self.assertIn(
+            f"{main.current_event_id()}:game-data:{main.TWO_TRUTHS_GAME_KEY}",
+            main.game_data_archives,
+        )
+        attendance_accounts = {
+            credit["account_id"]
+            for credit in main.recognition_credits
+            if credit.get("kind") == "attendance" and not credit.get("revoked_at")
+        }
+        self.assertEqual({"user-1", "user-2"}, attendance_accounts)
+        achievement_keys = {
+            item["key"]
+            for item in main.achievement_views(main.recognition_credits, "user-1")["achievements"]
+        }
+        self.assertIn("party_attendee", achievement_keys)
+        html_bodies = [
+            message["Content"]["Simple"]["Body"]["Html"]["Data"]
+            for message in fake_ses.sent_messages
+        ]
+        self.assertTrue(any("Jamie" in html for html in html_bodies))
+        self.assertTrue(any("Morgan" in html for html in html_bodies))
+        self.assertTrue(all("Participation by Game" in html for html in html_bodies))
+
+    def test_partial_official_delivery_preserves_games_and_retry_skips_sent_recipient(self):
+        self.prepare_real_wrapup_state()
+        fake_ses = FakeSESClient(failing_recipients={"morgan@example.com"})
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(
+                "/admin/wrapup",
+                data={
+                    "action": "finalize_party_wrapup",
+                    "attendee_account_ids": ["user-1", "user-2"],
+                },
+            )
+            first_send = admin.post("/admin/wrapup", data={"action": "send_party_recap"})
+
+            self.assertEqual(200, first_send.status_code)
+            self.assertEqual("delivery_failed", main.current_event_wrapup()["status"])
+            self.assertTrue(main.two_truths_game()["participants"])
+            self.assertEqual(1, len(fake_ses.sent_messages))
+
+            fake_ses.failing_recipients.clear()
+            retry = admin.post("/admin/wrapup", data={"action": "retry_failed_recap"})
+
+        self.assertEqual(200, retry.status_code)
+        self.assertEqual(2, len(fake_ses.sent_messages))
+        self.assertEqual("complete", main.current_event_wrapup()["status"])
+        self.assertEqual({}, main.two_truths_game()["participants"])
+        attempts = {
+            delivery["email"]: delivery["attempt_count"]
+            for delivery in main.current_event_wrapup()["deliveries"]
+        }
+        self.assertEqual(1, attempts["jamie@example.com"])
+        self.assertEqual(2, attempts["morgan@example.com"])
+
+    def test_game_history_admin_can_delete_detail_without_deleting_summary(self):
+        self.prepare_real_wrapup_state()
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(
+                "/admin/wrapup",
+                data={
+                    "action": "finalize_party_wrapup",
+                    "attendee_account_ids": ["user-1", "user-2"],
+                    f"retention_{main.TWO_TRUTHS_GAME_KEY}": "detailed",
+                },
+            )
+            detail_id = f"{main.current_event_id()}:game-data:{main.TWO_TRUTHS_GAME_KEY}"
+            page = admin.get("/admin/game_history")
+            filtered_page = admin.get(
+                f"/admin/game_history?history_game={main.TWO_TRUTHS_GAME_KEY}&history_retention=detailed&history_q=Jamie"
+            )
+            exported = json.loads(
+                admin.get(
+                    f"/admin/export/game-history?event_id={main.current_event_id()}&game_key={main.TWO_TRUTHS_GAME_KEY}"
+                ).data
+            )
+            deleted = admin.post(
+                "/admin/game_history",
+                data={"action": "delete_detailed_game_history", "archive_id": detail_id},
+            )
+
+        self.assertEqual(200, page.status_code)
+        self.assertIn(b"Game Archive", page.data)
+        self.assertEqual(200, filtered_page.status_code)
+        self.assertIn(b"Participant Cards", filtered_page.data)
+        self.assertEqual(1, len(exported["official_results"]))
+        self.assertNotIn("winner_links", exported["official_results"][0])
+        self.assertNotIn("user-1", json.dumps(exported))
+        self.assertEqual(200, deleted.status_code)
+        self.assertNotIn(detail_id, main.game_data_archives)
+        self.assertTrue(
+            any(
+                archive.get("status") == "official"
+                and archive.get("subject_key") == main.TWO_TRUTHS_GAME_KEY
+                for archive in main.result_archives
+            )
+        )
+
+    def test_completed_history_deletion_removes_recap_game_view_and_revokes_winner_credit(self):
+        self.prepare_real_wrapup_state()
+        fake_ses = FakeSESClient()
+        main.create_ses_client = lambda: fake_ses
+        main.app.config["EMAIL_UPDATES_ENABLED"] = True
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(
+                "/admin/wrapup",
+                data={
+                    "action": "finalize_party_wrapup",
+                    "attendee_account_ids": ["user-1", "user-2"],
+                },
+            )
+            admin.post("/admin/wrapup", data={"action": "send_party_recap"})
+            archive = next(
+                archive
+                for archive in main.result_archives
+                if archive.get("subject_key") == main.TWO_TRUTHS_GAME_KEY
+            )
+            response = admin.post(
+                "/admin/game_history",
+                data={
+                    "action": "delete_official_game_history",
+                    "archive_id": archive["id"],
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertFalse(any(row.get("id") == archive["id"] for row in main.result_archives))
+        self.assertEqual([], main.current_event_wrapup()["game_results"])
+        self.assertEqual([], main.current_event_wrapup()["analytics_snapshot"]["participation_by_game"])
+        self.assertEqual({}, main.current_event_wrapup()["personal_summaries"])
+        linked_credits = [
+            credit
+            for credit in main.recognition_credits
+            if credit.get("source_ref") == archive["id"]
+        ]
+        self.assertTrue(linked_credits)
+        self.assertTrue(all(credit.get("revoked_at") for credit in linked_credits))
+        self.assertTrue(
+            any(
+                credit.get("kind") == "attendance" and not credit.get("revoked_at")
+                for credit in main.recognition_credits
+            )
+        )
+
+    def test_schema_eighteen_round_trip_preserves_wrapup_archives_credits_and_costume_links(self):
         self.add_user_account()
         main.costume_signups = [
             main.CostumeSignup(
@@ -6895,12 +7386,28 @@ class RedisStateTests(unittest.TestCase):
                 subject_key="costume_contest",
             )
         ]
+        main.event_wrapups = {
+            "2026-halloween": {
+                "event_id": "2026-halloween",
+                "status": "finalized",
+                "attendee_account_ids": ["user-1"],
+                "deliveries": [
+                    {
+                        "account_id": "user-1",
+                        "email": "jamie@example.com",
+                        "name": "Jamie",
+                        "status": "pending",
+                    }
+                ],
+            }
+        }
 
         snapshot = main.snapshot_state()
         self.reset_state()
         main.apply_state_snapshot(snapshot)
 
-        self.assertEqual(17, snapshot["schema_version"])
+        self.assertEqual(18, snapshot["schema_version"])
         self.assertEqual("user-1", main.costume_signups[0].account_id)
         self.assertEqual("official", main.result_archives[0]["status"])
         self.assertEqual("costume_win", main.recognition_credits[0]["kind"])
+        self.assertEqual("finalized", main.event_wrapups["2026-halloween"]["status"])

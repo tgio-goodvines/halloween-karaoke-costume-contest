@@ -21,6 +21,9 @@ Flask/Jinja/static-file structure.
     and password reset pages inherit the polish without broad template rewrites.
   - Added safer generic table styling and text wrapping for dense admin and
     operational content.
+  - Added the consolidated Menu & Orders workspace header, summary cards,
+    pill-style view rail, privacy-safe live queue panel, status-grouped order
+    sections, and mobile sticky rail while reusing existing menu/order cards.
 
 - Live display:
   - Added a final `static/display.css` refinement layer for TV-scale rounded
@@ -64,6 +67,8 @@ Flask/Jinja/static-file structure.
   - `/admin`
   - `/bartender`
   - `/live-display`
+  - `/party/menu?view=menu`
+  - `/party/menu?view=orders`
 - Verified those browser checks had no horizontal overflow.
 - Verified `/rsvp` remains standalone without the header nav menu.
 - Verified admin, bartender, and live display load after local admin login.

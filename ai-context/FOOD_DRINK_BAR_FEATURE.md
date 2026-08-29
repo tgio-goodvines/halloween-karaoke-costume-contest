@@ -2,15 +2,19 @@
 
 ## Routes
 
-- `GET|POST /party/menu`: regular attendee menu page, available on the party
-  date and redirected to `/party` before then. Guests can view food and drink
-  cards with images. Available orderable drinks can be ordered; food is
-  view-only, and non-orderable drinks can be listed as bar-pickup/general
-  availability.
-- `GET|POST /party/drink-history`: regular attendee drink history page,
-  available on the party date and redirected to `/party` before then. Shows all
-  drink orders tied to the signed-in account, including old completed orders,
-  and supports reordering currently available/orderable drinks.
+- `GET|POST /party/menu`: consolidated regular-attendee Menu & Orders workspace,
+  available on the party date and redirected to `/party` before then.
+  `view=menu` shows food/drink cards and ordering; `view=orders` groups the
+  current account's Ready, Preparing, Received, and Previous orders and supports
+  eligible reorders. Food remains view-only, and non-orderable drinks can be
+  listed as bar-pickup/general availability.
+- `GET|POST /party/drink-history`: compatibility route. GET redirects to
+  `/party/menu?view=orders`; POST temporarily accepts legacy account-scoped
+  reorder submissions through the same helper as the canonical route.
+- `GET /api/party/bar-queue`: regular-attendee, party-day-protected JSON with
+  aggregate active/mixing/waiting counts, average prep time, and only the
+  current account's active/recent-ready order positions. It never exposes other
+  guests' identities, recipes, or operational controls.
 - `GET|POST /bartender`: bartender queue. Requires a `bartender` session role or an admin session. Admins can use the same view.
 - `GET /api/bartender-queue`: authenticated bartender/admin JSON endpoint
   returning the rendered queue fragment and a deterministic queue version for
@@ -56,6 +60,12 @@ The browser refreshes the queue fragment every few seconds through
 `/api/bartender-queue`, so newly placed attendee drink orders appear without a
 manual page reload.
 
+The attendee Menu & Orders workspace separately polls
+`/api/party/bar-queue` every five seconds. It uses the same sorted active-order
+sequence to calculate the current account's approximate positions, but returns
+only aggregate totals and account-scoped order details. The attendee endpoint
+does not reuse or weaken the bartender fragment/API.
+
 ## Order Lifecycle
 
 Statuses are `received`, `in_progress`, and `complete`.
@@ -64,7 +74,8 @@ Statuses are `received`, `in_progress`, and `complete`.
 
 Completed drink-ready notices appear on `/party` for 5 minutes after
 `completed_at`, but completed orders remain visible permanently on
-`/party/drink-history`.
+`/party/menu?view=orders`. Recent completed orders also appear as Ready for
+Pickup in the consolidated live bar status.
 
 ## Email
 
@@ -87,9 +98,13 @@ When no active orders or notices remain, the right stage collapses.
 
 ## Templates And Styling
 
-- `templates/menu.html`: attendee menu and recent order cards.
-- `templates/drink_history.html`: full attendee order history, reorder buttons,
-  and per-order bartender tip disclosure with the configured QR/payment image.
+- `templates/menu.html`: consolidated attendee shell with summary chips,
+  Browse Menu/My Orders rail, privacy-safe live bar status, and selected view.
+- `templates/_menu_catalog.html`: food/drink catalog and order forms.
+- `templates/_personal_drink_orders.html`: status-grouped full attendee order
+  history, reorder buttons, and one bartender-tip callout.
+- `templates/drink_history.html`: retired template; the legacy route redirects
+  to the consolidated My Orders view.
 - `templates/bartender.html`: bartender page shell and live queue container.
 - `templates/_bartender_queue.html`: active bartender queue, recipe reference,
   status forms, and recent completed orders, shared by the full page and queue
@@ -100,6 +115,8 @@ When no active orders or notices remain, the right stage collapses.
 - `static/styles.css`: menu cards, order cards, bartender cards, admin image previews, and responsive behavior.
 - `static/bartender.js`: authenticated polling refresh for the bartender queue
   fragment.
+- `static/bar-status.js`: five-second visibility-aware attendee polling for
+  aggregate queue metrics and personal live orders only.
 - `static/display.css`: drink-ready override image layout.
 
 ## Tests
@@ -107,7 +124,23 @@ When no active orders or notices remain, the right stage collapses.
 `tests/test_redis_state.py` covers state round-trip, party-date gating for the
 attendee menu, menu image persistence, attendee drink ordering,
 food-order rejection, bartender authorization, bartender status transitions,
-specialty drink limit enforcement, order history/reorder behavior, bartender
+specialty drink limit enforcement, consolidated order history/reorder behavior,
+legacy route compatibility, privacy-safe attendee queue payloads, bartender
 queue API refresh payloads, priority sorting for 4th+ specialty requests, tip
 QR rendering, ready-notice expiry, ready email sending, and live-display
-drink-ready override payloads.
+drink-ready override payloads. Bartender authorization and operational behavior
+remain separately covered.
+
+## Consolidation Verification (2026-08-29)
+
+- `python -m compileall -q main.py party_games.py` passed.
+- Full Python suite passed: 196 tests and 21 subtests.
+- `static/bar-status.js` passed the bundled Node syntax check.
+- Browser QA at 1280×800 and 390×844 confirmed both Menu & Orders views,
+  account-scoped queue content, sticky mobile navigation, one-column phone
+  cards, and no horizontal overflow.
+- Regular-attendee navigation showed one Menu & Orders item and no Bartender or
+  Drink History item. Automated combined-role coverage confirmed Bartender
+  remains separately visible to bartender/admin sessions.
+- No bartender operational forms, recipes, or other-guest identity appeared in
+  the attendee page/API. Existing bartender queue/update tests remained green.

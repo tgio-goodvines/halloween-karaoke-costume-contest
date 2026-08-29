@@ -5,7 +5,13 @@
       <h3>Party Games</h3>
       <p>Choose one game to operate. Status for the full game lineup stays visible without loading every control console at once.</p>
     </div>
-    <a class="button" href="{{ url_for('export_games') }}">Download All Game Data</a>
+    <div class="contest-actions">
+      <a class="button" href="{{ url_for('export_games') }}">Download All Game Data</a>
+      <form method="post" onsubmit="return confirm('Reset all games to their original testing state? This will clear {{ games_admin.reset_counts.participant_count }} participant records across {{ games_admin.reset_counts.enabled_count }} enabled, {{ games_admin.reset_counts.active_count }} active, and {{ games_admin.reset_counts.ended_count }} ended games, including {{ games_admin.reset_counts.simulation_count }} simulations. Official party history and achievements will be preserved.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="button button--danger" name="action" value="reset_all_games">Reset All Games</button>
+      </form>
+    </div>
   </div>
 
   <div class="game-admin-metrics game-admin-overview">
@@ -186,7 +192,7 @@
     </details>
 
     <details class="danger-zone" data-view-key="game:{{ game_key }}:reset"><summary>Reset {{ admin_game.metadata.title }}</summary>
-      <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% if game_key != 'two_truths_and_a_lie' %}<input type="hidden" name="game_key" value="{{ game_key }}">{% endif %}<p>This permanently clears play data, scores, and winners after creating a Redis backup.</p><label>Type {{ admin_game.reset_phrase }}<input name="confirmation" autocomplete="off" required></label><button class="button button--danger" name="action" value="{{ 'reset_two_truths_game' if game_key == 'two_truths_and_a_lie' else 'reset_game' }}">Reset Game</button></form>
+      <form method="post" onsubmit="return confirm('Reset {{ admin_game.metadata.title|e }}? This clears its current players, play data, scores, and results and restores its default configuration. Official history is preserved.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><p>This permanently clears current play data after creating a Redis backup. Official history is preserved.</p><button class="button button--danger" name="action" value="reset_game">Reset Game</button></form>
     </details>
   </article>
 </section>

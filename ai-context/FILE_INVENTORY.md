@@ -28,6 +28,7 @@
 | `static/images/features/` | Shared jukebox, bar, menu, and karaoke fallback/feature artwork. |
 | `static/images/achievements/` | Six transparent generated reward emblems used by attendee and admin collections. |
 | `static/games-live-status.js` | Five-second privacy-safe game/results/achievement polling renderer shared by the overview, game hub, and Results & Rewards page. |
+| `static/bar-status.js` | Five-second visibility-aware attendee bar polling for aggregate queue counts and account-scoped personal order status; it never consumes bartender-only queue HTML. |
 | `templates/results.html` | Signed-in live game status, personal achievements, and official Hall of Fame page. |
 | `templates/_admin_recognition.html` | Event-edition, retro credit, result publication, account collection, link/revoke, and export controls. |
 | `static/bartender.js` | Bartender queue polling refresh that fetches the authenticated `/api/bartender-queue` fragment and swaps it in when the queue version changes. |
@@ -52,8 +53,10 @@
 | `templates/_game_scoreboard.html` | Shared attendee winner and final-score table for every game engine. |
 | `templates/_admin_games.html` | Selected-game admin selector and operational console for lifecycle, progress, results/display, configuration, data, simulation, and reset. |
 | `templates/jukebox.html` | Attendee party-day Jukebox page with live confirmed Now Playing/artwork, playlist, catalog search, and personal pending requests. |
-| `templates/menu.html` | Attendee food/drink menu for `/party/menu`, including menu images, availability, specialty/standard badges, drink ordering, and recent order statuses. |
-| `templates/drink_history.html` | Attendee full drink order history for `/party/drink-history`, including account-scoped order records, reorder controls, and per-order bartender tip QR/payment disclosure. |
+| `templates/menu.html` | Consolidated attendee Menu & Orders shell for `/party/menu`, including summary chips, menu/orders rail, and privacy-safe live bar status. |
+| `templates/_menu_catalog.html` | Food/drink catalog partial with images, availability, classification badges, and drink-order forms. |
+| `templates/_personal_drink_orders.html` | Account-scoped Ready/Preparing/Received/Previous order groups, reorder controls, and one bartender-tip callout. |
+| `templates/drink_history.html` | Retired order-history template; `/party/drink-history` is now a compatibility route to the consolidated My Orders view. |
 | `templates/bartender.html` | Bartender/admin page shell for `/bartender`, with messages and the live-refresh queue container. |
 | `templates/_bartender_queue.html` | Shared bartender queue fragment with drink images/placeholders, specialty sequence and extra-request notes, recipe reference, status transition forms, and completed order history. |
 | `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
@@ -206,3 +209,15 @@ These files are present locally but not tracked by Git at the time this context 
     ├── menu.html
     └── rsvp.html
 ```
+
+## Schema 18 Wrap-Up Files
+
+- `party_wrapup.py` — reset, backup sanitation, detailed archive, wrap-up,
+  delivery-ledger, and test-audit normalizers.
+- `recap_analytics.py` — recap snapshots, playlist freezing, charts, and sample data.
+- `templates/_admin_wrapup.html` — readiness, roster, retention, Email Test Lab,
+  official delivery, and cleanup controls.
+- `templates/_admin_game_history.html` — grouped filters, detail, export, and deletion.
+- `templates/email/party_recap.html` — inline/table-based HTML recap and charts.
+- `static/wrapup-admin.js` — Select All/Suggested/Clear roster enhancement.
+- `tests/test_party_wrapup.py` — pure reset, sanitation, privacy, and analytics tests.

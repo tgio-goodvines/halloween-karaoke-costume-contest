@@ -1,0 +1,86 @@
+<section class="admin-section" aria-labelledby="game-history-heading">
+  <header class="admin-section__header">
+    <div>
+      <p class="admin-panel__eyebrow">Historical data</p>
+      <h3 id="game-history-heading">Game Archive</h3>
+      <p>Official, privacy-safe results are grouped by party. Detailed archives appear only when the host chose to retain them.</p>
+    </div>
+    <a class="button" href="{{ url_for('export_game_history') }}">Download Game History</a>
+  </header>
+
+  <div class="admin-stats">
+    <article><span>Official summaries</span><strong>{{ game_history_admin.official_count }}</strong></article>
+    <article><span>Detailed archives</span><strong>{{ game_history_admin.detailed_count }}</strong></article>
+  </div>
+
+  <form method="get" class="admin-subsection">
+    <h4>Filter History</h4>
+    <div class="admin-grid admin-grid--two">
+      <label>Party edition
+        <select name="history_event"><option value="">All editions</option>{% for option in game_history_admin.event_options %}<option value="{{ option.id }}"{% if game_history_admin.filters.event == option.id %} selected{% endif %}>{{ option.label }}</option>{% endfor %}</select>
+      </label>
+      <label>Game
+        <select name="history_game"><option value="">All games</option>{% for game_key, game in games_admin.catalog.items() %}<option value="{{ game_key }}"{% if game_history_admin.filters.game == game_key %} selected{% endif %}>{{ game.title }}</option>{% endfor %}</select>
+      </label>
+      <label>Retention
+        <select name="history_retention"><option value="">All retention states</option><option value="summary_only"{% if game_history_admin.filters.retention == 'summary_only' %} selected{% endif %}>Summary only</option><option value="detailed"{% if game_history_admin.filters.retention == 'detailed' %} selected{% endif %}>Detailed</option></select>
+      </label>
+      <label>Winner or result search<input type="search" name="history_q" value="{{ game_history_admin.filters.search }}" placeholder="Name, winner, or game"></label>
+    </div>
+    <div class="contest-actions"><button class="button button--primary">Apply Filters</button><a class="button" href="{{ url_for('admin_portal', admin_view='game_history') }}">Clear</a></div>
+  </form>
+
+  {% for group in game_history_admin.groups %}
+    <section class="admin-subsection">
+      <div class="admin-section__header"><h4>{{ group.title }} · {{ group.year }}</h4><a class="button button--small" href="{{ url_for('export_game_history', event_id=group.event_id) }}">Export Edition</a></div>
+      {% if group.wrapup %}<p>{{ group.wrapup.analytics_snapshot.attendee_count|default(0) }} attendees · {{ group.wrapup.analytics_snapshot.total_game_participations|default(0) }} game participations · {{ group.wrapup.deliveries|selectattr('status', 'equalto', 'sent')|list|length }}/{{ group.wrapup.deliveries|length }} recaps delivered · wrap-up {{ group.wrapup.status|replace('_', ' ') }}</p>{% endif %}
+      <div class="admin-entry-list">
+        {% for item in group.archives %}
+          <details class="admin-entry">
+            <summary class="admin-entry__summary">
+              <span class="admin-entry__summary-text"><strong>{{ item.summary.title }}</strong><span>{% if item.summary.summary.winners %}Winner{{ 's' if item.summary.summary.winners|length != 1 else '' }}: {{ item.summary.summary.winners|join(', ') }}{% else %}No winner recorded{% endif %} · {{ item.retention_status|replace('_', ' ')|title }}</span></span>
+            </summary>
+            <div class="admin-entry__form">
+              <p><strong>Published:</strong> {{ item.summary.published_at or item.summary.created_at }}</p>
+              <p><a class="button button--small" href="{{ url_for('export_game_history', event_id=group.event_id, game_key=item.summary.subject_key) }}">Export This Game</a></p>
+              {% if item.summary.winners %}<p><strong>Winner{{ 's' if item.summary.winners|length != 1 else '' }}:</strong> {{ item.summary.winners|map(attribute='public_identity')|join(', ') }}</p>{% endif %}
+              {% if item.detail %}
+                <p><strong>Detailed data:</strong> {{ item.detail.participant_count }} participants · {{ item.detail.scores|length }} ranked scores · archived {{ item.detail.archived_at }}</p>
+                {% if item.detail.game_key == 'two_truths_and_a_lie' %}
+                  <h5>Participant Cards</h5>
+                  {% for participant in item.detail.detail.participants %}<article><strong>{{ participant.name }}</strong><ul>{% for statement in participant.statements %}<li>{{ statement }}</li>{% endfor %}</ul></article>{% endfor %}
+                  <h5>Guess Log</h5>
+                  <ul>{% for guess in item.detail.detail.guesses %}<li>{{ guess.guesser }} guessed {{ guess.entered }} for {{ guess.target }}</li>{% else %}<li>No guesses retained.</li>{% endfor %}</ul>
+                {% elif item.detail.game_key == 'murder_marry_fuck' %}
+                  <h5>Aggregate Round Results</h5>
+                  {% for round in item.detail.detail.rounds %}<article><strong>Round {{ round.round }} · {{ round.respondent_count }} ballots</strong><p>{{ round.people|join(' · ') }}</p><small>Only aggregate totals and pluralities are retained; private ballots are not stored.</small></article>{% endfor %}
+                {% else %}
+                  <h5>Revealed Prompt Rounds</h5>
+                  {% for round in item.detail.detail.rounds %}<article><strong>Round {{ round.round }} · {{ round.prompt }}</strong><ul>{% for response in round.responses %}<li>{{ response.name }} — {{ response.text }} · {{ response.votes }} vote{{ 's' if response.votes != 1 else '' }}{% if response.winner %} · Winner{% endif %}</li>{% endfor %}</ul></article>{% endfor %}
+                {% endif %}
+                <form method="post">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="archive_id" value="{{ item.detail.id }}">
+                  <button class="button" name="action" value="delete_detailed_game_history" onclick="return confirm('Delete this detailed game archive? The official winner summary and achievements will remain.')">Delete Detailed Data</button>
+                </form>
+              {% else %}
+                <p>No detailed participant or round data is retained.</p>
+              {% endif %}
+              {% if not group.wrapup or group.wrapup.status == 'complete' %}
+                <form method="post">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="archive_id" value="{{ item.summary.id }}">
+                  <button class="button button--outline" name="action" value="delete_official_game_history" onclick="return confirm('Delete this official game history? Its detailed archive and stored recap view will be removed, related winner recognition will be revoked, and sent email cannot be recalled. This cannot be undone from the admin portal.')">Delete Official History</button>
+                </form>
+              {% else %}
+                <p><small>Official deletion unlocks after recap delivery and party cleanup complete.</small></p>
+              {% endif %}
+            </div>
+          </details>
+        {% endfor %}
+      </div>
+    </section>
+  {% else %}
+    <p class="empty-state">No official historical game results are stored yet. Party wrap-up creates them after real games end.</p>
+  {% endfor %}
+</section>

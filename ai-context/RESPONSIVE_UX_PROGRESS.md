@@ -126,3 +126,18 @@ in normal browser windows and on mobile phone browsers.
 - Verified admin add/edit disclosure rows remain collapsed by default on mobile.
 - Corrected the redesigned mobile card group so phone-width panels retain the
   square lab-panel shape instead of reverting to rounded cards.
+
+## Menu & Orders Consolidation Verification (2026-08-29)
+
+- Consolidated Browse Menu and My Orders under `/party/menu` with a two-item
+  server-rendered rail; the separate bartender/admin operational page and
+  dropdown item remain unchanged.
+- Added compact summary cards and a privacy-safe live bar panel with aggregate
+  totals plus only the current account's order status/position.
+- The rail becomes sticky and touch-safe on phones, summary cards collapse to
+  one column at 390px, queue rows switch to one column, and menu/order cards
+  retain the existing repeated-card performance safeguards.
+- Browser-verified Browse Menu and My Orders at 1280×800 and 390×844. Document
+  width matched viewport width, menu cards were one column on phone, no
+  bartender forms/recipes/other-guest identity appeared, and live five-second
+  polling produced no new console errors after the test server stabilized.

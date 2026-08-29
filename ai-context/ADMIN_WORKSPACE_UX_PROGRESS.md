@@ -46,7 +46,9 @@ the same state for navigation/reload restoration.
 - The party dashboard now shows the three most recent costume and karaoke entries with counts and a link to the dedicated list page, rather than duplicating complete lineups in the hub.
 - RSVP updates show the three newest cards first; earlier updates remain available under an explicit disclosure.
 - Costume and karaoke signup pages show eight entries initially and disclose the remaining public list when necessary.
-- Menu and order-history pages link directly to one another from their headers.
+- Menu and order history now share one `/party/menu` workspace with a compact
+  Browse Menu/My Orders rail. Bartender remains a separate role-restricted
+  dropdown item and operational page.
 - Costume-voting submit remains visible at the bottom of the viewport while a guest works through a long ballot.
 
 ## Verification
@@ -88,3 +90,14 @@ the same state for navigation/reload restoration.
 - Keep `/admin` as a summary/action hub; do not reintroduce full lists or settings forms there.
 - Use disclosure for an individual edit record or explicitly destructive action, not as the primary means of navigating unrelated controls.
 - Keep mobile repeated items as rows; reserve elevated cards for a workspace boundary, an urgent status, or media-rich attendee content.
+
+## Wrap-Up And Game History Workspaces (2026-08-29)
+
+- Wrap-Up is an ordered closeout workspace: roster/finalize, Email Test Lab,
+  official delivery ledger, then automatic cleanup.
+- The roster supports Select All, Select Suggested, Clear All, and a no-side-
+  effect Save Draft. Destructive actions use confirmation popups.
+- Game History groups results by edition and supports edition/game/retention/
+  winner filters plus engine-specific disclosure rows.
+- Stat tiles and repeated rows use responsive existing admin patterns and
+  collapse cleanly on narrow screens.

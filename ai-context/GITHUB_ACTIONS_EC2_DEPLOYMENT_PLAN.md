@@ -443,8 +443,9 @@ On failure:
 API ASG replacement nodes install Halloween automatically through launch-template
 user-data.
 
-- `goodvines-api-asg` is pinned to launch template version `2`.
-- Launch template version `2` runs the existing GoodVines bootstrap first.
+- `goodvines-api-asg` is pinned to launch template version `6`.
+- Launch template version `6` preserves the version `5` GoodVines bootstrap and
+  runs it first.
 - After GoodVines services start, it installs the Halloween app under
   `/opt/halloween`, writes `halloween-party.service`, writes
   `/etc/nginx/conf.d/halloween.conf`, starts `halloween-party`, validates nginx,

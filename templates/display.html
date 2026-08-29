@@ -34,13 +34,22 @@
             <strong>Games</strong>
           </header>
           <div class="display-game-stage__content" data-fit-content>
-            <p class="display-game-stage__status" data-game-status></p>
-            <h2 data-game-title></h2>
-            <p class="display-game-stage__primary" data-game-primary></p>
-            <p class="display-game-stage__secondary" data-game-secondary></p>
-            <div class="display-game-stage__metrics" data-game-metrics></div>
-            <ol class="display-game-stage__steps" data-game-steps hidden></ol>
-            <p class="display-game-stage__action" data-game-action hidden></p>
+            <section class="display-game-stage__summary">
+              <p class="display-game-stage__status" data-game-status></p>
+              <h2 data-game-title></h2>
+              <p class="display-game-stage__secondary" data-game-secondary></p>
+            </section>
+            <section class="display-game-stage__focus">
+              <span class="display-game-stage__focus-label" data-game-focus-label hidden></span>
+              <p class="display-game-stage__primary" data-game-primary></p>
+              <ol class="display-game-stage__focus-items" data-game-focus-items hidden></ol>
+              <p class="display-game-stage__feature" data-game-feature hidden></p>
+            </section>
+            <section class="display-game-stage__utility">
+              <div class="display-game-stage__metrics" data-game-metrics hidden></div>
+              <ol class="display-game-stage__steps" data-game-steps hidden></ol>
+              <p class="display-game-stage__action" data-game-action hidden></p>
+            </section>
           </div>
           <footer class="display-region-footer">
             <span data-game-position></span>

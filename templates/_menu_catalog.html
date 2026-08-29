@@ -1,0 +1,74 @@
+<section class="menu-section" aria-labelledby="drinks-heading">
+  <div class="menu-workspace__section-heading">
+    <div>
+      <p class="admin-panel__eyebrow">Order from your phone</p>
+      <h3 id="drinks-heading">Drinks</h3>
+    </div>
+    <a class="button" href="{{ url_for('party_menu', view='orders') }}">Track My Orders</a>
+  </div>
+  {% if menu_sections.drinks %}
+    <div class="menu-grid">
+      {% for item in menu_sections.drinks %}
+        <article class="menu-card{% if not item.available %} menu-card--unavailable{% endif %}">
+          <div class="menu-card__image-wrap">
+            {% if item.image_url %}
+              <img src="{{ item.image_url }}" alt="{{ item.name }}" class="menu-card__image">
+            {% else %}
+              <div class="menu-card__placeholder" aria-hidden="true">Drink</div>
+            {% endif %}
+          </div>
+          <div class="menu-card__body">
+            <p class="menu-card__eyebrow">{% if item.available %}Available{% else %}Unavailable{% endif %}</p>
+            <div class="menu-card__badges">
+              <span>{{ drink_type_label(item.drink_type) }}</span>
+              <span>{{ beverage_type_label(item.beverage_type) }}</span>
+              <span>{% if item.orderable %}Orderable{% else %}Bar Pickup{% endif %}</span>
+            </div>
+            <h4>{{ item.name }}</h4>
+            {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+            {% if item.drink_type == 'specialty' %}
+              <p class="rsvp-admin-item__meta">Counts toward the 3 specialty drink rule.</p>
+            {% endif %}
+            <form method="post" action="{{ url_for('party_menu', view='menu') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="order_drink">
+              <input type="hidden" name="menu_item_id" value="{{ item.id }}">
+              <button type="submit" class="button button--primary" {% if not item.available or not item.orderable %}disabled{% endif %}>
+                {% if not item.available %}Unavailable{% elif item.orderable %}Order Drink{% else %}Pick Up at Bar{% endif %}
+              </button>
+            </form>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="admin-empty">No drinks are on the menu yet.</p>
+  {% endif %}
+</section>
+
+<section class="menu-section" aria-labelledby="food-heading">
+  <p class="admin-panel__eyebrow">Available tonight</p>
+  <h3 id="food-heading">Food</h3>
+  {% if menu_sections.food %}
+    <div class="menu-grid">
+      {% for item in menu_sections.food %}
+        <article class="menu-card{% if not item.available %} menu-card--unavailable{% endif %}">
+          <div class="menu-card__image-wrap">
+            {% if item.image_url %}
+              <img src="{{ item.image_url }}" alt="{{ item.name }}" class="menu-card__image">
+            {% else %}
+              <div class="menu-card__placeholder" aria-hidden="true">Food</div>
+            {% endif %}
+          </div>
+          <div class="menu-card__body">
+            <p class="menu-card__eyebrow">{% if item.available %}Available{% else %}Unavailable{% endif %}</p>
+            <h4>{{ item.name }}</h4>
+            {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="admin-empty">No food items are on the menu yet.</p>
+  {% endif %}
+</section>

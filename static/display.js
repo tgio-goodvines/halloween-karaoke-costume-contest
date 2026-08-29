@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
     gameTitle: document.querySelector('[data-game-title]'),
     gamePrimary: document.querySelector('[data-game-primary]'),
     gameSecondary: document.querySelector('[data-game-secondary]'),
+    gameFocusLabel: document.querySelector('[data-game-focus-label]'),
+    gameFocusItems: document.querySelector('[data-game-focus-items]'),
+    gameFeature: document.querySelector('[data-game-feature]'),
     gameMetrics: document.querySelector('[data-game-metrics]'),
     gameSteps: document.querySelector('[data-game-steps]'),
     gameAction: document.querySelector('[data-game-action]'),
@@ -127,8 +130,14 @@ document.addEventListener('DOMContentLoaded', () => {
       fitContent && fitContent.clientHeight > 0 && fitContent.scrollHeight > fitContent.clientHeight + 2
     );
     if (contentHeight / availableHeight < 0.56) panel.classList.add('is-sparse');
-    if (panel.scrollHeight > panel.clientHeight + 2 || contentOverflows()) panel.classList.add('is-dense');
-    if (panel.scrollHeight > panel.clientHeight + 2 || contentOverflows()) panel.classList.add('is-ultra-dense');
+    if (panel.scrollHeight > panel.clientHeight + 2 || contentOverflows()) {
+      panel.classList.add('is-dense');
+      if (panel !== elements.gameStage) panel.classList.add('is-ultra-dense');
+      else {
+        panel.getBoundingClientRect();
+        if (panel.scrollHeight > panel.clientHeight + 2 || contentOverflows()) panel.classList.add('is-ultra-dense');
+      }
+    }
   };
   const fitAll = () => requestAnimationFrame(() => {
     fitPanel(elements.gameStage);
@@ -434,6 +443,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderGameEntry = (entry, count) => {
     const game = asObject(entry);
+    const presentation = ['signup', 'active', 'clue', 'prompt', 'voting', 'response', 'reveal', 'result'].includes(game.presentation)
+      ? game.presentation
+      : (game.phase === 'ended' ? 'result' : (game.phase === 'active' ? 'active' : 'signup'));
+    if (elements.gameStage) elements.gameStage.dataset.presentation = presentation;
     elements.gameStage?.classList.toggle('has-background-media', Boolean(game.image_url));
     if (elements.gameImage && elements.gameImageWrap) {
       if (game.image_url) {
@@ -463,8 +476,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (elements.gameStatus) elements.gameStatus.textContent = game.status_label || game.phase || '';
     if (elements.gameTitle) elements.gameTitle.textContent = game.title || 'Party Games';
-    if (elements.gamePrimary) elements.gamePrimary.textContent = game.primary || '';
-    if (elements.gameSecondary) elements.gameSecondary.textContent = game.secondary || '';
+    setOptionalText(elements.gamePrimary, game.primary || 'Follow the live game status here.');
+    setOptionalText(elements.gameSecondary, game.secondary || '');
+    setOptionalText(elements.gameFocusLabel, game.focus_label || 'Live focus');
+    setOptionalText(elements.gameFeature, game.feature_text || '');
+    if (elements.gameFocusItems) {
+      elements.gameFocusItems.innerHTML = '';
+      safeArray(game.focus_items).filter(Boolean).slice(0, 3).forEach((focusItem) => {
+        const item = document.createElement('li');
+        item.textContent = String(focusItem);
+        elements.gameFocusItems.appendChild(item);
+      });
+      setHidden(elements.gameFocusItems, !elements.gameFocusItems.children.length);
+    }
     if (elements.gameMetrics) {
       elements.gameMetrics.innerHTML = '';
       safeArray(game.metrics).slice(0, 3).forEach((metric) => {
@@ -476,6 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
         item.append(value, label);
         elements.gameMetrics.appendChild(item);
       });
+      setHidden(elements.gameMetrics, !elements.gameMetrics.children.length);
     }
     setHidden(elements.gameSteps, true);
     if (elements.gameSteps) elements.gameSteps.innerHTML = '';

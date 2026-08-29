@@ -35,8 +35,8 @@ Public routes are hosted at `tnq-halloween.com` and
 must not restart GoodVines services, edit GoodVines source directories, or
 change GoodVines nginx server blocks.
 
-API ASG replacement instances are covered by launch template version `2`, which
-preserves the existing GoodVines bootstrap and then installs Halloween from the
+API ASG replacement instances are covered by launch template version `6`, which
+preserves the current GoodVines bootstrap and then installs Halloween from the
 current `main` branch. Normal GitHub Actions deploys still install the exact
 merged commit SHA on currently running API instances.
 
@@ -115,13 +115,14 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
    performance without suppressing any later song lifecycle. The legacy
    optional-link flow remains available while the YouTube feature flag is
    disabled.
-8. On the party date, attendees can view food and drink menu cards with images
-   at `/party/menu` and order available/orderable drinks from the bar.
-   Specialty drinks are limited to 3 included attendee orders; after 11:00 PM,
-   4th+ specialty requests are allowed while supplies remain. `/party/drink-history`
-   shows the signed-in attendee's full order history, supports reorder for
-   currently available/orderable drinks, and shows a per-order bartender tip
-   disclosure when admin tipping is enabled.
+8. On the party date, `/party/menu` is the consolidated Menu & Orders workspace.
+   Attendees can browse food/drink cards, order available drinks, review grouped
+   personal order history, reorder eligible drinks, and follow a privacy-safe
+   live bar summary with aggregate queue counts and only their own order
+   positions. Specialty drinks are limited to 3 included attendee orders;
+   after 11:00 PM, 4th+ specialty requests are allowed while supplies remain.
+   `/party/drink-history` remains a compatibility redirect to the My Orders
+   view. Bartender operations remain separate at `/bartender`.
 9. Signed-in attendees can open `/party/account` from the shared Menu at any
    time to view their account level, stored roles, active session permissions,
    display name, email, and creation date; they can update their own profile or
@@ -352,3 +353,19 @@ The responsive UX pass is complete: live-display cards scale for normal browser
 windows, attendee pages use a compact menu nav with a single logout action,
 touch-safe forms, and admin add/edit forms collapse into disclosure rows by
 default on mobile-friendly layouts.
+
+## Party Wrap-Up And Game Reset (Schema 18)
+
+- Individual game resets use a confirm popup, preserve the enabled flag and
+  official history, restore code defaults, and sanitize retained Redis backups.
+- Reset All Games restores every game to pristine disabled testing defaults
+  while preserving official history, achievements, recaps, and unrelated party data.
+- `/admin/wrapup` freezes official game/costume results, attendance and winner
+  credit, per-attendee achievement changes, the final jukebox order, analytics,
+  retention choices, and a per-recipient delivery ledger.
+- Sample and current-database recap tests send only to the address entered by
+  the admin and cannot finalize, grant, contact attendees, or clean up games.
+- Official recap sends persist each recipient outcome outside SES network I/O.
+  Mutable game data is erased only after every intended delivery succeeds.
+- `/admin/game_history` groups official results by edition with filters,
+  engine-specific privacy-safe detail, scoped export, and deletion controls.

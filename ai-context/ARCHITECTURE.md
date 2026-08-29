@@ -30,17 +30,20 @@
   karaoke happen later in the night. Event-night signup/menu/drink/voting
   summaries are hidden. On the party date, it shows the normal event-night
   dashboard.
-- `GET|POST /party/menu` -> signed-in attendee menu page with food/drink image
-  cards. Available, orderable drinks can be ordered and create Redis-backed
-  drink orders with estimated ready times. Specialty drinks count toward the 3
-  specialty drink rule; 4th+ specialty requests are blocked until 11:00 PM and
-  still require the drink to be available. Attendee access is redirected back
-  to `/party` until the party date.
-- `GET|POST /party/drink-history` -> signed-in attendee order history page,
-  available on the party date. Shows all drink orders tied to the current
-  `session.user_id`, supports reorder for currently available/orderable drinks,
-  and shows the admin-configured bartender tip QR/payment disclosure on each
-  order when enabled.
+- `GET|POST /party/menu` -> signed-in consolidated Menu & Orders workspace with
+  query-backed `view=menu|orders` views. It preserves menu ordering and
+  specialty rules, groups account-scoped order history by live status, supports
+  reorder, and shows one bartender-tip callout when enabled. Successful orders
+  and reorders redirect to the My Orders view. Attendee access redirects to
+  `/party` until the party date.
+- `GET|POST /party/drink-history` -> compatibility route. GET redirects to
+  `/party/menu?view=orders`; temporary POST handling uses the shared
+  account-scoped reorder helper and then redirects to the canonical view.
+- `GET /api/party/bar-queue` -> party-day regular-attendee JSON endpoint with a
+  deterministic version, aggregate active/mixing/waiting counts, average prep
+  label, and only the current account's active/recent-ready order details and
+  approximate queue positions. It excludes other attendee identities, recipes,
+  and operational actions. `static/bar-status.js` polls it every five seconds.
 - `GET|POST /bartender` -> bartender/admin drink order queue with image and
   recipe reference; transitions orders to `in_progress` or `complete`. Active
   queue sorting keeps in-progress orders first, then normal/included orders,
@@ -221,7 +224,9 @@ and dismissal no longer depends on a second username/account lookup after the
 session participant has been authorized.
 
 Navigation is the union of active session roles: a mixed regular/bartender/admin
-session exposes the destinations for each represented role. Attendee sign-in
+session exposes the destinations for each represented role. Menu and Drink
+History share one `Menu & Orders` item, while Bartender remains a separate
+bartender/admin-only item. Attendee sign-in
 refreshes the account-derived regular/bartender roles while retaining an active
 admin role in the same browser session.
 
@@ -355,7 +360,7 @@ uses the persisted `event_experience_mode` first, then compares the local date
 of `HALLOWEEN_PARTY_START` to the current date when the mode is `auto`. Admins
 can force `pre_party` or `party_day` from `/admin` to test attendee UX states.
 Before the effective party date, `/party/menu`, `/party/costumes`, and
-`/party/karaoke` redirect to `/party`, and `base.html` hides the Menu, Costume,
+`/party/karaoke` redirect to `/party`, and `base.html` hides Menu & Orders, Costume,
 Karaoke, and Voting links. On the effective party date, those links/routes
 become available. Voting still depends on `costume_voting_is_visible()`, which
 also requires the admin contest state to have started/open voting with no
@@ -405,18 +410,22 @@ SSE connections.
 
 - `base.html`: shared shell, title, CSS include, header menu with signed-in
   identity and single logout action, footer, and script block. Regular attendee
-  Menu/Drink History/Costume/Karaoke/Voting links are hidden until the party
+  Menu & Orders/Costume/Karaoke/Voting links are hidden until the party
   date.
 - `index.html`: attendee dashboard, contest status banners, event highlights,
   drink order status cards, and signup summaries. It renders pre-party RSVP
   details/updates before the party date and event-night sections on the party
   date. Completed ready-drink notices are shown for 5 minutes after
   `completed_at`; older completed orders remain in drink history.
-- `menu.html`: attendee food/drink menu with images, drink ordering, drink type
-  badges, specialty count status, and recent order status cards.
-- `drink_history.html`: attendee order history with all account-bound drink
-  orders, status/timestamp metadata, reorder buttons, and per-order bartender
-  tip disclosure when enabled.
+- `menu.html`: consolidated Menu & Orders shell with summary chips, query-backed
+  view rail, privacy-safe live queue summary, and selected catalog/history
+  partial.
+- `_menu_catalog.html`: attendee food/drink cards, badges, availability, and
+  drink-order forms.
+- `_personal_drink_orders.html`: status-grouped account-bound order history,
+  reorder controls, and the single bartender-tip callout.
+- `drink_history.html`: retired template retained only until compatibility
+  cleanup; the route no longer renders it.
 - `bartender.html`: bartender/admin drink order page shell with a live-refresh
   queue container.
 - `_bartender_queue.html`: shared bartender queue fragment with image, specialty
@@ -542,3 +551,20 @@ SSE connections.
   the active track in a status dock rather than a content card.
 - Media treatment remains derived display data. It does not change Redis schema
   or persisted display configuration.
+
+## Schema 18 Wrap-Up Architecture
+
+- `party_wrapup.py` owns pure pristine reset, snapshot/back-up sanitation,
+  detailed archive construction, and wrap-up/delivery normalization.
+- `recap_analytics.py` owns frozen playlist order, recap result projections,
+  aggregate analytics, email bar view models, and deterministic sample data.
+- Schema 18 adds `event_wrapups`, `game_data_archives`, and `test_email_audit`.
+  Older snapshots normalize these to empty values without side effects.
+- A wrap-up freezes public results, playlist, analytics, roster, personal
+  summaries, achievements, retention policies, and per-recipient outcomes.
+- SES calls release the request Redis lock first. Attempt/outcome writes use
+  short explicit locks, so successful recipients remain recorded if another fails.
+- Cleanup resets active games, applies history retention, sanitizes retained
+  full-state backups, and leaves the frozen recap ledger intact.
+- Historical exports strip winner links, attendee IDs, delivery destinations,
+  private MMF ballots, and blind-voter authorship.

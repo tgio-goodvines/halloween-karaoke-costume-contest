@@ -34,8 +34,7 @@
                   <a href="{{ url_for('party_account') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Account{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                   <a href="{{ url_for('party_results') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Results &amp; Rewards{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                   {% if party_day_has_arrived %}
-                    <a href="{{ url_for('party_menu') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Menu{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
-                    <a href="{{ url_for('party_drink_history') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Drink History{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
+                    <a href="{{ url_for('party_menu') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Menu &amp; Orders{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     <a href="{{ url_for('party_jukebox') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Jukebox{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     <a href="{{ url_for('party_costumes') }}"{% if role_is_hidden_in_preview('regular') %} class="role-preview-hidden" aria-disabled="true"{% endif %}>Costume{% if role_is_hidden_in_preview('regular') %}<span>Hidden</span>{% endif %}</a>
                     {% if party_games_state.available %}

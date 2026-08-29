@@ -1,0 +1,148 @@
+<section class="admin-section" aria-labelledby="wrapup-heading">
+  <header class="admin-section__header">
+    <div>
+      <p class="admin-panel__eyebrow">Party closeout</p>
+      <h3 id="wrapup-heading">Results, Recap & Cleanup</h3>
+      <p>Freeze the real results, grant attendance and winner credit, verify the recap, deliver it to attendees, then erase mutable game data.</p>
+    </div>
+    <span class="status-badge">{{ wrapup_admin.status|replace('_', ' ')|title }}</span>
+  </header>
+
+  {% if wrapup_admin.wrapup %}
+    <div class="admin-stats">
+      <article><span>Attendees</span><strong>{{ wrapup_admin.wrapup.attendee_account_ids|length }}</strong></article>
+      <article><span>Game results</span><strong>{{ wrapup_admin.wrapup.game_results|length }}</strong></article>
+      <article><span>Playlist</span><strong>{{ wrapup_admin.wrapup.playlist_snapshot|length }}</strong></article>
+      <article><span>Delivered</span><strong>{{ wrapup_admin.wrapup.deliveries|selectattr('status', 'equalto', 'sent')|list|length }}/{{ wrapup_admin.wrapup.deliveries|length }}</strong></article>
+    </div>
+  {% endif %}
+
+  {% if wrapup_admin.status == 'draft' %}
+    <form method="post" class="admin-subsection">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <h4>1. Confirm the Party Record</h4>
+      <p>Suggested attendees have activity in the party database. Review the list before attendance credit and email recipients are frozen.</p>
+
+      {% if wrapup_admin.readiness.errors %}
+        <div class="flash flash--error" role="status">
+          <strong>Not ready to finalize</strong>
+          <ul>{% for error in wrapup_admin.readiness.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+        </div>
+      {% endif %}
+      {% if wrapup_admin.readiness.warnings %}
+        <div class="flash" role="status"><ul>{% for warning in wrapup_admin.readiness.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>
+      {% endif %}
+
+      <fieldset data-wrapup-attendees>
+        <legend>Confirmed attendees</legend>
+        <div class="contest-actions">
+          <button class="button button--small" type="button" data-wrapup-select-all>Select All</button>
+          <button class="button button--small" type="button" data-wrapup-select-suggested>Select Suggested</button>
+          <button class="button button--small" type="button" data-wrapup-clear-all>Clear All</button>
+        </div>
+        <div class="admin-entry-list">
+          {% for attendee in wrapup_admin.attendee_options %}
+            <label class="admin-entry">
+              <input type="checkbox" name="attendee_account_ids" value="{{ attendee.account_id }}" data-suggested="{{ 'true' if attendee.suggested else 'false' }}"{% if attendee.account_id in wrapup_admin.selected_attendee_ids %} checked{% endif %}>
+              <span><strong>{{ attendee.name }}</strong> · {{ attendee.email }}<br><small>{{ attendee.reasons|join(' · ') if attendee.reasons else 'No detected activity — select manually if they attended' }}</small></span>
+            </label>
+          {% else %}
+            <p class="empty-state">Create party accounts before finalizing attendance.</p>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Historical retention by game</legend>
+        <p>Official summaries are privacy-safe. Detailed archives retain game-specific analytics; private MMF ballots and blind-vote identities are never archived.</p>
+        <div class="admin-entry-list">
+          {% for game_key, game in games_admin.games.items() %}
+            <label class="admin-entry">
+              <span><strong>{{ game.metadata.title }}</strong><br><small>{{ game.participant_count }} participant{{ 's' if game.participant_count != 1 else '' }} · {{ game.phase|title }}</small></span>
+              <select name="retention_{{ game_key }}">
+                {% for policy, label in wrapup_admin.retention_policy_options.items() %}
+                  <option value="{{ policy }}"{% if wrapup_admin.retention_policies[game_key] == policy %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="contest-actions">
+        <button class="button" name="action" value="save_wrapup_draft">Save Draft</button>
+        <button class="button button--primary" name="action" value="finalize_party_wrapup" onclick="return confirm('Finalize this party record? Results, attendance, achievements, analytics, and the playlist will be frozen. No email will be sent and no game data will be erased yet.')">Finalize Party Record</button>
+      </div>
+    </form>
+  {% else %}
+    <section class="admin-subsection">
+      <h4>1. Party Record Frozen</h4>
+      <p>Finalized {{ wrapup_admin.wrapup.finalized_at }}. This snapshot is now the source for every official recap, including retries after cleanup.</p>
+      {% if wrapup_admin.wrapup.last_error %}<p class="flash flash--error">{{ wrapup_admin.wrapup.last_error }}</p>{% endif %}
+    </section>
+  {% endif %}
+
+  <section class="admin-subsection">
+    <h4>2. Recap Email Test Lab</h4>
+    <p>Test emails are visibly labeled and never grant credit, change delivery status, or trigger cleanup. Current-data tests read the live database without finalizing it.</p>
+    <div class="admin-grid admin-grid--two">
+      <form method="post" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h5>Generated Sample Data</h5>
+        <label>Send test to<input type="email" name="test_recipient" required placeholder="host@example.com"></label>
+        <button class="button" name="action" value="send_sample_recap_test">Send Sample Recap Test</button>
+      </form>
+      <form method="post" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h5>Current Party Database</h5>
+        <label>Send test to<input type="email" name="test_recipient" required placeholder="host@example.com"></label>
+        <label>Personalize as
+          <select name="personalization_account_id">
+            <option value="">Generic attendee</option>
+            {% for attendee in wrapup_admin.attendee_options %}<option value="{{ attendee.account_id }}">{{ attendee.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="button" name="action" value="send_current_recap_test">Send Real-Data Recap Test</button>
+      </form>
+    </div>
+    {% if wrapup_admin.test_email_audit %}
+      <details>
+        <summary>Recent test sends</summary>
+        <ul>{% for entry in wrapup_admin.test_email_audit %}<li>{{ entry.requested_at }} · {{ entry.mode|title }} · {{ entry.destination }} · {{ 'Sent' if entry.success else 'Failed: ' ~ entry.error }}</li>{% endfor %}</ul>
+      </details>
+    {% endif %}
+  </section>
+
+  {% if wrapup_admin.status != 'draft' %}
+    <section class="admin-subsection">
+      <h4>3. Official Delivery & Automatic Game Cleanup</h4>
+      <p>Cleanup starts only after SES accepts every attendee email. A failed recipient stays retryable and preserves all mutable game data.</p>
+      <div class="admin-entry-list">
+        {% for delivery in wrapup_admin.wrapup.deliveries %}
+          <article class="admin-entry"><span><strong>{{ delivery.name }}</strong> · {{ delivery.email }}<br><small>{{ delivery.status|replace('_', ' ')|title }} · {{ delivery.attempt_count }} attempt{{ 's' if delivery.attempt_count != 1 else '' }}{% if delivery.last_error %} · {{ delivery.last_error }}{% endif %}</small></span></article>
+        {% endfor %}
+      </div>
+      {% if wrapup_admin.status == 'complete' %}
+        <p class="flash flash--success">Official delivery and game cleanup completed {{ wrapup_admin.wrapup.completed_at }}.</p>
+      {% elif wrapup_admin.status == 'cleanup_failed' %}
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" name="action" value="retry_wrapup_cleanup">Retry Game Cleanup</button></form>
+      {% else %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="button button--primary" name="action" value="{{ 'retry_failed_recap' if wrapup_admin.status == 'delivery_failed' else 'send_party_recap' }}" onclick="return confirm('Send the official personalized recap to every pending attendee? When every delivery succeeds, mutable game data will be erased automatically according to the selected retention policies.')">{{ 'Retry Failed Official Recaps' if wrapup_admin.status == 'delivery_failed' else 'Send Official Recap & Wrap Up Party' }}</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="admin-subsection">
+    <h4>Current Email Preview Data</h4>
+    <div class="admin-stats">
+      <article><span>Attendees</span><strong>{{ wrapup_admin.preview.analytics_snapshot.attendee_count }}</strong></article>
+      <article><span>Games</span><strong>{{ wrapup_admin.preview.analytics_snapshot.games_played }}</strong></article>
+      <article><span>Interactions</span><strong>{{ wrapup_admin.preview.analytics_snapshot.total_game_interactions }}</strong></article>
+      <article><span>Playlist tracks</span><strong>{{ wrapup_admin.preview.analytics_snapshot.playlist.track_count }}</strong></article>
+    </div>
+  </section>
+</section>
+<script src="{{ url_for('static', filename='wrapup-admin.js') }}" defer></script>

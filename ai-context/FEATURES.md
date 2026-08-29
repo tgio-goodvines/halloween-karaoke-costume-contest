@@ -35,8 +35,9 @@
 - Email-based password reset at `/party/password-reset` sends a one-time
   45-minute reset link without revealing whether the submitted email is
   registered.
-- On the party date, food and drink menu at `/party/menu` shows admin-managed
-  cards with images, descriptions, and availability.
+- On the party date, `/party/menu` is a consolidated Menu & Orders workspace
+  with Browse Menu and My Orders views. It shows admin-managed cards with
+  images, descriptions, and availability.
 - On the party date, signed-in attendees can order available, orderable drinks
   from `/party/menu`; food items are currently view-only, and drinks can be
   listed as bar-pickup/general availability without enabling portal orders.
@@ -45,14 +46,18 @@
   available. Standard alcoholic and non-alcoholic drinks do not count against
   the specialty limit.
 - On the party date, attendees can see recent drink order statuses and
-  dashboard ready-drink cards. Ready-drink dashboard notices expire after 5
-  minutes without deleting the underlying order.
-- `/party/drink-history` shows the signed-in attendee's full drink order
-  history, including completed orders older than 5 minutes, and supports
-  reordering currently available/orderable drinks.
-- Drink history cards include a bartender tip button when tipping is enabled;
-  the button opens the admin-configured QR/payment image and Zelle, PayPal,
-  Venmo, or Cash App handles.
+  dashboard ready-drink cards. The consolidated workspace groups Ready for
+  Pickup, Being Prepared, Order Received, and Previous Orders; ready dashboard
+  notices expire after 5 minutes without deleting the underlying order.
+- The Menu & Orders workspace supports account-scoped history and reordering
+  currently available/orderable drinks. `/party/drink-history` redirects to
+  its My Orders view for compatibility.
+- A privacy-safe live bar summary exposes aggregate active/mixing/waiting
+  counts, average prep time, and the signed-in attendee's own queue positions;
+  it never exposes other attendees' identities, recipes, or bartender actions.
+- My Orders includes one bartender tip callout when tipping is enabled; it
+  opens the admin-configured QR/payment image and Zelle, PayPal, Venmo, or Cash
+  App handles.
 - A single logout action inside the shared header menu clears the current
   browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
@@ -294,6 +299,8 @@
 
 - Bartender view at `/bartender` is available to assigned bartender accounts and
   admins.
+- The shared dropdown keeps Bartender as a separate role-restricted item; it is
+  not merged into the attendee Menu & Orders workspace.
 - Drink orders progress from `received` to `in_progress` to `complete`.
 - Bartender view shows drink image and recipe reference; in-progress orders keep
   the recipe visible.
@@ -308,6 +315,9 @@
 - Completing a drink sends a ready email, updates attendee dashboard/menu order
   cards, and creates a temporary live-display drink-ready override with the
   drink image.
+- `/api/party/bar-queue` is regular-attendee and party-day protected. It returns
+  aggregate queue metrics and account-scoped personal order status only;
+  `/api/bartender-queue` remains separately protected for bartender/admin use.
 
 Important caveat: UI role passwords must be configured for normal use:
 `HALLOWEEN_ADMIN_PASSWORD` is the only UI password loaded from Vault. Regular
@@ -402,6 +412,24 @@ app state.
   from ordinary game-status and final-score cards.
 - Six transparent achievement emblems provide an activity-award-style
   collection across Results & Rewards, Account, and admin Recognition views.
+
+## Testing Reset, Party Wrap-Up, And Recap Email
+
+- Every game has a Reset button with a normal confirmation popup; no typed
+  reset phrase is required. Games admin also has Reset All Games for returning
+  all five games to their original disabled state between test runs.
+- Wrap-Up suggests attendees from recorded activity, supports manual roster
+  correction and per-game history retention, and can save a side-effect-free draft.
+- Finalization publishes eligible real winners, grants idempotent attendance
+  and winner credit, unlocks Party Attendee on first attendance, and freezes
+  the playlist and recap analytics.
+- The recap includes winners, the costume champion, final playlist, aggregate
+  stat/bar charts, new achievements, and an attendee-specific night summary.
+- Sample and current-database tests are labeled `[TEST]` and go only to the
+  entered address. Official retries contact only unsent recipients; all-success
+  delivery applies retention choices and clears mutable game state.
+- Game History provides grouped/filterable official history, sanitized detail,
+  scoped JSON exports, and popup-confirmed deletion with recognition revocation.
 
 ## Results, History, And Recognition
 

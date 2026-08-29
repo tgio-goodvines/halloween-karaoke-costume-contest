@@ -96,6 +96,25 @@ from recognition import (
     normalize_recognition_credits,
     normalize_result_archives,
 )
+from party_wrapup import (
+    DEFAULT_RETENTION_POLICY,
+    RETENTION_POLICIES,
+    all_deliveries_sent,
+    build_detailed_game_archive,
+    game_reset_counts,
+    normalize_event_wrapups,
+    normalize_game_data_archives,
+    normalize_test_email_audit,
+    remove_game_history_from_wrapup,
+    reset_games_state,
+    sanitize_mutable_game_data,
+)
+from recap_analytics import (
+    build_game_result_snapshots,
+    build_playlist_snapshot,
+    build_recap_analytics,
+    build_sample_recap_payload,
+)
 
 
 def _config_int(name: str, default: int) -> int:
@@ -334,7 +353,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 17
+STATE_SCHEMA_VERSION = 18
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -653,6 +672,8 @@ ADMIN_WORKSPACES: dict[str, dict[str, str]] = {
     "menu": {"label": "Menu", "description": "Food and drink availability."},
     "accounts": {"label": "Accounts", "description": "Party accounts and bartender access."},
     "recognition": {"label": "Recognition", "description": "Attendance, achievements, and official winner history."},
+    "wrapup": {"label": "Wrap-Up", "description": "Finalize results, award attendance, test and send the party recap, then clean up games."},
+    "game_history": {"label": "Game History", "description": "Review official results, retained game detail, analytics, and retention controls."},
 }
 
 ROLE_PREVIEW_OPTIONS: dict[str, dict[str, object]] = {
@@ -711,6 +732,9 @@ event_editions: dict[str, dict[str, str]] = normalize_event_editions(
 )
 result_archives: list[dict[str, object]] = []
 recognition_credits: list[dict[str, object]] = []
+event_wrapups: dict[str, dict[str, object]] = {}
+game_data_archives: dict[str, dict[str, object]] = {}
+test_email_audit: list[dict[str, object]] = []
 redis_state_available = False
 display_pubsub_listener_started = False
 STATE_MUTATION_ENDPOINTS = {
@@ -744,6 +768,7 @@ STATE_REFRESH_ENDPOINTS = {
     "party_dashboard",
     "party_menu",
     "party_drink_history",
+    "party_bar_queue_data",
     "party_bartender_tip",
     "bartender_portal",
     "bartender_queue_data",
@@ -775,6 +800,7 @@ ADMIN_ENDPOINTS = {
     "export_costume_results",
     "export_karaoke_lineup",
     "export_games",
+    "export_game_history",
     "export_recognition",
     "admin_dj_song_request_queue",
     "admin_karaoke_state",
@@ -804,6 +830,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_dashboard",
     "party_menu",
     "party_drink_history",
+    "party_bar_queue_data",
     "party_bartender_tip",
     "party_costumes",
     "party_karaoke",
@@ -1820,7 +1847,7 @@ def send_drink_order_placed_email(order: dict[str, object]) -> bool:
         app.logger.warning("Drink order email requested, but boto3 is not installed.")
         return False
 
-    menu_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_menu")
+    menu_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_menu", view="orders")
     ready_label = format_time_label(order.get("estimated_ready_at")) or "soon"
     subject = f"Drink order received: {order.get('item_name', 'your drink')}"
     text_body = (
@@ -1867,7 +1894,7 @@ def send_drink_ready_email(order: dict[str, object]) -> bool:
         app.logger.warning("Drink ready email requested, but boto3 is not installed.")
         return False
 
-    menu_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_menu")
+    menu_url = app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_menu", view="orders")
     subject = f"Drink ready: {order.get('item_name', 'your drink')}"
     text_body = (
         f"Hi {order.get('username', 'there')},\n\n"
@@ -4587,6 +4614,9 @@ def snapshot_state() -> dict[str, object]:
         "event_editions": copy.deepcopy(event_editions),
         "result_archives": copy.deepcopy(result_archives),
         "recognition_credits": copy.deepcopy(recognition_credits),
+        "event_wrapups": copy.deepcopy(event_wrapups),
+        "game_data_archives": copy.deepcopy(game_data_archives),
+        "test_email_audit": copy.deepcopy(test_email_audit),
         "live_display_event_override": copy.deepcopy(live_display_event_override),
         "live_display_notice_override": copy.deepcopy(live_display_notice_override),
         "live_display_notice_queue": copy.deepcopy(live_display_notice_queue),
@@ -4607,7 +4637,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, display_custom_cards, display_update_version
     global password_reset_tokens, menu_items, drink_orders, dj_playlist, dj_song_requests, dj_state, rsvp_notification_email, bartender_tip_settings, youtube_karaoke, games_state
-    global event_editions, result_archives, recognition_credits
+    global event_editions, result_archives, recognition_credits, event_wrapups, game_data_archives, test_email_audit
 
     raw_costume_signups = data.get("costume_signups", [])
     costume_signups = [
@@ -4740,6 +4770,9 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
     )
     result_archives = normalize_result_archives(data.get("result_archives", []))
     recognition_credits = normalize_recognition_credits(data.get("recognition_credits", []))
+    event_wrapups = normalize_event_wrapups(data.get("event_wrapups", {}))
+    game_data_archives = normalize_game_data_archives(data.get("game_data_archives", {}))
+    test_email_audit = normalize_test_email_audit(data.get("test_email_audit", []))
     account_names_by_id = {
         str(account.get("id", "")): str(account.get("username", "") or "")
         for account in user_accounts.values()
@@ -4915,6 +4948,94 @@ def write_state_backup_if_available(reason: str) -> str | None:
             raise RuntimeError("Unable to write Halloween state backup to Redis.") from exc
         app.logger.warning("Unable to write Halloween state backup: %s", exc)
         return None
+
+
+def sanitize_game_data_in_state_backups(
+    *,
+    game_keys: set[str] | None = None,
+    delete_official_for: set[str] | None = None,
+    delete_official_archive_ids: set[str] | None = None,
+    delete_detailed_archive_ids: set[str] | None = None,
+) -> int:
+    """Remove mutable/deleted game data from retained full-state backups."""
+    if not redis_state_available:
+        return 0
+
+    prepared: list[tuple[str, int, str]] = []
+    match = redis_key("state:backup:*")
+    for raw_key in redis_client.scan_iter(match=match):
+        key = raw_key.decode("utf-8") if isinstance(raw_key, bytes) else str(raw_key)
+        raw_payload = redis_client.get(key)
+        if not raw_payload:
+            continue
+        try:
+            payload = json.loads(raw_payload)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Unable to sanitize malformed state backup {key}.") from exc
+        sanitized = sanitize_mutable_game_data(
+            payload,
+            game_keys=game_keys,
+            preserve_official=True,
+            delete_official_for=delete_official_for,
+            delete_official_archive_ids=delete_official_archive_ids,
+            delete_detailed_archive_ids=delete_detailed_archive_ids,
+        )
+        ttl = STATE_BACKUP_TTL_SECONDS
+        ttl_reader = getattr(redis_client, "ttl", None)
+        if callable(ttl_reader):
+            current_ttl = int(ttl_reader(key) or 0)
+            if current_ttl > 0:
+                ttl = current_ttl
+        prepared.append((key, ttl, json.dumps(sanitized, sort_keys=True)))
+
+    for key, ttl, payload in prepared:
+        redis_client.setex(key, ttl, payload)
+    return len(prepared)
+
+
+def clear_game_display_artifacts(game_keys: set[str]) -> None:
+    global live_display_event_override
+    configured = display_config.setdefault("game_result_card_enabled", {})
+    if isinstance(configured, dict):
+        display_config["game_result_card_enabled"] = {
+            card_id: enabled
+            for card_id, enabled in configured.items()
+            if not any(str(card_id).startswith(f"games:{game_key}-") for game_key in game_keys)
+        }
+    if str(display_config.get("pinned_game_key", "")) in game_keys:
+        display_config["pinned_game_key"] = ""
+    pinned_card_id = str(display_runtime.get("pinned_card_id", "") or "")
+    if any(pinned_card_id.startswith(f"games:{game_key}-") for game_key in game_keys):
+        display_runtime["pinned_card_id"] = ""
+        display_runtime["center_paused"] = False
+        display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
+    if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
+        live_display_event_override = None
+
+
+def reset_current_games(
+    game_keys: set[str],
+    *,
+    preserve_enabled: bool,
+    sanitize_backups: bool,
+) -> int:
+    global games_state, result_archives
+    games_state = reset_games_state(
+        games_state,
+        game_keys=game_keys,
+        preserve_enabled=preserve_enabled,
+    )
+    result_archives = [
+        archive
+        for archive in result_archives
+        if not (
+            archive.get("kind") == "game"
+            and str(archive.get("subject_key", "")) in game_keys
+            and archive.get("status") != "official"
+        )
+    ]
+    clear_game_display_artifacts(game_keys)
+    return sanitize_game_data_in_state_backups(game_keys=game_keys) if sanitize_backups else 0
 
 
 def build_costume_results_export() -> dict[str, object]:
@@ -5114,6 +5235,20 @@ def explicit_state_mutation(mutator, *, broadcast: bool = True):
         ) from exc
     finally:
         release_state_lock(state_lock)
+
+
+def release_request_state_lock_for_io() -> None:
+    """Persist request state and release its Redis lock before network I/O."""
+    state_lock = getattr(g, "redis_state_lock", None)
+    if not bool(getattr(g, "redis_state_lock_owned", False)):
+        return
+    try:
+        save_state_to_redis()
+    finally:
+        release_state_lock(state_lock)
+        g.redis_state_lock = None
+        g.redis_state_lock_owned = False
+        g.redis_state_saved_during_request = False
 
 
 def load_state_from_redis() -> bool:
@@ -5967,6 +6102,497 @@ def results_rewards_payload(user_id: str) -> dict[str, object]:
     }
 
 
+def party_account_by_id(account_id: str) -> dict[str, object] | None:
+    return next(
+        (
+            account
+            for account in user_accounts.values()
+            if isinstance(account, dict) and str(account.get("id", "")) == account_id
+        ),
+        None,
+    )
+
+
+def attendee_activity_reasons(account_id: str) -> list[str]:
+    reasons = []
+    if any(account_id in party_game_state(game_key).get("participants", {}) for game_key in GAME_CATALOG):
+        reasons.append("Played a game")
+    if any(signup.account_id == account_id for signup in costume_signups):
+        reasons.append("Entered the costume contest")
+    if any(
+        any(str(singer.get("account_id", "")) == account_id for singer in signup.singers)
+        for signup in karaoke_signups
+    ):
+        reasons.append("Joined karaoke")
+    if any(str(order.get("user_id", "")) == account_id for order in drink_orders):
+        reasons.append("Ordered from the bar")
+    if any(str(song_request.get("requester_id", "")) == account_id for song_request in dj_song_requests):
+        reasons.append("Requested a jukebox song")
+    return reasons
+
+
+def wrapup_attendance_options() -> list[dict[str, object]]:
+    options = []
+    for account in sorted(user_accounts.values(), key=lambda entry: str(entry.get("username", "")).casefold()):
+        account_id = str(account.get("id", "") or "")
+        if not account_id:
+            continue
+        reasons = attendee_activity_reasons(account_id)
+        options.append(
+            {
+                "account_id": account_id,
+                "name": str(account.get("username", "Guest") or "Guest"),
+                "email": normalize_email(str(account.get("email", "") or "")),
+                "reasons": reasons,
+                "suggested": bool(reasons),
+            }
+        )
+    return options
+
+
+def current_event_wrapup() -> dict[str, object] | None:
+    return event_wrapups.get(current_event_id())
+
+
+def wrapup_readiness(attendee_account_ids: set[str]) -> dict[str, object]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    played_game_keys: list[str] = []
+    for game_key, metadata in GAME_CATALOG.items():
+        game = party_game_state(game_key)
+        if not game.get("participants"):
+            continue
+        played_game_keys.append(game_key)
+        if game.get("simulation", {}).get("is_simulated"):
+            errors.append(f"{metadata['title']} contains simulated results and cannot be finalized.")
+        elif game.get("phase") != "ended":
+            errors.append(f"End {metadata['title']} before finalizing the party.")
+        elif not isinstance(game.get("results"), dict):
+            errors.append(f"{metadata['title']} does not have a final result snapshot.")
+        if game.get("phase") == "ended" and not game_winner_links(game_key, game):
+            warnings.append(f"{metadata['title']} has no account-linked winner; public results can still be preserved.")
+
+    if not contest_state.get("winner_locked") or not isinstance(contest_state.get("winner"), dict):
+        errors.append("Lock the costume contest winner before finalizing the party.")
+    elif not next(
+        (
+            signup
+            for signup in costume_signups
+            if signup.id == str(contest_state.get("winner", {}).get("id", "")) and signup.account_id
+        ),
+        None,
+    ):
+        warnings.append("The costume winner is not linked to a party account and cannot receive an account achievement.")
+
+    if not attendee_account_ids:
+        errors.append("Select at least one attendee for attendance credit and recap email.")
+    valid_account_ids = {
+        str(account.get("id", ""))
+        for account in user_accounts.values()
+        if isinstance(account, dict) and normalize_email(str(account.get("email", "") or ""))
+    }
+    invalid = sorted(attendee_account_ids - valid_account_ids)
+    if invalid:
+        errors.append("Every selected attendee must have a valid party account email.")
+    return {
+        "ready": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "played_game_keys": played_game_keys,
+        "attendee_count": len(attendee_account_ids),
+    }
+
+
+def current_costume_recap_result() -> dict[str, object]:
+    winner = contest_state.get("winner")
+    if not isinstance(winner, dict):
+        return {}
+    return {
+        "winner": str(winner.get("name", "Guest") or "Guest"),
+        "costume": str(winner.get("costume", "") or ""),
+        "average": round(float(winner.get("average", 0) or 0), 2),
+        "vote_count": int(winner.get("count", 0) or 0),
+    }
+
+
+def build_current_recap_payload(
+    attendee_account_ids: set[str],
+    *,
+    include_incomplete: bool = False,
+    personalization_account_id: str = "",
+) -> dict[str, object]:
+    playlist = build_playlist_snapshot(dj_playlist, dj_state)
+    costume_scores = rank_costume_entries(build_costume_scoreboard()[0])
+    payload: dict[str, object] = {
+        "event_id": current_event_id(),
+        "year": str(app.config["PARTY_YEAR"]),
+        "title": str(app.config["PARTY_TITLE"]),
+        "date": str(app.config["PARTY_DATE_LABEL"]),
+        "game_results": build_game_result_snapshots(games_state, include_incomplete=include_incomplete),
+        "costume_result": current_costume_recap_result(),
+        "playlist_snapshot": playlist,
+        "analytics_snapshot": build_recap_analytics(
+            games_state,
+            attendee_count=len(attendee_account_ids),
+            costume_scores=costume_scores,
+            playlist_snapshot=playlist,
+        ),
+        "new_achievements": [],
+        "personal_summary": {},
+    }
+    if personalization_account_id:
+        account = party_account_by_id(personalization_account_id)
+        if account:
+            achievements = achievement_views(recognition_credits, personalization_account_id)
+            payload["recipient_name"] = str(account.get("username", "Guest") or "Guest")
+            payload["new_achievements"] = [entry["title"] for entry in achievements.get("achievements", [])]
+            payload["personal_summary"] = current_personal_recap_summary(
+                personalization_account_id
+            )
+    return payload
+
+
+def current_personal_recap_summary(account_id: str) -> dict[str, int]:
+    achievements = achievement_views(recognition_credits, account_id)
+    return {
+        "games_joined": sum(
+            1
+            for game_key in GAME_CATALOG
+            if account_id in party_game_state(game_key).get("participants", {})
+        ),
+        "wins": len(achievements.get("game_wins", []))
+        + len(achievements.get("costume_wins", [])),
+        "jukebox_requests": sum(
+            1
+            for entry in dj_song_requests
+            if str(entry.get("requester_id", "")) == account_id
+        ),
+        "karaoke_appearances": sum(
+            1
+            for signup in karaoke_signups
+            if any(
+                str(singer.get("account_id", "")) == account_id
+                for singer in signup.singers
+            )
+        ),
+    }
+
+
+def finalize_current_wrapup(
+    attendee_account_ids: set[str],
+    retention_policies: dict[str, str],
+) -> tuple[dict[str, object] | None, list[str]]:
+    readiness = wrapup_readiness(attendee_account_ids)
+    if not readiness["ready"]:
+        return None, list(readiness["errors"])
+
+    existing = current_event_wrapup()
+    if existing and existing.get("status") not in {"draft"}:
+        return existing, []
+
+    timestamp = _utc_now_iso()
+    before_credit_ids = {str(credit.get("id", "")) for credit in recognition_credits}
+    before_achievements = {
+        account_id: {
+            entry["key"] for entry in achievement_views(recognition_credits, account_id).get("achievements", [])
+        }
+        for account_id in attendee_account_ids
+    }
+    game_archive_ids: list[str] = []
+    for game_key in readiness["played_game_keys"]:
+        archive = upsert_game_result_archive(game_key)
+        if not archive:
+            continue
+        publish_result_archive(archive)
+        game_archive_ids.append(str(archive.get("id", "")))
+        policy = retention_policies.get(game_key, DEFAULT_RETENTION_POLICY)
+        if policy == "detailed":
+            detailed = build_detailed_game_archive(
+                game_key,
+                party_game_state(game_key),
+                event_id=current_event_id(),
+                year=str(app.config["PARTY_YEAR"]),
+                archived_at=timestamp,
+                official_archive_id=str(archive.get("id", "")),
+            )
+            game_data_archives[str(detailed["id"])] = detailed
+
+    costume_archive = upsert_costume_result_archive()
+    if costume_archive:
+        publish_result_archive(costume_archive)
+
+    attendance_credit_ids: list[str] = []
+    for account_id in sorted(attendee_account_ids):
+        account = party_account_by_id(account_id)
+        if not account:
+            continue
+        existing_credit = next(
+            (
+                credit
+                for credit in recognition_credits
+                if credit_exists(
+                    [credit],
+                    kind="attendance",
+                    account_id=account_id,
+                    event_id=current_event_id(),
+                )
+            ),
+            None,
+        )
+        if not existing_credit:
+            existing_credit = new_credit(
+                kind="attendance",
+                account_id=account_id,
+                recipient_name=str(account.get("username", "Guest") or "Guest"),
+                event_id=current_event_id(),
+                year=str(app.config["PARTY_YEAR"]),
+                note="Awarded during party wrap-up.",
+            )
+            recognition_credits.append(existing_credit)
+        attendance_credit_ids.append(str(existing_credit.get("id", "")))
+
+    new_achievements: dict[str, list[str]] = {}
+    for account_id in attendee_account_ids:
+        after = achievement_views(recognition_credits, account_id).get("achievements", [])
+        new_achievements[account_id] = [
+            str(entry.get("key", ""))
+            for entry in after
+            if str(entry.get("key", "")) not in before_achievements.get(account_id, set())
+        ]
+    personal_summaries = {
+        account_id: current_personal_recap_summary(account_id)
+        for account_id in attendee_account_ids
+    }
+
+    created_credit_ids = [
+        str(credit.get("id", ""))
+        for credit in recognition_credits
+        if str(credit.get("id", "")) not in before_credit_ids
+    ]
+    winner_credit_ids = [
+        str(credit.get("id", ""))
+        for credit in recognition_credits
+        if str(credit.get("id", "")) in created_credit_ids and credit.get("kind") in {"game_win", "costume_win"}
+    ]
+    recap_payload = build_current_recap_payload(attendee_account_ids)
+    recap_payload["analytics_snapshot"]["credit_count"] = len(created_credit_ids)
+    recap_payload["analytics_snapshot"]["achievement_count"] = sum(len(values) for values in new_achievements.values())
+    deliveries = []
+    for account_id in sorted(attendee_account_ids):
+        account = party_account_by_id(account_id)
+        if not account:
+            continue
+        deliveries.append(
+            {
+                "account_id": account_id,
+                "email": normalize_email(str(account.get("email", "") or "")),
+                "name": str(account.get("username", "Guest") or "Guest"),
+                "status": "pending",
+                "attempt_count": 0,
+                "last_attempt_at": "",
+                "sent_at": "",
+                "last_error": "",
+            }
+        )
+    wrapup = {
+        "id": current_event_id(),
+        "event_id": current_event_id(),
+        "year": str(app.config["PARTY_YEAR"]),
+        "title": str(app.config["PARTY_TITLE"]),
+        "date": str(app.config["PARTY_DATE_LABEL"]),
+        "status": "finalized",
+        "created_at": str(existing.get("created_at", timestamp) if existing else timestamp),
+        "finalized_at": timestamp,
+        "sent_at": "",
+        "cleanup_started_at": "",
+        "completed_at": "",
+        "last_error": "",
+        "game_archive_ids": game_archive_ids,
+        "costume_archive_id": str(costume_archive.get("id", "")) if costume_archive else "",
+        "game_results": recap_payload["game_results"],
+        "costume_result": recap_payload["costume_result"],
+        "playlist_snapshot": recap_payload["playlist_snapshot"],
+        "analytics_snapshot": recap_payload["analytics_snapshot"],
+        "attendee_account_ids": sorted(attendee_account_ids),
+        "attendance_credit_ids": attendance_credit_ids,
+        "winner_credit_ids": winner_credit_ids,
+        "new_achievements": new_achievements,
+        "personal_summaries": personal_summaries,
+        "retention_policies": {
+            game_key: retention_policies.get(game_key, DEFAULT_RETENTION_POLICY)
+            if retention_policies.get(game_key, DEFAULT_RETENTION_POLICY) in RETENTION_POLICIES
+            else DEFAULT_RETENTION_POLICY
+            for game_key in GAME_CATALOG
+        },
+        "deliveries": deliveries,
+    }
+    event_wrapups[current_event_id()] = normalize_event_wrapups({current_event_id(): wrapup})[current_event_id()]
+    return event_wrapups[current_event_id()], []
+
+
+def personalized_wrapup_payload(wrapup: dict[str, object], account_id: str) -> dict[str, object]:
+    payload = {
+        "event_id": wrapup.get("event_id", ""),
+        "year": wrapup.get("year", ""),
+        "title": wrapup.get("title", ""),
+        "date": wrapup.get("date", ""),
+        "game_results": copy.deepcopy(wrapup.get("game_results", [])),
+        "costume_result": copy.deepcopy(wrapup.get("costume_result", {})),
+        "playlist_snapshot": copy.deepcopy(wrapup.get("playlist_snapshot", [])),
+        "analytics_snapshot": copy.deepcopy(wrapup.get("analytics_snapshot", {})),
+        "test_mode": "",
+    }
+    account = party_account_by_id(account_id)
+    payload["recipient_name"] = str(account.get("username", "Guest") if account else "Guest")
+    achievement_keys = set(wrapup.get("new_achievements", {}).get(account_id, [])) if isinstance(wrapup.get("new_achievements"), dict) else set()
+    payload["new_achievements"] = [
+        str(definition.get("title", key))
+        for key, definition in ACHIEVEMENT_CATALOG.items()
+        if key in achievement_keys
+    ]
+    summaries = wrapup.get("personal_summaries", {})
+    payload["personal_summary"] = (
+        copy.deepcopy(summaries.get(account_id, {}))
+        if isinstance(summaries, dict)
+        else {}
+    )
+    return payload
+
+
+def build_party_recap_text(payload: dict[str, object], *, test_mode: str = "") -> str:
+    lines = []
+    if test_mode:
+        lines.extend(["TEST EMAIL — NOT THE OFFICIAL PARTY RECAP", f"Data source: {test_mode}", ""])
+    lines.extend([str(payload.get("title", "Halloween Party")), "The party results are in!", ""])
+    for result in payload.get("game_results", []):
+        if isinstance(result, dict):
+            lines.append(f"{result.get('title', 'Game')}: {result.get('winner_label', 'Pending')}")
+    costume = payload.get("costume_result", {})
+    if isinstance(costume, dict) and costume:
+        lines.extend(["", f"Costume winner: {costume.get('winner', 'Guest')} — {costume.get('costume', '')}"])
+    lines.append("")
+    lines.append("Final jukebox playlist:")
+    for song in payload.get("playlist_snapshot", []):
+        if isinstance(song, dict):
+            lines.append(f"{song.get('position', '')}. {song.get('title', 'Song')} — {song.get('artist', 'Artist')}")
+    achievements = payload.get("new_achievements", [])
+    if achievements:
+        lines.extend(["", "Your newly unlocked achievements: " + ", ".join(str(value) for value in achievements)])
+    lines.extend(["", app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_results")])
+    return "\n".join(lines)
+
+
+def send_party_recap_message(
+    destination: str,
+    payload: dict[str, object],
+    *,
+    test_mode: str = "",
+) -> tuple[bool, str]:
+    recipient = normalize_email(destination)
+    if not recipient:
+        return False, "Enter a valid test recipient email address."
+    if not app.config["EMAIL_UPDATES_ENABLED"]:
+        return False, "Halloween email sending is disabled."
+    try:
+        ses_client = create_ses_client()
+    except ImportError:
+        return False, "Email sending is enabled, but boto3 is unavailable."
+    subject_prefix = "[TEST] " if test_mode else ""
+    subject = f"{subject_prefix}{payload.get('title', 'Halloween Party')} Results & Recap"
+    html_body = render_template(
+        "email/party_recap.html",
+        recap=payload,
+        test_mode=test_mode,
+        results_url=app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_results"),
+    )
+    try:
+        ses_client.send_email(
+            FromEmailAddress=app.config["EMAIL_FROM"],
+            Destination={"ToAddresses": [recipient]},
+            Content={
+                "Simple": {
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": {
+                        "Text": {"Data": build_party_recap_text(payload, test_mode=test_mode), "Charset": "UTF-8"},
+                        "Html": {"Data": html_body, "Charset": "UTF-8"},
+                    },
+                }
+            },
+        )
+    except Exception as exc:
+        app.logger.warning("Unable to send party recap email to %s: %s", recipient, exc)
+        return False, str(exc)[:500]
+    return True, ""
+
+
+def cleanup_completed_wrapup(wrapup: dict[str, object]) -> tuple[bool, str]:
+    global result_archives, recognition_credits
+    if not all_deliveries_sent(wrapup):
+        return False, "Every official recap email must be sent before game cleanup."
+    before_cleanup = snapshot_state()
+    wrapup_id = str(wrapup.get("event_id", ""))
+    timestamp = _utc_now_iso()
+    wrapup["status"] = "cleanup_pending"
+    wrapup["cleanup_started_at"] = timestamp
+    delete_all = {
+        game_key
+        for game_key, policy in wrapup.get("retention_policies", {}).items()
+        if policy == "delete_all"
+    }
+    try:
+        for game_key, policy in wrapup.get("retention_policies", {}).items():
+            archive_id = f"{wrapup.get('event_id')}:game-data:{game_key}"
+            if policy != "detailed":
+                game_data_archives.pop(archive_id, None)
+        deleted_archive_ids = {
+            str(archive.get("id", ""))
+            for archive in result_archives
+            if archive.get("kind") == "game" and str(archive.get("subject_key", "")) in delete_all
+        }
+        result_archives = [
+            archive
+            for archive in result_archives
+            if not (archive.get("kind") == "game" and str(archive.get("subject_key", "")) in delete_all)
+        ]
+        for credit in recognition_credits:
+            if str(credit.get("source_ref", "")) in deleted_archive_ids and not credit.get("revoked_at"):
+                credit["revoked_at"] = timestamp
+                credit["revoked_reason"] = "Historical game record deleted during party wrap-up."
+        reset_current_games(set(GAME_CATALOG), preserve_enabled=False, sanitize_backups=False)
+        sanitize_game_data_in_state_backups(
+            game_keys=set(GAME_CATALOG),
+            delete_official_for=delete_all,
+        )
+    except (redis.RedisError, RuntimeError) as exc:
+        apply_state_snapshot(before_cleanup)
+        restored_wrapup = event_wrapups.get(wrapup_id)
+        if restored_wrapup:
+            restored_wrapup["status"] = "cleanup_failed"
+            restored_wrapup["last_error"] = str(exc)[:500]
+        return False, str(exc)
+    if delete_all:
+        for game_key in delete_all:
+            official_archive_id = next(
+                (
+                    archive_id
+                    for archive_id in deleted_archive_ids
+                    if archive_id.endswith(f":game:{game_key}")
+                ),
+                "",
+            )
+            updated = remove_game_history_from_wrapup(
+                wrapup,
+                game_key=game_key,
+                official_archive_id=official_archive_id,
+            )
+            wrapup.clear()
+            wrapup.update(updated)
+    wrapup["status"] = "complete"
+    wrapup["completed_at"] = _utc_now_iso()
+    wrapup["last_error"] = ""
+    return True, ""
+
+
 def total_game_participations() -> int:
     return sum(len(party_game_state(game_key).get("participants", {})) for game_key in GAME_CATALOG)
 
@@ -6015,7 +6641,6 @@ def mmf_admin_view() -> dict[str, object]:
         "metadata": GAME_CATALOG[MURDER_MARRY_FUCK_GAME_KEY],
         "statistics": statistics,
         "winners": game_winners(MURDER_MARRY_FUCK_GAME_KEY, game),
-        "reset_phrase": "RESET MURDER MARRY FUCK",
     }
 
 
@@ -6028,7 +6653,6 @@ def prompt_admin_view(game_key: str) -> dict[str, object]:
         "metadata": GAME_CATALOG[game_key],
         "statistics": statistics,
         "winners": game_winners(game_key, game),
-        "reset_phrase": f"RESET {GAME_CATALOG[game_key]['short_title'].upper()}",
     }
 
 
@@ -6039,7 +6663,6 @@ def game_admin_view(game_key: str) -> dict[str, object]:
             {
                 "key": TWO_TRUTHS_GAME_KEY,
                 "metadata": GAME_CATALOG[TWO_TRUTHS_GAME_KEY],
-                "reset_phrase": "RESET TWO TRUTHS AND A LIE",
             }
         )
         return view
@@ -6078,6 +6701,146 @@ def all_games_admin_view(
         "active_count": active_count,
         "enabled_count": enabled_count,
         "participant_count": participant_count,
+        "reset_counts": game_reset_counts(games_state),
+    }
+
+
+def wrapup_admin_view() -> dict[str, object]:
+    wrapup = current_event_wrapup()
+    attendee_options = wrapup_attendance_options()
+    selected_ids = (
+        set(wrapup.get("attendee_account_ids", []))
+        if wrapup
+        else {
+            str(option["account_id"])
+            for option in attendee_options
+            if option.get("suggested")
+        }
+    )
+    policies = {
+        game_key: str(
+            (wrapup or {}).get("retention_policies", {}).get(
+                game_key, DEFAULT_RETENTION_POLICY
+            )
+        )
+        for game_key in GAME_CATALOG
+    }
+    return {
+        "wrapup": wrapup,
+        "status": str((wrapup or {}).get("status", "draft")),
+        "attendee_options": attendee_options,
+        "selected_attendee_ids": selected_ids,
+        "retention_policies": policies,
+        "retention_policy_options": {
+            "summary_only": "Official summary only",
+            "detailed": "Detailed privacy-safe archive",
+            "delete_all": "Delete this game's history after delivery",
+        },
+        "readiness": wrapup_readiness(selected_ids),
+        "preview": build_current_recap_payload(
+            selected_ids,
+            include_incomplete=True,
+        ),
+        "email_enabled": bool(app.config["EMAIL_UPDATES_ENABLED"]),
+        "test_email_audit": list(reversed(test_email_audit[-10:])),
+    }
+
+
+def game_history_admin_view() -> dict[str, object]:
+    event_filter = str(request.args.get("history_event", "") or "")
+    game_filter = str(request.args.get("history_game", "") or "")
+    retention_filter = str(request.args.get("history_retention", "") or "")
+    search = str(request.args.get("history_q", "") or "").strip().casefold()[:120]
+    groups: dict[str, dict[str, object]] = {}
+    all_event_ids: set[str] = set()
+    for archive in result_archives:
+        if archive.get("kind") != "game" or archive.get("status") != "official":
+            continue
+        event_id = str(archive.get("event_id", "") or "unknown-event")
+        all_event_ids.add(event_id)
+        detail = next(
+            (
+                entry
+                for entry in game_data_archives.values()
+                if entry.get("official_archive_id") == archive.get("id")
+            ),
+            None,
+        )
+        retention_status = (
+            detail.get("retention_status", "detailed") if detail else "summary_only"
+        )
+        if event_filter and event_id != event_filter:
+            continue
+        if game_filter and str(archive.get("subject_key", "")) != game_filter:
+            continue
+        if retention_filter and retention_status != retention_filter:
+            continue
+        searchable = json.dumps(
+            {
+                "title": archive.get("title", ""),
+                "summary": archive.get("summary", {}),
+            },
+            sort_keys=True,
+        ).casefold()
+        if search and search not in searchable:
+            continue
+        group = groups.setdefault(
+            event_id,
+            {
+                "event_id": event_id,
+                "year": str(archive.get("year", "") or "Unknown"),
+                "title": str(
+                    event_editions.get(event_id, {}).get("title", "Halloween Party")
+                ),
+                "wrapup": event_wrapups.get(event_id),
+                "archives": [],
+            },
+        )
+        group["archives"].append(
+            {
+                "summary": archive,
+                "detail": detail,
+                "retention_status": retention_status,
+            }
+        )
+    ordered = sorted(
+        groups.values(),
+        key=lambda group: str(group.get("year", "")),
+        reverse=True,
+    )
+    for group in ordered:
+        group["archives"] = sorted(
+            group["archives"],
+            key=lambda entry: str(entry["summary"].get("title", "")),
+        )
+    return {
+        "groups": ordered,
+        "official_count": sum(len(group["archives"]) for group in ordered),
+        "detailed_count": sum(
+            1
+            for group in ordered
+            for item in group["archives"]
+            if item.get("detail")
+        ),
+        "event_options": sorted(
+            (
+                {
+                    "id": event_id,
+                    "label": str(
+                        event_editions.get(event_id, {}).get("title", event_id)
+                    ),
+                }
+                for event_id in all_event_ids
+            ),
+            key=lambda option: option["label"],
+            reverse=True,
+        ),
+        "filters": {
+            "event": event_filter,
+            "game": game_filter,
+            "retention": retention_filter,
+            "search": search,
+        },
     }
 
 
@@ -6627,6 +7390,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
         phase = str(game.get("phase", "signup") or "signup")
         participants = game.get("participants", {}) if isinstance(game.get("participants"), dict) else {}
         title = GAME_CATALOG[game_key]["title"]
+        presentation = "result" if phase == "ended" else ("active" if phase == "active" else "signup")
         entry: dict[str, object] = {
             "id": game_key,
             "game_key": game_key,
@@ -6634,16 +7398,40 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             "image_url": game_art_url(game_key),
             "media_treatment": "background",
             "phase": phase,
+            "presentation": presentation,
             "status_label": phase.replace("_", " ").title(),
             "primary": GAME_CATALOG[game_key]["description"],
-            "secondary": "Open Games in the party portal to join.",
+            "secondary": (
+                "Final results are available in Party Games."
+                if phase == "ended"
+                else (
+                    "Play from your phone while the game is live."
+                    if phase == "active"
+                    else "Open Games in the party portal to join."
+                )
+            ),
+            "focus_label": "Final result" if phase == "ended" else ("Live game" if phase == "active" else "How to play"),
+            "focus_items": [],
+            "feature_text": "",
             "metrics": [{"label": "Players", "value": len(participants)}],
-            "steps": [
-                "Open Games in the party portal",
-                "Join this game",
-                "Follow the live phase shown here",
-            ],
-            "action_label": "Join at tnq-halloween.com/party/games",
+            "steps": (
+                []
+                if phase == "ended"
+                else [
+                    "Open Games in the party portal",
+                    "Join this game" if phase == "signup" else "Complete the current game action",
+                    "Follow the live phase shown here",
+                ]
+            ),
+            "action_label": (
+                "See results at tnq-halloween.com/party/results"
+                if phase == "ended"
+                else (
+                    "Play at tnq-halloween.com/party/games"
+                    if phase == "active"
+                    else "Join at tnq-halloween.com/party/games"
+                )
+            ),
             "priority": 2 if phase == "active" else (1 if phase == "ended" else 0),
         }
 
@@ -6668,12 +7456,15 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                         {
                             **entry,
                             "id": f"{game_key}:{participant.get('submission_id', 'clue')}",
+                            "presentation": "clue",
                             "status_label": "Mystery clue",
-                            "primary": f"1. {statements[0]} · 2. {statements[1]} · 3. {statements[2]}",
+                            "focus_label": "Three statements",
+                            "primary": "Which statement is the lie?",
                             "secondary": "Can you identify the mystery guest?",
-                            "steps": statements,
+                            "focus_items": statements,
+                            "steps": [],
                             "action_label": "Make your guess in Party Games",
-                            "metrics": [],
+                            "metrics": copy.deepcopy(entry["metrics"]),
                             "priority": 3 if phase == "active" else 1,
                         }
                     )
@@ -6696,6 +7487,12 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 responses = current_round.get("responses", {}) if isinstance(current_round.get("responses"), dict) else {}
                 votes = current_round.get("votes", {}) if isinstance(current_round.get("votes"), dict) else {}
                 entry["status_label"] = f"Round {int(game.get('current_round_index', 0) or 0) + 1} · {round_status.title()}"
+                entry["presentation"] = {
+                    "submissions": "prompt",
+                    "voting": "voting",
+                    "revealed": "reveal",
+                }.get(round_status, "prompt")
+                entry["focus_label"] = "Current prompt"
                 entry["primary"] = str(current_round.get("prompt_text", "") or "Responses are open.")
                 entry["secondary"] = "Blind voting is open in Games." if round_status == "voting" else "Submit your response in Games."
                 entry["metrics"] = [
@@ -6710,25 +7507,24 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 ]
                 entry["action_label"] = "Respond in Party Games" if round_status == "submissions" else "Vote now in Party Games"
                 entry["priority"] = 3 if round_status in {"voting", "revealed"} else 2
-                if round_status in {"voting", "revealed"}:
+                if phase != "ended" and round_status in {"voting", "revealed"}:
                     for response in responses.values():
                         detail_entries.append(
                             {
                                 **entry,
                                 "id": f"{game_key}:{response.get('id', 'response')}",
+                                "presentation": "response" if round_status == "voting" else "reveal",
                                 "status_label": f"Round {int(game.get('current_round_index', 0) or 0) + 1} · {round_status.title()}",
+                                "focus_label": "Blind response" if round_status == "voting" else "Round reveal",
                                 "primary": str(current_round.get("prompt_text", "") or "Prompt"),
-                                "secondary": str(response.get("text", "") or "Anonymous response"),
+                                "secondary": "Read the prompt, then judge this response.",
+                                "feature_text": str(response.get("text", "") or "Anonymous response"),
                                 "metrics": [
                                     {"label": "Answers", "value": len(responses)},
                                     {"label": "Votes", "value": len(votes)},
                                     {"label": "Players", "value": len(participants)},
                                 ],
-                                "steps": [
-                                    "Open Party Games",
-                                    "Read every blind response",
-                                    "Vote for your favorite",
-                                ],
+                                "steps": [],
                                 "action_label": "Vote in Party Games",
                                 "priority": 4,
                             }
@@ -6738,6 +7534,11 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Game champions"
 
+        if phase == "ended":
+            entry["presentation"] = "result"
+            entry["focus_label"] = "Winner" if game_public_winner_names(game_key, game) else "Final outcome"
+            entry["steps"] = []
+            entry["action_label"] = "See results at tnq-halloween.com/party/results"
         if phase == "ended" and game_public_winner_names(game_key, game):
             entry["image_url"] = game_art_url(game_key, winner=True)
         entries.append(entry)
@@ -8604,10 +9405,112 @@ def party_register():
     )
 
 
+def place_attendee_drink_order(
+    user_id: str,
+    account: dict[str, object],
+    item_id: str,
+) -> tuple[dict[str, object] | None, str]:
+    item = find_menu_item(item_id)
+    can_order, order_error = can_order_menu_item(user_id, item)
+    if not can_order or not item:
+        return None, order_error
+
+    order = create_drink_order(user_id, account, item)
+    drink_orders.append(order)
+    send_drink_order_placed_email(order)
+    persist_state_if_available()
+    return order, ""
+
+
+def reorder_attendee_drink(
+    user_id: str,
+    account: dict[str, object],
+    order_id: str,
+) -> tuple[dict[str, object] | None, str]:
+    original_order = find_drink_order(order_id)
+    if not original_order or str(original_order.get("user_id", "")) != user_id:
+        return None, "That drink order could not be found."
+
+    item = find_menu_item(str(original_order.get("menu_item_id", "") or ""))
+    can_order, order_error = can_order_menu_item(user_id, item)
+    if not can_order or not item:
+        return None, order_error
+
+    order = create_drink_order(user_id, account, item)
+    drink_orders.append(order)
+    send_drink_order_placed_email(order)
+    persist_state_if_available()
+    return order, ""
+
+
+def group_attendee_drink_orders(user_id: str) -> dict[str, list[dict[str, object]]]:
+    groups: dict[str, list[dict[str, object]]] = {
+        "ready": [],
+        "in_progress": [],
+        "received": [],
+        "previous": [],
+    }
+    for order in user_drink_orders(user_id):
+        status = str(order.get("status", "received"))
+        if status == "complete" and ready_order_is_visible_on_dashboard(order):
+            groups["ready"].append(order)
+        elif status == "in_progress":
+            groups["in_progress"].append(order)
+        elif status == "received":
+            groups["received"].append(order)
+        else:
+            groups["previous"].append(order)
+    return groups
+
+
+def render_party_menu_workspace(
+    user_id: str,
+    *,
+    errors: list[str] | None = None,
+    messages: list[str] | None = None,
+    active_view: str | None = None,
+):
+    selected_view = active_view or str(request.args.get("view", "menu") or "menu")
+    if selected_view not in {"menu", "orders"}:
+        selected_view = "menu"
+
+    page_messages = list(messages or [])
+    if request.args.get("ordered") == "1":
+        page_messages.append("Your drink order was sent to the bar.")
+    if request.args.get("reordered") == "1":
+        page_messages.append("Your reorder was sent to the bar.")
+
+    orders = user_drink_orders(user_id)
+    order_groups = group_attendee_drink_orders(user_id)
+    reorderable_item_ids = {
+        str(item.get("id", ""))
+        for item in menu_items
+        if can_order_menu_item(user_id, item)[0]
+    }
+    queue_state = attendee_bar_queue_state(user_id)
+
+    return render_template(
+        "menu.html",
+        errors=list(errors or []),
+        messages=page_messages,
+        active_view=selected_view,
+        menu_sections=build_menu_sections(),
+        drink_orders=orders,
+        order_groups=order_groups,
+        reorderable_item_ids=reorderable_item_ids,
+        specialty_drink_count=user_specialty_drink_count(user_id),
+        specialty_drink_limit=SPECIALTY_DRINK_INCLUDED_LIMIT,
+        specialty_extra_orders_open=specialty_extra_orders_are_open(),
+        bartender_tip_settings=bartender_tip_settings,
+        bartender_tip_methods=bartender_tip_methods(),
+        bar_queue=queue_state,
+        bar_queue_data_url=url_for("party_bar_queue_data"),
+        show_admin_link=False,
+    )
+
+
 @app.route("/party/menu", methods=["GET", "POST"])
 def party_menu():
-    errors: List[str] = []
-    messages: List[str] = []
     user_id = str(session.get("user_id", "") or "")
     account = current_user_account()
 
@@ -8617,43 +9520,41 @@ def party_menu():
         return redirect(url_for("party_dashboard"))
 
     if request.method == "POST":
-        item_id = request.form.get("menu_item_id", "").strip()
-        item = find_menu_item(item_id)
-        can_order, order_error = can_order_menu_item(user_id, item)
-        if not can_order:
-            errors.append(order_error)
+        action = str(request.form.get("action", "") or "").strip()
+        if not action:
+            action = "reorder_drink" if request.form.get("order_id") else "order_drink"
 
-        if not errors and item:
-            order = create_drink_order(user_id, account, item)
-            drink_orders.append(order)
-            send_drink_order_placed_email(order)
-            messages.append(
-                f"Order received for {order['item_name']}. Estimated ready time: "
-                f"{format_time_label(order['estimated_ready_at']) or 'soon'}."
+        if action == "order_drink":
+            order, order_error = place_attendee_drink_order(
+                user_id,
+                account,
+                request.form.get("menu_item_id", "").strip(),
             )
-            persist_state_if_available()
-            return redirect(url_for("party_menu", ordered="1"))
+            if order:
+                return redirect(url_for("party_menu", view="orders", ordered="1"))
+            return render_party_menu_workspace(user_id, errors=[order_error], active_view="menu")
 
-    if request.args.get("ordered") == "1":
-        messages.append("Your drink order was sent to the bar.")
+        if action == "reorder_drink":
+            order, order_error = reorder_attendee_drink(
+                user_id,
+                account,
+                request.form.get("order_id", "").strip(),
+            )
+            if order:
+                return redirect(url_for("party_menu", view="orders", reordered="1"))
+            return render_party_menu_workspace(user_id, errors=[order_error], active_view="orders")
 
-    return render_template(
-        "menu.html",
-        errors=errors,
-        messages=messages,
-        menu_sections=build_menu_sections(),
-        drink_orders=user_drink_orders(user_id),
-        specialty_drink_count=user_specialty_drink_count(user_id),
-        specialty_drink_limit=SPECIALTY_DRINK_INCLUDED_LIMIT,
-        specialty_extra_orders_open=specialty_extra_orders_are_open(),
-        show_admin_link=False,
-    )
+        return render_party_menu_workspace(
+            user_id,
+            errors=["Choose a valid menu action."],
+            active_view=str(request.args.get("view", "menu") or "menu"),
+        )
+
+    return render_party_menu_workspace(user_id)
 
 
 @app.route("/party/drink-history", methods=["GET", "POST"])
 def party_drink_history():
-    errors: List[str] = []
-    messages: List[str] = []
     user_id = str(session.get("user_id", "") or "")
     account = current_user_account()
 
@@ -8663,46 +9564,16 @@ def party_drink_history():
         return redirect(url_for("party_dashboard"))
 
     if request.method == "POST":
-        order_id = request.form.get("order_id", "").strip()
-        original_order = find_drink_order(order_id)
-        if not original_order or str(original_order.get("user_id", "")) != user_id:
-            errors.append("That drink order could not be found.")
-        else:
-            item = find_menu_item(str(original_order.get("menu_item_id", "") or ""))
-            can_order, order_error = can_order_menu_item(user_id, item)
-            if not can_order:
-                errors.append(order_error)
-            elif item:
-                order = create_drink_order(user_id, account, item)
-                drink_orders.append(order)
-                send_drink_order_placed_email(order)
-                messages.append(f"Reordered {order['item_name']}.")
-                persist_state_if_available()
-                return redirect(url_for("party_drink_history", reordered="1"))
+        order, order_error = reorder_attendee_drink(
+            user_id,
+            account,
+            request.form.get("order_id", "").strip(),
+        )
+        if order:
+            return redirect(url_for("party_menu", view="orders", reordered="1"))
+        return render_party_menu_workspace(user_id, errors=[order_error], active_view="orders")
 
-    if request.args.get("reordered") == "1":
-        messages.append("Your reorder was sent to the bar.")
-
-    orders = user_drink_orders(user_id)
-    reorderable_item_ids = {
-        str(item.get("id", ""))
-        for item in menu_items
-        if can_order_menu_item(user_id, item)[0]
-    }
-
-    return render_template(
-        "drink_history.html",
-        errors=errors,
-        messages=messages,
-        drink_orders=orders,
-        reorderable_item_ids=reorderable_item_ids,
-        specialty_drink_count=user_specialty_drink_count(user_id),
-        specialty_drink_limit=SPECIALTY_DRINK_INCLUDED_LIMIT,
-        specialty_extra_orders_open=specialty_extra_orders_are_open(),
-        bartender_tip_settings=bartender_tip_settings,
-        bartender_tip_methods=bartender_tip_methods(),
-        show_admin_link=False,
-    )
+    return redirect(url_for("party_menu", view="orders"))
 
 
 @app.route("/party/bartender-tip")
@@ -8715,7 +9586,7 @@ def party_bartender_tip():
     if not party_day_has_arrived():
         return redirect(url_for("party_dashboard"))
     if not bartender_tip_settings.get("enabled"):
-        return redirect(url_for("party_drink_history"))
+        return redirect(url_for("party_menu", view="orders"))
 
     return render_template(
         "bartender_tip.html",
@@ -8759,6 +9630,72 @@ def bartender_queue_context() -> dict[str, object]:
         "completed_orders": list(reversed(recent_completed)),
         "average_completion_seconds": average_drink_completion_seconds(),
         "queue_version": queue_version,
+    }
+
+
+def attendee_bar_queue_state(user_id: str) -> dict[str, object]:
+    queue_context = bartender_queue_context()
+    active_orders = list(queue_context["active_orders"])
+    personal_orders: list[dict[str, object]] = []
+
+    for position, order in enumerate(active_orders, start=1):
+        if str(order.get("user_id", "")) != user_id:
+            continue
+        personal_orders.append(
+            {
+                "id": str(order.get("id", "")),
+                "item_name": str(order.get("item_name", "Drink") or "Drink"),
+                "item_image_url": safe_image_url(str(order.get("item_image_url", "") or "")),
+                "status": str(order.get("status", "received") or "received"),
+                "status_label": drink_order_status_label(order.get("status")),
+                "estimated_ready_label": format_time_label(order.get("estimated_ready_at")) or "Soon",
+                "queue_position": position,
+                "orders_ahead": max(0, position - 1),
+                "ready": False,
+            }
+        )
+
+    ready_orders = [
+        order
+        for order in user_drink_orders(user_id)
+        if ready_order_is_visible_on_dashboard(order)
+    ]
+    for order in reversed(ready_orders):
+        personal_orders.insert(
+            0,
+            {
+                "id": str(order.get("id", "")),
+                "item_name": str(order.get("item_name", "Drink") or "Drink"),
+                "item_image_url": safe_image_url(str(order.get("item_image_url", "") or "")),
+                "status": "complete",
+                "status_label": "Ready for pickup",
+                "estimated_ready_label": "Ready now",
+                "queue_position": 0,
+                "orders_ahead": 0,
+                "ready": True,
+            },
+        )
+
+    average_seconds = int(queue_context["average_completion_seconds"])
+    average_minutes = max(1, (average_seconds + 59) // 60)
+    attendee_version = hashlib.sha256(
+        json.dumps(
+            {
+                "queue_version": str(queue_context["queue_version"]),
+                "personal_orders": personal_orders,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "queue_version": attendee_version,
+        "active_count": len(active_orders),
+        "mixing_count": sum(1 for order in active_orders if order.get("status") == "in_progress"),
+        "waiting_count": sum(1 for order in active_orders if order.get("status") == "received"),
+        "average_prep_label": f"About {average_minutes} minute{'s' if average_minutes != 1 else ''}",
+        "personal_orders": personal_orders,
+        "personal_active_count": sum(1 for order in personal_orders if not order["ready"]),
+        "personal_ready_count": sum(1 for order in personal_orders if order["ready"]),
     }
 
 
@@ -8828,6 +9765,16 @@ def bartender_queue_data():
             "completed_count": len(queue_context["completed_orders"]),
         }
     )
+
+
+@app.route("/api/party/bar-queue")
+def party_bar_queue_data():
+    user_id = str(session.get("user_id", "") or "")
+    if not user_id or not current_user_account():
+        return jsonify({"error": "Party account sign-in required."}), 401
+    if not party_day_has_arrived():
+        return jsonify({"error": "Bar ordering is not available yet."}), 403
+    return jsonify(attendee_bar_queue_state(user_id))
 
 
 @app.route("/party/logout", methods=["POST"])
@@ -9196,7 +10143,7 @@ def admin_portal(admin_view: str):
     global live_display_event_override, live_display_notice_override, live_display_notice_queue
     global submitted_costume_votes, costume_ballots, karaoke_state
     global landing_page_target, event_experience_mode, party_code_hash, party_code_hint, party_details, display_settings, display_config, display_runtime, rsvp_notification_email
-    global bartender_tip_settings, dj_song_requests
+    global bartender_tip_settings, dj_song_requests, result_archives, recognition_credits
 
     ensure_costume_votes_alignment()
 
@@ -9584,7 +10531,421 @@ def admin_portal(admin_view: str):
             "link_recognition_credit",
         }
 
-        if action in recognition_actions:
+        wrapup_actions = {
+            "save_wrapup_draft",
+            "finalize_party_wrapup",
+            "send_sample_recap_test",
+            "send_current_recap_test",
+            "send_party_recap",
+            "retry_failed_recap",
+            "retry_wrapup_cleanup",
+            "delete_detailed_game_history",
+            "delete_official_game_history",
+        }
+
+        if action == "reset_all_games":
+            counts = game_reset_counts(games_state)
+            before_reset = snapshot_state()
+            try:
+                sanitized_backup_count = reset_current_games(
+                    set(GAME_CATALOG),
+                    preserve_enabled=False,
+                    sanitize_backups=True,
+                )
+            except (redis.RedisError, RuntimeError) as exc:
+                apply_state_snapshot(before_reset)
+                errors.append(f"Game reset could not sanitize retained state backups: {exc}")
+            else:
+                messages.append(
+                    "All games were restored to their original disabled testing state. "
+                    f"Cleared {counts['participant_count']} participant record"
+                    f"{'s' if counts['participant_count'] != 1 else ''}, "
+                    f"{counts['simulation_count']} simulation"
+                    f"{'s' if counts['simulation_count'] != 1 else ''}, and sanitized "
+                    f"{sanitized_backup_count} Redis backup"
+                    f"{'s' if sanitized_backup_count != 1 else ''}. Official history and achievements were preserved."
+                )
+                should_broadcast = True
+
+        elif action in wrapup_actions:
+            if action in {"save_wrapup_draft", "finalize_party_wrapup"}:
+                attendee_ids = {
+                    str(account_id).strip()
+                    for account_id in request.form.getlist("attendee_account_ids")
+                    if str(account_id).strip()
+                }
+                policies = {
+                    game_key: str(
+                        request.form.get(
+                            f"retention_{game_key}", DEFAULT_RETENTION_POLICY
+                        )
+                    )
+                    for game_key in GAME_CATALOG
+                }
+                if action == "save_wrapup_draft":
+                    existing = current_event_wrapup() or {}
+                    if existing.get("status") not in {None, "", "draft"}:
+                        errors.append("A finalized party record cannot be changed as a draft.")
+                    else:
+                        timestamp = _utc_now_iso()
+                        draft = {
+                            **existing,
+                            "id": current_event_id(),
+                            "event_id": current_event_id(),
+                            "year": str(app.config["PARTY_YEAR"]),
+                            "title": str(app.config["PARTY_TITLE"]),
+                            "date": str(app.config["PARTY_DATE_LABEL"]),
+                            "status": "draft",
+                            "created_at": str(existing.get("created_at", timestamp) or timestamp),
+                            "attendee_account_ids": sorted(attendee_ids),
+                            "retention_policies": policies,
+                        }
+                        event_wrapups[current_event_id()] = normalize_event_wrapups(
+                            {current_event_id(): draft}
+                        )[current_event_id()]
+                        messages.append(
+                            "Saved the attendance and retention draft. No results were finalized, "
+                            "credits awarded, email sent, or game data erased."
+                        )
+                        should_broadcast = True
+                else:
+                    before_finalize = snapshot_state()
+                    try:
+                        write_state_backup_if_available("party-wrapup-finalize")
+                        wrapup, finalize_errors = finalize_current_wrapup(
+                            attendee_ids,
+                            policies,
+                        )
+                    except (RuntimeError, ValueError, redis.RedisError) as exc:
+                        apply_state_snapshot(before_finalize)
+                        errors.append(f"Party wrap-up could not be finalized: {exc}")
+                    else:
+                        if finalize_errors:
+                            errors.extend(finalize_errors)
+                        elif wrapup:
+                            messages.append(
+                                "Party results, playlist, analytics, attendance, and achievements "
+                                "were frozen for recap delivery. No game data has been erased yet."
+                            )
+                            should_broadcast = True
+
+            elif action in {"send_sample_recap_test", "send_current_recap_test"}:
+                mode = "sample" if action == "send_sample_recap_test" else "current"
+                destination = normalize_email(request.form.get("test_recipient", ""))
+                personalization_id = str(
+                    request.form.get("personalization_account_id", "") or ""
+                )
+                if not destination:
+                    errors.append("Enter a valid test recipient email address.")
+                else:
+                    if mode == "sample":
+                        payload = build_sample_recap_payload()
+                    else:
+                        active_wrapup = current_event_wrapup()
+                        selected_ids = (
+                            set(active_wrapup.get("attendee_account_ids", []))
+                            if active_wrapup
+                            else {
+                                str(option["account_id"])
+                                for option in wrapup_attendance_options()
+                                if option.get("suggested")
+                            }
+                        )
+                        payload = build_current_recap_payload(
+                            selected_ids,
+                            include_incomplete=True,
+                            personalization_account_id=personalization_id,
+                        )
+                    payload["test_mode"] = mode
+                    try:
+                        release_request_state_lock_for_io()
+                        success, email_error = send_party_recap_message(
+                            destination,
+                            payload,
+                            test_mode=mode,
+                        )
+                        now = _utc_now_iso()
+
+                        def record_test_send():
+                            test_email_audit.append(
+                                {
+                                    "mode": mode,
+                                    "destination": destination,
+                                    "requested_at": now,
+                                    "sent_at": now if success else "",
+                                    "success": success,
+                                    "error": email_error,
+                                }
+                            )
+                            test_email_audit[:] = normalize_test_email_audit(
+                                test_email_audit
+                            )
+
+                        explicit_state_mutation(record_test_send)
+                    except (redis.RedisError, StateMutationBusy) as exc:
+                        errors.append(f"The recap test could not update its audit record: {exc}")
+                    else:
+                        if success:
+                            messages.append(
+                                f"Sent a clearly labeled {mode}-data recap test to {destination}. "
+                                "Official delivery and cleanup were not changed."
+                            )
+                        else:
+                            errors.append(
+                                f"The recap test email could not be sent: {email_error}"
+                            )
+
+            elif action in {"send_party_recap", "retry_failed_recap"}:
+                wrapup = current_event_wrapup()
+                if not wrapup or wrapup.get("status") == "draft":
+                    errors.append("Finalize the party wrap-up before sending official recaps.")
+                elif wrapup.get("status") == "complete":
+                    messages.append("The official recap and game cleanup are already complete.")
+                else:
+                    write_state_backup_if_available("party-recap-send")
+                    pending = [
+                        copy.deepcopy(delivery)
+                        for delivery in wrapup.get("deliveries", [])
+                        if delivery.get("status") != "sent"
+                    ]
+                    if not pending and not all_deliveries_sent(wrapup):
+                        errors.append("No valid recap recipients are available.")
+                    else:
+                        wrapup["status"] = "sending"
+                        sent_count = 0
+                        failed_count = 0
+                        intended_count = len(wrapup.get("deliveries", []))
+                        try:
+                            release_request_state_lock_for_io()
+                            for delivery in pending:
+                                account_id = str(delivery.get("account_id", ""))
+                                destination = str(delivery.get("email", ""))
+                                attempt_at = _utc_now_iso()
+
+                                def mark_delivery_sending():
+                                    active = current_event_wrapup()
+                                    if not active:
+                                        raise RuntimeError("The finalized wrap-up disappeared.")
+                                    ledger_entry = next(
+                                        (
+                                            entry
+                                            for entry in active.get("deliveries", [])
+                                            if entry.get("account_id") == account_id
+                                            and entry.get("email") == destination
+                                        ),
+                                        None,
+                                    )
+                                    if not ledger_entry or ledger_entry.get("status") == "sent":
+                                        return False
+                                    ledger_entry["status"] = "sending"
+                                    ledger_entry["attempt_count"] = int(
+                                        ledger_entry.get("attempt_count", 0) or 0
+                                    ) + 1
+                                    ledger_entry["last_attempt_at"] = attempt_at
+                                    active["status"] = "sending"
+                                    return True
+
+                                should_send = explicit_state_mutation(mark_delivery_sending)
+                                if not should_send:
+                                    continue
+                                active = current_event_wrapup()
+                                payload = personalized_wrapup_payload(active, account_id)
+                                success, email_error = send_party_recap_message(
+                                    destination,
+                                    payload,
+                                )
+
+                                def record_delivery_outcome():
+                                    active_wrapup = current_event_wrapup()
+                                    if not active_wrapup:
+                                        raise RuntimeError("The finalized wrap-up disappeared.")
+                                    ledger_entry = next(
+                                        (
+                                            entry
+                                            for entry in active_wrapup.get("deliveries", [])
+                                            if entry.get("account_id") == account_id
+                                            and entry.get("email") == destination
+                                        ),
+                                        None,
+                                    )
+                                    if not ledger_entry:
+                                        raise RuntimeError("The recap recipient ledger changed.")
+                                    ledger_entry["status"] = "sent" if success else "failed"
+                                    ledger_entry["sent_at"] = attempt_at if success else ""
+                                    ledger_entry["last_error"] = "" if success else email_error
+
+                                explicit_state_mutation(record_delivery_outcome)
+                                if success:
+                                    sent_count += 1
+                                else:
+                                    failed_count += 1
+
+                            def finish_delivery_and_cleanup():
+                                active_wrapup = current_event_wrapup()
+                                if not active_wrapup:
+                                    raise RuntimeError("The finalized wrap-up disappeared.")
+                                if all_deliveries_sent(active_wrapup):
+                                    active_wrapup["status"] = "sent"
+                                    active_wrapup["sent_at"] = _utc_now_iso()
+                                    cleanup_success, cleanup_error = cleanup_completed_wrapup(
+                                        active_wrapup
+                                    )
+                                    return "complete" if cleanup_success else "cleanup_failed", cleanup_error
+                                active_wrapup["status"] = "delivery_failed"
+                                active_wrapup["last_error"] = (
+                                    f"{failed_count} recap delivery attempt"
+                                    f"{'s' if failed_count != 1 else ''} failed."
+                                )
+                                return "delivery_failed", ""
+
+                            final_status, delivery_error = explicit_state_mutation(
+                                finish_delivery_and_cleanup
+                            )
+                        except (RuntimeError, redis.RedisError, StateMutationBusy) as exc:
+                            errors.append(
+                                "Official recap delivery was interrupted. Saved outcomes can be retried: "
+                                f"{exc}"
+                            )
+                        else:
+                            if final_status == "complete":
+                                messages.append(
+                                    f"Official recaps were accepted for all {intended_count} attendees. "
+                                    "Mutable game data was erased and selected history was retained."
+                                )
+                            elif final_status == "cleanup_failed":
+                                errors.append(
+                                    "All official recaps were sent, but game cleanup needs a retry: "
+                                    f"{delivery_error}"
+                                )
+                            else:
+                                errors.append(
+                                    f"Sent {sent_count} official recap{'s' if sent_count != 1 else ''}; "
+                                    f"{failed_count} failed. Game data was preserved for retry."
+                                )
+
+            elif action == "retry_wrapup_cleanup":
+                wrapup = current_event_wrapup()
+                if not wrapup:
+                    errors.append("No finalized wrap-up is available.")
+                elif not all_deliveries_sent(wrapup):
+                    errors.append("All official recap deliveries must succeed before cleanup.")
+                else:
+                    cleanup_success, cleanup_error = cleanup_completed_wrapup(wrapup)
+                    if cleanup_success:
+                        messages.append("Game cleanup completed. Official retained history remains available.")
+                    else:
+                        errors.append(f"Game cleanup still needs attention: {cleanup_error}")
+                    should_broadcast = True
+
+            elif action == "delete_detailed_game_history":
+                archive_id = str(request.form.get("archive_id", "") or "")
+                before_delete = snapshot_state()
+                archive = game_data_archives.get(archive_id)
+                if not archive:
+                    errors.append("That detailed game archive could not be found.")
+                else:
+                    try:
+                        game_data_archives.pop(archive_id, None)
+                        sanitized_count = sanitize_game_data_in_state_backups(
+                            game_keys={str(archive.get("game_key", ""))},
+                            delete_detailed_archive_ids={archive_id},
+                        )
+                    except (RuntimeError, redis.RedisError) as exc:
+                        apply_state_snapshot(before_delete)
+                        errors.append(f"Detailed history could not be deleted: {exc}")
+                    else:
+                        messages.append(
+                            f"Deleted the detailed archive and sanitized {sanitized_count} retained state "
+                            "backup(s). The official winner summary remains."
+                        )
+                        should_broadcast = True
+
+            elif action == "delete_official_game_history":
+                archive_id = str(request.form.get("archive_id", "") or "")
+                archive = next(
+                    (
+                        entry
+                        for entry in result_archives
+                        if entry.get("id") == archive_id
+                        and entry.get("kind") == "game"
+                        and entry.get("status") == "official"
+                    ),
+                    None,
+                )
+                if not archive:
+                    errors.append("That official game archive could not be found.")
+                elif (
+                    event_wrapups.get(str(archive.get("event_id", "")))
+                    and event_wrapups[str(archive.get("event_id", ""))].get("status")
+                    != "complete"
+                ):
+                    errors.append(
+                        "Complete official recap delivery and party cleanup before deleting "
+                        "a frozen historical result."
+                    )
+                else:
+                    before_delete = snapshot_state()
+                    timestamp = _utc_now_iso()
+                    detailed_ids = {
+                        str(detail_id)
+                        for detail_id, detail in game_data_archives.items()
+                        if detail.get("official_archive_id") == archive_id
+                    }
+                    try:
+                        result_archives[:] = [
+                            entry for entry in result_archives if entry.get("id") != archive_id
+                        ]
+                        for detail_id in detailed_ids:
+                            game_data_archives.pop(detail_id, None)
+                        for credit in recognition_credits:
+                            if (
+                                str(credit.get("source_ref", "")) == archive_id
+                                and not credit.get("revoked_at")
+                            ):
+                                credit["revoked_at"] = timestamp
+                                credit["revoked_reason"] = "Official game history deleted by an admin."
+                        archived_wrapup = event_wrapups.get(
+                            str(archive.get("event_id", ""))
+                        )
+                        if archived_wrapup:
+                            updated_wrapup = remove_game_history_from_wrapup(
+                                archived_wrapup,
+                                game_key=str(archive.get("subject_key", "")),
+                                official_archive_id=archive_id,
+                            )
+                            for account_id, keys in updated_wrapup.get(
+                                "new_achievements", {}
+                            ).items():
+                                active_keys = {
+                                    item["key"]
+                                    for item in achievement_views(
+                                        recognition_credits, str(account_id)
+                                    ).get("achievements", [])
+                                }
+                                updated_wrapup["new_achievements"][account_id] = [
+                                    key for key in keys if key in active_keys
+                                ]
+                            event_wrapups[str(archive.get("event_id", ""))] = (
+                                normalize_event_wrapups(
+                                    {str(archive.get("event_id", "")): updated_wrapup}
+                                )[str(archive.get("event_id", ""))]
+                            )
+                        sanitized_count = sanitize_game_data_in_state_backups(
+                            game_keys={str(archive.get("subject_key", ""))},
+                            delete_official_archive_ids={archive_id},
+                            delete_detailed_archive_ids=detailed_ids,
+                        )
+                    except (RuntimeError, redis.RedisError) as exc:
+                        apply_state_snapshot(before_delete)
+                        errors.append(f"Official history could not be deleted: {exc}")
+                    else:
+                        messages.append(
+                            f"Deleted the official game summary, its detailed archive, and sanitized "
+                            f"{sanitized_count} retained state backup(s). Related winner credit was revoked."
+                        )
+                        should_broadcast = True
+
+        elif action in recognition_actions:
             if action == "publish_result_archive":
                 archive_id = str(request.form.get("archive_id", "") or "")
                 archive = next((entry for entry in result_archives if entry.get("id") == archive_id), None)
@@ -9970,21 +11331,21 @@ def admin_portal(admin_view: str):
                         should_broadcast = True
 
                 elif action == "reset_game":
-                    expected = "RESET TWO TRUTHS AND A LIE" if game_key == TWO_TRUTHS_GAME_KEY else ("RESET MURDER MARRY FUCK" if game_key == MURDER_MARRY_FUCK_GAME_KEY else f"RESET {metadata['short_title'].upper()}")
-                    if request.form.get("confirmation", "").strip() != expected:
-                        errors.append(f"Enter the exact reset phrase: {expected}")
+                    before_reset = snapshot_state()
+                    write_state_backup_if_available(f"game-{game_key}-reset")
+                    try:
+                        reset_current_games(
+                            {game_key},
+                            preserve_enabled=True,
+                            sanitize_backups=True,
+                        )
+                    except (redis.RedisError, RuntimeError) as exc:
+                        apply_state_snapshot(before_reset)
+                        errors.append(f"{title} could not be reset safely: {exc}")
                     else:
-                        enabled = bool(game.get("enabled"))
-                        write_state_backup_if_available(f"game-{game_key}-reset")
-                        if game_key == TWO_TRUTHS_GAME_KEY:
-                            games_state[game_key] = empty_two_truths_game_state(enabled=enabled)
-                        elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
-                            games_state[game_key] = empty_mmf_game_state(enabled=enabled)
-                        else:
-                            games_state[game_key] = empty_prompt_game_state(game_key, enabled=enabled)
-                        if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
-                            live_display_event_override = None
-                        messages.append(f"{title} was reset. Configuration defaults were restored and play data was cleared.")
+                        messages.append(
+                            f"{title} was reset. Configuration defaults were restored, current play data was cleared, and official history was preserved."
+                        )
                         should_broadcast = True
 
                 elif action == "update_mmf_rounds":
@@ -10950,17 +12311,19 @@ def admin_portal(admin_view: str):
                 should_broadcast = True
 
         elif action == "reset_two_truths_game":
-            confirmation = request.form.get("confirmation", "").strip()
-            if confirmation != "RESET TWO TRUTHS AND A LIE":
-                errors.append("Enter the exact reset confirmation phrase.")
+            before_reset = snapshot_state()
+            write_state_backup_if_available("two-truths-reset")
+            try:
+                reset_current_games(
+                    {TWO_TRUTHS_GAME_KEY},
+                    preserve_enabled=True,
+                    sanitize_backups=True,
+                )
+            except (redis.RedisError, RuntimeError) as exc:
+                apply_state_snapshot(before_reset)
+                errors.append(f"Two Truths and a Lie could not be reset safely: {exc}")
             else:
-                game = two_truths_game()
-                enabled = bool(game.get("enabled"))
-                write_state_backup_if_available("two-truths-reset")
-                games_state[TWO_TRUTHS_GAME_KEY] = empty_two_truths_game_state(enabled=enabled)
-                if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
-                    live_display_event_override = None
-                messages.append("Two Truths and a Lie was reset. Participants, guesses, scores, and winners were cleared.")
+                messages.append("Two Truths and a Lie was reset. Current play data was cleared and official history was preserved.")
                 should_broadcast = True
 
         elif action == "pause_game_display":
@@ -11501,6 +12864,8 @@ def admin_portal(admin_view: str):
             str(account.get("id", "")): achievement_views(recognition_credits, str(account.get("id", "")))
             for account in user_accounts.values()
         },
+        wrapup_admin=wrapup_admin_view(),
+        game_history_admin=game_history_admin_view(),
     )
 
 
@@ -11585,6 +12950,65 @@ def export_recognition():
             "recognition_credits": copy.deepcopy(recognition_credits),
         },
         "halloween-recognition-history.json",
+    )
+
+
+@app.route("/admin/export/game-history")
+def export_game_history():
+    if redis_state_available:
+        load_state_from_redis()
+    event_filter = str(request.args.get("event_id", "") or "")[:80]
+    game_filter = str(request.args.get("game_key", "") or "")[:100]
+    official = [
+        copy.deepcopy(archive)
+        for archive in result_archives
+        if archive.get("kind") == "game"
+        and archive.get("status") == "official"
+        and (not event_filter or archive.get("event_id") == event_filter)
+        and (not game_filter or archive.get("subject_key") == game_filter)
+    ]
+    for archive in official:
+        archive.pop("winner_links", None)
+    official_ids = {str(archive.get("id", "")) for archive in official}
+    detail = {
+        archive_id: copy.deepcopy(archive)
+        for archive_id, archive in game_data_archives.items()
+        if str(archive.get("official_archive_id", "")) in official_ids
+    }
+    filename_parts = ["halloween-game-history"]
+    if event_filter:
+        filename_parts.append(re.sub(r"[^a-zA-Z0-9_-]+", "-", event_filter))
+    if game_filter:
+        filename_parts.append(re.sub(r"[^a-zA-Z0-9_-]+", "-", game_filter))
+    return send_json_export(
+        {
+            "schema_version": STATE_SCHEMA_VERSION,
+            "exported_at": _utc_now_iso(),
+            "privacy_note": (
+                "This admin export follows each party's retention choices. "
+                "Murder, Marry, F%$@ private ballots and blind-vote identities are never included."
+            ),
+            "filters": {"event_id": event_filter, "game_key": game_filter},
+            "official_results": official,
+            "detailed_archives": detail,
+            "wrapup_summaries": {
+                event_id: {
+                    "event_id": event_id,
+                    "year": wrapup.get("year", ""),
+                    "title": wrapup.get("title", ""),
+                    "date": wrapup.get("date", ""),
+                    "status": wrapup.get("status", ""),
+                    "finalized_at": wrapup.get("finalized_at", ""),
+                    "completed_at": wrapup.get("completed_at", ""),
+                    "analytics_snapshot": copy.deepcopy(
+                        wrapup.get("analytics_snapshot", {})
+                    ),
+                }
+                for event_id, wrapup in event_wrapups.items()
+                if not event_filter or event_id == event_filter
+            },
+        },
+        "-".join(filename_parts) + ".json",
     )
 
 

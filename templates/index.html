@@ -68,7 +68,7 @@
         {{ ready_drink_orders[0].item_name }} is ready for pickup at the bar.
       </p>
     </div>
-    <a class="contest-banner__button" href="{{ url_for('party_drink_history') }}">View Orders</a>
+    <a class="contest-banner__button" href="{{ url_for('party_menu', view='orders') }}">View Orders</a>
   </section>
 {% endif %}
 
@@ -91,8 +91,7 @@
 
 {% if party_day_has_arrived %}
   <section class="feature-action-grid" aria-label="Party night destinations">
-    <a class="feature-action-card" href="{{ url_for('party_menu') }}"><img src="{{ feature_art.menu }}" alt=""><span><strong>Menu</strong><small>Food and drink</small></span></a>
-    <a class="feature-action-card" href="{{ url_for('party_drink_history') }}"><img src="{{ feature_art.bar }}" alt=""><span><strong>Bar</strong><small>Live order status</small></span></a>
+    <a class="feature-action-card" href="{{ url_for('party_menu') }}"><img src="{{ feature_art.menu }}" alt=""><span><strong>Menu &amp; Orders</strong><small>Food, drinks, and live bar status</small></span></a>
     <a class="feature-action-card" href="{{ url_for('party_karaoke') }}"><img src="{{ feature_art.karaoke }}" alt=""><span><strong>Karaoke</strong><small>Queue and stage status</small></span></a>
     <a class="feature-action-card" href="{{ url_for('party_jukebox') }}"><img src="{{ feature_art.jukebox }}" alt=""><span><strong>Jukebox</strong><small>Now playing and requests</small></span></a>
   </section>
@@ -154,7 +153,7 @@
       {% endfor %}
     </div>
     <div class="contest-actions">
-      <a class="button" href="{{ url_for('party_drink_history') }}">View Full History</a>
+      <a class="button" href="{{ url_for('party_menu', view='orders') }}">View Full History</a>
     </div>
   </section>
 {% endif %}

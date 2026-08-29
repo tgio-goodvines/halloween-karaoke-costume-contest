@@ -1,0 +1,76 @@
+{% macro order_card(order, ready=false) %}
+  <article class="order-card order-card--{{ order.status }}">
+    {% if order.item_image_url %}
+      <img src="{{ order.item_image_url }}" alt="{{ order.item_name }}" class="order-card__image">
+    {% endif %}
+    <div class="order-card__body">
+      <p class="order-card__status">{% if ready %}Ready for pickup{% else %}{{ drink_order_status_label(order.status) }}{% endif %}</p>
+      <div class="menu-card__badges">
+        <span>{{ drink_type_label(order.drink_type) }}</span>
+        <span>{{ beverage_type_label(order.beverage_type) }}</span>
+        {% if order.specialty_sequence_number %}<span>Specialty #{{ order.specialty_sequence_number }}</span>{% endif %}
+      </div>
+      <h4>{{ order.item_name }}</h4>
+      <p class="rsvp-admin-item__meta">Order {{ order.id }}</p>
+      <p>Ordered: {{ format_time_label(order.created_at) or 'Tonight' }}</p>
+      {% if order.status == 'complete' and order.completed_at %}
+        <p>Completed: {{ format_time_label(order.completed_at) }}</p>
+      {% elif order.estimated_ready_at %}
+        <p>Estimated ready: {{ format_time_label(order.estimated_ready_at) }}</p>
+      {% endif %}
+      {% if order.menu_item_id in reorderable_item_ids %}
+        <form method="post" action="{{ url_for('party_menu', view='orders') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="reorder_drink">
+          <input type="hidden" name="order_id" value="{{ order.id }}">
+          <button type="submit" class="button button--primary">Reorder</button>
+        </form>
+      {% endif %}
+    </div>
+  </article>
+{% endmacro %}
+
+<section class="personal-orders" aria-labelledby="personal-orders-heading">
+  <div class="menu-workspace__section-heading">
+    <div>
+      <p class="admin-panel__eyebrow">Personal history</p>
+      <h3 id="personal-orders-heading">My Drink Orders</h3>
+    </div>
+    <a class="button" href="{{ url_for('party_menu', view='menu') }}">Order Another Drink</a>
+  </div>
+
+  {% if bartender_tip_settings.enabled and drink_orders %}
+    <aside class="tip-callout">
+      <div>
+        <p class="admin-panel__eyebrow">Bar thanks</p>
+        <h4>Tip {{ bartender_tip_settings.display_name or 'the Bartender' }}</h4>
+        <p>{{ bartender_tip_settings.note or 'Tips are never required, always appreciated.' }}</p>
+      </div>
+      <a href="{{ url_for('party_bartender_tip') }}" class="button">Tip Bartender</a>
+    </aside>
+  {% endif %}
+
+  {% set groups = [
+    ('ready', 'Ready for Pickup', order_groups.ready),
+    ('in-progress', 'Being Prepared', order_groups.in_progress),
+    ('received', 'Order Received', order_groups.received),
+    ('previous', 'Previous Orders', order_groups.previous)
+  ] %}
+  {% if drink_orders %}
+    {% for group_key, group_title, orders in groups %}
+      {% if orders %}
+        <section class="order-group order-group--{{ group_key }}">
+          <div class="order-group__heading">
+            <h4>{{ group_title }}</h4>
+            <span>{{ orders|length }}</span>
+          </div>
+          <div class="order-list order-list--history">
+            {% for order in orders %}{{ order_card(order, group_key == 'ready') }}{% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    <p class="admin-empty">No drink orders yet. Browse the menu to send your first order to the bar.</p>
+  {% endif %}
+</section>

@@ -29,7 +29,7 @@ class RecognitionTests(unittest.TestCase):
         self.assertEqual(3, rewards["attendance_count"])
         self.assertEqual(["2026", "2025", "2024"], rewards["attendance_years"])
         self.assertEqual(
-            {"returning_reveler", "seasoned_spirit"},
+            {"party_attendee", "returning_reveler", "seasoned_spirit"},
             {achievement["key"] for achievement in rewards["achievements"]},
         )
         self.assertEqual("halloween_legend", rewards["next_attendance"]["key"])
@@ -43,6 +43,7 @@ class RecognitionTests(unittest.TestCase):
         rewards = achievement_views([active, duplicate, revoked], "guest-1")
 
         self.assertEqual(1, rewards["attendance_count"])
+        self.assertIn("party_attendee", {item["key"] for item in rewards["achievements"]})
         self.assertNotIn("returning_reveler", {item["key"] for item in rewards["achievements"]})
 
     def test_winner_achievements_support_ties_and_multiple_games(self):

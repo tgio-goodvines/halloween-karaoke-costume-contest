@@ -12,16 +12,17 @@ after the normal GoodVines user-data flow starts the existing services.
 - ASG: `goodvines-api-asg`
 - Launch template: `goodvines-api-lt`
 - Launch template ID: `lt-0f899847971a77126`
-- Active ASG launch template version: `2`
+- Active ASG launch template version: `6`
 - Version description:
-  `goodvines api bootstrap with halloween app install`
+  `Preserve v5 GoodVines bootstrap and restore Halloween app install`
 
-The ASG is pinned to explicit version `2`. It is not relying on `$Latest`.
+The ASG is pinned to explicit version `6`. It is not relying on `$Latest`.
 
 ## Bootstrap Order
 
-Launch template version `2` preserves the existing GoodVines API bootstrap and
-adds `install_halloween_app` after `start_services`.
+Launch template version `6` preserves the version `5` GoodVines API bootstrap,
+including the Apple root-certificate and log-retention updates, and restores
+`install_halloween_app` after `start_services`.
 
 The Halloween bootstrap:
 
@@ -68,6 +69,24 @@ Actions, which deploys the exact merged commit SHA to currently running API
 instances through SSM.
 
 ## Verification Recorded
+
+On 2026-08-28, replacement instance `i-06b70f289aa4e65fd` exposed an
+intermittent production `404 {"detail":"Not Found"}` because launch-template
+versions `3` through `5` had been created without `install_halloween_app` or the
+Halloween nginx server block. Version `6` was created from version `5` with the
+known-good Halloween installer restored and `/health` used for its local smoke
+checks. Validation confirmed that all non-user-data launch settings match
+version `5`, the user-data passes `bash -n`, and the GoodVines certificate and
+log-retention calls remain present.
+
+The ASG is now pinned to version `6`. Both active instances served release
+`d54ff9ff177ec04502a45a1f45b2744a75c9d088`; local checks returned `200` for
+Halloween `/health`, `/rsvp`, and `/party/login`, and for GoodVines `/health`.
+Twelve consecutive public checks for each main Halloween route completed with
+zero failures. A version `5` replacement that launched just before the ASG pin
+was repaired through the standard SSM deployment script.
+
+Historical verification for the original version `2` bootstrap:
 
 After pinning `goodvines-api-asg` to launch template version `2`:
 

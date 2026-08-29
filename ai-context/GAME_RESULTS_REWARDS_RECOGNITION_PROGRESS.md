@@ -119,7 +119,7 @@ crimson, cold-blue, glass-and-metal laboratory language.
   game/costume awards, normalization, and idempotency.
 - Integration tests cover authentication, public-payload redaction, blind-vote
   privacy, tied-winner publication, simulation blocking, retro attendance,
-  account deletion/unlinking, dedicated display art, and schema-17 round trips.
+  account deletion/unlinking, dedicated display art, and schema-18 round trips.
 - Python compilation, bundled-Node syntax checks, the complete pytest suite,
   template/browser QA, deployment workflow, production health, and GoodVines
   isolation must pass before this document's release section is marked deployed.
@@ -137,3 +137,14 @@ Game and winner illustrations on the live display use a translucent full-card
 background with layered contrast gradients. They no longer occupy a separate
 thumbnail column or image block. Dedicated trophy variants remain reserved for
 winner/outcome states, and attendee/admin page artwork is unchanged.
+
+## Party Wrap-Up Recognition (Schema 18, 2026-08-29)
+
+- First distinct attendance now unlocks `party_attendee`; existing later
+  attendance thresholds remain unchanged.
+- Wrap-up finalization publishes eligible real game/costume results and grants
+  source-linked winner plus idempotent attendance credit.
+- Newly unlocked achievement keys and personal activity totals are frozen
+  before cleanup so recap retries stay stable.
+- Deleting official game history revokes source-linked winner credit with a
+  reason, so derived achievements recalculate while the audit row remains.

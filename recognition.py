@@ -6,6 +6,12 @@ from uuid import uuid4
 
 
 ACHIEVEMENT_CATALOG: dict[str, dict[str, object]] = {
+    "party_attendee": {
+        "title": "Party Attendee",
+        "description": "Attended a Halloween party.",
+        "image": "images/achievements/returning-reveler.png",
+        "attendance_count": 1,
+    },
     "returning_reveler": {
         "title": "Returning Reveler",
         "description": "Attended two Halloween parties.",

@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 21. The following globals in `main.py` are
+`halloween:state` with schema version 22. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -253,13 +253,15 @@ the process-local cache:
   prompt decks, blind submission/voting/reveal rounds, an admin-controlled public
   identity mode, votes, cumulative scores, presentation state, and explicit
   simulation metadata. MMF and prompt games default to signed-in display names;
-  admins may switch an entire game to generated aliases while signup is open.
+  admins may switch an entire game to generated aliases before it opens.
   Attendees do not control anonymity. Schema normalization backfills legacy
   participant display names from registered users when available.
   Admin simulation builds deterministic completed games without creating party
   accounts and refuses to replace real participant data. MMF and prompt engines permit a
   one-player session; a single prompt response becomes a one-point solo
-  spotlight while Two Truths retains its two-player minimum.
+  spotlight. Enabling any game opens it immediately with no player minimum;
+  attendees can join and participate until the host closes it. Schema 22
+  converts legacy enabled/`signup` game records to the open `active` phase.
 
 Drink orders move from `received` to `in_progress` to `complete`. Active
 bartender preparation resolves the latest non-empty menu ingredients and

@@ -14,6 +14,10 @@
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
   const normalizedText = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const viewScope = (root = document) => {
+    const scoped = root.querySelector?.("[data-view-scope]");
+    return scoped?.dataset.viewScope || window.location.pathname;
+  };
 
   const elementKey = (element, root = document) => {
     if (!(element instanceof Element)) return "";
@@ -50,6 +54,7 @@
     const submitter = source instanceof HTMLButtonElement || source instanceof HTMLInputElement ? source : null;
     return {
       page: `${window.location.pathname}${window.location.search}`,
+      scope: viewScope(),
       x: window.scrollX,
       y: window.scrollY,
       anchorKey: elementKey(anchor, panel),
@@ -114,7 +119,7 @@
     if (!saved) return;
     const adjust = () => {
       const anchor = findByKey(panel, saved.anchorKey);
-      if (anchor) {
+      if (anchor?.getClientRects().length) {
         const delta = anchor.getBoundingClientRect().top - Number(saved.anchorTop || 0);
         if (Math.abs(delta) > 1) window.scrollBy(0, delta);
       } else {
@@ -132,8 +137,9 @@
 
   const restoreAfterNavigation = () => {
     const saved = readStoredView();
-    const currentPage = `${window.location.pathname}${window.location.search}`;
-    if (!saved || saved.page !== currentPage) return;
+    if (!saved) return;
+    const currentView = saved.scope ? viewScope() : `${window.location.pathname}${window.location.search}`;
+    if ((saved.scope || saved.page) !== currentView) return;
     sessionStorage.removeItem(storageKey);
     const panel = document.querySelector(".admin-panel") || document.body;
     reopenDetails(panel, saved);

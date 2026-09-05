@@ -1789,6 +1789,105 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(1, main.dj_state["receiver"]["current_queue_index"])
         self.assertEqual(3, main.dj_state["receiver"]["queue_revision"])
 
+    def test_dj_receiver_boot_diagnostics_record_state_transitions_and_stay_bounded(self):
+        for index in range(30):
+            main.record_dj_receiver_state(
+                {
+                    "receiver_id": "living-room-tv",
+                    "receiver_boot_id": f"boot-{index}",
+                    "navigation_type": "reload" if index else "navigate",
+                    "was_discarded": index == 29,
+                    "report_reason": "bootstrap_authorized",
+                    "status": "needs_audio_enable",
+                    "authorization_status": "authorized",
+                    "audio_enabled": False,
+                }
+            )
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "receiver_boot_id": "boot-29",
+                "navigation_type": "reload",
+                "was_discarded": True,
+                "report_reason": "heartbeat",
+                "status": "needs_audio_enable",
+                "authorization_status": "authorized",
+                "audio_enabled": False,
+            }
+        )
+
+        normalized = main.normalize_dj_state(main.dj_state)
+        events = normalized["receiver_events"]
+        self.assertEqual(25, len(events))
+        self.assertEqual("boot-5", events[0]["boot_id"])
+        self.assertEqual("boot-29", events[-1]["boot_id"])
+        self.assertEqual("bootstrap_authorized", events[-1]["reason"])
+        self.assertTrue(events[-1]["was_discarded"])
+        self.assertEqual("heartbeat", normalized["receiver"]["last_report_reason"])
+
+    def test_auto_music_footer_stays_visible_for_an_idle_online_receiver(self):
+        main.display_config["music_mode"] = "auto"
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "stopped",
+                "current_song_id": "",
+            }
+        )
+
+        music = main.build_music_footer()
+
+        self.assertTrue(music["visible"])
+        self.assertFalse(music["needs_attention"])
+        self.assertIsNone(music["current_song"])
+
+    def test_multiple_admin_sessions_can_control_the_same_dj_receiver(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+            }
+        )
+        self.save_current_state()
+
+        first_admin = main.app.test_client()
+        second_admin = main.app.test_client()
+        receiver = main.app.test_client()
+        self.login_admin(first_admin)
+        self.login_admin(second_admin)
+        self.login_admin(receiver)
+
+        pause_response = first_admin.post("/admin/dj", data={"action": "pause_dj"})
+        pause_command = self.redis_state()["dj_state"]["current_command"]
+        acknowledgement = receiver.post(
+            "/api/dj/receiver-state",
+            json={
+                "receiver_id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "paused",
+                "acknowledged_command_id": pause_command["id"],
+                "command_succeeded": True,
+            },
+        )
+        next_response = second_admin.post("/admin/dj", data={"action": "next_dj"})
+
+        state = self.redis_state()["dj_state"]
+        self.assertEqual(200, pause_response.status_code)
+        self.assertEqual(200, acknowledgement.status_code)
+        self.assertEqual(200, next_response.status_code)
+        self.assertEqual("succeeded", state["last_command"]["status"])
+        self.assertEqual("next", state["current_command"]["action"])
+        self.assertEqual(2, state["command_revision"])
+
     def test_dj_failure_remains_visible_after_a_regular_receiver_heartbeat(self):
         main.dj_playlist = [
             main.normalize_dj_song(
@@ -3895,7 +3994,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(21, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(22, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])
@@ -6485,6 +6584,22 @@ class RedisStateTests(unittest.TestCase):
             set(self.redis_state()["games_state"]),
         )
 
+    def test_schema_twenty_one_enabled_signup_games_migrate_to_open(self):
+        snapshot = main.snapshot_state()
+        snapshot["schema_version"] = 21
+        for game in snapshot["games_state"].values():
+            game["enabled"] = True
+            game["phase"] = "signup"
+        self.fake_redis.set(main.redis_key("state"), json.dumps(snapshot))
+
+        self.assertTrue(main.load_state_from_redis())
+
+        for game_key in main.GAME_CATALOG:
+            with self.subTest(game_key=game_key):
+                game = main.party_game_state(game_key)
+                self.assertTrue(game["enabled"])
+                self.assertEqual("active", game["phase"])
+
     def test_two_truths_enrollment_is_persisted_and_live_display_is_anonymous(self):
         with main.app.test_client() as admin:
             self.login_admin(admin)
@@ -6529,6 +6644,83 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("Three statements", game_entry["focus_label"])
         self.assertEqual(3, len(game_entry["focus_items"]))
         self.assertEqual([], game_entry["steps"])
+
+    def test_enabling_games_opens_them_immediately_without_players(self):
+        for game_key in main.GAME_CATALOG:
+            with self.subTest(game_key=game_key):
+                self.reset_state()
+                with main.app.test_client() as admin:
+                    self.login_admin(admin)
+                    action = "enable_two_truths_game" if game_key == main.TWO_TRUTHS_GAME_KEY else "enable_game"
+                    data = {"action": action}
+                    if game_key != main.TWO_TRUTHS_GAME_KEY:
+                        data["game_key"] = game_key
+                    response = admin.post(f"/admin/games?game={game_key}", data=data)
+
+                game = main.party_game_state(game_key)
+                self.assertEqual(200, response.status_code)
+                self.assertTrue(game["enabled"])
+                self.assertEqual("active", game["phase"])
+                self.assertEqual({}, game["participants"])
+                self.assertTrue(game["started_at"])
+                self.assertNotIn(b"Start Game", response.data)
+
+    def test_two_truths_late_join_appears_in_attendee_live_fragment(self):
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post("/admin/games", data={"action": "enable_two_truths_game"})
+
+        with main.app.test_client() as jamie:
+            self.login_regular(jamie, user_id="user-1", username="Jamie")
+            jamie.post(
+                "/party/games/two-truths-and-a-lie/submission",
+                data={"truth_one": "I own a kayak.", "truth_two": "I bake bread.", "lie": "I fear pumpkins."},
+            )
+            before = jamie.get("/api/party/games/two-truths-and-a-lie/view").get_json()
+
+        with main.app.test_client() as morgan:
+            self.login_regular(morgan, user_id="user-2", username="Morgan")
+            submitted = morgan.post(
+                "/party/games/two-truths-and-a-lie/submission",
+                data={"truth_one": "I can juggle.", "truth_two": "I climbed a volcano.", "lie": "I dislike candy."},
+            )
+
+        with main.app.test_client() as jamie:
+            self.login_regular(jamie, user_id="user-1", username="Jamie")
+            after_response = jamie.get("/api/party/games/two-truths-and-a-lie/view")
+            after = after_response.get_json()
+
+        self.assertEqual(302, submitted.status_code)
+        self.assertEqual(200, after_response.status_code)
+        self.assertNotEqual(before["revision"], after["revision"])
+        self.assertIn("I can juggle.", after["html"])
+        self.assertNotIn("Morgan", after["html"])
+        self.assertEqual(2, next(game for game in after["payload"]["games"] if game["key"] == main.TWO_TRUTHS_GAME_KEY)["participant_count"])
+
+    def test_mmf_round_navigator_marks_completion_and_advances(self):
+        game_key = main.MURDER_MARRY_FUCK_GAME_KEY
+        slug = main.GAME_CATALOG[game_key]["slug"]
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            attendee.post(f"/party/games/{slug}/join")
+            initial = attendee.get(f"/party/games?game={slug}")
+            game_round = main.party_game_state(game_key)["rounds"][0]
+            people = [person["id"] for person in game_round["people"]]
+            saved = attendee.post(
+                "/party/games/murder-marry-fuck/answers",
+                data={"round_id": game_round["id"], "murder": people[0], "marry": people[1], "fuck": people[2]},
+            )
+            advanced = attendee.get(saved.headers["Location"])
+
+        self.assertEqual(10, initial.data.count(b"data-mmf-round-target="))
+        self.assertEqual(302, saved.status_code)
+        self.assertIn("round=mmf-02", saved.headers["Location"])
+        self.assertIn(b'data-mmf-round-target="mmf-01"', advanced.data)
+        self.assertIn(b"Completed", advanced.data)
+        self.assertIn(b'data-mmf-round-target="mmf-02"', advanced.data)
 
     def test_prompt_game_stage_separates_prompt_response_and_bottom_utility_data(self):
         game = main.party_game_state(main.WRONG_ANSWERS_GAME_KEY)
@@ -6661,6 +6853,7 @@ class RedisStateTests(unittest.TestCase):
             )
         self.assertEqual(200, reset.status_code)
         self.assertTrue(main.two_truths_game()["enabled"])
+        self.assertEqual("active", main.two_truths_game()["phase"])
         self.assertEqual({}, main.two_truths_game()["participants"])
         self.assertEqual({}, main.two_truths_game()["guesses"])
 
@@ -6822,7 +7015,7 @@ class RedisStateTests(unittest.TestCase):
             self.assertEqual(302, blocked.status_code)
             self.assertEqual({}, main.two_truths_game()["guesses"])
 
-    def test_admin_controls_game_anonymity_during_signup(self):
+    def test_admin_game_anonymity_locks_after_the_game_opens(self):
         game_key = main.FILL_BLANK_GAME_KEY
         slug = main.GAME_CATALOG[game_key]["slug"]
         main.party_game_state(game_key)["enabled"] = True
@@ -6834,7 +7027,6 @@ class RedisStateTests(unittest.TestCase):
             named_page = attendee.get(f"/party/games?game={slug}")
 
         participant = main.party_game_state(game_key)["participants"]["user-1"]
-        alias = participant["alias"]
         self.assertFalse(main.party_game_state(game_key)["anonymous_mode"])
         self.assertEqual("Jamie", participant["display_name"])
         self.assertEqual("Jamie", main.participant_public_name(participant, anonymous=False))
@@ -6852,12 +7044,13 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn(b"Signed-in names", admin_page.data)
         self.assertIn(b"Use Anonymous Aliases", admin_page.data)
         self.assertEqual(200, changed.status_code)
-        self.assertTrue(main.party_game_state(game_key)["anonymous_mode"])
+        self.assertIn(b"only be changed before the game opens", changed.data)
+        self.assertFalse(main.party_game_state(game_key)["anonymous_mode"])
 
         with main.app.test_client() as attendee:
             self.login_regular(attendee, user_id="user-1", username="Jamie")
             anonymous_page = attendee.get(f"/party/games?game={slug}")
-        self.assertIn(alias.encode(), anonymous_page.data)
+        self.assertIn(b"You\xe2\x80\x99re in as Jamie", anonymous_page.data)
 
         main.party_game_state(game_key)["phase"] = "active"
         self.save_current_state()
@@ -6870,8 +7063,8 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(302, joined.status_code)
         self.assertEqual(200, locked.status_code)
-        self.assertIn(b"only be changed while enrollment is open", locked.data)
-        self.assertTrue(main.party_game_state(game_key)["anonymous_mode"])
+        self.assertIn(b"only be changed before the game opens", locked.data)
+        self.assertFalse(main.party_game_state(game_key)["anonymous_mode"])
 
     def test_schema_eleven_game_participants_backfill_names_for_admin_default_mode(self):
         raw = main.empty_prompt_game_state(main.BAD_ADVICE_GAME_KEY, enabled=True)
@@ -6900,8 +7093,8 @@ class RedisStateTests(unittest.TestCase):
         slug = main.GAME_CATALOG[game_key]["slug"]
         with main.app.test_client() as admin:
             self.login_admin(admin)
-            enabled = admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
             anonymous = admin.post("/admin/games", data={"action": "toggle_game_anonymity", "game_key": game_key})
+            enabled = admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
         self.assertEqual(200, enabled.status_code)
         self.assertEqual(200, anonymous.status_code)
         self.assertTrue(main.party_game_state(game_key)["anonymous_mode"])
@@ -6983,6 +7176,7 @@ class RedisStateTests(unittest.TestCase):
             reset = admin.post("/admin/games", data={"action": "reset_game", "game_key": game_key, "confirmation": "RESET MURDER MARRY FUCK"})
         self.assertEqual(200, reset.status_code)
         self.assertTrue(main.party_game_state(game_key)["enabled"])
+        self.assertEqual("active", main.party_game_state(game_key)["phase"])
         self.assertFalse(main.party_game_state(game_key)["anonymous_mode"])
         self.assertEqual({}, main.party_game_state(game_key)["participants"])
         self.assertEqual(10, len(main.party_game_state(game_key)["rounds"]))
@@ -7063,6 +7257,46 @@ class RedisStateTests(unittest.TestCase):
                 self.assertEqual({"Jamie", "Morgan"}, {score["name"] for score in game["results"]["scores"]})
                 self.assertEqual("game_presentation", main.live_display_event_override["type"])
 
+    def test_prompt_game_accepts_late_join_and_vote_while_voting_is_open(self):
+        game_key = main.WRONG_ANSWERS_GAME_KEY
+        slug = main.GAME_CATALOG[game_key]["slug"]
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post("/admin/games", data={"action": "enable_game", "game_key": game_key})
+
+        for user_id, username in (("user-1", "Jamie"), ("user-2", "Morgan")):
+            with main.app.test_client() as attendee:
+                self.login_regular(attendee, user_id=user_id, username=username)
+                attendee.post(f"/party/games/{slug}/join")
+
+        game = main.party_game_state(game_key)
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post(
+                "/admin/games",
+                data={"action": "start_prompt_round", "game_key": game_key, "prompt_id": game["prompts"][0]["id"]},
+            )
+        for user_id, username, answer in (("user-1", "Jamie", "Answer one"), ("user-2", "Morgan", "Answer two")):
+            with main.app.test_client() as attendee:
+                self.login_regular(attendee, user_id=user_id, username=username)
+                attendee.post(f"/party/games/{slug}/response", data={"response": answer})
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            admin.post("/admin/games", data={"action": "open_prompt_voting", "game_key": game_key})
+
+        with main.app.test_client() as late_attendee:
+            self.login_regular(late_attendee, user_id="user-3", username="Taylor")
+            joined = late_attendee.post(f"/party/games/{slug}/join")
+            voting_page = late_attendee.get(f"/party/games?game={slug}")
+            response_id = next(iter(main.prompt_round_for_game(main.party_game_state(game_key))["responses"]))
+            voted = late_attendee.post(f"/party/games/{slug}/vote", data={"response_id": response_id})
+
+        self.assertEqual(302, joined.status_code)
+        self.assertIn(b"Voting open", voting_page.data)
+        self.assertEqual(302, voted.status_code)
+        late_player_id = main.party_game_state(game_key)["participants"]["user-3"]["player_id"]
+        self.assertEqual(response_id, main.prompt_round_for_game(main.party_game_state(game_key))["votes"][late_player_id])
+
     def test_single_player_games_start_and_score_without_peer_votes(self):
         game_key = main.MURDER_MARRY_FUCK_GAME_KEY
         slug = main.GAME_CATALOG[game_key]["slug"]
@@ -7122,7 +7356,7 @@ class RedisStateTests(unittest.TestCase):
                 self.assertEqual(1, len(game["results"]["winner_player_ids"]))
                 self.assertIn("Solo spotlight", json.dumps(main.build_game_presentation_slides(game_key)))
 
-    def test_two_truths_still_requires_two_players_and_game_ui_is_unified(self):
+    def test_two_truths_opens_without_waiting_for_two_players_and_game_ui_is_unified(self):
         main.two_truths_game()["enabled"] = True
         participant = main.empty_two_truths_game_state()["participants"]
         main.two_truths_game()["participants"] = participant
@@ -7136,7 +7370,9 @@ class RedisStateTests(unittest.TestCase):
             response = admin.post("/admin/games", data={"action": "start_two_truths_game"})
             page = admin.get("/admin/games")
         self.assertEqual(200, response.status_code)
-        self.assertEqual("signup", main.two_truths_game()["phase"])
+        self.assertEqual("active", main.two_truths_game()["phase"])
+        self.assertNotIn(b"Start Game", page.data)
+        self.assertIn(b"Close Game &amp; Calculate Results", page.data)
         self.assertIn(b"Choose one game to operate", page.data)
         self.assertNotIn(b"Additional Games", page.data)
         self.assertEqual(5, page.data.count(b'data-view-key="game-selector:'))

@@ -32,7 +32,7 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "image": "images/games/two-truths-and-a-lie.jpg",
         "winner_image": "images/games/winners/two-truths-and-a-lie-winner.jpg",
         "personality": "Three stories enter the lab. Only one is fabricated.",
-        "solo_note": "Needs at least two mystery guests.",
+        "solo_note": "Opens immediately; guessing grows as guests join.",
     },
     MURDER_MARRY_FUCK_GAME_KEY: {
         "slug": "murder-marry-fuck",
@@ -202,6 +202,8 @@ def default_prompt_records(game_key: str) -> list[dict[str, Any]]:
 def empty_two_truths_game_state(*, enabled: bool = False) -> dict[str, Any]:
     state = copy.deepcopy(DEFAULT_TWO_TRUTHS_GAME_STATE)
     state["enabled"] = bool(enabled)
+    if enabled:
+        state["phase"] = "active"
     return state
 
 
@@ -209,7 +211,7 @@ def empty_mmf_game_state(*, enabled: bool = False) -> dict[str, Any]:
     return {
         "enabled": bool(enabled),
         "anonymous_mode": False,
-        "phase": "signup",
+        "phase": "active" if enabled else "signup",
         "started_at": "",
         "ended_at": "",
         "explicit_label": "F%$@",
@@ -225,7 +227,7 @@ def empty_prompt_game_state(game_key: str, *, enabled: bool = False) -> dict[str
     return {
         "enabled": bool(enabled),
         "anonymous_mode": False,
-        "phase": "signup",
+        "phase": "active" if enabled else "signup",
         "started_at": "",
         "ended_at": "",
         "participants": {},
@@ -353,6 +355,8 @@ def normalize_two_truths_game_state(raw: object) -> dict[str, Any]:
         return state
     state["enabled"] = bool(raw.get("enabled"))
     state["phase"] = _phase(raw.get("phase"))
+    if state["enabled"] and state["phase"] == "signup":
+        state["phase"] = "active"
     state["started_at"] = str(raw.get("started_at", "") or "")
     state["ended_at"] = str(raw.get("ended_at", "") or "")
     participants: dict[str, dict[str, Any]] = {}
@@ -505,6 +509,8 @@ def normalize_mmf_game_state(raw: object) -> dict[str, Any]:
     state["enabled"] = bool(raw.get("enabled"))
     state["anonymous_mode"] = bool(raw.get("anonymous_mode"))
     state["phase"] = _phase(raw.get("phase"))
+    if state["enabled"] and state["phase"] == "signup":
+        state["phase"] = "active"
     state["started_at"] = str(raw.get("started_at", "") or "")
     state["ended_at"] = str(raw.get("ended_at", "") or "")
     state["explicit_label"] = str(raw.get("explicit_label", "F%$@") or "F%$@")[:24]
@@ -614,6 +620,8 @@ def normalize_prompt_game_state(raw: object, game_key: str) -> dict[str, Any]:
     state["enabled"] = bool(raw.get("enabled"))
     state["anonymous_mode"] = bool(raw.get("anonymous_mode"))
     state["phase"] = _phase(raw.get("phase"))
+    if state["enabled"] and state["phase"] == "signup":
+        state["phase"] = "active"
     state["started_at"] = str(raw.get("started_at", "") or "")
     state["ended_at"] = str(raw.get("ended_at", "") or "")
     prompts = []

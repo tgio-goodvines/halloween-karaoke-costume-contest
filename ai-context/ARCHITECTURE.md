@@ -115,15 +115,24 @@
 - `GET|POST /party/costumes` -> attendee costume signup form, available on
   the party date and redirected to `/party` before then.
 - `GET /party/games` -> party-day Games workspace for enabled games. The
-  selected `game` query activates one of five catalog tabs; signup, active,
-  round, voting, and final-result views are server-selected from Redis state.
+  selected `game` query activates one of five catalog tabs; open, round, voting,
+  and final-result views are server-selected from Redis state. Enabled games are
+  normalized/opened as `active`, accept late enrollment until `ended`, and do
+  not require a separate start transition.
+- `GET /api/party/games/<game_slug>/view` -> regular-user-authenticated,
+  party-day attendee fragment for the selected game. It returns privacy-scoped
+  server-rendered HTML, a state revision, and the existing attendee-safe game/
+  rewards payload. `static/games-live-status.js` polls it every five seconds and
+  reconciles changes while preserving dirty form state, focus, MMF selection,
+  open disclosures, and the viewport anchor.
 - `POST /party/games/two-truths-and-a-lie/opt-in|submission` and
   `POST /party/games/two-truths-and-a-lie/guesses/<submission_id>` ->
   CSRF-protected, account-bound enrollment, clue submission/update, and guess
   upsert actions with phase and ownership checks.
 - `POST /party/games/<game_slug>/join` -> attendee enrollment for MMF and the
-  three prompt/vote games. The game-level admin setting determines whether every
-  player appears under a signed-in name or generated anonymous alias.
+  three prompt/vote games at any time while the game is open. The game-level
+  admin setting determines whether every player appears under a signed-in name
+  or generated anonymous alias.
 - `POST /party/games/murder-marry-fuck/answers` -> saves one validated
   three-action MMF round ballot for an enrolled player while active.
 - `POST /party/games/<game_slug>/response|vote` -> upserts one blind

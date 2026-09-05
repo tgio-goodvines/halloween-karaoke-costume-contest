@@ -16,7 +16,7 @@
 
   <div class="game-admin-metrics game-admin-overview">
     <div><span>Enabled games</span><strong>{{ games_admin.enabled_count }} / 5</strong></div>
-    <div><span>Games live</span><strong>{{ games_admin.active_count }}</strong></div>
+    <div><span>Games open</span><strong>{{ games_admin.active_count }}</strong></div>
     <div><span>Total signups</span><strong>{{ games_admin.participant_count }}</strong></div>
     <div><span>Display</span><strong>{% if live_override and live_override.type.startswith('game_') %}Paused{% else %}Rotating{% endif %}</strong></div>
   </div>
@@ -30,8 +30,8 @@
         data-view-key="game-selector:{{ game_key }}"
       >
         <span class="game-admin-selector__title">{{ game.metadata.short_title }}</span>
-        <span class="game-phase game-phase--{{ game.phase }}">
-          {% if game.simulation.is_simulated %}Simulated{% elif not game.enabled %}Disabled{% else %}{{ game.phase|title }}{% endif %}
+        <span class="game-phase game-phase--{{ game.phase if game.enabled else 'signup' }}">
+          <span aria-hidden="true"></span>{% if game.simulation.is_simulated %}Simulated{% elif not game.enabled %}Disabled{% elif game.phase == 'active' %}Open{% else %}Closed{% endif %}
         </span>
         <small>{{ game.participant_count }} player{{ '' if game.participant_count == 1 else 's' }}</small>
       </a>
@@ -46,15 +46,15 @@
         <p class="admin-panel__eyebrow">{{ admin_game.metadata.engine|replace('_', ' ') }}</p>
         <h4>{{ admin_game.metadata.title }}</h4>
       </div>
-      <span class="game-phase game-phase--{{ admin_game.phase }}">
-        {% if admin_game.simulation.is_simulated %}Simulated Results{% elif not admin_game.enabled %}Disabled{% else %}{{ admin_game.phase|title }}{% endif %}
+      <span class="game-phase game-phase--{{ admin_game.phase if admin_game.enabled else 'signup' }}">
+        <span aria-hidden="true"></span>{% if admin_game.simulation.is_simulated %}Simulated Results{% elif not admin_game.enabled %}Disabled{% elif admin_game.phase == 'active' %}Open · Join anytime{% else %}Closed{% endif %}
       </span>
     </header>
     <p>{{ admin_game.metadata.description }} <strong>{{ admin_game.metadata.solo_note }}</strong></p>
 
     {% if game_key != 'two_truths_and_a_lie' %}
       <section class="game-admin-primary game-admin-identity" data-view-key="game:{{ game_key }}:identity">
-        <div><p class="admin-panel__eyebrow">Player identity</p><h5>{{ 'Anonymous aliases' if admin_game.anonymous_mode else 'Signed-in names' }}</h5><p>This setting applies to every player and locks when the game starts.</p></div>
+        <div><p class="admin-panel__eyebrow">Player identity</p><h5>{{ 'Anonymous aliases' if admin_game.anonymous_mode else 'Signed-in names' }}</h5><p>This setting applies to every player and locks when the game opens.</p></div>
         <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="toggle_game_anonymity"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Use {{ 'Signed-in Names' if admin_game.anonymous_mode else 'Anonymous Aliases' }}</button></form>
       </section>
     {% endif %}
@@ -65,25 +65,21 @@
         <div class="contest-actions game-admin-actions">
           {% if game_key == 'two_truths_and_a_lie' %}
             {% if not admin_game.enabled %}
-              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" name="action" value="enable_two_truths_game">Enable Enrollment</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" name="action" value="enable_two_truths_game">{{ 'Show Closed Results' if admin_game.phase == 'ended' else 'Open Game' }}</button></form>
             {% else %}
               <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="disable_two_truths_game">Disable Game</button></form>
             {% endif %}
-            {% if admin_game.enabled and admin_game.phase == 'signup' %}
-              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" name="action" value="start_two_truths_game">Start Game</button></form>
-            {% elif admin_game.phase == 'active' %}
-              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" name="action" value="end_two_truths_game">End and Tally Results</button></form>
+            {% if admin_game.enabled and admin_game.phase == 'active' %}
+              <form method="post" onsubmit="return confirm('Close Two Truths and a Lie? New players, clue edits, and guesses will be locked while results are calculated.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" name="action" value="end_two_truths_game">Close Game &amp; Calculate Results</button></form>
             {% endif %}
           {% else %}
             {% if not admin_game.enabled %}
-              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="enable_game">Enable</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="enable_game">{{ 'Show Closed Results' if admin_game.phase == 'ended' else 'Open Game' }}</button></form>
             {% else %}
               <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="disable_game">Disable</button></form>
             {% endif %}
-            {% if admin_game.enabled and admin_game.phase == 'signup' %}
-              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="start_game">Start Game</button></form>
-            {% elif admin_game.phase == 'active' %}
-              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="end_game">End and Tally</button></form>
+            {% if admin_game.enabled and admin_game.phase == 'active' %}
+              <form method="post" onsubmit="return confirm('Close {{ admin_game.metadata.title|e }}? New players and answers will be locked while results are calculated.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="end_game">Close Game &amp; Calculate Results</button></form>
             {% endif %}
           {% endif %}
         </div>

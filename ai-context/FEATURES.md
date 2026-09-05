@@ -74,6 +74,9 @@
 - Costume contest signup at `/party/costumes` is attendee-accessible on the
   party date.
 - Enabled party games appear on the party-day dashboard and at `/party/games`.
+  Enabling is also the open action: there is no separate start gate or player
+  minimum. New attendees may join and participate until the host explicitly
+  closes the game to calculate final statistics and winner(s).
   Two Truths and a Lie lets each account submit two truths and one lie during
   enrollment, shows anonymous shuffled clue cards, accepts one editable
   free-text identity guess per other participant during active play, and
@@ -90,9 +93,16 @@
   responses remain authorless during voting, self-voting is rejected, and
   received votes become cumulative game points.
 - MMF and all prompt games support a single opted-in player. Solo prompt rounds
-  become one-point spotlights without a self-vote; Two Truths retains its
-  two-player minimum. The dashboard gives every enabled game its own illustrated
+  become one-point spotlights without a self-vote; Two Truths can collect clues
+  before another mystery guest arrives. The dashboard gives every enabled game its own illustrated
   card immediately below the welcome panel.
+- The selected game page refreshes attendee-safe server-rendered content every
+  five seconds, so late joins, new clues, phase changes, votes, and results
+  appear without a full reload. Dirty forms, focus, MMF round selection, and the
+  current scroll anchor are preserved across refreshes.
+- Murder, Marry, F%$@ presents all ten rounds as numbered controls with distinct
+  selected and completed indicators, and advances a saved ballot to the next
+  incomplete round.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
 - List of submitted costume entries.

@@ -55,6 +55,10 @@ the same state for navigation/reload restoration.
 
 ### Party Games verification (2026-08-05)
 
+Historical note: the start gate and minimum-two validation below were
+superseded by the 2026-09-05 continuous open-game lifecycle. Enable now opens a
+game immediately and attendees may join until the host closes it.
+
 - Browser-verified `/admin/games` at 1280px and `390x844` with no horizontal
   overflow.
 - Browser-verified the enable control, participant count/status update, and

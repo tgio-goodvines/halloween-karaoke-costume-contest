@@ -120,7 +120,7 @@
           <img src="{{ url_for('static', filename=game.image) }}" alt="" loading="lazy">
           <span class="game-showcase-card__veil" aria-hidden="true"></span>
           <span class="game-showcase-card__body">
-            <span class="game-showcase-card__status">{% if game.phase == 'active' %}Live now{% elif game.phase == 'ended' %}See results{% elif game.participating %}You're in{% else %}Enrollment open{% endif %}</span>
+            <span class="game-showcase-card__status">{% if game.phase == 'active' %}Open · Join anytime{% elif game.phase == 'ended' %}Closed · See results{% else %}Disabled{% endif %}</span>
             <strong>{{ game.title }}</strong>
             <span>{{ game.personality }}</span>
             <small>{{ game.solo_note }} · {{ game.participant_count }} player{{ 's' if game.participant_count != 1 else '' }}</small>

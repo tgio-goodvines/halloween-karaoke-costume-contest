@@ -1,5 +1,16 @@
 # Responsive UX Progress
 
+## Continuous Game Interaction Update (2026-09-05)
+
+- Attendee game pages refresh their selected, privacy-scoped server fragment
+  every five seconds without a full navigation or scroll reset.
+- Reconciliation preserves dirty inputs, focused controls, open disclosures,
+  and a stable viewport anchor while late-player and round-state changes arrive.
+- Murder, Marry, F%$@ uses a ten-button round navigator: five columns on wider
+  screens and two on phones, with separate selected and completed treatments.
+- Game state labels are compact non-interactive indicators rather than controls,
+  preventing status text from being mistaken for an action button.
+
 ## Goal
 
 Improve the live display, attendee flow, and admin portal so they work cleanly

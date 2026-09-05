@@ -21,27 +21,31 @@ operations, and host-controlled live-display results.
 5. **Wrong Answers Only** — fictional/general questions, blind wrong answers,
    response voting, and an admin-selected public identity mode.
 
-All new games deploy disabled. Admin must enable each game before its tab,
-dashboard status, or enrollment flow appears to attendees.
+All new games deploy disabled. Enabling a game opens it immediately: its tab,
+dashboard status, enrollment, and gameplay become available without a separate
+start step. Attendees may join throughout the open game and lock only when the
+host closes it for final scoring.
 
 ## Shared Lifecycle
 
 - `disabled`: hidden and blocked while saved data remains intact.
-- `signup`: enabled enrollment; attendees may opt in. Two Truths submissions
-  remain editable in this phase.
-- `active`: enrollment locks and game-specific play opens.
+- `signup`: legacy/configuration-only phase. Schema-22 normalization promotes
+  enabled records in this phase to `active`.
+- `active`: the game is open; attendees may join late and participate in any
+  currently available submissions, ballots, guesses, or votes.
 - `ended`: answers/votes lock and final scores/winners are snapshotted.
 - `reset`: creates a Redis backup, clears play data, restores configuration
-  defaults, and preserves the enabled flag.
+  defaults, and reopens the game when the enabled flag is preserved.
 
 Prompt games add per-round phases: `submissions -> voting -> revealed`. The
 host must reveal the current round before opening another or ending the game.
 
-MMF and all three prompt games can start with one opted-in player. A solo MMF
+All games can open with zero players. MMF and all three prompt games support a
+one-player session. A solo MMF
 ballot is scored against its own round pluralities. A prompt round with one
 response skips the impossible self-vote step, reveals a solo spotlight, and
-awards one point. Two Truths still requires two mystery guests because its core
-interaction depends on guessing another attendee.
+awards one point. Two Truths remains open to clue submission with fewer than two
+players; guessing becomes useful as additional mystery guests join.
 
 ## Scoring
 
@@ -70,7 +74,7 @@ interaction depends on guessing another attendee.
 ## Privacy And Content Guardrails
 
 - MMF and prompt games default to signed-in display names. The selected-game
-  admin console can switch the entire game to generated aliases during signup;
+  admin console can switch the entire game to generated aliases before opening;
   attendees do not control anonymity.
 - Prompt responses remain authorless during voting so named enrollment cannot
   bias voting. Reveals, scoreboards, result cards, and presentation slides use
@@ -119,15 +123,39 @@ interaction depends on guessing another attendee.
 ## State And Routes
 
 - Games were introduced in schema version `12`; the canonical app state is now
-  schema version `17` after recognition/history additions.
+  schema version `22`. The schema-22 game lifecycle migration opens legacy
+  records whose enabled flag was paired with the old `signup` phase.
 - `games_state` contains all five independent game records.
 - Attendee hub: `GET /party/games?game=<slug>`.
+- Attendee live fragment: `GET /api/party/games/<slug>/view`; it returns a
+  signed-in, privacy-scoped server-rendered game fragment plus revision and safe
+  status data for five-second refreshes.
 - Attendee enrollment under the admin-selected identity mode:
   `POST /party/games/<slug>/join`.
 - MMF ballot round: `POST /party/games/murder-marry-fuck/answers`.
 - Prompt response/vote: `POST /party/games/<slug>/response|vote`.
 - Admin operations continue through the focused `/admin/games` POST handler.
 - Aggregate/redacted download: `GET /admin/export/games`.
+
+## Continuous Open-Game UX (2026-09-05)
+
+- Enable is the single host action that opens a game. Compatibility start
+  actions are idempotent and no longer impose participant minimums.
+- Closing is the explicit transition that locks joining/play and calculates
+  final statistics and winner(s). Re-enabling an ended game only makes its
+  closed results visible; reset is required to reopen a clean session.
+- Two Truths, MMF, and prompt games accept new players throughout `active`,
+  including during an open prompt voting round.
+- The selected attendee game fragment refreshes every five seconds and after
+  tab visibility returns. Reconciliation preserves dirty form values, focus,
+  open disclosures, the selected MMF round, and the viewport anchor.
+- MMF renders ten numbered round controls with selected and completed color/
+  indicator states, automatically advancing a saved ballot to the next
+  incomplete round.
+- Game phases render as status indicators rather than button-like controls.
+- Navigation fallback and progressive admin actions preserve the current view
+  scope across success/error query changes, preventing post-action jumps to the
+  top of a page.
 
 ## Realtime Results And Official History (2026-08-24)
 

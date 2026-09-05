@@ -9,8 +9,9 @@
   const tokenEndpoint = body.dataset.djTokenApi;
   const appleMusicConfigured = body.dataset.djAppleMusicConfigured === 'true';
   const queueState = window.HalloweenDjQueueState;
-  if (!queueState) {
-    console.error('DJ queue state helpers did not load. Refresh this display and try again.');
+  const receiverState = window.HalloweenDjReceiverState;
+  if (!queueState || !receiverState) {
+    console.error('DJ receiver helpers did not load. Refresh this display and try again.');
     return;
   }
   const csrfToken = body.dataset.csrfToken || '';
@@ -24,13 +25,18 @@
   const receiverId = window.sessionStorage.getItem('halloween-dj-receiver-id')
     || (window.crypto?.randomUUID?.() || `receiver-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   window.sessionStorage.setItem('halloween-dj-receiver-id', receiverId);
+  const receiverBootId = window.crypto?.randomUUID?.()
+    || `boot-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const navigationEntry = window.performance?.getEntriesByType?.('navigation')?.[0];
+  const navigationType = String(navigationEntry?.type || 'unknown').slice(0, 40);
+  const wasDiscarded = Boolean(document.wasDiscarded);
 
   let dj = {};
   let music = null;
   let audioEnabled = false;
-  let authorizationStatus = 'not_authorized';
-  let verifiedMusicUserToken = '';
+  let authorizationStatus = appleMusicConfigured ? 'checking' : 'not_configured';
   let receiverError = '';
+  let receiverInitializing = appleMusicConfigured;
   let pairingInProgress = false;
   let processingCommandId = '';
   let playbackSongId = '';
@@ -109,6 +115,12 @@
     if (detailElement) detailElement.textContent = text || '';
   };
 
+  const localReceiverStatus = () => receiverState.statusFor({
+    authorizationStatus,
+    audioEnabled,
+    hasError: Boolean(receiverError),
+  });
+
   const errorMessage = (error, fallback) => {
     const candidates = [
       error?.message,
@@ -150,10 +162,22 @@
 
     const ownedElsewhere = receiverOwnedElsewhere();
     if (enableButton) {
-      if (audioEnabled || pairingInProgress || !appleMusicConfigured || ownedElsewhere) enableButton.setAttribute('hidden', '');
-      else enableButton.removeAttribute('hidden');
+      enableButton.textContent = receiverState.buttonLabelFor(authorizationStatus);
+      if (audioEnabled || pairingInProgress || receiverInitializing || !appleMusicConfigured || ownedElsewhere) {
+        enableButton.setAttribute('hidden', '');
+      } else enableButton.removeAttribute('hidden');
     }
-    if (ownedElsewhere) setDetail('DJ audio is controlled by another live display. This tab is display-only.');
+    if (ownedElsewhere) {
+      setDetail('DJ audio is controlled by another live display. This tab is display-only.');
+    } else {
+      setDetail(receiverState.detailFor({
+        configured: appleMusicConfigured,
+        initializing: receiverInitializing,
+        authorizationStatus,
+        audioEnabled,
+        error: receiverError,
+      }));
+    }
   };
 
   const statusPayload = (extra = {}) => {
@@ -162,8 +186,12 @@
     const hasPlaybackPosition = Object.prototype.hasOwnProperty.call(extra, 'playback_position_seconds');
     return {
       receiver_id: receiverId,
-      status: extra.status || (audioEnabled ? 'ready' : (receiverError ? 'error' : 'needs_audio_enable')),
-      authorization_status: extra.authorization_status || (audioEnabled ? 'authorized' : authorizationStatus),
+      receiver_boot_id: receiverBootId,
+      navigation_type: navigationType,
+      was_discarded: wasDiscarded,
+      report_reason: String(extra.report_reason || 'heartbeat').slice(0, 80),
+      status: extra.status || localReceiverStatus(),
+      authorization_status: extra.authorization_status || authorizationStatus,
       audio_enabled: audioEnabled,
       playback_status: extra.playback_status || receiver().playback_status || 'stopped',
       current_song_id: hasCurrentSong
@@ -213,6 +241,7 @@
   // changing tracks must not arrive after the track-change report and put the
   // old song back into Redis.
   const report = (extra = {}) => {
+    if (receiverInitializing && !extra.report_reason) return Promise.resolve();
     if (receiverOwnedElsewhere()) return Promise.resolve();
     reportChain = reportChain.then(() => sendReport(extra));
     return reportChain;
@@ -349,6 +378,51 @@
     return music;
   };
 
+  const initializeReceiver = async () => {
+    if (receiverOwnedElsewhere()) {
+      receiverInitializing = false;
+      render();
+      return;
+    }
+    if (!appleMusicConfigured) {
+      receiverInitializing = false;
+      authorizationStatus = 'not_configured';
+      render();
+      return;
+    }
+    try {
+      const instance = await ensureMusicKit();
+      const initialState = receiverState.authorizationAfterConfiguration(
+        appleMusicConfigured,
+        Boolean(instance.isAuthorized),
+      );
+      authorizationStatus = initialState.authorizationStatus;
+      audioEnabled = initialState.audioEnabled;
+      receiverError = '';
+      receiverInitializing = false;
+      render();
+      await report({
+        status: initialState.status,
+        authorization_status: initialState.authorizationStatus,
+        report_reason: 'bootstrap',
+        error: '',
+        clear_error: true,
+      });
+      await sync();
+    } catch (error) {
+      receiverInitializing = false;
+      receiverError = errorMessage(error, 'Apple Music could not initialize on this display.');
+      authorizationStatus = 'error';
+      render();
+      await report({
+        status: 'error',
+        authorization_status: 'error',
+        report_reason: 'bootstrap_error',
+        error: receiverError,
+      });
+    }
+  };
+
   const resetLocalReceiver = async () => {
     let stopError = null;
     try {
@@ -409,6 +483,7 @@
   };
 
   const executeCommand = async () => {
+    if (receiverInitializing) return;
     if (receiverOwnedElsewhere()) return;
     const command = dj?.current_command;
     if (!command || !command.id || command.id === processingCommandId) return;
@@ -446,12 +521,14 @@
     }
 
     if (!audioEnabled || !music) {
-      receiverError = 'DJ audio has not been enabled on the live display yet.';
-      authorizationStatus = 'not_authorized';
+      const authorizationRetained = authorizationStatus === 'authorized';
+      receiverError = authorizationRetained
+        ? 'DJ audio needs to be resumed on the live display before this command can run.'
+        : 'DJ audio has not been enabled on the live display yet.';
       setDetail(receiverError);
       await report({
-        status: 'needs_audio_enable',
-        authorization_status: 'not_authorized',
+        status: authorizationRetained ? 'needs_audio_enable' : 'needs_authorization',
+        authorization_status: authorizationStatus,
         acknowledged_command_id: command.id,
         command_succeeded: false,
         error: receiverError,
@@ -543,29 +620,34 @@
     setDetail('Connecting Apple Music…');
     try {
       const instance = await ensureMusicKit();
-      // MusicKit can retain an unusable/stale browser authorization from an
-      // earlier page. The first explicit enable click must establish a real
-      // Music User Token so the operator sees Apple's consent/account flow.
-      if (!verifiedMusicUserToken && instance.isAuthorized && typeof instance.unauthorize === 'function') {
-        await instance.unauthorize();
-      }
+      const wasAuthorized = Boolean(instance.isAuthorized);
       const userToken = await instance.authorize();
-      if (!instance.isAuthorized || !userToken) {
+      if (!instance.isAuthorized || (!wasAuthorized && !userToken)) {
         throw new Error('Apple Music sign-in did not complete. Click Enable DJ Audio again and finish the Apple prompt on this display.');
       }
-      verifiedMusicUserToken = userToken;
       audioEnabled = true;
       authorizationStatus = 'authorized';
       receiverError = '';
       setDetail('Apple Music is connected. Remote DJ controls are ready.');
-      await report({ status: 'ready', authorization_status: 'authorized', error: '', clear_error: true });
+      await report({
+        status: 'ready',
+        authorization_status: 'authorized',
+        report_reason: wasAuthorized ? 'audio_resumed' : 'authorization_succeeded',
+        error: '',
+        clear_error: true,
+      });
       await sync();
     } catch (error) {
       const message = errorMessage(error, 'Apple Music authorization did not complete.');
       receiverError = message;
       authorizationStatus = 'error';
       setDetail(message);
-      await report({ status: 'error', authorization_status: 'error', error: message });
+      await report({
+        status: 'error',
+        authorization_status: 'error',
+        report_reason: 'authorization_failed',
+        error: message,
+      });
     } finally {
       pairingInProgress = false;
       enableButton.disabled = false;
@@ -574,8 +656,8 @@
   });
 
   render();
-  report({ status: 'needs_audio_enable', authorization_status: 'not_authorized' });
   sync();
+  initializeReceiver();
   window.setInterval(() => report(), 5000);
   window.setInterval(sync, 5000);
 

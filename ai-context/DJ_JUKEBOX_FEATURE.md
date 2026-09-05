@@ -112,6 +112,12 @@ adds request provenance and priority synchronization state inside the
   tabs remain display-only and do not execute DJ commands. An authorized
   receiver may replace an online unpaired tab immediately; any tab may claim
   the slot after the current heartbeat becomes stale.
+- The receiver ID survives a same-tab reload, while each page boot gets a new
+  boot ID. MusicKit is configured before the first receiver report so retained
+  Apple authorization is rehydrated instead of being overwritten by a false
+  `not_authorized` startup heartbeat. Navigation type, browser-discard state,
+  report reason, and the last 25 state transitions are retained as token-free
+  receiver diagnostics.
 - `dj_song_requests`: pending attendee requests with requester identity,
   timestamp, and normalized Apple Music song metadata.
 
@@ -174,6 +180,15 @@ path is intentionally all green: **Admin request: Ready**, **Live display:
 Connected**, **Apple Music: Authorized**, and **Audio output: Ready**. Playback
 is not required for this healthy armed state.
 
+Authorization and browser audio readiness are independent. After a page reload,
+MusicKit may restore **Apple Music: Authorized**, but the display truthfully
+returns to **Audio output: Resume required** until someone clicks **Resume DJ
+Audio** on the playback browser. That click revalidates the retained MusicKit
+session without revoking it or repeating account consent. In automatic display
+mode the compact music footer remains visible while a receiver is online, even
+when no song has been selected, so a successful authorization cannot look like
+the display reset.
+
 This prevents the historical control failure mode where a button press was
 shown as playback even though the display had not received it or browser audio
 had not been unlocked. MusicKit startup is deferred until the Apple library has
@@ -181,10 +196,15 @@ loaded, and client errors are normalized so the UI never reports `undefined`.
 The display only reports Apple Music as authorized after MusicKit confirms an
 authenticated user; a cancelled or absent Apple sign-in can resolve without an
 exception and is therefore explicitly treated as a pairing failure.
-The first **Enable DJ Audio** click on a freshly loaded display clears any stale
-MusicKit browser authorization and requires a newly issued Music User Token, so
-the operator receives Apple’s account/consent flow instead of a false-ready
-state.
+The first **Enable DJ Audio** click authorizes Apple Music when necessary. A
+subsequent page boot lets MusicKit restore that authorization and presents
+**Resume DJ Audio** rather than deliberately invalidating the Music User Token.
+
+There is one playback receiver and any number of admin controllers. Every
+authenticated `/admin/dj` browser reads and writes the same Redis command state;
+admin browsers never claim receiver ownership. The server permits only one
+pending playback command at a time, so simultaneous admins receive the shared
+pending/confirmed state instead of overwriting one another.
 
 The DJ admin workspace subscribes to the existing display-update stream and
 also polls the display-state API every five seconds. Receiver pairing,

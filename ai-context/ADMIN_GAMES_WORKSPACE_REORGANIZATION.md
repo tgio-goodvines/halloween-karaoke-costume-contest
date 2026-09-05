@@ -23,6 +23,10 @@ and prevent admin actions from returning the operator to the top of a workspace.
 - Scoreboards render the first 20 rows and Two Truths inspection tables render
   at most 50 rows. The aggregate game export remains the source for complete
   datasets.
+- Enabling a game is the single open-game action; the former start controls are
+  retained only as server-side compatibility actions. The selected console uses
+  non-interactive Open/Closed/Disabled indicators and explicitly closes a game
+  to calculate results.
 
 ### Data construction
 
@@ -46,6 +50,9 @@ and prevent admin actions from returning the operator to the top of a workspace.
   disclosures, the action anchor's viewport offset, and the pressed control.
   It restores the anchor after layout and font settling and returns focus to the
   same or logical replacement control.
+- Full-navigation fallbacks compare a stable workspace scope instead of the
+  complete query string, so POST success/error parameters do not reset the
+  viewport to the top.
 - Toggle counterparts are explicitly paired for enable/disable and
   pause/resume controls. Repeated previous/next and result-presentation actions
   remain on the same control.

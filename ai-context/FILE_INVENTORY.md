@@ -22,12 +22,12 @@
 | `tests/test_dj_live_widgets.js` | Dependency-free Node regression tests for shared attendee/admin DJ payload normalization, atomic song/artwork lifecycle rendering, and stale/out-of-order response rejection. |
 | `tests/test_display_media.js` | Dependency-free Node regression tests for the live-display background-default media contract, explicit foreground opt-in, and bounded contrast tones. |
 | `static/styles.css` | Shared dark lab-terminal Halloween design system for attendee/admin pages, including scanline texture, serif headings, mono controls, square glowing panels, game-specific illustrated cards, header menu, menu cards, attendee pickup actions, and Current/Up Next bartender stages. |
-| `static/preserve-scroll.js` | Stable view-state restoration plus progressive same-origin admin POST handling that replaces the returned workspace in place and preserves anchor, disclosure, query, and focus state. |
+| `static/preserve-scroll.js` | Stable view-scope restoration plus progressive same-origin admin POST handling that replaces the returned workspace in place and preserves anchor, disclosure, query, and focus state across success/error query changes. |
 | `static/images/games/` | Five optimized generated illustrations used by the party dashboard and game-page hero panels. |
 | `static/images/games/winners/` | Five style-matched completed-game trophy illustrations for live winner/outcome cards. |
 | `static/images/features/` | Shared jukebox, bar, menu, and karaoke fallback/feature artwork. |
 | `static/images/achievements/` | Six transparent generated reward emblems used by attendee and admin collections. |
-| `static/games-live-status.js` | Five-second privacy-safe game/results/achievement polling renderer shared by the overview, game hub, and Results & Rewards page. |
+| `static/games-live-status.js` | Five-second privacy-safe game/results/achievement polling plus selected-game fragment reconciliation; preserves dirty forms, focus, view anchors, disclosure state, and MMF round navigation. |
 | `static/bar-status.js` | Five-second visibility-aware attendee bar polling for aggregate queue counts and account-scoped personal order status, including safe pickup acknowledgement forms; it never consumes bartender-only queue HTML. |
 | `templates/results.html` | Signed-in live game status, personal achievements, and official Hall of Fame page. |
 | `templates/_admin_recognition.html` | Event-edition, retro credit, result publication, account collection, link/revoke, and export controls. |
@@ -37,6 +37,7 @@
 | `static/display-media.js` | Browser/Node-compatible media policy helpers that make image-bearing live cards background-first while retaining explicit foreground exceptions and bounded contrast tones. |
 | `static/display.js` | Live-display client logic: center/game rotation, independent keyed bar promotion/history rotation, API polling, SSE reconnects, full-stage temporary notice rendering, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/dj-queue-state.js` | Browser/Node-compatible pure helpers for resolving MusicKit catalog and library item identifiers, preserving MusicKit queue order, building priority catalog remainders, and validating confirmed track/queue transitions. |
+| `static/dj-receiver-state.js` | Browser/Node-compatible pure helpers for reload-safe MusicKit authorization, separate browser-audio readiness, and receiver action/status copy. |
 | `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, resolved-queue capture, non-interrupting `playNext` priority reconciliation, event-confirmed track changes, retained authorization diagnostics, reset handling, serialized heartbeat/acknowledgement reporting, and Now Playing dock updates. |
 | `static/dj-admin.js` | Authenticated Apple Music catalog search and DJ add-song form hydration. |
 | `static/dj-admin-status.js` | Live admin DJ status updater using authenticated display-state polling and SSE notifications; refreshes the signal path, confirmed Current/Up Next cards, priority synchronization diagnostics/retry state, readiness message, and playback-control availability without reloading forms. |
@@ -50,7 +51,8 @@
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, live receiver-confirmed Jukebox summary/artwork, priority illustrated game gallery, ready drink/order cards with pickup acknowledgement, slides, costume and karaoke summaries. |
-| `templates/games.html` | Party-day five-game workspace with dynamic tabs, admin-selected identity messaging, MMF ten-round ballots, prompt responses/blind voting, Two Truths guessing, aggregate reveals, and final results. |
+| `templates/_fragment_base.html` | Minimal Jinja base used to render authenticated attendee game fragments without the full site shell. |
+| `templates/games.html` | Party-day five-game workspace with dynamic tabs, open/closed status indicators, live-refresh fragment boundaries, late enrollment, completed MMF round controls, prompt responses/blind voting, Two Truths guessing, aggregate reveals, and final results. |
 | `templates/_game_scoreboard.html` | Shared attendee winner and final-score table for every game engine. |
 | `templates/_admin_games.html` | Selected-game admin selector and operational console for lifecycle, progress, results/display, configuration, data, simulation, and reset. |
 | `templates/jukebox.html` | Attendee party-day Jukebox page with live confirmed Now Playing/artwork, playlist, catalog search, and personal pending requests. |

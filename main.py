@@ -353,7 +353,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 21
+STATE_SCHEMA_VERSION = 22
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -520,8 +520,13 @@ DEFAULT_DJ_STATE: dict[str, object] = {
     "current_command": None,
     "last_command": None,
     "last_reset": None,
+    "receiver_events": [],
     "receiver": {
         "id": "",
+        "boot_id": "",
+        "navigation_type": "unknown",
+        "was_discarded": False,
+        "last_report_reason": "",
         "status": "offline",
         "authorization_status": "not_configured",
         "audio_enabled": False,
@@ -785,6 +790,7 @@ STATE_REFRESH_ENDPOINTS = {
     "party_games",
     "party_results",
     "party_games_data",
+    "party_game_view_data",
     "party_costume_voting",
     "party_jukebox",
     "party_jukebox_data",
@@ -852,6 +858,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_games",
     "party_results",
     "party_games_data",
+    "party_game_view_data",
     "party_game_opt_in",
     "party_game_submission",
     "party_game_guess",
@@ -2995,10 +3002,32 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
         state["priority_sync_attempted_revision"] = 0
     state["priority_sync_error"] = str(raw_state.get("priority_sync_error", "") or "").strip()[:500]
 
+    raw_receiver_events = raw_state.get("receiver_events", [])
+    if isinstance(raw_receiver_events, list):
+        state["receiver_events"] = [
+            {
+                "at": str(event.get("at", "") or "")[:80],
+                "receiver_id": str(event.get("receiver_id", "") or "")[:120],
+                "boot_id": str(event.get("boot_id", "") or "")[:120],
+                "navigation_type": str(event.get("navigation_type", "unknown") or "unknown")[:40],
+                "was_discarded": bool(event.get("was_discarded", False)),
+                "reason": str(event.get("reason", "") or "")[:80],
+                "status": str(event.get("status", "") or "")[:80],
+                "authorization_status": str(event.get("authorization_status", "") or "")[:80],
+                "audio_enabled": bool(event.get("audio_enabled", False)),
+            }
+            for event in raw_receiver_events[-25:]
+            if isinstance(event, dict)
+        ]
+
     raw_receiver = raw_state.get("receiver")
     if isinstance(raw_receiver, dict):
         receiver = state["receiver"]
         receiver["id"] = str(raw_receiver.get("id", "") or "").strip()[:120]
+        receiver["boot_id"] = str(raw_receiver.get("boot_id", "") or "").strip()[:120]
+        receiver["navigation_type"] = str(raw_receiver.get("navigation_type", "unknown") or "unknown")[:40]
+        receiver["was_discarded"] = bool(raw_receiver.get("was_discarded", False))
+        receiver["last_report_reason"] = str(raw_receiver.get("last_report_reason", "") or "")[:80]
         requested_status = str(raw_receiver.get("status", "offline") or "offline")
         receiver["status"] = requested_status if requested_status in DJ_RECEIVER_STATUSES else "error"
         receiver["authorization_status"] = str(raw_receiver.get("authorization_status", "") or "not_configured")[:80]
@@ -3252,7 +3281,17 @@ def record_dj_receiver_state(payload: dict[str, object]) -> bool:
     ):
         return False
 
+    previous_event_state = (
+        str(receiver.get("boot_id", "") or ""),
+        str(receiver.get("status", "") or ""),
+        str(receiver.get("authorization_status", "") or ""),
+        bool(receiver.get("audio_enabled", False)),
+    )
     receiver["id"] = receiver_id or active_receiver_id
+    receiver["boot_id"] = str(payload.get("receiver_boot_id", "") or receiver.get("boot_id", ""))[:120]
+    receiver["navigation_type"] = str(payload.get("navigation_type", "unknown") or "unknown")[:40]
+    receiver["was_discarded"] = bool(payload.get("was_discarded", False))
+    receiver["last_report_reason"] = str(payload.get("report_reason", "") or "")[:80]
     requested_status = str(payload.get("status", "") or receiver.get("status", "offline"))
     receiver["status"] = requested_status if requested_status in DJ_RECEIVER_STATUSES else "error"
     receiver["authorization_status"] = str(payload.get("authorization_status", "") or receiver.get("authorization_status", ""))[:80]
@@ -3288,6 +3327,31 @@ def record_dj_receiver_state(payload: dict[str, object]) -> bool:
     except (TypeError, ValueError):
         receiver["playback_position_seconds"] = 0
     receiver["last_seen_at"] = _utc_now_iso()
+    current_event_state = (
+        str(receiver.get("boot_id", "") or ""),
+        str(receiver.get("status", "") or ""),
+        str(receiver.get("authorization_status", "") or ""),
+        bool(receiver.get("audio_enabled", False)),
+    )
+    if receiver.get("boot_id") and current_event_state != previous_event_state:
+        receiver_events = dj_state.setdefault("receiver_events", [])
+        if not isinstance(receiver_events, list):
+            receiver_events = []
+            dj_state["receiver_events"] = receiver_events
+        receiver_events.append(
+            {
+                "at": receiver["last_seen_at"],
+                "receiver_id": receiver["id"],
+                "boot_id": receiver["boot_id"],
+                "navigation_type": receiver["navigation_type"],
+                "was_discarded": receiver["was_discarded"],
+                "reason": receiver["last_report_reason"],
+                "status": receiver["status"],
+                "authorization_status": receiver["authorization_status"],
+                "audio_enabled": receiver["audio_enabled"],
+            }
+        )
+        del receiver_events[:-25]
     reported_error = str(payload.get("error", "") or "").strip()[:500]
     if reported_error:
         receiver["last_error"] = reported_error
@@ -3376,7 +3440,15 @@ def dj_command_flow() -> list[dict[str, str]]:
             requested_detail = "The live display confirmed the last DJ command."
 
     audio_state = str(receiver.get("playback_status", "stopped") or "stopped")
-    audio_detail = command_error or ("DJ audio is enabled." if receiver.get("audio_enabled") else "Use Enable DJ Audio on the live display once.")
+    audio_detail = command_error or (
+        "DJ audio is enabled."
+        if receiver.get("audio_enabled")
+        else (
+            "Use Resume DJ Audio on the live display."
+            if receiver.get("authorization_status") == "authorized"
+            else "Use Enable DJ Audio on the live display once."
+        )
+    )
     if receiver_ready and audio_state == "stopped":
         audio_state = "ready"
         audio_detail = "Audio is unlocked and ready to play."
@@ -3482,7 +3554,7 @@ def dj_view_state() -> dict[str, object]:
     elif str(receiver.get("authorization_status", "") if isinstance(receiver, dict) else "") != "authorized":
         controls_message = "Authorize Apple Music on the live display before using playback controls."
     elif not bool(receiver.get("audio_enabled") if isinstance(receiver, dict) else False):
-        controls_message = "Press Enable DJ Audio on the live display before using playback controls."
+        controls_message = "Press Resume DJ Audio on the live display before using playback controls."
     else:
         controls_message = "Receiver connected, Apple Music authorized, and audio output ready."
     view["current_song"] = copy.deepcopy(current_song)
@@ -5365,6 +5437,13 @@ def reset_current_games(
         game_keys=game_keys,
         preserve_enabled=preserve_enabled,
     )
+    if preserve_enabled:
+        reset_at = _utc_now_iso()
+        for game_key in game_keys:
+            game = games_state.get(game_key)
+            if isinstance(game, dict) and game.get("enabled"):
+                game["phase"] = "active"
+                game["started_at"] = reset_at
     result_archives = [
         archive
         for archive in result_archives
@@ -6093,6 +6172,26 @@ def party_game_state(game_key: str) -> dict[str, object]:
     return game
 
 
+def game_is_open(game: object) -> bool:
+    return bool(
+        isinstance(game, dict)
+        and game.get("enabled")
+        and game.get("phase") == "active"
+    )
+
+
+def open_game_for_attendees(game: dict[str, object]) -> bool:
+    """Enable a non-finalized game and make it immediately joinable."""
+    game["enabled"] = True
+    if game.get("phase") == "ended":
+        return False
+    game["phase"] = "active"
+    if not game.get("started_at"):
+        game["started_at"] = _utc_now_iso()
+    game["ended_at"] = ""
+    return True
+
+
 def enabled_game_keys() -> list[str]:
     return [game_key for game_key in GAME_CATALOG if party_game_state(game_key).get("enabled")]
 
@@ -6184,7 +6283,7 @@ def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]
         "winner_image_url": game_art_url(game_key, winner=True),
         "enabled": bool(game.get("enabled")),
         "phase": phase,
-        "status_label": "Final results" if phase == "ended" else ("Live now" if phase == "active" else "Enrollment open"),
+        "status_label": "Closed · Final results" if phase == "ended" else ("Open · Join anytime" if phase == "active" else "Disabled"),
         "participant_count": len(participants),
         "participating": bool(user_id and user_id in participants),
         "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
@@ -7570,7 +7669,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
             facts=[
                 _display_fact("Costumes", len(costume_signups)),
                 _display_fact("Karaoke", len(public_karaoke)),
-                _display_fact("Games live", active_game_count),
+                _display_fact("Games open", active_game_count),
                 _display_fact("Bar orders", len(active_orders)),
             ],
             steps=[
@@ -7681,7 +7780,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 tertiary="Available: " + " · ".join(GAME_CATALOG[key]["short_title"] for key in enabled_games),
                 facts=[
                     _display_fact("Available", len(enabled_games)),
-                    _display_fact("Live now", active_game_count),
+                    _display_fact("Open now", active_game_count),
                     _display_fact("Players", total_game_participations()),
                 ],
                 steps=["Open Games", "Join any enabled game", "Submit, vote, and follow results"],
@@ -8014,7 +8113,9 @@ def build_music_footer() -> dict[str, object]:
     next_song = dj.get("next_song")
     mode = str(display_config.get("music_mode", "auto"))
     needs_attention = bool(apple_music_is_configured() and (not receiver.get("audio_enabled") or receiver.get("last_error")))
-    visible = mode != "hidden" and (mode == "always" or bool(current_song) or needs_attention)
+    visible = mode != "hidden" and (
+        mode == "always" or bool(current_song) or bool(receiver.get("online")) or needs_attention
+    )
     return {
         "visible": visible,
         "state": dj,
@@ -10289,20 +10390,15 @@ def party_games_data():
     return response
 
 
-@app.route("/party/games")
-def party_games():
-    if not party_day_has_arrived():
-        return redirect(url_for("party_dashboard"))
-
-    enabled_keys = enabled_game_keys()
-    if not enabled_keys:
-        return redirect(url_for("party_dashboard"))
-    user_id = str(session.get("user_id", "") or "")
-    if not user_id or not session.get("username"):
-        return redirect(url_for("party_login", next=url_for("party_games")))
-
-    requested_key = game_by_slug(request.args.get("game", ""))
-    game_key = requested_key if requested_key in enabled_keys else enabled_keys[0]
+def build_party_game_page_context(
+    game_key: str,
+    user_id: str,
+    *,
+    show_participation_form: bool = False,
+    selected_round_id: str = "",
+    success: str = "",
+    error: str = "",
+) -> dict[str, object]:
     game = party_game_state(game_key)
     metadata = GAME_CATALOG[game_key]
     participant = game.get("participants", {}).get(user_id)
@@ -10351,34 +10447,122 @@ def party_games():
         if isinstance(entry, dict)
     }
 
-    return render_template(
-        "games.html",
-        game_key=game_key,
-        game_metadata=metadata,
-        game_catalog=game_catalog_views(user_id),
-        game=game,
-        participant=participant,
-        submissions=submissions,
-        results=game.get("results", {}),
-        winners=game_winners(game_key, game),
-        prompt_round=prompt_round,
-        prompt_responses=prompt_responses,
-        saved_response=saved_response,
-        saved_vote=saved_vote,
-        participant_identity=participant_public_name(
+    selected_mmf_round_id = ""
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY and participant and phase == "active":
+        round_ids = [str(entry.get("id", "")) for entry in game.get("rounds", [])]
+        completed_ids = set(participant.get("answers", {}))
+        requested_round_id = str(selected_round_id or "")
+        selected_mmf_round_id = requested_round_id if requested_round_id in round_ids else ""
+        if not selected_mmf_round_id:
+            selected_mmf_round_id = next(
+                (round_id for round_id in round_ids if round_id not in completed_ids),
+                round_ids[0] if round_ids else "",
+            )
+
+    revision_source = json.dumps(
+        {
+            "game": game,
+            "enabled_games": [
+                {
+                    "key": entry["key"],
+                    "enabled": entry["enabled"],
+                    "phase": entry["phase"],
+                    "participant_count": entry["participant_count"],
+                }
+                for entry in game_catalog_views(user_id)
+            ],
+            "user_id": user_id,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    return {
+        "game_key": game_key,
+        "game_metadata": metadata,
+        "game_catalog": game_catalog_views(user_id),
+        "game": game,
+        "participant": participant,
+        "submissions": submissions,
+        "results": game.get("results", {}),
+        "winners": game_winners(game_key, game),
+        "prompt_round": prompt_round,
+        "prompt_responses": prompt_responses,
+        "saved_response": saved_response,
+        "saved_vote": saved_vote,
+        "participant_identity": participant_public_name(
             participant,
             anonymous=bool(game.get("anonymous_mode")),
         ) if participant else "",
-        identity_by_player=identity_by_player,
+        "identity_by_player": identity_by_player,
+        "show_participation_form": show_participation_form,
+        "selected_mmf_round_id": selected_mmf_round_id,
+        "success": success,
+        "error": error,
+        "statement_max_length": GAME_STATEMENT_MAX_LENGTH,
+        "response_max_length": GAME_RESPONSE_MAX_LENGTH,
+        "mmf_actions": MMF_ACTIONS,
+        "games_data_url": url_for("party_games_data"),
+        "game_view_url": url_for("party_game_view_data", game_slug=metadata["slug"]),
+        "game_view_revision": hashlib.sha256(revision_source.encode("utf-8")).hexdigest()[:16],
+        "show_admin_link": False,
+    }
+
+
+@app.route("/party/games")
+def party_games():
+    if not party_day_has_arrived():
+        return redirect(url_for("party_dashboard"))
+
+    enabled_keys = enabled_game_keys()
+    if not enabled_keys:
+        return redirect(url_for("party_dashboard"))
+    user_id = str(session.get("user_id", "") or "")
+    if not user_id or not session.get("username"):
+        return redirect(url_for("party_login", next=url_for("party_games")))
+
+    requested_key = game_by_slug(request.args.get("game", ""))
+    game_key = requested_key if requested_key in enabled_keys else enabled_keys[0]
+    context = build_party_game_page_context(
+        game_key,
+        user_id,
         show_participation_form=request.args.get("participate") == "1",
+        selected_round_id=request.args.get("round", ""),
         success=request.args.get("success", ""),
         error=request.args.get("error", ""),
-        statement_max_length=GAME_STATEMENT_MAX_LENGTH,
-        response_max_length=GAME_RESPONSE_MAX_LENGTH,
-        mmf_actions=MMF_ACTIONS,
-        games_data_url=url_for("party_games_data"),
-        show_admin_link=False,
     )
+    return render_template("games.html", **context)
+
+
+@app.route("/api/party/games/<game_slug>/view")
+def party_game_view_data(game_slug: str):
+    if not party_day_has_arrived():
+        return jsonify({"redirect_url": url_for("party_dashboard")}), 403
+    user_id = str(session.get("user_id", "") or "")
+    game_key = game_by_slug(game_slug)
+    enabled_keys = enabled_game_keys()
+    if not game_key or game_key not in enabled_keys:
+        redirect_url = (
+            url_for("party_games", game=GAME_CATALOG[enabled_keys[0]]["slug"])
+            if enabled_keys
+            else url_for("party_dashboard")
+        )
+        return jsonify({"redirect_url": redirect_url})
+    context = build_party_game_page_context(
+        game_key,
+        user_id,
+        show_participation_form=request.args.get("participate") == "1",
+        selected_round_id=request.args.get("round", ""),
+    )
+    response = jsonify(
+        {
+            "html": render_template("games.html", game_layout="_fragment_base.html", **context),
+            "revision": context["game_view_revision"],
+            "payload": results_rewards_payload(user_id),
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/party/games/two-truths-and-a-lie/opt-in", methods=["POST"])
@@ -10386,8 +10570,8 @@ def party_game_opt_in():
     game = two_truths_game()
     if not party_day_has_arrived() or not game.get("enabled"):
         return redirect(url_for("party_dashboard"))
-    if game.get("phase") != "signup":
-        return redirect(url_for("party_games", error="Enrollment has closed because the game has started."))
+    if not game_is_open(game):
+        return redirect(url_for("party_games", error="This game is closed."))
     if not session.get("user_id") or not session.get("username"):
         return redirect(url_for("party_login", next=url_for("party_games")))
     return redirect(url_for("party_games", participate="1"))
@@ -10398,8 +10582,8 @@ def party_game_submission():
     game = two_truths_game()
     if not party_day_has_arrived() or not game.get("enabled"):
         return redirect(url_for("party_dashboard"))
-    if game.get("phase") != "signup":
-        return redirect(url_for("party_games", error="Submissions are locked because the game has started."))
+    if not game_is_open(game):
+        return redirect(url_for("party_games", error="Submissions are locked because the game is closed."))
     if not session.get("user_id") or not session.get("username"):
         return redirect(url_for("party_login", next=url_for("party_games")))
 
@@ -10477,8 +10661,8 @@ def party_game_join(game_slug: str):
     game = party_game_state(game_key)
     if not party_day_has_arrived() or not game.get("enabled"):
         return redirect(url_for("party_dashboard"))
-    if game.get("phase") != "signup":
-        return redirect(url_for("party_games", game=game_slug, error="Enrollment has closed because the game has started."))
+    if not game_is_open(game):
+        return redirect(url_for("party_games", game=game_slug, error="This game is closed."))
     user_id = str(session.get("user_id", "") or "")
     if not user_id or not session.get("username"):
         return redirect(url_for("party_login", next=url_for("party_games", game=game_slug)))
@@ -10514,8 +10698,18 @@ def party_mmf_answers():
         return redirect(url_for("party_games", game=slug, error="Use Murder, Marry, and F%$@ exactly once in the round."))
     participant.setdefault("answers", {})[round_id] = answer
     participant["updated_at"] = _utc_now_iso()
+    round_ids = [str(entry.get("id", "")) for entry in game.get("rounds", [])]
+    current_index = round_ids.index(round_id)
+    next_round_id = next(
+        (
+            candidate
+            for candidate in [*round_ids[current_index + 1 :], *round_ids[:current_index]]
+            if candidate not in participant.get("answers", {})
+        ),
+        round_id,
+    )
     broadcast_display_update()
-    return redirect(url_for("party_games", game=slug, success="answer", round=round_id))
+    return redirect(url_for("party_games", game=slug, success="answer", round=next_round_id))
 
 
 @app.route("/party/games/<game_slug>/response", methods=["POST"])
@@ -11744,8 +11938,12 @@ def admin_portal(admin_view: str):
                         should_broadcast = True
 
                 elif action == "enable_game":
-                    game["enabled"] = True
-                    messages.append(f"{title} is enabled for attendees.")
+                    opened = open_game_for_attendees(game)
+                    messages.append(
+                        f"{title} is open. Attendees can join and participate until you close it."
+                        if opened
+                        else f"{title} is visible with its closed results. Reset it to open a new game."
+                    )
                     should_broadcast = True
 
                 elif action == "disable_game":
@@ -11759,7 +11957,7 @@ def admin_portal(admin_view: str):
                     if game_key == TWO_TRUTHS_GAME_KEY:
                         errors.append("Two Truths and a Lie must use account names for identity guesses.")
                     elif game.get("phase") != "signup":
-                        errors.append("Player anonymity can only be changed while enrollment is open.")
+                        errors.append("Player identity can only be changed before the game opens.")
                     else:
                         game["anonymous_mode"] = not bool(game.get("anonymous_mode"))
                         mode_label = "anonymous aliases" if game["anonymous_mode"] else "signed-in names"
@@ -11767,28 +11965,17 @@ def admin_portal(admin_view: str):
                         should_broadcast = True
 
                 elif action == "start_game":
-                    participant_count = len(game.get("participants", {}))
                     if game_key == TWO_TRUTHS_GAME_KEY:
                         errors.append("Use the existing Two Truths start control.")
                     elif not game.get("enabled"):
                         errors.append(f"Enable {title} before starting it.")
-                    elif game.get("phase") != "signup":
-                        errors.append(f"{title} can only start from enrollment.")
-                    elif participant_count < 1:
-                        errors.append(f"At least one participant must join {title} before it starts.")
-                    elif game_key == MURDER_MARRY_FUCK_GAME_KEY and len(game.get("rounds", [])) != MMF_ROUND_COUNT:
-                        errors.append(f"Configure exactly {MMF_ROUND_COUNT} complete rounds before starting {title}.")
+                    elif game.get("phase") == "ended":
+                        errors.append(f"Reset {title} before opening a new game.")
+                    elif game_is_open(game):
+                        messages.append(f"{title} is already open for attendees.")
                     else:
-                        game["phase"] = "active"
-                        game["started_at"] = _utc_now_iso()
-                        game["ended_at"] = ""
-                        game["presentation"] = {"active": False, "slide_index": 0}
-                        if game_key == MURDER_MARRY_FUCK_GAME_KEY:
-                            game["results"] = copy.deepcopy(empty_mmf_game_state()["results"])
-                        else:
-                            game["results"] = copy.deepcopy(empty_prompt_game_state(game_key)["results"])
-                        write_state_backup_if_available(f"game-{game_key}-start")
-                        messages.append(f"{title} started with {participant_count} players.")
+                        open_game_for_attendees(game)
+                        messages.append(f"{title} is open for attendees.")
                         should_broadcast = True
 
                 elif action == "end_game":
@@ -11824,7 +12011,7 @@ def admin_portal(admin_view: str):
                         errors.append(f"{title} could not be reset safely: {exc}")
                     else:
                         messages.append(
-                            f"{title} was reset. Configuration defaults were restored, current play data was cleared, and official history was preserved."
+                            f"{title} was reset and reopened. Configuration defaults were restored, current play data was cleared, and official history was preserved."
                         )
                         should_broadcast = True
 
@@ -11832,7 +12019,7 @@ def admin_portal(admin_view: str):
                     if game_key != MURDER_MARRY_FUCK_GAME_KEY:
                         errors.append("That configuration form does not belong to this game.")
                     elif game.get("phase") != "signup":
-                        errors.append("Murder, Marry, F%$@ rounds can only be edited during enrollment.")
+                        errors.append("Murder, Marry, F%$@ rounds can only be edited before the game opens.")
                     else:
                         rounds = []
                         for round_index in range(MMF_ROUND_COUNT):
@@ -11862,7 +12049,7 @@ def admin_portal(admin_view: str):
                     if game_key not in PROMPT_GAME_KEYS:
                         errors.append("Prompts are only available for response-and-voting games.")
                     elif game.get("phase") != "signup":
-                        errors.append("Prompt decks can only be edited during enrollment.")
+                        errors.append("Prompt decks can only be edited before the game opens.")
                     else:
                         raw_prompt = request.form.get("prompt_text", "")
                         prompt_text = normalize_prompt(raw_prompt)
@@ -11881,7 +12068,7 @@ def admin_portal(admin_view: str):
                     if game_key not in PROMPT_GAME_KEYS or not prompt:
                         errors.append("That game prompt could not be found.")
                     elif game.get("phase") != "signup":
-                        errors.append("Prompt decks can only be edited during enrollment.")
+                        errors.append("Prompt decks can only be edited before the game opens.")
                     elif action == "toggle_game_prompt":
                         prompt["enabled"] = not bool(prompt.get("enabled"))
                         messages.append(f"Updated the prompt in {title}.")
@@ -12794,8 +12981,12 @@ def admin_portal(admin_view: str):
 
         elif action == "enable_two_truths_game":
             game = two_truths_game()
-            game["enabled"] = True
-            messages.append("Two Truths and a Lie enrollment is enabled.")
+            opened = open_game_for_attendees(game)
+            messages.append(
+                "Two Truths and a Lie is open. Attendees can join and play until you close it."
+                if opened
+                else "Two Truths and a Lie is visible with its closed results. Reset it to open a new game."
+            )
             should_broadcast = True
 
         elif action == "disable_two_truths_game":
@@ -12808,20 +12999,15 @@ def admin_portal(admin_view: str):
 
         elif action == "start_two_truths_game":
             game = two_truths_game()
-            participant_count = len(game.get("participants", {}))
             if not game.get("enabled"):
                 errors.append("Enable Two Truths and a Lie before starting it.")
-            elif game.get("phase") != "signup":
-                errors.append("Two Truths and a Lie can only start from the signup phase.")
-            elif participant_count < 2:
-                errors.append("At least two participants must submit clues before the game can start.")
+            elif game.get("phase") == "ended":
+                errors.append("Reset Two Truths and a Lie before opening a new game.")
+            elif game_is_open(game):
+                messages.append("Two Truths and a Lie is already open for attendees.")
             else:
-                game["phase"] = "active"
-                game["started_at"] = _utc_now_iso()
-                game["ended_at"] = ""
-                game["results"] = copy.deepcopy(empty_two_truths_game_state()["results"])
-                write_state_backup_if_available("two-truths-start")
-                messages.append(f"Two Truths and a Lie started with {participant_count} participants. Guesses are open.")
+                open_game_for_attendees(game)
+                messages.append("Two Truths and a Lie is open for attendees.")
                 should_broadcast = True
 
         elif action == "end_two_truths_game":
@@ -12855,7 +13041,7 @@ def admin_portal(admin_view: str):
                 apply_state_snapshot(before_reset)
                 errors.append(f"Two Truths and a Lie could not be reset safely: {exc}")
             else:
-                messages.append("Two Truths and a Lie was reset. Current play data was cleared and official history was preserved.")
+                messages.append("Two Truths and a Lie was reset and reopened. Current play data was cleared and official history was preserved.")
                 should_broadcast = True
 
         elif action == "pause_game_display":

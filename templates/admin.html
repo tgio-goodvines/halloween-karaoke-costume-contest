@@ -2,7 +2,7 @@
 {% set title = "Admin Portal" %}
 
 {% block content %}
-<section class="admin-panel" data-admin-inline="true">
+<section class="admin-panel" data-admin-inline="true" data-view-scope="admin:{{ admin_view }}{% if admin_view == 'games' %}:{{ games_admin.selected_key }}{% endif %}">
   <header class="admin-panel__header">
     <p class="admin-panel__eyebrow">Control room</p>
     <h2>{{ admin_workspaces[admin_view].label }}</h2>
@@ -84,7 +84,7 @@
         </a>
         <a class="admin-home__card" href="{{ url_for('admin_portal', admin_view='games') }}">
           <span class="admin-home__label">Party games</span>
-          <strong>{% if games_admin.active_count %}{{ games_admin.active_count }} Live{% elif games_admin.enabled_count %}{{ games_admin.enabled_count }} Enabled{% else %}Disabled{% endif %}</strong>
+          <strong>{% if games_admin.active_count %}{{ games_admin.active_count }} Open{% elif games_admin.enabled_count %}{{ games_admin.enabled_count }} Closed{% else %}Disabled{% endif %}</strong>
           <span>{{ games_admin.participant_count }} total participation{{ 's' if games_admin.participant_count != 1 else '' }}</span>
         </a>
         <a

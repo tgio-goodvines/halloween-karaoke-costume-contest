@@ -107,6 +107,11 @@ adds request provenance and priority synchronization state inside the
   `dj_state.desired.queue_order` so
   a skipped or library-backed MusicKit item cannot silently move display state
   onto a different song.
+- An online, authorized receiver holds a 20-second lease on that receiver slot.
+  Heartbeats from other live-display tabs cannot replace it, and non-owner
+  tabs remain display-only and do not execute DJ commands. An authorized
+  receiver may replace an online unpaired tab immediately; any tab may claim
+  the slot after the current heartbeat becomes stale.
 - `dj_song_requests`: pending attendee requests with requester identity,
   timestamp, and normalized Apple Music song metadata.
 
@@ -233,6 +238,9 @@ by MusicKit and is not persisted server-side.
 ## Operational Recovery
 
 - **Receiver offline:** open or refresh `/live-display` on the TV device.
+- **Another display owns DJ audio:** keep the playback/casting tab open. Other
+  live-display tabs may stay open for viewing, but remain display-only until
+  the active receiver has been offline for 20 seconds.
 - **Needs authorization/audio enable:** press Enable DJ Audio on the TV and
   complete the Apple Music prompt there.
 - **Command failed/timed out:** the workspace displays the receiver’s message;

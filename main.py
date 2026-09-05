@@ -3231,9 +3231,28 @@ def reset_dj_workflow_state(reset_record: dict[str, object]) -> None:
     dj_state["last_reset"] = reset_record
 
 
-def record_dj_receiver_state(payload: dict[str, object]) -> None:
+def dj_receiver_report_is_ready(payload: dict[str, object]) -> bool:
+    return bool(
+        str(payload.get("status", "") or "") == "ready"
+        and str(payload.get("authorization_status", "") or "") == "authorized"
+        and payload.get("audio_enabled")
+    )
+
+
+def record_dj_receiver_state(payload: dict[str, object]) -> bool:
     receiver = dj_state["receiver"]
-    receiver["id"] = str(payload.get("receiver_id", "") or receiver.get("id", ""))[:120]
+    receiver_id = str(payload.get("receiver_id", "") or "").strip()[:120]
+    active_receiver_id = str(receiver.get("id", "") or "")
+    if (
+        receiver_id
+        and active_receiver_id
+        and receiver_id != active_receiver_id
+        and dj_receiver_is_online(receiver)
+        and (dj_receiver_is_ready(receiver) or not dj_receiver_report_is_ready(payload))
+    ):
+        return False
+
+    receiver["id"] = receiver_id or active_receiver_id
     requested_status = str(payload.get("status", "") or receiver.get("status", "offline"))
     receiver["status"] = requested_status if requested_status in DJ_RECEIVER_STATUSES else "error"
     receiver["authorization_status"] = str(payload.get("authorization_status", "") or receiver.get("authorization_status", ""))[:80]
@@ -3289,7 +3308,7 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
             reset_record["acknowledged_at"] = _utc_now_iso()
             reset_record["error"] = "" if succeeded else receiver["last_error"] or "The live display could not complete the DJ reset."
             reset_dj_workflow_state(reset_record)
-            return
+            return True
         current_command["status"] = "succeeded" if succeeded else "failed"
         current_command["acknowledged_at"] = _utc_now_iso()
         current_command["error"] = "" if succeeded else receiver["last_error"] or "The display could not complete the DJ command."
@@ -3313,9 +3332,10 @@ def record_dj_receiver_state(payload: dict[str, object]) -> None:
         dj_state["last_command"] = copy.deepcopy(current_command)
         dj_state["current_command"] = None
         maybe_queue_dj_priority_sync_command()
-        return
+        return True
 
     maybe_queue_dj_priority_sync_command()
+    return True
 
 
 def dj_command_flow() -> list[dict[str, str]]:
@@ -8201,9 +8221,16 @@ def dj_receiver_state():
     if not isinstance(payload, dict):
         return jsonify({"error": "Expected a DJ receiver state payload."}), 400
 
-    record_dj_receiver_state(payload)
-    broadcast_display_update()
-    return jsonify({"dj": dj_view_state(), "command": copy.deepcopy(dj_state.get("current_command"))})
+    receiver_accepted = record_dj_receiver_state(payload)
+    if receiver_accepted:
+        broadcast_display_update()
+    return jsonify(
+        {
+            "dj": dj_view_state(),
+            "command": copy.deepcopy(dj_state.get("current_command")),
+            "receiver_accepted": receiver_accepted,
+        }
+    )
 
 
 @app.context_processor

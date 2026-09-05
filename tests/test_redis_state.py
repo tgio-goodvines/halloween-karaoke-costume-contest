@@ -1842,6 +1842,132 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("armed", flow[0]["detail"])
         self.assertIn("unlocked", flow[3]["detail"])
 
+    def test_ready_dj_receiver_ignores_competing_unpaired_display(self):
+        accepted = main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "playing",
+            }
+        )
+        rejected = main.record_dj_receiver_state(
+            {
+                "receiver_id": "admin-display",
+                "status": "needs_audio_enable",
+                "authorization_status": "not_authorized",
+                "audio_enabled": False,
+                "playback_status": "playing",
+            }
+        )
+
+        receiver = main.dj_state["receiver"]
+        self.assertTrue(accepted)
+        self.assertFalse(rejected)
+        self.assertEqual("casting-display", receiver["id"])
+        self.assertEqual("ready", receiver["status"])
+        self.assertEqual("authorized", receiver["authorization_status"])
+        self.assertTrue(receiver["audio_enabled"])
+
+    def test_ready_dj_receiver_keeps_lease_against_second_ready_display(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+            }
+        )
+
+        accepted = main.record_dj_receiver_state(
+            {
+                "receiver_id": "second-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+            }
+        )
+
+        self.assertFalse(accepted)
+        self.assertEqual("casting-display", main.dj_state["receiver"]["id"])
+
+    def test_ready_dj_receiver_can_replace_online_unpaired_display(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "unpaired-display",
+                "status": "needs_audio_enable",
+                "authorization_status": "not_authorized",
+                "audio_enabled": False,
+            }
+        )
+
+        accepted = main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+            }
+        )
+
+        self.assertTrue(accepted)
+        self.assertEqual("casting-display", main.dj_state["receiver"]["id"])
+        self.assertEqual("authorized", main.dj_state["receiver"]["authorization_status"])
+
+    def test_new_display_can_replace_stale_ready_receiver(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "old-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+            }
+        )
+        main.dj_state["receiver"]["last_seen_at"] = "2020-01-01T00:00:00+00:00"
+
+        accepted = main.record_dj_receiver_state(
+            {
+                "receiver_id": "replacement-display",
+                "status": "needs_audio_enable",
+                "authorization_status": "not_authorized",
+                "audio_enabled": False,
+            }
+        )
+
+        self.assertTrue(accepted)
+        self.assertEqual("replacement-display", main.dj_state["receiver"]["id"])
+        self.assertEqual("needs_audio_enable", main.dj_state["receiver"]["status"])
+
+    def test_receiver_state_route_does_not_broadcast_rejected_heartbeat(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+            }
+        )
+        self.save_current_state()
+        starting_version = main.display_update_version
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/api/dj/receiver-state",
+                json={
+                    "receiver_id": "admin-display",
+                    "status": "needs_audio_enable",
+                    "authorization_status": "not_authorized",
+                    "audio_enabled": False,
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertFalse(response.get_json()["receiver_accepted"])
+        self.assertEqual(starting_version, main.display_update_version)
+        self.assertEqual("casting-display", self.redis_state()["dj_state"]["receiver"]["id"])
+
     def test_dj_workflow_reset_preserves_playlist_and_waits_for_display_acknowledgement(self):
         main.dj_playlist = [
             main.normalize_dj_song(

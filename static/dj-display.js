@@ -49,6 +49,15 @@
   }
 
   const receiver = () => (dj && typeof dj.receiver === 'object' ? dj.receiver : {});
+  const receiverOwnedElsewhere = () => {
+    const activeReceiverId = String(receiver().id || '');
+    return Boolean(
+      activeReceiverId
+      && activeReceiverId !== receiverId
+      && receiver().effective_status !== 'offline'
+      && receiver().online !== false
+    );
+  };
   const songs = () => (Array.isArray(dj.playlist) ? dj.playlist : []);
   const songById = (songId) => songs().find((song) => song && String(song.id) === String(songId));
 
@@ -139,10 +148,12 @@
       }
     }
 
+    const ownedElsewhere = receiverOwnedElsewhere();
     if (enableButton) {
-      if (audioEnabled || pairingInProgress || !appleMusicConfigured) enableButton.setAttribute('hidden', '');
+      if (audioEnabled || pairingInProgress || !appleMusicConfigured || ownedElsewhere) enableButton.setAttribute('hidden', '');
       else enableButton.removeAttribute('hidden');
     }
+    if (ownedElsewhere) setDetail('DJ audio is controlled by another live display. This tab is display-only.');
   };
 
   const statusPayload = (extra = {}) => {
@@ -202,6 +213,7 @@
   // changing tracks must not arrive after the track-change report and put the
   // old song back into Redis.
   const report = (extra = {}) => {
+    if (receiverOwnedElsewhere()) return Promise.resolve();
     reportChain = reportChain.then(() => sendReport(extra));
     return reportChain;
   };
@@ -397,6 +409,7 @@
   };
 
   const executeCommand = async () => {
+    if (receiverOwnedElsewhere()) return;
     const command = dj?.current_command;
     if (!command || !command.id || command.id === processingCommandId) return;
     processingCommandId = command.id;
@@ -521,6 +534,10 @@
   };
 
   enableButton?.addEventListener('click', async () => {
+    if (receiverOwnedElsewhere()) {
+      setDetail('DJ audio is already controlled by another live display.');
+      return;
+    }
     pairingInProgress = true;
     enableButton.disabled = true;
     setDetail('Connecting Apple Music…');

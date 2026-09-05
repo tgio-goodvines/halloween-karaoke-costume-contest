@@ -3994,7 +3994,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(22, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(23, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])
@@ -6770,6 +6770,54 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(3, len(response["metrics"]))
         self.assertNotIn("Private Name", json.dumps(entries))
 
+    def test_prompt_game_stage_rotates_only_display_eligible_anonymous_history(self):
+        game = main.party_game_state(main.BAD_ADVICE_GAME_KEY)
+        game.update(
+            {
+                "enabled": True,
+                "phase": "active",
+                "current_round_id": "round-2",
+                "participants": {
+                    "private-user": {
+                        "player_id": "private-player",
+                        "display_name": "Secret Person",
+                        "alias": "Cursed Pumpkin",
+                    }
+                },
+                "rounds": [
+                    {
+                        "id": "round-1",
+                        "prompt_text": "A fictional dilemma",
+                        "status": "revealed",
+                        "responses": {
+                            "visible": {"id": "visible", "player_id": "private-player", "text": "Call a lawyer dressed as a ghost", "display_hidden": False},
+                            "hidden": {"id": "hidden", "player_id": "private-player", "text": "Never show this on TV", "display_hidden": True},
+                        },
+                        "votes": {},
+                        "results": {"vote_counts": {"visible": 2, "hidden": 0}, "winner_response_ids": ["visible"], "vote_count": 2},
+                    },
+                    {
+                        "id": "round-2",
+                        "prompt_text": "The current dilemma",
+                        "status": "submissions",
+                        "responses": {},
+                        "votes": {},
+                        "results": {},
+                    },
+                ],
+            }
+        )
+        main.display_config["prompt_answer_cards_enabled"] = True
+
+        entries = main.build_game_stage_entries()
+        payload = json.dumps(entries)
+        flashback = next(entry for entry in entries if entry.get("entry_kind") == "round_favorite")
+
+        self.assertEqual("Call a lawyer dressed as a ghost", flashback["feature_text"])
+        self.assertNotIn("Never show this on TV", payload)
+        self.assertNotIn("Secret Person", payload)
+        self.assertNotIn("Cursed Pumpkin", payload)
+
     def test_two_truths_lifecycle_guess_scoring_ties_overrides_export_and_reset(self):
         with main.app.test_client() as admin:
             self.login_admin(admin)
@@ -7030,7 +7078,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(main.party_game_state(game_key)["anonymous_mode"])
         self.assertEqual("Jamie", participant["display_name"])
         self.assertEqual("Jamie", main.participant_public_name(participant, anonymous=False))
-        self.assertIn(b"You\xe2\x80\x99re in as Jamie", named_page.data)
+        self.assertIn(b"Responses open", named_page.data)
+        self.assertIn(b"The 10-minute timer starts after 3 answers", named_page.data)
         self.assertNotIn(b"play_anonymously", named_page.data)
 
         with main.app.test_client() as admin:
@@ -7050,7 +7099,7 @@ class RedisStateTests(unittest.TestCase):
         with main.app.test_client() as attendee:
             self.login_regular(attendee, user_id="user-1", username="Jamie")
             anonymous_page = attendee.get(f"/party/games?game={slug}")
-        self.assertIn(b"You\xe2\x80\x99re in as Jamie", anonymous_page.data)
+        self.assertIn(b"Responses open", anonymous_page.data)
 
         main.party_game_state(game_key)["phase"] = "active"
         self.save_current_state()

@@ -89,7 +89,10 @@
 - Fill in the Blank: After Dark, Bad Advice Hotline, and Wrong Answers Only use
   independent prompt decks over one shared blind response/voting engine. Players
   default to signed-in display names; the admin can switch each entire game to
-  anonymous aliases while enrollment is open. Each round moves through submissions, voting, and reveal;
+  anonymous aliases while enrollment is open. Automatic rounds wait for three
+  answers, run a ten-minute response window, open five-minute voting windows
+  until at least one vote exists, reveal for thirty seconds, and then generate
+  the next fictional prompt locally. Each round moves through submissions, voting, and reveal;
   responses remain authorless during voting, self-voting is rejected, and
   received votes become cumulative game points.
 - MMF and all prompt games support a single opted-in player. Solo prompt rounds
@@ -100,6 +103,10 @@
   five seconds, so late joins, new clues, phase changes, votes, and results
   appear without a full reload. Dirty forms, focus, MMF round selection, and the
   current scroll anchor are preserved across refreshes.
+- The live game stage includes automatic-round status/countdown cards and a
+  shuffle-bag sample of revealed questions, anonymous answers, and anonymous
+  round favorites. Hosts can suppress all prompt-answer cards or hide one
+  response from the TV without altering votes or scoring.
 - Murder, Marry, F%$@ presents all ten rounds as numbered controls with distinct
   selected and completed indicators, and advances a saved ballot to the next
   incomplete round.

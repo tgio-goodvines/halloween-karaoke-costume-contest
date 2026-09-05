@@ -92,6 +92,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let gameEntryId = '';
   let gameTimer = null;
   let gameTimerEntryId = '';
+  let gameRotationQueue = [];
+  const gameDetailBags = new Map();
   let barPromotionIndex = 0;
   let barPromotionItemId = '';
   let barHistoryIndex = 0;
@@ -103,6 +105,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const safeArray = (value) => (Array.isArray(value) ? value : []);
   const asObject = (value) => (value && typeof value === 'object' ? value : {});
+  const shuffled = (items) => {
+    const result = [...items];
+    for (let index = result.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.random() * (index + 1));
+      [result[index], result[target]] = [result[target], result[index]];
+    }
+    return result;
+  };
+
+  const detailSelectionsForGame = (gameKey, candidates, count = 2) => {
+    const candidateIds = candidates.map((entry) => String(entry.id || '')).filter(Boolean);
+    if (!candidateIds.length) return [];
+    let bag = safeArray(gameDetailBags.get(gameKey)).filter((id) => candidateIds.includes(id));
+    const selected = [];
+    while (selected.length < Math.min(count, candidateIds.length)) {
+      if (!bag.length) bag = shuffled(candidateIds.filter((id) => id !== gameEntryId && !selected.includes(id)));
+      if (!bag.length) bag = shuffled(candidateIds.filter((id) => !selected.includes(id)));
+      if (!bag.length) break;
+      const id = bag.shift();
+      if (id && !selected.includes(id)) selected.push(id);
+    }
+    gameDetailBags.set(gameKey, bag);
+    return selected;
+  };
+
+  const buildGameRotationQueue = (entries) => {
+    const statuses = entries.filter((entry) => entry.entry_kind === 'live_status');
+    const detailsByGame = new Map();
+    entries.filter((entry) => entry.entry_kind !== 'live_status').forEach((entry) => {
+      const key = String(entry.game_key || 'games');
+      if (!detailsByGame.has(key)) detailsByGame.set(key, []);
+      detailsByGame.get(key).push(entry);
+    });
+    const selectedIds = statuses.map((entry) => String(entry.id || '')).filter(Boolean);
+    detailsByGame.forEach((candidates, gameKey) => {
+      selectedIds.push(...detailSelectionsForGame(gameKey, candidates));
+    });
+    const queue = shuffled(selectedIds.filter((id) => id && id !== gameEntryId));
+    if (queue.length > 1 && queue[0] === gameTimerEntryId) queue.push(queue.shift());
+    return queue;
+  };
   const mediaHelpers = window.HalloweenDisplayMedia || {};
   const mediaTreatmentFor = mediaHelpers.treatmentFor || ((entry) => (
     entry?.image_url ? (entry.media_treatment === 'foreground' ? 'foreground' : 'background') : 'none'
@@ -118,6 +161,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const text = value == null ? '' : String(value);
     element.textContent = text;
     setHidden(element, !text);
+  };
+  const gameSecondaryText = (game) => {
+    let secondary = game.secondary || '';
+    if (game.deadline_at && game.deadline_prefix) {
+      const deadline = new Date(game.deadline_at).getTime();
+      if (Number.isFinite(deadline)) {
+        const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        secondary = `${game.deadline_prefix} ${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+      }
+    }
+    return secondary;
   };
   const boundedSeconds = (value, fallback = 8) => {
     const parsed = Number(value);
@@ -491,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elements.gameStatus) elements.gameStatus.textContent = game.status_label || game.phase || '';
     if (elements.gameTitle) elements.gameTitle.textContent = game.title || 'Party Games';
     setOptionalText(elements.gamePrimary, game.primary || 'Follow the live game status here.');
-    setOptionalText(elements.gameSecondary, game.secondary || '');
+    setOptionalText(elements.gameSecondary, gameSecondaryText(game));
     setOptionalText(elements.gameFocusLabel, game.focus_label || 'Live focus');
     setOptionalText(elements.gameFeature, game.feature_text || '');
     if (elements.gameFocusItems) {
@@ -536,9 +590,17 @@ document.addEventListener('DOMContentLoaded', () => {
       clearGameRotationTimer();
       return;
     }
-    const preserved = entries.findIndex((entry) => String(entry.id || '') === gameEntryId);
-    if (preserved >= 0) gameIndex = preserved;
-    gameIndex %= entries.length;
+    const validIds = new Set(entries.map((entry) => String(entry.id || '')).filter(Boolean));
+    gameRotationQueue = gameRotationQueue.filter((id) => validIds.has(id) && id !== gameEntryId);
+    let preserved = entries.findIndex((entry) => String(entry.id || '') === gameEntryId);
+    if (preserved < 0) {
+      gameRotationQueue = buildGameRotationQueue(entries);
+      const latestStatus = entries.find((entry) => entry.entry_kind === 'live_status');
+      gameEntryId = String(latestStatus?.id || gameRotationQueue.shift() || entries[0]?.id || '');
+      gameRotationQueue = gameRotationQueue.filter((id) => id !== gameEntryId);
+      preserved = entries.findIndex((entry) => String(entry.id || '') === gameEntryId);
+    }
+    gameIndex = Math.max(0, preserved);
     renderGameEntry(entries[gameIndex], entries.length);
     if (entries.length > 1 && !games.pinned_game_key) {
       const entryId = String(entries[gameIndex]?.id || '');
@@ -554,9 +616,9 @@ document.addEventListener('DOMContentLoaded', () => {
           renderGames();
           return;
         }
-        const currentIndex = latestEntries.findIndex((entry) => String(entry.id || '') === gameEntryId);
-        gameIndex = ((currentIndex >= 0 ? currentIndex : gameIndex) + 1) % latestEntries.length;
-        gameEntryId = String(latestEntries[gameIndex]?.id || '');
+        if (!gameRotationQueue.length) gameRotationQueue = buildGameRotationQueue(latestEntries);
+        gameEntryId = gameRotationQueue.shift() || String(latestEntries[0]?.id || '');
+        gameIndex = Math.max(0, latestEntries.findIndex((entry) => String(entry.id || '') === gameEntryId));
         renderGames();
       }, seconds * 1000);
     } else clearGameRotationTimer();
@@ -877,5 +939,9 @@ document.addEventListener('DOMContentLoaded', () => {
   renderLayout();
   fetchLatest();
   window.setInterval(fetchLatest, 30000);
+  window.setInterval(() => {
+    const entry = safeArray(asObject(layout.games).entries).find((item) => String(item.id || '') === gameEntryId);
+    if (entry) setOptionalText(elements.gameSecondary, gameSecondaryText(entry));
+  }, 1000);
   startEventStream();
 });

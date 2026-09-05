@@ -37,8 +37,12 @@ host closes it for final scoring.
 - `reset`: creates a Redis backup, clears play data, restores configuration
   defaults, and reopens the game when the enabled flag is preserved.
 
-Prompt games add per-round phases: `submissions -> voting -> revealed`. The
-host must reveal the current round before opening another or ending the game.
+Prompt games add per-round phases: `submissions -> voting -> revealed`. Schema
+23 automatic rounds wait for three distinct answers, run a persisted ten-minute
+response window, open voting for five minutes, extend voting in five-minute
+blocks until at least one vote exists, reveal for thirty seconds, and then open
+the next procedurally generated prompt. The host can pause, resume, skip, or
+manually advance a round and can end the game from any phase.
 
 All games can open with zero players. MMF and all three prompt games support a
 one-player session. A solo MMF
@@ -183,6 +187,33 @@ players; guessing becomes useful as additional mystery guests join.
   the 10-round configuration presence, and desktop overflow at 1280px.
 - Active MMF, prompt submission, and prompt voting templates have dedicated
   authenticated route-render regression tests.
+
+## Automatic Prompt Rounds And Varied Live Cards (2026-09-05)
+
+- Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only share one
+  Redis-deadline transition engine. The production worker checks every two
+  seconds, uses the existing distributed state lock, and broadcasts only real
+  transitions so competing EC2 instances cannot create duplicate rounds.
+- Versioned local procedural generators create privacy-safe fictional prompts
+  without a network dependency. A bounded fifty-prompt fingerprint history
+  avoids recent repetition; configured prompt decks remain manual/fallback
+  material.
+- Existing pre-schema-23 games migrate with automation paused. Fresh/reset
+  games default to automatic play, and the selected-game admin console exposes
+  pause, resume, skip, manual advancement, and per-answer TV visibility.
+- The independent live game stage always includes current round status and
+  countdown cards. Revealed questions, anonymous answers, and anonymous round
+  favorites join a bounded client-side shuffle-bag selection. Each cycle keeps
+  live status represented, chooses at most two detail cards per game, and avoids
+  repeating an answer until its eligible pool has been consumed.
+- Anonymous live cards never contain an account ID, player ID, signed-in name,
+  or game alias. Admins may globally disable prompt-answer cards or hide one
+  response from the TV without changing voting or scoring.
+- Final verification passed with 238 Python tests and 31 subtests, Python and
+  browser-script syntax checks, deployment-script shell validation, and
+  whitespace validation. Local desktop/mobile browser QA confirmed the admin
+  countdown controls, live status cards, anonymous flashbacks, and clean
+  browser console output.
 
 ## Simulation And Result-Card Controls (2026-08-13)
 

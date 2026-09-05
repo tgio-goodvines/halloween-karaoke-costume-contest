@@ -138,6 +138,11 @@
 - `POST /party/games/<game_slug>/response|vote` -> upserts one blind
   response or non-self vote for the current Fill in the Blank, Bad Advice, or
   Wrong Answers round.
+  The third response starts a persisted ten-minute deadline. A Redis-locked
+  worker opens five-minute voting, extends empty voting windows, reveals a
+  voted round for thirty seconds, and creates the next locally generated
+  prompt. Every attendee/admin mutation reconciles expired deadlines before
+  accepting an action.
 - `GET|POST /party/karaoke` -> attendee karaoke signup form, available on the
   party date and redirected to `/party` before then. With YouTube karaoke
   enabled, the three-step flow collects song-card metadata first, searches for

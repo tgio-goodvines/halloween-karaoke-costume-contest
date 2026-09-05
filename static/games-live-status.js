@@ -1,4 +1,17 @@
 (() => {
+  const updateCountdowns = () => {
+    document.querySelectorAll('[data-game-deadline]').forEach((node) => {
+      const deadline = new Date(node.dataset.gameDeadline || '').getTime();
+      if (!Number.isFinite(deadline)) return;
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      const minutes = Math.floor(remaining / 60);
+      const seconds = remaining % 60;
+      node.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    });
+  };
+  updateCountdowns();
+  window.setInterval(updateCountdowns, 1000);
+
   const widgets = Array.from(document.querySelectorAll('[data-games-live-widget]'));
   if (!widgets.length) return;
 

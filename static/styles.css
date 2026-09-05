@@ -6090,6 +6090,14 @@ textarea,
 
 .game-prompt-list li > div { display: flex; gap: 0.4rem; }
 .game-prompt-list .is-disabled { color: #71717a; text-decoration: line-through; }
+.game-timer {
+  color: #f4f4f5;
+  font-variant-numeric: tabular-nums;
+}
+.game-timer strong {
+  color: #ff5555;
+  letter-spacing: 0.06em;
+}
 .game-round-controls,
 .game-presentation-controls { margin-block: 1rem; padding-block: 1rem; border-block: 1px solid rgba(255,255,255,.12); }
 

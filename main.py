@@ -60,16 +60,22 @@ from party_games import (
     MMF_ROUND_COUNT,
     MURDER_MARRY_FUCK_GAME_KEY,
     PROMPT_GAME_KEYS,
+    PROMPT_RESPONSE_MINIMUM,
+    PROMPT_RESPONSE_WINDOW_SECONDS,
+    PROMPT_REVEAL_WINDOW_SECONDS,
+    PROMPT_VOTING_WINDOW_SECONDS,
     TWO_TRUTHS_GAME_KEY,
     WRONG_ANSWERS_GAME_KEY,
     calculate_mmf_results,
     calculate_prompt_results,
     calculate_two_truths_results,
+    advance_prompt_game_automation,
     build_simulated_game_state,
     empty_mmf_game_state,
     empty_prompt_game_state,
     empty_two_truths_game_state,
     finalize_prompt_round,
+    create_automatic_prompt_round,
     game_by_slug,
     game_winners,
     generate_game_alias,
@@ -353,7 +359,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 22
+STATE_SCHEMA_VERSION = 23
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -593,6 +599,7 @@ DEFAULT_DISPLAY_CONFIG: dict[str, object] = {
     "game_interval_seconds": 10,
     "game_mode": "auto",
     "pinned_game_key": "",
+    "prompt_answer_cards_enabled": True,
     "bar_mode": "auto",
     "music_mode": "auto",
     "max_bar_orders": 4,
@@ -744,6 +751,7 @@ game_data_archives: dict[str, dict[str, object]] = {}
 test_email_audit: list[dict[str, object]] = []
 redis_state_available = False
 display_pubsub_listener_started = False
+prompt_automation_worker_started = False
 STATE_MUTATION_ENDPOINTS = {
     "party_account",
     "party_login",
@@ -2530,6 +2538,9 @@ def normalize_display_config(raw_config: object) -> dict[str, object]:
 
     pinned_game_key = str(raw_config.get("pinned_game_key", "") or "")
     normalized["pinned_game_key"] = pinned_game_key if pinned_game_key in GAME_CATALOG else ""
+    normalized["prompt_answer_cards_enabled"] = bool(
+        raw_config.get("prompt_answer_cards_enabled", True)
+    )
     raw_game_card_enabled = raw_config.get("game_result_card_enabled", {})
     if isinstance(raw_game_card_enabled, dict):
         valid_suffixes = {"winner", "scores"}
@@ -5629,6 +5640,87 @@ def release_state_lock(state_lock: redis.lock.Lock | None) -> None:
         app.logger.warning("Redis state lock could not be released cleanly: %s", exc)
 
 
+def advance_due_prompt_games(*, now: datetime | None = None) -> list[dict[str, str]]:
+    transitions: list[dict[str, str]] = []
+    timestamp = now or datetime.now(timezone.utc)
+    for game_key in PROMPT_GAME_KEYS:
+        game = games_state.get(game_key)
+        if not isinstance(game, dict):
+            continue
+        for event in advance_prompt_game_automation(game_key, game, now=timestamp):
+            transitions.append({"game_key": game_key, "event": event})
+    return transitions
+
+
+def reconcile_prompt_automation_state(*, blocking: bool = False) -> list[dict[str, str]]:
+    """Advance persisted prompt timers under the shared Redis mutation lock."""
+    if not redis_state_available:
+        transitions = advance_due_prompt_games()
+        if transitions:
+            broadcast_display_update()
+        return transitions
+    state_lock = redis_client.lock(
+        redis_key("lock:state"),
+        timeout=STATE_LOCK_TIMEOUT_SECONDS,
+        blocking_timeout=STATE_LOCK_BLOCKING_TIMEOUT_SECONDS if blocking else 0,
+        thread_local=False,
+    )
+    acquired = False
+    try:
+        acquired = bool(state_lock.acquire(blocking=blocking))
+        if not acquired:
+            return []
+        load_state_from_redis()
+        transitions = advance_due_prompt_games()
+        if transitions:
+            broadcast_display_update()
+        return transitions
+    finally:
+        if acquired:
+            release_state_lock(state_lock)
+
+
+def prompt_automation_worker_loop() -> None:
+    heartbeat_key = redis_key("games:automation:heartbeat")
+    while True:
+        try:
+            transitions = reconcile_prompt_automation_state(blocking=False)
+            redis_client.setex(
+                heartbeat_key,
+                15,
+                json.dumps(
+                    {
+                        "instance": APP_INSTANCE_ID,
+                        "checked_at": _utc_now_iso(),
+                        "transitions": transitions,
+                    },
+                    sort_keys=True,
+                ),
+            )
+        except (redis.RedisError, RuntimeError) as exc:
+            app.logger.warning("Prompt-game automation tick failed: %s", exc)
+        time.sleep(2)
+
+
+def start_prompt_automation_worker() -> bool:
+    global prompt_automation_worker_started
+    configured = os.environ.get(
+        "HALLOWEEN_PROMPT_AUTOMATION_WORKER_ENABLED",
+        "true" if os.environ.get("APP_ENV") == "production" else "false",
+    ).strip().casefold()
+    if configured not in {"1", "true", "yes", "on"}:
+        return False
+    if prompt_automation_worker_started or not redis_state_available:
+        return False
+    Thread(
+        target=prompt_automation_worker_loop,
+        name="prompt-game-automation",
+        daemon=True,
+    ).start()
+    prompt_automation_worker_started = True
+    return True
+
+
 class StateMutationBusy(RuntimeError):
     pass
 
@@ -5713,6 +5805,7 @@ def initialize_state_store() -> bool:
 
 if initialize_state_store():
     start_display_pubsub_listener()
+    start_prompt_automation_worker()
 
 
 def get_csrf_token() -> str:
@@ -5844,6 +5937,16 @@ def refresh_state_for_reads():
         return None
 
     if not redis_state_available:
+        if request.endpoint in {
+            "party_games",
+            "party_games_data",
+            "party_game_view_data",
+            "display_data",
+            "admin_portal",
+        }:
+            transitions = advance_due_prompt_games()
+            if transitions:
+                broadcast_display_update()
         return None
 
     try:
@@ -5855,6 +5958,18 @@ def refresh_state_for_reads():
                 "The event state store is temporarily unavailable. Please try again.",
                 status=503,
             )
+
+    if request.endpoint in {
+        "party_games",
+        "party_games_data",
+        "party_game_view_data",
+        "display_data",
+        "admin_portal",
+    }:
+        try:
+            reconcile_prompt_automation_state(blocking=False)
+        except (redis.RedisError, RuntimeError) as exc:
+            app.logger.warning("Unable to reconcile prompt-game timers before read: %s", exc)
 
     return None
 
@@ -5873,6 +5988,9 @@ def lock_state_for_mutation():
                 "The event state store is temporarily unavailable. Please try again.",
                 status=503,
             )
+        transitions = advance_due_prompt_games()
+        if transitions:
+            broadcast_display_update()
         return None
 
     try:
@@ -5906,6 +6024,13 @@ def lock_state_for_mutation():
             "The event state store is temporarily unavailable. Please try again.",
             status=503,
         )
+
+    transitions = advance_due_prompt_games()
+    if transitions:
+        broadcast_display_update()
+        # The route may perform another mutation without broadcasting, so keep
+        # the normal after-request persistence pass active.
+        g.redis_state_saved_during_request = False
 
     return None
 
@@ -6190,6 +6315,80 @@ def open_game_for_attendees(game: dict[str, object]) -> bool:
         game["started_at"] = _utc_now_iso()
     game["ended_at"] = ""
     return True
+
+
+def parse_utc_timestamp(value: object) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def prompt_round_number(game: dict[str, object], game_round: dict[str, object] | None) -> int:
+    if not game_round:
+        return 0
+    return next(
+        (
+            index + 1
+            for index, entry in enumerate(game.get("rounds", []))
+            if isinstance(entry, dict) and entry.get("id") == game_round.get("id")
+        ),
+        1,
+    )
+
+
+def prompt_timer_view(game: dict[str, object], game_round: dict[str, object] | None) -> dict[str, object]:
+    automation = game.get("automation", {}) if isinstance(game.get("automation"), dict) else {}
+    deadline_at = str(game_round.get("deadline_at", "") or "") if game_round else ""
+    return {
+        "enabled": bool(automation.get("enabled")),
+        "paused": bool(automation.get("paused")),
+        "deadline_at": deadline_at,
+        "response_minimum": PROMPT_RESPONSE_MINIMUM,
+        "response_window_seconds": PROMPT_RESPONSE_WINDOW_SECONDS,
+        "voting_window_seconds": PROMPT_VOTING_WINDOW_SECONDS,
+        "reveal_window_seconds": PROMPT_REVEAL_WINDOW_SECONDS,
+        "vote_extensions": int(game_round.get("vote_extensions", 0) or 0) if game_round else 0,
+        "round_number": prompt_round_number(game, game_round),
+    }
+
+
+def pause_prompt_automation(game: dict[str, object]) -> None:
+    automation = game.setdefault("automation", {})
+    now = datetime.now(timezone.utc)
+    current = prompt_round_for_game(game)
+    deadline = parse_utc_timestamp(current.get("deadline_at")) if current else None
+    automation["enabled"] = True
+    automation["paused"] = True
+    automation["paused_at"] = now.isoformat().replace("+00:00", "Z")
+    automation["remaining_seconds"] = max(0, int((deadline - now).total_seconds())) if deadline else 0
+
+
+def resume_prompt_automation(game: dict[str, object]) -> None:
+    automation = game.setdefault("automation", {})
+    current = prompt_round_for_game(game)
+    remaining = max(0, int(automation.get("remaining_seconds", 0) or 0))
+    now = datetime.now(timezone.utc)
+    if current and remaining:
+        current["deadline_at"] = (
+            now + timedelta(seconds=remaining)
+        ).isoformat().replace("+00:00", "Z")
+    elif current and current.get("status") == "voting" and not current.get("deadline_at"):
+        current["deadline_at"] = (
+            now + timedelta(seconds=PROMPT_VOTING_WINDOW_SECONDS)
+        ).isoformat().replace("+00:00", "Z")
+    elif current and current.get("status") == "revealed" and not current.get("deadline_at"):
+        current["deadline_at"] = now.isoformat().replace("+00:00", "Z")
+    automation["enabled"] = True
+    automation["paused"] = False
+    automation["paused_at"] = ""
+    automation["remaining_seconds"] = 0
 
 
 def enabled_game_keys() -> list[str]:
@@ -7095,6 +7294,7 @@ def prompt_admin_view(game_key: str) -> dict[str, object]:
         "key": game_key,
         "metadata": GAME_CATALOG[game_key],
         "statistics": statistics,
+        "timer": prompt_timer_view(game, statistics.get("current_round")),
         "winners": game_winners(game_key, game),
     }
 
@@ -7873,6 +8073,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
         entry: dict[str, object] = {
             "id": game_key,
             "game_key": game_key,
+            "entry_kind": "live_status",
             "title": title,
             "image_url": game_art_url(game_key),
             "media_treatment": "background",
@@ -7965,7 +8166,11 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 round_status = str(current_round.get("status", "submissions"))
                 responses = current_round.get("responses", {}) if isinstance(current_round.get("responses"), dict) else {}
                 votes = current_round.get("votes", {}) if isinstance(current_round.get("votes"), dict) else {}
-                entry["status_label"] = f"Round {int(game.get('current_round_index', 0) or 0) + 1} · {round_status.title()}"
+                round_number = prompt_round_number(game, current_round)
+                automation = game.get("automation", {}) if isinstance(game.get("automation"), dict) else {}
+                deadline_at = str(current_round.get("deadline_at", "") or "")
+                entry["entry_kind"] = "live_status"
+                entry["status_label"] = f"Round {round_number} · {round_status.title()}"
                 entry["presentation"] = {
                     "submissions": "prompt",
                     "voting": "voting",
@@ -7973,7 +8178,23 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 }.get(round_status, "prompt")
                 entry["focus_label"] = "Current prompt"
                 entry["primary"] = str(current_round.get("prompt_text", "") or "Responses are open.")
-                entry["secondary"] = "Blind voting is open in Games." if round_status == "voting" else "Submit your response in Games."
+                entry["deadline_at"] = deadline_at
+                if automation.get("paused"):
+                    entry["secondary"] = "Automatic rotation is paused by the hosts."
+                elif round_status == "submissions" and not deadline_at:
+                    entry["secondary"] = f"Waiting for {PROMPT_RESPONSE_MINIMUM} answers · {len(responses)} submitted."
+                elif round_status == "submissions":
+                    entry["secondary"] = "Responses close in"
+                    entry["deadline_prefix"] = "Responses close in"
+                elif round_status == "voting":
+                    extension_count = int(current_round.get("vote_extensions", 0) or 0)
+                    entry["secondary"] = "Voting closes in" if deadline_at else "Host-controlled voting is open."
+                    entry["deadline_prefix"] = "Voting closes in" if deadline_at else ""
+                    if extension_count:
+                        entry["status_label"] += f" · Extended {extension_count}x"
+                else:
+                    entry["secondary"] = "Next question arrives in"
+                    entry["deadline_prefix"] = "Next question arrives in"
                 entry["metrics"] = [
                     {"label": "Answers", "value": len(responses)},
                     {"label": "Votes", "value": len(votes)},
@@ -7986,14 +8207,21 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 ]
                 entry["action_label"] = "Respond in Party Games" if round_status == "submissions" else "Vote now in Party Games"
                 entry["priority"] = 3 if round_status in {"voting", "revealed"} else 2
-                if phase != "ended" and round_status in {"voting", "revealed"}:
+                if (
+                    display_config.get("prompt_answer_cards_enabled", True)
+                    and phase != "ended"
+                    and round_status in {"voting", "revealed"}
+                ):
                     for response in responses.values():
+                        if response.get("display_hidden"):
+                            continue
                         detail_entries.append(
                             {
                                 **entry,
                                 "id": f"{game_key}:{response.get('id', 'response')}",
+                                "entry_kind": "current_blind_response" if round_status == "voting" else "round_favorite",
                                 "presentation": "response" if round_status == "voting" else "reveal",
-                                "status_label": f"Round {int(game.get('current_round_index', 0) or 0) + 1} · {round_status.title()}",
+                                "status_label": f"Round {round_number} · {round_status.title()}",
                                 "focus_label": "Blind response" if round_status == "voting" else "Round reveal",
                                 "primary": str(current_round.get("prompt_text", "") or "Prompt"),
                                 "secondary": "Read the prompt, then judge this response.",
@@ -8008,6 +8236,60 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                                 "priority": 4,
                             }
                         )
+                if display_config.get("prompt_answer_cards_enabled", True):
+                    for historical_index, historical_round in enumerate(game.get("rounds", []), start=1):
+                        if (
+                            not isinstance(historical_round, dict)
+                            or historical_round.get("status") != "revealed"
+                            or (
+                                phase != "ended"
+                                and historical_round.get("id") == current_round.get("id")
+                            )
+                        ):
+                            continue
+                        historical_results = historical_round.get("results", {}) if isinstance(historical_round.get("results"), dict) else {}
+                        winner_ids = set(historical_results.get("winner_response_ids", []))
+                        detail_entries.append(
+                            {
+                                **entry,
+                                "id": f"{game_key}:question:{historical_round.get('id', historical_index)}",
+                                "entry_kind": "question_flashback",
+                                "presentation": "prompt",
+                                "status_label": f"Question of the Night · Round {historical_index}",
+                                "focus_label": "Earlier tonight",
+                                "primary": str(historical_round.get("prompt_text", "") or "Earlier tonight…"),
+                                "secondary": "The party supplied the answers.",
+                                "feature_text": "",
+                                "deadline_at": "",
+                                "deadline_prefix": "",
+                                "metrics": [],
+                                "steps": [],
+                                "action_label": "More questions are live in Party Games",
+                                "priority": 1,
+                            }
+                        )
+                        for response_id, response in historical_round.get("responses", {}).items():
+                            if not isinstance(response, dict) or response.get("display_hidden"):
+                                continue
+                            detail_entries.append(
+                                {
+                                    **entry,
+                                    "id": f"{game_key}:flashback:{historical_round.get('id', historical_index)}:{response_id}",
+                                    "entry_kind": "round_favorite" if response_id in winner_ids else "anonymous_answer",
+                                    "presentation": "reveal",
+                                    "status_label": f"Question of the Night · Round {historical_index}",
+                                    "focus_label": "Anonymous round favorite" if response_id in winner_ids else "Anonymous answer",
+                                    "primary": str(historical_round.get("prompt_text", "") or "Earlier tonight…"),
+                                    "secondary": "One of tonight's anonymous answers.",
+                                    "feature_text": str(response.get("text", "") or "Anonymous response"),
+                                    "deadline_at": "",
+                                    "deadline_prefix": "",
+                                    "metrics": [],
+                                    "steps": [],
+                                    "action_label": "More questions are live in Party Games",
+                                    "priority": 1,
+                                }
+                            )
             if phase == "ended":
                 winners = game_winners(game_key, game)
                 entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
@@ -10487,6 +10769,7 @@ def build_party_game_page_context(
         "results": game.get("results", {}),
         "winners": game_winners(game_key, game),
         "prompt_round": prompt_round,
+        "prompt_timer": prompt_timer_view(game, prompt_round),
         "prompt_responses": prompt_responses,
         "saved_response": saved_response,
         "saved_vote": saved_vote,
@@ -10734,8 +11017,16 @@ def party_prompt_response(game_slug: str):
     player_id = str(participant.get("player_id", ""))
     existing_id = next((response_id for response_id, entry in game_round.get("responses", {}).items() if entry.get("player_id") == player_id), "")
     response_id = existing_id or uuid4().hex
-    game_round.setdefault("responses", {})[response_id] = {"id": response_id, "player_id": player_id, "text": text, "submitted_at": _utc_now_iso()}
+    existing_response = game_round.get("responses", {}).get(response_id, {})
+    game_round.setdefault("responses", {})[response_id] = {
+        "id": response_id,
+        "player_id": player_id,
+        "text": text,
+        "submitted_at": _utc_now_iso(),
+        "display_hidden": bool(existing_response.get("display_hidden")),
+    }
     participant["updated_at"] = _utc_now_iso()
+    advance_prompt_game_automation(game_key, game)
     broadcast_display_update()
     return redirect(url_for("party_games", game=game_slug, success="response"))
 
@@ -11167,6 +11458,10 @@ def admin_portal(admin_view: str):
             "start_prompt_round",
             "open_prompt_voting",
             "reveal_prompt_round",
+            "pause_prompt_automation",
+            "resume_prompt_automation",
+            "skip_prompt_round",
+            "toggle_prompt_response_display",
             "start_game_presentation",
             "previous_game_slide",
             "next_game_slide",
@@ -11752,6 +12047,7 @@ def admin_portal(admin_view: str):
                     "center_interval_seconds": request.form.get("center_interval_seconds", "8"),
                     "game_interval_seconds": request.form.get("game_interval_seconds", "10"),
                     "game_mode": request.form.get("game_mode", "auto"),
+                    "prompt_answer_cards_enabled": request.form.get("prompt_answer_cards_enabled") == "1",
                     "bar_mode": request.form.get("bar_mode", "auto"),
                     "music_mode": request.form.get("music_mode", "auto"),
                     "max_bar_orders": request.form.get("max_bar_orders", "4"),
@@ -11939,6 +12235,8 @@ def admin_portal(admin_view: str):
 
                 elif action == "enable_game":
                     opened = open_game_for_attendees(game)
+                    if opened and game_key in PROMPT_GAME_KEYS:
+                        advance_prompt_game_automation(game_key, game)
                     messages.append(
                         f"{title} is open. Attendees can join and participate until you close it."
                         if opened
@@ -11947,6 +12245,8 @@ def admin_portal(admin_view: str):
                     should_broadcast = True
 
                 elif action == "disable_game":
+                    if game_key in PROMPT_GAME_KEYS and game.get("phase") == "active":
+                        pause_prompt_automation(game)
                     game["enabled"] = False
                     if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
                         live_display_event_override = None
@@ -11975,6 +12275,9 @@ def admin_portal(admin_view: str):
                         messages.append(f"{title} is already open for attendees.")
                     else:
                         open_game_for_attendees(game)
+                        if game_key in PROMPT_GAME_KEYS:
+                            resume_prompt_automation(game)
+                            advance_prompt_game_automation(game_key, game)
                         messages.append(f"{title} is open for attendees.")
                         should_broadcast = True
 
@@ -11983,12 +12286,26 @@ def admin_portal(admin_view: str):
                         errors.append("Use the existing Two Truths end control.")
                     elif game.get("phase") != "active":
                         errors.append(f"Start {title} before ending it.")
-                    elif game_key in PROMPT_GAME_KEYS and prompt_round_for_game(game) and prompt_round_for_game(game).get("status") != "revealed":
-                        errors.append("Reveal the current prompt round before ending the game.")
-                    elif game_key in PROMPT_GAME_KEYS and not any(entry.get("status") == "revealed" for entry in game.get("rounds", [])):
-                        errors.append("Reveal at least one prompt round before ending the game.")
                     else:
                         finalized_at = _utc_now_iso()
+                        if game_key in PROMPT_GAME_KEYS:
+                            current_round = prompt_round_for_game(game)
+                            if current_round and current_round.get("status") == "voting" and current_round.get("votes"):
+                                current_round["status"] = "revealed"
+                                current_round["revealed_at"] = finalized_at
+                                current_round["closed_at"] = finalized_at
+                                current_round["deadline_at"] = ""
+                                current_round["results"] = finalize_prompt_round(current_round)
+                            elif current_round and current_round.get("status") != "revealed":
+                                game["rounds"] = [
+                                    entry for entry in game.get("rounds", [])
+                                    if entry.get("id") != current_round.get("id")
+                                ]
+                                game["current_round_id"] = ""
+                            automation = game.setdefault("automation", {})
+                            automation["paused"] = True
+                            automation["paused_at"] = finalized_at
+                            automation["remaining_seconds"] = 0
                         game["phase"] = "ended"
                         game["ended_at"] = finalized_at
                         game["results"] = calculate_mmf_results(game, finalized_at=finalized_at) if game_key == MURDER_MARRY_FUCK_GAME_KEY else calculate_prompt_results(game, finalized_at=finalized_at)
@@ -12090,7 +12407,27 @@ def admin_portal(admin_view: str):
                         errors.append("Select an enabled prompt.")
                     else:
                         round_id = uuid4().hex
-                        game_round = {"id": round_id, "prompt_id": prompt_id, "prompt_text": prompt["text"], "status": "submissions", "responses": {}, "votes": {}, "results": {"vote_counts": {}, "winner_response_ids": [], "vote_count": 0}, "created_at": _utc_now_iso(), "revealed_at": ""}
+                        timestamp = _utc_now_iso()
+                        game_round = {
+                            "id": round_id,
+                            "prompt_id": prompt_id,
+                            "prompt_text": prompt["text"],
+                            "prompt_source": "manual",
+                            "prompt_fingerprint": "",
+                            "generator_version": 0,
+                            "status": "submissions",
+                            "responses": {},
+                            "votes": {},
+                            "results": {"vote_counts": {}, "winner_response_ids": [], "vote_count": 0, "solo_spotlight": False},
+                            "created_at": timestamp,
+                            "phase_started_at": timestamp,
+                            "threshold_reached_at": "",
+                            "deadline_at": "",
+                            "voting_opened_at": "",
+                            "vote_extensions": 0,
+                            "revealed_at": "",
+                            "closed_at": "",
+                        }
                         game.setdefault("rounds", []).append(game_round)
                         game["current_round_id"] = round_id
                         messages.append(f"Opened a new {title} response round.")
@@ -12105,11 +12442,21 @@ def admin_portal(admin_view: str):
                     elif len(current_round.get("responses", {})) == 1:
                         current_round["status"] = "revealed"
                         current_round["revealed_at"] = _utc_now_iso()
+                        current_round["closed_at"] = current_round["revealed_at"]
+                        current_round["deadline_at"] = (
+                            datetime.now(timezone.utc) + timedelta(seconds=PROMPT_REVEAL_WINDOW_SECONDS)
+                        ).isoformat().replace("+00:00", "Z") if game.get("automation", {}).get("enabled") and not game.get("automation", {}).get("paused") else ""
                         current_round["results"] = finalize_prompt_round(current_round)
                         messages.append(f"Revealed the solo {title} spotlight and awarded one point.")
                         should_broadcast = True
                     else:
                         current_round["status"] = "voting"
+                        current_round["phase_started_at"] = _utc_now_iso()
+                        current_round["voting_opened_at"] = current_round["phase_started_at"]
+                        automation = game.get("automation", {})
+                        current_round["deadline_at"] = (
+                            datetime.now(timezone.utc) + timedelta(seconds=PROMPT_VOTING_WINDOW_SECONDS)
+                        ).isoformat().replace("+00:00", "Z") if automation.get("enabled") and not automation.get("paused") else ""
                         messages.append(f"Voting is now open for {title}.")
                         should_broadcast = True
 
@@ -12122,8 +12469,64 @@ def admin_portal(admin_view: str):
                     else:
                         current_round["status"] = "revealed"
                         current_round["revealed_at"] = _utc_now_iso()
+                        current_round["closed_at"] = current_round["revealed_at"]
+                        current_round["phase_started_at"] = current_round["revealed_at"]
+                        current_round["deadline_at"] = (
+                            datetime.now(timezone.utc) + timedelta(seconds=PROMPT_REVEAL_WINDOW_SECONDS)
+                        ).isoformat().replace("+00:00", "Z") if game.get("automation", {}).get("enabled") and not game.get("automation", {}).get("paused") else ""
                         current_round["results"] = finalize_prompt_round(current_round)
                         messages.append(f"Revealed the current {title} round.")
+                        should_broadcast = True
+
+                elif action == "pause_prompt_automation":
+                    if game_key not in PROMPT_GAME_KEYS or game.get("phase") != "active":
+                        errors.append("Only an open prompt game can pause automatic rotation.")
+                    else:
+                        pause_prompt_automation(game)
+                        messages.append(f"Paused automatic rounds for {title}.")
+                        should_broadcast = True
+
+                elif action == "resume_prompt_automation":
+                    if game_key not in PROMPT_GAME_KEYS or game.get("phase") != "active":
+                        errors.append("Only an open prompt game can resume automatic rotation.")
+                    else:
+                        resume_prompt_automation(game)
+                        advance_prompt_game_automation(game_key, game)
+                        messages.append(f"Automatic rounds are running for {title}.")
+                        should_broadcast = True
+
+                elif action == "skip_prompt_round":
+                    current_round = prompt_round_for_game(game)
+                    if game_key not in PROMPT_GAME_KEYS or game.get("phase") != "active" or not current_round:
+                        errors.append("There is no active prompt round to skip.")
+                    else:
+                        game["rounds"] = [
+                            entry for entry in game.get("rounds", [])
+                            if entry.get("id") != current_round.get("id")
+                        ]
+                        game["current_round_id"] = ""
+                        if game.get("automation", {}).get("enabled") and not game.get("automation", {}).get("paused"):
+                            create_automatic_prompt_round(game_key, game)
+                        messages.append(f"Skipped the current {title} prompt.")
+                        should_broadcast = True
+
+                elif action == "toggle_prompt_response_display":
+                    response_id = str(request.form.get("response_id", "") or "")
+                    response = next(
+                        (
+                            response
+                            for game_round in game.get("rounds", [])
+                            if isinstance(game_round, dict)
+                            for candidate_id, response in game_round.get("responses", {}).items()
+                            if candidate_id == response_id and isinstance(response, dict)
+                        ),
+                        None,
+                    )
+                    if game_key not in PROMPT_GAME_KEYS or not response:
+                        errors.append("That prompt response could not be found.")
+                    else:
+                        response["display_hidden"] = not bool(response.get("display_hidden"))
+                        messages.append("Updated that response's live-display visibility.")
                         should_broadcast = True
 
                 elif action in {"start_game_presentation", "previous_game_slide", "next_game_slide"}:

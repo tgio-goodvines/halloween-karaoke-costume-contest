@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import random
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import uuid4
 
 
 TWO_TRUTHS_GAME_KEY = "two_truths_and_a_lie"
@@ -15,6 +18,12 @@ WRONG_ANSWERS_GAME_KEY = "wrong_answers_only"
 PROMPT_GAME_KEYS = (FILL_BLANK_GAME_KEY, BAD_ADVICE_GAME_KEY, WRONG_ANSWERS_GAME_KEY)
 GAME_PHASES = {"signup", "active", "ended"}
 PROMPT_ROUND_PHASES = {"submissions", "voting", "revealed"}
+PROMPT_RESPONSE_MINIMUM = 3
+PROMPT_RESPONSE_WINDOW_SECONDS = 10 * 60
+PROMPT_VOTING_WINDOW_SECONDS = 5 * 60
+PROMPT_REVEAL_WINDOW_SECONDS = 30
+PROMPT_RECENT_FINGERPRINT_LIMIT = 50
+PROMPT_GENERATOR_VERSION = 1
 GAME_STATEMENT_MAX_LENGTH = 240
 GAME_PROMPT_MAX_LENGTH = 240
 GAME_RESPONSE_MAX_LENGTH = 280
@@ -192,6 +201,111 @@ DEFAULT_PROMPTS: dict[str, list[str]] = {
 }
 
 
+PROMPT_GENERATOR_PARTS: dict[str, dict[str, list[str]]] = {
+    FILL_BLANK_GAME_KEY: {
+        "templates": [
+            "The haunted house has one rule: never ___ after {event}.",
+            "My villain origin story started when someone ___ near {place}.",
+            "The fastest way to get banned from {place} is ___.",
+            "This party was perfectly normal until ___ appeared in {place}.",
+            "My last text before the group chat went silent was ___.",
+            "The warning label on {object} should really say ___.",
+        ],
+        "event": ["midnight", "last call", "the séance", "karaoke", "the costume contest", "dessert"],
+        "place": ["the kitchen", "the dance floor", "the graveyard", "the hotel lobby", "the laboratory", "the group chat"],
+        "object": ["the cursed punch bowl", "the fog machine", "the mystery key", "the karaoke microphone", "the velvet cape", "the emergency glitter"],
+    },
+    BAD_ADVICE_GAME_KEY: {
+        "templates": [
+            "I accidentally {mistake} right before {event}. What is the worst advice you can give me?",
+            "My roommate insists {problem}. How should I make this dramatically worse?",
+            "I found {object} in {place}. What is the least responsible next step?",
+            "I promised I could {task}, but I absolutely cannot. How do I bluff my way through it?",
+            "The host just announced {problem}. What terrible advice should I follow?",
+        ],
+        "mistake": ["invited both of my exes", "replied all to the family email", "wore the same costume as my nemesis", "lost the only key", "volunteered to make a speech", "called the DJ by the wrong name"],
+        "event": ["a first date", "the costume judging", "a wedding toast", "the big presentation", "midnight karaoke", "a very formal dinner"],
+        "problem": ["the house is definitely haunted", "everyone must perform a solo", "the punch bowl is judging us", "the neighbors have started a rival party", "the group chat needs a leader", "the fog machine is now sentient"],
+        "object": ["a suspicious envelope", "an unlabeled potion", "a tiny velvet throne", "a key marked DO NOT USE", "a phone with one percent battery", "a coupon for one free alibi"],
+        "place": ["the coat closet", "the haunted basement", "the rideshare", "the hotel lobby", "the laboratory", "the dance floor"],
+        "task": ["perform an exorcism", "DJ for an hour", "deliver a flawless toast", "repair a fog machine", "judge a dance battle", "decode a mysterious voicemail"],
+    },
+    WRONG_ANSWERS_GAME_KEY: {
+        "templates": [
+            "Why is {object} hidden in {place}?",
+            "What is the real purpose of {object}?",
+            "What should you say when someone announces {event}?",
+            "What is the first rule of {activity}?",
+            "Why did the host ban {object} after midnight?",
+            "What does {phrase} actually mean?",
+        ],
+        "object": ["the emergency glitter", "the cursed punch bowl", "the velvet cape", "the karaoke microphone", "the mystery key", "the fog machine"],
+        "place": ["the freezer", "the coat closet", "the graveyard", "the group chat", "the laboratory", "the rideshare"],
+        "event": ["last call", "a surprise séance", "mandatory karaoke", "the final costume vote", "a mysterious delivery", "an unscheduled dance battle"],
+        "activity": ["haunted-house etiquette", "midnight karaoke", "competitive pumpkin carving", "group-chat diplomacy", "villain networking", "emergency costume repair"],
+        "phrase": ["business casual", "plus one", "last call", "read the room", "circle back", "dress to impress"],
+    },
+}
+
+
+def prompt_fingerprint(text: object) -> str:
+    normalized = normalize_prompt(text).casefold()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:20]
+
+
+def _format_generated_prompt(parts: dict[str, list[str]], rng: random.Random) -> str:
+    template = rng.choice(parts["templates"])
+    values = {
+        key: rng.choice(options)
+        for key, options in parts.items()
+        if key != "templates" and options
+    }
+    return normalize_prompt(template.format(**values))
+
+
+def generate_prompt_for_game(
+    game_key: str,
+    game: dict[str, Any],
+    *,
+    rng: random.Random | None = None,
+) -> dict[str, str | int]:
+    """Generate a bounded, privacy-safe prompt and avoid recent repetitions."""
+    if game_key not in PROMPT_GAME_KEYS:
+        raise KeyError(game_key)
+    chooser = rng or random.SystemRandom()
+    automation = game.setdefault("automation", {})
+    recent = [str(value) for value in automation.get("recent_prompt_fingerprints", []) if value]
+    recent_set = set(recent)
+    parts = PROMPT_GENERATOR_PARTS[game_key]
+    selected = ""
+    fingerprint = ""
+    for _ in range(100):
+        candidate = _format_generated_prompt(parts, chooser)
+        candidate_fingerprint = prompt_fingerprint(candidate)
+        if candidate and candidate_fingerprint not in recent_set:
+            selected = candidate
+            fingerprint = candidate_fingerprint
+            break
+    if not selected:
+        enabled_prompts = [
+            entry for entry in game.get("prompts", [])
+            if isinstance(entry, dict) and entry.get("enabled") and normalize_prompt(entry.get("text"))
+        ]
+        fallback = chooser.choice(enabled_prompts) if enabled_prompts else {"text": DEFAULT_PROMPTS[game_key][0]}
+        selected = normalize_prompt(fallback.get("text"))
+        fingerprint = prompt_fingerprint(selected)
+    automation["recent_prompt_fingerprints"] = [
+        *[value for value in recent if value != fingerprint],
+        fingerprint,
+    ][-PROMPT_RECENT_FINGERPRINT_LIMIT:]
+    return {
+        "text": selected,
+        "fingerprint": fingerprint,
+        "source": "procedural",
+        "generator_version": PROMPT_GENERATOR_VERSION,
+    }
+
+
 def default_prompt_records(game_key: str) -> list[dict[str, Any]]:
     return [
         {"id": f"{game_key}-{index + 1:02d}", "text": text, "enabled": True}
@@ -234,6 +348,14 @@ def empty_prompt_game_state(game_key: str, *, enabled: bool = False) -> dict[str
         "prompts": default_prompt_records(game_key),
         "rounds": [],
         "current_round_id": "",
+        "automation": {
+            "enabled": True,
+            "paused": False,
+            "paused_at": "",
+            "remaining_seconds": 0,
+            "recent_prompt_fingerprints": [],
+            "generator_version": PROMPT_GENERATOR_VERSION,
+        },
         "results": {"finalized_at": "", "scores": [], "winner_player_ids": []},
         "presentation": {"active": False, "slide_index": 0},
         "simulation": {"is_simulated": False, "player_count": 0, "generated_at": ""},
@@ -548,6 +670,26 @@ def normalize_prompt_record(raw: object, game_key: str, index: int) -> dict[str,
     return {"id": _slug_id(raw.get("id"), f"{game_key}-{index + 1:02d}"), "text": text, "enabled": bool(raw.get("enabled", True))}
 
 
+def normalize_prompt_automation(raw: object, *, legacy: bool = False) -> dict[str, Any]:
+    source = raw if isinstance(raw, dict) else {}
+    try:
+        remaining_seconds = max(0, int(source.get("remaining_seconds", 0) or 0))
+    except (TypeError, ValueError):
+        remaining_seconds = 0
+    fingerprints = source.get("recent_prompt_fingerprints", [])
+    return {
+        # Existing live games migrate paused so deployment never advances them unexpectedly.
+        "enabled": bool(source.get("enabled", not legacy)),
+        "paused": bool(source.get("paused", legacy)),
+        "paused_at": str(source.get("paused_at", "") or ""),
+        "remaining_seconds": min(PROMPT_RESPONSE_WINDOW_SECONDS, remaining_seconds),
+        "recent_prompt_fingerprints": [
+            str(value)[:40] for value in fingerprints if value
+        ][-PROMPT_RECENT_FINGERPRINT_LIMIT:] if isinstance(fingerprints, list) else [],
+        "generator_version": PROMPT_GENERATOR_VERSION,
+    }
+
+
 def finalize_prompt_round(game_round: dict[str, Any]) -> dict[str, Any]:
     responses = game_round.get("responses", {})
     votes = game_round.get("votes", {})
@@ -568,6 +710,120 @@ def finalize_prompt_round(game_round: dict[str, Any]) -> dict[str, Any]:
         "vote_count": sum(counts.values()),
         "solo_spotlight": solo_spotlight,
     }
+
+
+def _iso_datetime(value: object) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _at_iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def create_automatic_prompt_round(
+    game_key: str,
+    game: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    rng: random.Random | None = None,
+) -> dict[str, Any]:
+    timestamp = now or datetime.now(timezone.utc)
+    generated = generate_prompt_for_game(game_key, game, rng=rng)
+    round_id = uuid4().hex
+    game_round = {
+        "id": round_id,
+        "prompt_id": "",
+        "prompt_text": generated["text"],
+        "prompt_source": generated["source"],
+        "prompt_fingerprint": generated["fingerprint"],
+        "generator_version": generated["generator_version"],
+        "status": "submissions",
+        "responses": {},
+        "votes": {},
+        "results": {"vote_counts": {}, "winner_response_ids": [], "vote_count": 0, "solo_spotlight": False},
+        "created_at": _at_iso(timestamp),
+        "phase_started_at": _at_iso(timestamp),
+        "threshold_reached_at": "",
+        "deadline_at": "",
+        "voting_opened_at": "",
+        "vote_extensions": 0,
+        "revealed_at": "",
+        "closed_at": "",
+    }
+    game.setdefault("rounds", []).append(game_round)
+    game["current_round_id"] = round_id
+    return game_round
+
+
+def advance_prompt_game_automation(
+    game_key: str,
+    game: dict[str, Any],
+    *,
+    now: datetime | None = None,
+    rng: random.Random | None = None,
+) -> list[str]:
+    """Advance one prompt game at most one timed phase per call."""
+    timestamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    automation = game.get("automation", {})
+    if (
+        game_key not in PROMPT_GAME_KEYS
+        or not game.get("enabled")
+        or game.get("phase") != "active"
+        or not isinstance(automation, dict)
+        or not automation.get("enabled")
+        or automation.get("paused")
+    ):
+        return []
+
+    current = prompt_round_for_game(game)
+    if not current:
+        create_automatic_prompt_round(game_key, game, now=timestamp, rng=rng)
+        return ["round_opened"]
+
+    status = str(current.get("status", "submissions"))
+    deadline = _iso_datetime(current.get("deadline_at"))
+    if status == "submissions":
+        responses = current.get("responses", {})
+        if len(responses) >= PROMPT_RESPONSE_MINIMUM and not deadline:
+            current["threshold_reached_at"] = _at_iso(timestamp)
+            current["phase_started_at"] = _at_iso(timestamp)
+            current["deadline_at"] = _at_iso(timestamp + timedelta(seconds=PROMPT_RESPONSE_WINDOW_SECONDS))
+            return ["response_timer_started"]
+        if deadline and deadline <= timestamp:
+            current["status"] = "voting"
+            current["phase_started_at"] = _at_iso(timestamp)
+            current["voting_opened_at"] = _at_iso(timestamp)
+            current["deadline_at"] = _at_iso(timestamp + timedelta(seconds=PROMPT_VOTING_WINDOW_SECONDS))
+            return ["voting_opened"]
+        return []
+
+    if status == "voting" and deadline and deadline <= timestamp:
+        if not current.get("votes"):
+            current["vote_extensions"] = _nonnegative_int(current.get("vote_extensions")) + 1
+            current["phase_started_at"] = _at_iso(timestamp)
+            current["deadline_at"] = _at_iso(timestamp + timedelta(seconds=PROMPT_VOTING_WINDOW_SECONDS))
+            return ["voting_extended"]
+        current["status"] = "revealed"
+        current["revealed_at"] = _at_iso(timestamp)
+        current["closed_at"] = _at_iso(timestamp)
+        current["phase_started_at"] = _at_iso(timestamp)
+        current["deadline_at"] = _at_iso(timestamp + timedelta(seconds=PROMPT_REVEAL_WINDOW_SECONDS))
+        current["results"] = finalize_prompt_round(current)
+        return ["round_revealed"]
+
+    if status == "revealed" and deadline and deadline <= timestamp:
+        create_automatic_prompt_round(game_key, game, now=timestamp, rng=rng)
+        return ["round_opened"]
+    return []
 
 
 def calculate_prompt_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
@@ -624,6 +880,10 @@ def normalize_prompt_game_state(raw: object, game_key: str) -> dict[str, Any]:
         state["phase"] = "active"
     state["started_at"] = str(raw.get("started_at", "") or "")
     state["ended_at"] = str(raw.get("ended_at", "") or "")
+    state["automation"] = normalize_prompt_automation(
+        raw.get("automation"),
+        legacy="automation" not in raw,
+    )
     prompts = []
     seen_prompt_ids: set[str] = set()
     raw_prompts = raw.get("prompts", [])
@@ -664,7 +924,13 @@ def normalize_prompt_game_state(raw: object, game_key: str) -> dict[str, Any]:
                     player_id = str(raw_response.get("player_id", "") or "")
                     text = normalize_response(raw_response.get("text"))
                     if player_id in valid_player_ids and text:
-                        responses[str(response_id)] = {"id": str(response_id), "player_id": player_id, "text": text, "submitted_at": str(raw_response.get("submitted_at", "") or "")}
+                        responses[str(response_id)] = {
+                            "id": str(response_id),
+                            "player_id": player_id,
+                            "text": text,
+                            "submitted_at": str(raw_response.get("submitted_at", "") or ""),
+                            "display_hidden": bool(raw_response.get("display_hidden")),
+                        }
             votes = {}
             raw_votes = raw_round.get("votes", {})
             if isinstance(raw_votes, dict):
@@ -672,8 +938,26 @@ def normalize_prompt_game_state(raw: object, game_key: str) -> dict[str, Any]:
                     response = responses.get(str(response_id))
                     if str(player_id) in valid_player_ids and response and response.get("player_id") != str(player_id):
                         votes[str(player_id)] = str(response_id)
-            game_round = {"id": round_id, "prompt_id": str(raw_round.get("prompt_id", "") or ""), "prompt_text": prompt_text, "status": status, "responses": responses, "votes": votes, "created_at": str(raw_round.get("created_at", "") or ""), "revealed_at": str(raw_round.get("revealed_at", "") or "")}
-            game_round["results"] = finalize_prompt_round(game_round) if status == "revealed" else {"vote_counts": {}, "winner_response_ids": [], "vote_count": 0}
+            game_round = {
+                "id": round_id,
+                "prompt_id": str(raw_round.get("prompt_id", "") or ""),
+                "prompt_text": prompt_text,
+                "prompt_source": str(raw_round.get("prompt_source", "manual") or "manual")[:24],
+                "prompt_fingerprint": str(raw_round.get("prompt_fingerprint", "") or prompt_fingerprint(prompt_text))[:40],
+                "generator_version": _nonnegative_int(raw_round.get("generator_version")),
+                "status": status,
+                "responses": responses,
+                "votes": votes,
+                "created_at": str(raw_round.get("created_at", "") or ""),
+                "phase_started_at": str(raw_round.get("phase_started_at", "") or raw_round.get("created_at", "") or ""),
+                "threshold_reached_at": str(raw_round.get("threshold_reached_at", "") or ""),
+                "deadline_at": str(raw_round.get("deadline_at", "") or ""),
+                "voting_opened_at": str(raw_round.get("voting_opened_at", "") or ""),
+                "vote_extensions": _nonnegative_int(raw_round.get("vote_extensions")),
+                "revealed_at": str(raw_round.get("revealed_at", "") or ""),
+                "closed_at": str(raw_round.get("closed_at", "") or raw_round.get("revealed_at", "") or ""),
+            }
+            game_round["results"] = finalize_prompt_round(game_round) if status == "revealed" else {"vote_counts": {}, "winner_response_ids": [], "vote_count": 0, "solo_spotlight": False}
             rounds.append(game_round)
             seen_round_ids.add(round_id)
     state["rounds"] = rounds

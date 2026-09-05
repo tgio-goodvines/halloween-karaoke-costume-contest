@@ -4,9 +4,9 @@
 
 | File | Purpose |
 | --- | --- |
-| `main.py` | Flask app entrypoint, route definitions, Redis-backed schema-v21 state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, per-account specialty allowances, bar reset/wrap-up cleanup, YouTube karaoke workflow/state/routes, multi-singer/request-priority/adaptive-display state, stable-user karaoke completion acknowledgements, admin-controlled game identity, official result/recognition actions, generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
+| `main.py` | Flask app entrypoint, route definitions, Redis-backed schema-v23 state cache/serialization, RSVP/email/account/menu/bar/DJ behavior, per-account specialty allowances, bar reset/wrap-up cleanup, YouTube karaoke workflow/state/routes, prompt-game automation worker/deadlines, multi-singer/request-priority/adaptive-display state, stable-user karaoke completion acknowledgements, admin-controlled game identity, official result/recognition actions, generated-game-card state/builders/admin actions, role auth, CSRF, voting, and live-display JSON/SSE APIs. |
 | `youtube_karaoke.py` | YouTube URL/metadata normalization, Google API search and playlist client, bounded timeout/error translation, OAuth flow, and dedicated Vault refresh-token store. |
-| `party_games.py` | Five-game catalog, persisted-state normalization, game-level signed-in-name/anonymous-alias modes, Two Truths scoring, MMF plurality scoring, shared prompt-response-voting results, ties, and statistics. |
+| `party_games.py` | Five-game catalog, persisted-state normalization, local procedural prompt generation, automatic response/voting/reveal transitions, game-level signed-in-name/anonymous-alias modes, Two Truths scoring, MMF plurality scoring, shared prompt-response-voting results, ties, and statistics. |
 | `recognition.py` | Event-edition, result-archive, and recognition-credit normalization plus achievement catalog and derived account collection logic. |
 | `requirements.txt` | Python dependencies including Flask, Redis, AWS/SES, Google YouTube/OAuth clients, hvac, and gunicorn. |
 | `.github/workflows/deploy-aws.yml` | GitHub Actions workflow that validates the app and deploys merged `main` commits to the existing API EC2 ASG through AWS CLI and SSM. |
@@ -18,6 +18,7 @@
 | `deploy/validate_goodvines_health.sh` | Local EC2 health helper that verifies the existing GoodVines app through nginx using the `appg-v.com` Host header. |
 | `.env.example` | Blank/local Redis, email, MusicKit, and YouTube karaoke environment examples. |
 | `tests/test_redis_state.py` | Redis/state/route/security tests plus DJ FIFO request priority/reconciliation/lifecycle coverage and fake-backed YouTube search, workflow, playlist, ordering, stage, OAuth-state, migration, and secret-exclusion coverage. |
+| `tests/test_prompt_game_automation.py` | Pure prompt generator, persisted deadline, zero-vote extension, reveal/next-round, migration, and paused-automation coverage. |
 | `tests/test_dj_queue_state.js` | Dependency-free Node regression tests for MusicKit catalog/library identifier resolution, resolved queue ordering, priority remainder/catalog payload construction, and track/queue confirmation boundaries. |
 | `tests/test_dj_live_widgets.js` | Dependency-free Node regression tests for shared attendee/admin DJ payload normalization, atomic song/artwork lifecycle rendering, and stale/out-of-order response rejection. |
 | `tests/test_display_media.js` | Dependency-free Node regression tests for the live-display background-default media contract, explicit foreground opt-in, and bounded contrast tones. |
@@ -35,7 +36,7 @@
 | `static/menu-admin.js` | Menu-admin category controller that hides and disables drink-only classification, ingredient, instruction, and ordering fields for food records and reinitializes after inline admin updates. |
 | `static/display.css` | Fixed-viewport adaptive TV grid with title header, independent game/bar rails, dominant center cards, conditional music footer, density fitting, full-stage neon ready alerts, rotating bar promotion/history compositions, CTA, scoreboard, and karaoke layouts. |
 | `static/display-media.js` | Browser/Node-compatible media policy helpers that make image-bearing live cards background-first while retaining explicit foreground exceptions and bounded contrast tones. |
-| `static/display.js` | Live-display client logic: center/game rotation, independent keyed bar promotion/history rotation, API polling, SSE reconnects, full-stage temporary notice rendering, scoreboard rendering, karaoke countdown and panel rotation. |
+| `static/display.js` | Live-display client logic: center rotation, fair shuffle-bag game status/question/anonymous-answer rotation, independent keyed bar promotion/history rotation, API polling, SSE reconnects, full-stage temporary notice rendering, scoreboard rendering, karaoke countdown and panel rotation. |
 | `static/dj-queue-state.js` | Browser/Node-compatible pure helpers for resolving MusicKit catalog and library item identifiers, preserving MusicKit queue order, building priority catalog remainders, and validating confirmed track/queue transitions. |
 | `static/dj-receiver-state.js` | Browser/Node-compatible pure helpers for reload-safe MusicKit authorization, separate browser-audio readiness, and receiver action/status copy. |
 | `static/dj-display.js` | Live-display MusicKit receiver: load-safe local audio pairing, resolved-queue capture, non-interrupting `playNext` priority reconciliation, event-confirmed track changes, retained authorization diagnostics, reset handling, serialized heartbeat/acknowledgement reporting, and Now Playing dock updates. |

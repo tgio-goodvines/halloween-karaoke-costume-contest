@@ -172,6 +172,7 @@
           <label>Center rotation seconds<input type="number" name="center_interval_seconds" min="4" max="30" value="{{ display_config.center_interval_seconds }}"></label>
           <label>Game rotation seconds<input type="number" name="game_interval_seconds" min="5" max="30" value="{{ display_config.game_interval_seconds }}"></label>
           <label>Left game stage<select name="game_mode"><option value="auto"{% if display_config.game_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.game_mode == 'always' %} selected{% endif %}>Always when games exist</option><option value="hidden"{% if display_config.game_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
+          <label class="checkbox-label"><input type="checkbox" name="prompt_answer_cards_enabled" value="1"{% if display_config.prompt_answer_cards_enabled %} checked{% endif %}> Rotate anonymous prompt answers</label>
           <label>Right bar stage<select name="bar_mode"><option value="auto"{% if display_config.bar_mode == 'auto' %} selected{% endif %}>Automatic — queue, history, or menu</option><option value="always"{% if display_config.bar_mode == 'always' %} selected{% endif %}>Always</option><option value="hidden"{% if display_config.bar_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
           <label>Music footer<select name="music_mode"><option value="auto"{% if display_config.music_mode == 'auto' %} selected{% endif %}>Automatic</option><option value="always"{% if display_config.music_mode == 'always' %} selected{% endif %}>Always</option><option value="hidden"{% if display_config.music_mode == 'hidden' %} selected{% endif %}>Hidden</option></select></label>
           <label>Display density<select name="density"><option value="compact"{% if display_config.density == 'compact' %} selected{% endif %}>Compact</option><option value="standard"{% if display_config.density == 'standard' %} selected{% endif %}>Standard</option><option value="large"{% if display_config.density == 'large' %} selected{% endif %}>Large</option></select></label>
@@ -1464,6 +1465,9 @@
 {% endblock %}
 
 {% block scripts %}
+  {% if admin_view == 'games' %}
+    <script src="{{ url_for('static', filename='games-live-status.js') }}" defer></script>
+  {% endif %}
   {% if admin_view in ('home', 'display') %}
     <script src="{{ url_for('static', filename='dj-live-widgets.js') }}"></script>
   {% endif %}

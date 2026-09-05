@@ -62,6 +62,12 @@ Important working notes:
   live-display rotation. Ended games support host-controlled
   previous/next result presentations. Game `game_*` event overrides can be
   cleared without changing costume, karaoke, DJ, or drink-notice state.
+- Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only use schema-23
+  automatic rounds: three answers start a ten-minute response timer, voting
+  runs in five-minute windows until at least one vote exists, results reveal
+  for thirty seconds, and a locally generated prompt opens next. Their live
+  game-stage cards mix guaranteed current status with shuffled anonymous
+  questions/answers; hosts can pause, skip, or suppress individual TV answers.
 - Signed-in attendees can always open `/party/results` for privacy-safe
   five-second live game status, official cross-year results, and their account
   achievements. Game/contest completion creates a draft archive; only explicit

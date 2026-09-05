@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 22. The following globals in `main.py` are
+`halloween:state` with schema version 23. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -262,6 +262,11 @@ the process-local cache:
   spotlight. Enabling any game opens it immediately with no player minimum;
   attendees can join and participate until the host closes it. Schema 22
   converts legacy enabled/`signup` game records to the open `active` phase.
+  Schema 23 adds Redis-persisted automatic prompt-round deadlines, local
+  procedural question generation, bounded repeat protection, pause/resume/skip
+  controls, and privacy-safe shuffled question/answer cards on the live game
+  stage. Existing games migrate with automation paused; fresh/reset prompt
+  games default to automatic rotation.
 
 Drink orders move from `received` to `in_progress` to `complete`. Active
 bartender preparation resolves the latest non-empty menu ingredients and

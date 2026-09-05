@@ -55,6 +55,7 @@ jobs:
           node --check static/dj-live-widgets.js
           node --check static/jukebox.js
           node --check static/karaoke-live-status.js
+          node --check static/games-live-status.js
           node --test tests/test_display_media.js
           node --test tests/test_dj_queue_state.js
           node --test tests/test_dj_receiver_state.js

@@ -271,3 +271,14 @@ fixed no-scroll track.
   and summary facts yield first to keep the fixed rail no-scroll.
 - Browser verification at 1280×720 showed two active and two completed drinks in
   the right stage with zero document overflow.
+
+## Automatic Prompt-Game Rotation (2026-09-05)
+
+- The left game stage renders response-threshold, ten-minute response,
+  five-minute voting, zero-vote extension, reveal, and next-question status for
+  each automated prompt round.
+- Completed prompts contribute question flashbacks, anonymous answer cards, and
+  anonymous round-favorite cards. The display samples detail cards through a
+  per-game shuffle bag while guaranteeing current status in every cycle.
+- A display setting can suppress all prompt-answer cards, and admins can hide
+  individual answers from the TV without affecting attendee voting or scores.

@@ -59,6 +59,10 @@ Drink orders snapshot `item_name`, `item_image_url`, `recipe`, `instructions`, d
 classification, and specialty sequence/allowance metadata at order time.
 Active bartender work resolves the latest non-empty menu preparation fields so
 admin corrections appear on the next poll; completed history retains snapshots.
+Menu and active bartender drink artwork is rendered inside bounded responsive
+frames with centered `object-fit: contain` scaling. This preserves the full
+uploaded image at portrait, landscape, and square aspect ratios instead of
+cropping it or stretching the bartender card media to match long prep content.
 
 ## Specialty Drink Rules
 

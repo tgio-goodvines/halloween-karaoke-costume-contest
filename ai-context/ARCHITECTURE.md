@@ -40,6 +40,9 @@
   validated admin-uploaded menu artwork stored in Redis, allowing attendee,
   bartender, email, and live-display surfaces to share one image across API
   instances.
+- `GET /bartender-tip-images/<image_id>.<extension>` -> public immutable
+  delivery for validated bartender-tip QR uploads stored under separate Redis
+  binary keys and shared across API instances/releases.
 - `GET|POST /party/drink-history` -> compatibility route. GET redirects to
   `/party/menu?view=orders`; temporary POST handling uses the shared
   account-scoped reorder helper and then redirects to the canonical view.
@@ -437,7 +440,7 @@ SSE connections.
 - Scaling live-display cards for normal desktop/laptop browser windows and
   narrow browser widths.
 
-`static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds. The server chooses the slide set: pre-party RSVP details/updates before the party date, and event-night slides on the party date. When bartender tipping is enabled, the party-day slides include a tip prompt with the configured QR/payment image and payment handles.
+`static/slides.js` is independent and rotates `.slide` elements on the attendee dashboard every 6 seconds. The server chooses the slide set: pre-party RSVP details/updates before the party date, and event-night slides on the party date. When bartender tipping is enabled, the party-day slides include one named prompt per enabled, payment-method-specific QR entry and link to the dedicated tipping page. A QR entry can be assigned to Zelle, PayPal, Venmo, or Cash App, with at most one entry per method; its slide keeps that provider's handle paired with its image. QR upload bytes use Redis `bartender-tip-image:*` keys and immutable `/bartender-tip-images/<id>.<extension>` URLs rather than release-local storage.
 
 ## Template Responsibilities
 

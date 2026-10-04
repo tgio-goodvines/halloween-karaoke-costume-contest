@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 24. The following globals in `main.py` are
+`halloween:state` with schema version 25. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -184,8 +184,10 @@ the process-local cache:
   baseline. Historical orders remain intact when an admin grants another drink
   or resets current eligibility.
 - `bartender_tip_settings`: admin-managed bartender tip prompt settings with an
-  enable flag, display name, note, QR/payment image URL, and optional Zelle,
-  PayPal, Venmo, or Cash App handles.
+  enable flag, overall display heading, note, and one ordered, independently
+  named QR entry per supported payment method (Zelle, PayPal, Venmo, or Cash
+  App). Optional provider handles stay paired with their method's QR. New local
+  QR images live in Redis binary keys and use immutable app-served URLs.
 - `registered_users`: maps session `user_id` to display name.
 - `rsvp_signups`: independent host RSVP list entries with name, required email
   contact, guest count, note, created timestamp, and stable ID.

@@ -439,6 +439,12 @@ main.container {
   background: rgba(0, 0, 0, 0.35);
 }
 
+.slide__image--qr {
+  aspect-ratio: 1;
+  padding: 0.5rem;
+  background: #fff;
+}
+
 .signup-summary {
   display: grid;
   gap: 1.5rem;
@@ -1041,8 +1047,59 @@ main.container {
   object-fit: contain;
   border: 1px solid rgba(255, 49, 49, 0.45);
   border-radius: 18px;
-  background: rgba(0, 0, 0, 0.35);
+  padding: 0.55rem;
+  background: #fff;
   box-shadow: 0 0 28px rgba(255, 49, 49, 0.18);
+}
+
+.tip-page__qr-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+}
+
+.tip-page__qr-card {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 49, 49, 0.35);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.tip-page__qr-card h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tip-qr-admin {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 49, 49, 0.3);
+}
+
+.tip-qr-admin__list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tip-qr-admin__preview {
+  width: min(100%, 16rem);
+  aspect-ratio: 1;
+  margin: 0.9rem auto 0;
+  display: block;
+  object-fit: contain;
+  border: 1px solid rgba(255, 49, 49, 0.38);
+  border-radius: 14px;
+  background: #fff;
+  padding: 0.55rem;
+}
+
+.tip-qr-admin__move {
+  padding: 0 1rem 1rem;
 }
 
 .tip-page__methods {

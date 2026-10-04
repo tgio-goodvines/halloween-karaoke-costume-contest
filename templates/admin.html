@@ -1031,10 +1031,7 @@
           <span>{% if bartender_tip_settings.enabled %}Enabled{% else %}Disabled{% endif %}</span>
         </span>
       </summary>
-      {% if bartender_tip_settings.image_url %}
-        <img class="menu-admin-entry__image" src="{{ bartender_tip_settings.image_url }}" alt="Bartender tip QR code">
-      {% endif %}
-      <form method="post" class="admin-entry__form" enctype="multipart/form-data">
+      <form method="post" class="admin-entry__form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="admin-entry__fields">
           <label class="form-check">
@@ -1042,20 +1039,12 @@
             <span>Show bartender tip prompt</span>
           </label>
           <label>
-            Display Name
+            Display Heading
             <input type="text" name="tip_display_name" maxlength="80" value="{{ bartender_tip_settings.display_name }}">
           </label>
           <label>
             Tip Note
             <textarea name="tip_note" maxlength="240">{{ bartender_tip_settings.note }}</textarea>
-          </label>
-          <label>
-            QR / Payment Image URL
-            <input type="text" name="tip_image_url" maxlength="500" value="{{ bartender_tip_settings.image_url }}" placeholder="https://... or /static/..." inputmode="url">
-          </label>
-          <label>
-            Upload QR / Payment Image
-            <input type="file" name="tip_image_upload" accept="image/png,image/jpeg,image/gif,image/webp">
           </label>
           <label>
             Zelle
@@ -1076,6 +1065,7 @@
         </div>
         <button type="submit" name="action" value="update_bartender_tip_settings" class="button button--primary">Save Tip Settings</button>
       </form>
+      {% include "_admin_bartender_tip_qr.html" %}
     </details>
     <details class="admin-entry admin-entry--editable admin-entry--danger">
       <summary class="admin-entry__summary">

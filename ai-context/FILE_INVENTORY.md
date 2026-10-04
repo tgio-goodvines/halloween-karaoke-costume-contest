@@ -63,6 +63,7 @@
 | `templates/drink_history.html` | Retired order-history template; `/party/drink-history` is now a compatibility route to the consolidated My Orders view. |
 | `templates/bartender.html` | Bartender/admin page shell for `/bartender`, with messages and the live-refresh FIFO queue container. |
 | `templates/_bartender_queue.html` | Shared bartender queue fragment with a full-width Current Drink workbench, compact Up Next/backlog disclosures, responsive ingredient/instruction references, guarded transition forms, and completed order history. |
+| `templates/_admin_bartender_tip_qr.html` | Admin add/edit/replace/enable/reorder/remove controls for independently named, payment-method-specific bartender tip QR entries. |
 | `templates/rsvp.html` | Public RSVP landing page with RSVP prompt, party-code field on the RSVP form, party details, Google Maps embed/directions button, newest-to-oldest update cards, confirmation state, and optional portal account links. |
 | `templates/halloween_login.html` | Public attendee account sign-in form. |
 | `templates/halloween_register.html` | Public attendee account registration form. |
@@ -121,6 +122,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/ARCHITECTURE.md` | Durable route map, data flow, frontend behavior, constraints, and extension guidance. |
 | `ai-context/FILE_INVENTORY.md` | Durable file-by-file inventory. |
 | `ai-context/FOOD_DRINK_BAR_FEATURE.md` | Durable implementation notes for menu items, drink orders, bartender role, emails, estimates, and live-display ready overrides. |
+| `ai-context/BARTENDER_QR_IMAGE_COLLECTION_IMPLEMENTATION_PLAN.md` | Completed implementation record for one independently named QR entry per bartender payment method, shared Redis media, schema migration, admin/attendee rendering, verification, and rollout. |
 | `ai-context/AWS_EXISTING_INFRA_HOSTING_PLAN.md` | Hosting plan for reusing the existing GoodVines ALB/EC2 infrastructure for `tnq-halloween.com`. |
 | `ai-context/AWS_IMPLEMENTATION_CHECKLIST.md` | Step-by-step AWS, nginx, systemd, DNS, TLS, deploy, and smoke-test checklist. |
 | `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` | Launch template version 2 bootstrap details for installing Halloween automatically on replacement API EC2 instances. |

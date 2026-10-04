@@ -7,8 +7,17 @@
   <h2>Tip {{ bartender_tip_settings.display_name or 'the Bartender' }}</h2>
   <p>{{ bartender_tip_settings.note }}</p>
 
-  {% if bartender_tip_settings.image_url %}
-    <img src="{{ bartender_tip_settings.image_url }}" alt="Bartender payment QR code" class="tip-page__image">
+  {% if bartender_tip_qr_codes %}
+    <div class="tip-page__qr-grid">
+      {% for qr_code in bartender_tip_qr_codes %}
+        <article class="tip-page__qr-card">
+          <img src="{{ qr_code.image_url }}" alt="Payment QR code for {{ qr_code.name }}" class="tip-page__image">
+          <h3>{{ qr_code.name }}</h3>
+          <p class="order-card__status">{{ qr_code.method_label }}</p>
+          {% if qr_code.method_value %}<p>{{ qr_code.method_value }}</p>{% endif %}
+        </article>
+      {% endfor %}
+    </div>
   {% else %}
     <p class="admin-empty">No QR code image is configured yet.</p>
   {% endif %}

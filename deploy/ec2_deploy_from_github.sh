@@ -8,6 +8,8 @@ APP_ROOT="${APP_ROOT:-/opt/halloween}"
 APP_REPO_DIR="${APP_REPO_DIR:-${APP_ROOT}/app}"
 RELEASES_DIR="${RELEASES_DIR:-${APP_ROOT}/releases}"
 CURRENT_LINK="${CURRENT_LINK:-${APP_ROOT}/current}"
+SHARED_DIR="${SHARED_DIR:-${APP_ROOT}/shared}"
+LEGACY_TIP_UPLOAD_DIR="${LEGACY_TIP_UPLOAD_DIR:-${SHARED_DIR}/bartender-tips}"
 LOG_DIR="${LOG_DIR:-/var/log/halloween-party}"
 DEPLOY_SHA="${DEPLOY_SHA:?DEPLOY_SHA is required}"
 REPO_REF="${REPO_REF:-main}"
@@ -124,7 +126,13 @@ main() {
     useradd --system --home-dir "${APP_ROOT}" --gid "${APP_GROUP}" --shell /sbin/nologin "${APP_USER}"
   fi
 
-  install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${APP_ROOT}" "${APP_REPO_DIR}" "${RELEASES_DIR}" "${LOG_DIR}"
+  install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${APP_ROOT}" "${APP_REPO_DIR}" "${RELEASES_DIR}" "${SHARED_DIR}" "${LEGACY_TIP_UPLOAD_DIR}" "${LOG_DIR}"
+
+  if [ -n "${PREVIOUS_CURRENT}" ] && [ -d "${PREVIOUS_CURRENT}/static/uploads/bartender-tips" ]; then
+    log "Preserving legacy bartender tip uploads in shared storage."
+    cp -an "${PREVIOUS_CURRENT}/static/uploads/bartender-tips/." "${LEGACY_TIP_UPLOAD_DIR}/"
+    chown -R "${APP_USER}:${APP_GROUP}" "${LEGACY_TIP_UPLOAD_DIR}"
+  fi
 
   log "Fetching GitHub deploy credentials from Vault path ${GITHUB_SECRET_PATH}."
   vault_token="$(VAULT_ADDR="${VAULT_ADDR}" vault login -method=aws -token-only role="${VAULT_AWS_AUTH_ROLE}")"
@@ -211,6 +219,9 @@ EOF
   rm -rf "${release_dir}"
   install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${release_dir}"
   sudo -u "${APP_USER}" git -C "${APP_REPO_DIR}" archive "${DEPLOY_SHA}" | tar -x -C "${release_dir}"
+  install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${release_dir}/static/uploads"
+  rm -rf "${release_dir}/static/uploads/bartender-tips"
+  ln -s "${LEGACY_TIP_UPLOAD_DIR}" "${release_dir}/static/uploads/bartender-tips"
   chown -R "${APP_USER}:${APP_GROUP}" "${release_dir}"
   chmod 0755 "${release_dir}/deploy/ec2_deploy_from_github.sh" "${release_dir}/deploy/start_halloween.sh" "${release_dir}/deploy/validate_goodvines_health.sh"
 

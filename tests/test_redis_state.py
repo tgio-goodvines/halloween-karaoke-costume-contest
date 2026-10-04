@@ -8,9 +8,16 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import redis
+from PIL import Image
 
 import main
 import youtube_karaoke
+
+
+def make_test_image_bytes(image_format="PNG"):
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), color=(255, 255, 255)).save(buffer, format=image_format)
+    return buffer.getvalue()
 
 
 class FakeLock:
@@ -51,8 +58,14 @@ class FakeRedis:
         return True
 
     def setex(self, key, ttl, value):
-        self.store[key] = str(value)
+        self.store[key] = value if isinstance(value, bytes) else str(value)
         self.ttls[key] = ttl
+        return True
+
+    def persist(self, key):
+        if key not in self.store:
+            return False
+        self.ttls.pop(key, None)
         return True
 
     def incr(self, key):
@@ -299,6 +312,7 @@ class RedisStateTests(unittest.TestCase):
         main.password_reset_tokens = {}
         main.menu_items = []
         main.menu_image_memory = {}
+        main.bartender_tip_image_memory = {}
         main.drink_orders = []
         main.specialty_drink_allowances = {}
         main.dj_playlist = []
@@ -3361,7 +3375,7 @@ class RedisStateTests(unittest.TestCase):
 
     def test_admin_can_upload_and_serve_a_redis_backed_menu_image(self):
         self.save_current_state()
-        png_bytes = b"\x89PNG\r\n\x1a\n" + b"menu-image-payload"
+        png_bytes = make_test_image_bytes("PNG")
 
         with main.app.test_client() as client:
             self.login_admin(client)
@@ -3381,7 +3395,7 @@ class RedisStateTests(unittest.TestCase):
             image_url = state["menu_items"][0]["image_url"]
             image_response = client.get(image_url)
 
-            webp_bytes = b"RIFF\x04\x00\x00\x00WEBPmenu-image-replacement"
+            webp_bytes = make_test_image_bytes("WEBP")
             update_response = client.post(
                 "/admin/menu",
                 data={
@@ -3870,15 +3884,24 @@ class RedisStateTests(unittest.TestCase):
 
         with main.app.test_client() as client:
             self.login_admin(client)
-            admin_response = client.post(
-                "/admin",
+            settings_response = client.post(
+                "/admin/bar",
                 data={
                     "action": "update_bartender_tip_settings",
                     "tip_enabled": "yes",
-                    "tip_display_name": "Casey",
+                    "tip_display_name": "Your Bartenders",
                     "tip_note": "Thanks for keeping the bar moving.",
-                    "tip_image_url": "https://example.test/tip.png",
                     "tip_venmo": "@casey",
+                },
+            )
+            admin_response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "add_bartender_tip_qr",
+                    "tip_qr_name": "Casey — Venmo",
+                    "tip_qr_payment_method": "venmo",
+                    "tip_qr_image_url": "https://example.test/tip.png",
+                    "tip_qr_enabled": "yes",
                 },
             )
             self.login_regular(client)
@@ -3892,74 +3915,231 @@ class RedisStateTests(unittest.TestCase):
         tip_html = tip_response.get_data(as_text=True)
         self.assertEqual(200, admin_response.status_code)
         self.assertTrue(state["bartender_tip_settings"]["enabled"])
-        self.assertIn("Tip Casey", overview_html)
+        self.assertEqual(200, settings_response.status_code)
+        self.assertIn("Tip Casey — Venmo", overview_html)
         self.assertIn("https://example.test/tip.png", overview_html)
         self.assertIn("@casey", overview_html)
         self.assertIn("Tip Bartender", history_html)
         self.assertIn("/party/bartender-tip", history_html)
-        self.assertIn("Bartender payment QR code", tip_html)
+        self.assertIn("Payment QR code for Casey — Venmo", tip_html)
         self.assertIn("@casey", tip_html)
 
     def test_admin_can_upload_bartender_tip_qr_image(self):
-        original_upload_dir = main.app.config["BARTENDER_TIP_UPLOAD_DIR"]
-        png_bytes = b"\x89PNG\r\n\x1a\n" + b"qr-code-bytes"
+        self.save_current_state()
+        png_bytes = make_test_image_bytes("PNG")
 
-        with tempfile.TemporaryDirectory() as upload_dir:
-            main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = upload_dir
-            try:
-                with main.app.test_client() as client:
-                    self.login_admin(client)
-                    response = client.post(
-                        "/admin",
-                        data={
-                            "action": "update_bartender_tip_settings",
-                            "tip_enabled": "yes",
-                            "tip_display_name": "Casey",
-                            "tip_note": "Thanks for keeping the bar moving.",
-                            "tip_image_url": "",
-                            "tip_image_upload": (io.BytesIO(png_bytes), "casey-qr.png"),
-                            "tip_venmo": "@casey",
-                        },
-                        content_type="multipart/form-data",
-                    )
-            finally:
-                main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = original_upload_dir
-
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "add_bartender_tip_qr",
+                    "tip_qr_name": "Casey — Venmo",
+                    "tip_qr_payment_method": "venmo",
+                    "tip_qr_image_upload": (io.BytesIO(png_bytes), "casey-qr.png"),
+                    "tip_qr_enabled": "yes",
+                },
+                content_type="multipart/form-data",
+            )
             state = self.redis_state()
-            image_url = state["bartender_tip_settings"]["image_url"]
-            self.assertEqual(200, response.status_code)
-            self.assertTrue(state["bartender_tip_settings"]["enabled"])
-            self.assertTrue(image_url.startswith("/static/uploads/bartender-tips/bartender-tip-"))
-            self.assertTrue(image_url.endswith(".png"))
-            self.assertTrue(os.path.exists(os.path.join(upload_dir, os.path.basename(image_url))))
+            qr_code = state["bartender_tip_settings"]["qr_codes"][0]
+            image_url = qr_code["image_url"]
+            image_response = client.get(image_url)
+
+        image_id = image_url.rsplit("/", 1)[1].split(".", 1)[0]
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("Casey — Venmo", qr_code["name"])
+        self.assertEqual("venmo", qr_code["payment_method"])
+        self.assertRegex(image_url, r"^/bartender-tip-images/[0-9a-f]{32}\.png$")
+        self.assertEqual(
+            png_bytes,
+            self.fake_binary_redis.store[
+                main.redis_key(f"bartender-tip-image:{image_id}:png")
+            ],
+        )
+        self.assertEqual(200, image_response.status_code)
+        self.assertEqual("image/png", image_response.mimetype)
+        self.assertIn("immutable", image_response.headers["Cache-Control"])
 
     def test_admin_rejects_invalid_bartender_tip_qr_upload(self):
-        original_upload_dir = main.app.config["BARTENDER_TIP_UPLOAD_DIR"]
+        self.save_current_state()
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "add_bartender_tip_qr",
+                    "tip_qr_name": "Casey",
+                    "tip_qr_payment_method": "venmo",
+                    "tip_qr_image_upload": (io.BytesIO(b"not really an image"), "casey-qr.png"),
+                    "tip_qr_enabled": "yes",
+                },
+                content_type="multipart/form-data",
+            )
 
-        with tempfile.TemporaryDirectory() as upload_dir:
-            main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = upload_dir
+        html = response.get_data(as_text=True)
+        self.assertEqual(200, response.status_code)
+        self.assertIn("does not look like a valid image file", html)
+        self.assertEqual([], self.redis_state()["bartender_tip_settings"]["qr_codes"])
+        self.assertEqual({}, self.fake_binary_redis.store)
+
+    def test_admin_manages_bartender_tip_qr_entries_independently(self):
+        self.save_current_state()
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            for name, payment_method, image_url in (
+                ("Casey", "venmo", "https://example.test/casey.png"),
+                ("Jordan", "zelle", "https://example.test/jordan.png"),
+            ):
+                response = client.post(
+                    "/admin/bar",
+                    data={
+                        "action": "add_bartender_tip_qr",
+                        "tip_qr_name": name,
+                        "tip_qr_payment_method": payment_method,
+                        "tip_qr_image_url": image_url,
+                        "tip_qr_enabled": "yes",
+                    },
+                )
+                self.assertEqual(200, response.status_code)
+
+            state = self.redis_state()
+            first, second = state["bartender_tip_settings"]["qr_codes"]
+            duplicate_response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "add_bartender_tip_qr",
+                    "tip_qr_name": "Another Venmo",
+                    "tip_qr_payment_method": "venmo",
+                    "tip_qr_image_url": "https://example.test/duplicate.png",
+                    "tip_qr_enabled": "yes",
+                },
+            )
+            rename_response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "update_bartender_tip_qr",
+                    "tip_qr_id": first["id"],
+                    "tip_qr_updated_at": first["updated_at"],
+                    "tip_qr_name": "Casey — Cash App",
+                    "tip_qr_payment_method": "venmo",
+                    "tip_qr_image_url": first["image_url"],
+                    "tip_qr_enabled": "yes",
+                },
+            )
+            move_response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "move_bartender_tip_qr",
+                    "tip_qr_id": second["id"],
+                    "direction": "up",
+                },
+            )
+            moved_state = self.redis_state()
+            renamed = next(
+                entry
+                for entry in moved_state["bartender_tip_settings"]["qr_codes"]
+                if entry["id"] == first["id"]
+            )
+            settings_response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "update_bartender_tip_settings",
+                    "tip_enabled": "yes",
+                    "tip_display_name": "The Bar Team",
+                    "tip_note": "Thank you.",
+                },
+            )
+            delete_response = client.post(
+                "/admin/bar",
+                data={
+                    "action": "delete_bartender_tip_qr",
+                    "tip_qr_id": first["id"],
+                    "tip_qr_updated_at": renamed["updated_at"],
+                },
+            )
+
+        final_state = self.redis_state()["bartender_tip_settings"]
+        self.assertEqual(200, rename_response.status_code)
+        self.assertIn(
+            "Venmo already has a QR code",
+            duplicate_response.get_data(as_text=True),
+        )
+        self.assertEqual(200, move_response.status_code)
+        self.assertEqual(200, settings_response.status_code)
+        self.assertEqual(200, delete_response.status_code)
+        self.assertEqual("The Bar Team", final_state["display_name"])
+        self.assertEqual([second["id"]], [entry["id"] for entry in final_state["qr_codes"]])
+        self.assertEqual("Jordan", final_state["qr_codes"][0]["name"])
+        self.assertEqual("zelle", final_state["qr_codes"][0]["payment_method"])
+        self.assertEqual("https://example.test/jordan.png", final_state["qr_codes"][0]["image_url"])
+
+    def test_schema_25_migrates_singleton_bartender_tip_without_resurrection(self):
+        legacy_state = main.snapshot_state()
+        legacy_state["schema_version"] = 24
+        legacy_state["bartender_tip_settings"] = {
+            "enabled": True,
+            "display_name": "Casey",
+            "note": "Thanks.",
+            "image_url": "https://example.test/legacy-tip.png",
+            "venmo": "@casey",
+        }
+        self.fake_redis.set(main.redis_key("state"), json.dumps(legacy_state))
+
+        self.assertTrue(main.load_state_from_redis())
+
+        persisted = self.redis_state()
+        qr_codes = persisted["bartender_tip_settings"]["qr_codes"]
+        self.assertEqual(25, persisted["schema_version"])
+        self.assertEqual(1, len(qr_codes))
+        self.assertEqual("Casey", qr_codes[0]["name"])
+        self.assertEqual("https://example.test/legacy-tip.png", qr_codes[0]["image_url"])
+        backup_key = main.redis_key("state:backup:schema25-bartender-tip-qr")
+        backup = json.loads(self.fake_redis.store[backup_key])
+        self.assertNotIn("qr_codes", backup["bartender_tip_settings"])
+
+        explicit_empty = main.normalize_bartender_tip_settings(
+            {
+                "enabled": True,
+                "display_name": "Casey",
+                "image_url": "https://example.test/legacy-tip.png",
+                "qr_codes": [],
+            }
+        )
+        self.assertEqual([], explicit_empty["qr_codes"])
+
+    def test_schema_25_imports_a_legacy_release_local_tip_image_into_redis(self):
+        legacy_filename = "bartender-tip-11111111111111111111111111111111.png"
+        legacy_state = main.snapshot_state()
+        legacy_state["schema_version"] = 24
+        legacy_state["bartender_tip_settings"] = {
+            "enabled": True,
+            "display_name": "Casey",
+            "image_url": f"/static/uploads/bartender-tips/{legacy_filename}",
+        }
+        original_static_folder = main.app.static_folder
+        with tempfile.TemporaryDirectory() as temp_dir:
+            upload_dir = os.path.join(temp_dir, "uploads", "bartender-tips")
+            os.makedirs(upload_dir)
+            with open(os.path.join(upload_dir, legacy_filename), "wb") as image_file:
+                image_file.write(make_test_image_bytes("PNG"))
+            main.app.static_folder = temp_dir
+            self.fake_redis.set(main.redis_key("state"), json.dumps(legacy_state))
             try:
-                with main.app.test_client() as client:
-                    self.login_admin(client)
-                    response = client.post(
-                        "/admin",
-                        data={
-                            "action": "update_bartender_tip_settings",
-                            "tip_enabled": "yes",
-                            "tip_display_name": "Casey",
-                            "tip_note": "Thanks for keeping the bar moving.",
-                            "tip_image_url": "",
-                            "tip_image_upload": (io.BytesIO(b"not really an image"), "casey-qr.png"),
-                        },
-                        content_type="multipart/form-data",
-                    )
+                self.assertTrue(main.load_state_from_redis())
             finally:
-                main.app.config["BARTENDER_TIP_UPLOAD_DIR"] = original_upload_dir
+                main.app.static_folder = original_static_folder
 
-            html = response.get_data(as_text=True)
-            self.assertEqual(200, response.status_code)
-            self.assertIn("does not look like a valid image file", html)
-            self.assertEqual([], os.listdir(upload_dir))
+        qr_code = self.redis_state()["bartender_tip_settings"]["qr_codes"][0]
+        self.assertRegex(
+            qr_code["image_url"],
+            r"^/bartender-tip-images/[0-9a-f]{32}\.png$",
+        )
+        image_id = qr_code["image_url"].rsplit("/", 1)[1].split(".", 1)[0]
+        self.assertIn(
+            main.redis_key(f"bartender-tip-image:{image_id}:png"),
+            self.fake_binary_redis.store,
+        )
 
     def test_dashboard_ready_drink_notifications_expire_but_history_retains_orders(self):
         self.add_user_account(username="Jamie", user_id="user-1")
@@ -4079,7 +4259,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(24, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(25, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])

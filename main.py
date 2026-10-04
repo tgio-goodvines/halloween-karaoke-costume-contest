@@ -17,9 +17,12 @@ import random
 import re
 import secrets
 import time
+import warnings
 
 import redis
+from PIL import Image, UnidentifiedImageError
 from werkzeug.utils import secure_filename
+from werkzeug.datastructures import FileStorage
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask import (
@@ -173,10 +176,6 @@ app.config["PUBLIC_BASE_URL"] = os.environ.get("HALLOWEEN_PUBLIC_BASE_URL", "htt
 app.config["RSVP_NOTIFICATION_EMAIL"] = os.environ.get(
     "HALLOWEEN_RSVP_NOTIFICATION_EMAIL",
     "tgio1129@gmail.com",
-)
-app.config["BARTENDER_TIP_UPLOAD_DIR"] = os.environ.get(
-    "HALLOWEEN_BARTENDER_TIP_UPLOAD_DIR",
-    os.path.join(app.static_folder or "static", "uploads", "bartender-tips"),
 )
 app.config["APPLE_MUSIC_TEAM_ID"] = os.environ.get("HALLOWEEN_APPLE_MUSIC_TEAM_ID", "").strip()
 app.config["APPLE_MUSIC_KEY_ID"] = os.environ.get("HALLOWEEN_APPLE_MUSIC_KEY_ID", "").strip()
@@ -384,7 +383,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 24
+STATE_SCHEMA_VERSION = 25
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -591,9 +590,18 @@ DRINK_ORDER_STATUSES = ("received", "in_progress", "complete")
 MENU_ITEM_CATEGORIES = ("drink", "food")
 DRINK_TYPES = ("standard", "specialty")
 BEVERAGE_TYPES = ("alcoholic", "non_alcoholic")
-BARTENDER_TIP_UPLOAD_URL_PREFIX = "/static/uploads/bartender-tips"
+BARTENDER_TIP_IMAGE_URL_PREFIX = "/bartender-tip-images"
 ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS = {".gif", ".jpg", ".jpeg", ".png", ".webp"}
 MAX_BARTENDER_TIP_IMAGE_BYTES = 5 * 1024 * 1024
+BARTENDER_TIP_PAYMENT_METHODS = {
+    "zelle": "Zelle",
+    "paypal": "PayPal",
+    "venmo": "Venmo",
+    "cash_app": "Cash App",
+}
+BARTENDER_TIP_QR_LIMIT = len(BARTENDER_TIP_PAYMENT_METHODS)
+BARTENDER_TIP_QR_NAME_MAX_LENGTH = 80
+MAX_UPLOADED_IMAGE_PIXELS = 25_000_000
 MENU_IMAGE_URL_PREFIX = "/menu-images"
 ALLOWED_MENU_IMAGE_EXTENSIONS = {".gif", ".jpg", ".jpeg", ".png", ".webp"}
 MENU_IMAGE_MIME_TYPES = {
@@ -653,6 +661,7 @@ DEFAULT_BARTENDER_TIP_SETTINGS: dict[str, object] = {
     "display_name": "Your Bartender",
     "note": "Tips are never required, always appreciated.",
     "image_url": "",
+    "qr_codes": [],
     "zelle": "",
     "paypal": "",
     "venmo": "",
@@ -743,6 +752,7 @@ karaoke_completion_acknowledgements: dict[str, dict[str, str]] = {}
 password_reset_tokens: dict[str, dict[str, object]] = {}
 menu_items: list[dict[str, object]] = []
 menu_image_memory: dict[str, bytes] = {}
+bartender_tip_image_memory: dict[str, bytes] = {}
 drink_orders: list[dict[str, object]] = []
 specialty_drink_allowances: dict[str, dict[str, object]] = {}
 dj_playlist: list[dict[str, object]] = []
@@ -1992,6 +2002,8 @@ def safe_image_url(raw_url: str) -> str:
         return image_url
     if re.fullmatch(r"/menu-images/[0-9a-f]{32}\.(?:gif|jpe?g|png|webp)", image_url):
         return image_url
+    if re.fullmatch(r"/bartender-tip-images/[0-9a-f]{32}\.(?:gif|jpe?g|png|webp)", image_url):
+        return image_url
     return ""
 
 
@@ -2008,27 +2020,63 @@ def image_bytes_match_extension(filename: str, image_bytes: bytes) -> bool:
     return False
 
 
-def prepare_uploaded_menu_image(upload) -> tuple[dict[str, object] | None, str]:
+def prepare_uploaded_image(
+    upload,
+    *,
+    label: str,
+    allowed_extensions: set[str],
+    max_bytes: int,
+) -> tuple[dict[str, object] | None, str]:
     if upload is None or not upload.filename:
         return None, ""
 
     safe_name = secure_filename(upload.filename)
     extension = os.path.splitext(safe_name)[1].lower()
-    if extension not in ALLOWED_MENU_IMAGE_EXTENSIONS:
-        return None, "Menu image upload must be a PNG, JPG, GIF, or WebP image."
+    if extension not in allowed_extensions:
+        return None, f"{label} must be a PNG, JPG, GIF, or WebP image."
 
-    image_bytes = upload.stream.read(MAX_MENU_IMAGE_BYTES + 1)
+    image_bytes = upload.stream.read(max_bytes + 1)
     if not image_bytes:
-        return None, "Menu image upload was empty."
-    if len(image_bytes) > MAX_MENU_IMAGE_BYTES:
-        return None, "Menu image upload must be 5 MB or smaller."
+        return None, f"{label} was empty."
+    if len(image_bytes) > max_bytes:
+        return None, f"{label} must be 5 MB or smaller."
     if not image_bytes_match_extension(safe_name, image_bytes):
-        return None, "Menu image upload does not look like a valid image file."
+        return None, f"{label} does not look like a valid image file."
+
+    expected_formats = {
+        ".gif": "GIF",
+        ".jpg": "JPEG",
+        ".jpeg": "JPEG",
+        ".png": "PNG",
+        ".webp": "WEBP",
+    }
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(image_bytes)) as uploaded_image:
+                detected_format = str(uploaded_image.format or "").upper()
+                width, height = uploaded_image.size
+                uploaded_image.verify()
+        if detected_format != expected_formats.get(extension):
+            return None, f"{label} format does not match its filename."
+        if width <= 0 or height <= 0 or width * height > MAX_UPLOADED_IMAGE_PIXELS:
+            return None, f"{label} dimensions are too large."
+    except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombWarning):
+        return None, f"{label} does not look like a valid image file."
 
     return {
         "bytes": image_bytes,
         "extension": extension,
     }, ""
+
+
+def prepare_uploaded_menu_image(upload) -> tuple[dict[str, object] | None, str]:
+    return prepare_uploaded_image(
+        upload,
+        label="Menu image upload",
+        allowed_extensions=ALLOWED_MENU_IMAGE_EXTENSIONS,
+        max_bytes=MAX_MENU_IMAGE_BYTES,
+    )
 
 
 def store_prepared_menu_image(prepared: dict[str, object]) -> tuple[str, str]:
@@ -2053,31 +2101,65 @@ def store_prepared_menu_image(prepared: dict[str, object]) -> tuple[str, str]:
     return f"{MENU_IMAGE_URL_PREFIX}/{image_id}{extension}", ""
 
 
-def save_uploaded_bartender_tip_image(upload) -> tuple[str, str]:
-    if upload is None or not upload.filename:
-        return "", ""
+def prepare_uploaded_bartender_tip_image(upload) -> tuple[dict[str, object] | None, str]:
+    return prepare_uploaded_image(
+        upload,
+        label="Bartender tip QR upload",
+        allowed_extensions=ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS,
+        max_bytes=MAX_BARTENDER_TIP_IMAGE_BYTES,
+    )
 
-    safe_name = secure_filename(upload.filename)
-    extension = os.path.splitext(safe_name)[1].lower()
-    if extension not in ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS:
-        return "", "Bartender tip QR upload must be a PNG, JPG, GIF, or WebP image."
 
-    image_bytes = upload.stream.read(MAX_BARTENDER_TIP_IMAGE_BYTES + 1)
-    if not image_bytes:
-        return "", "Bartender tip QR upload was empty."
-    if len(image_bytes) > MAX_BARTENDER_TIP_IMAGE_BYTES:
-        return "", "Bartender tip QR upload must be 5 MB or smaller."
-    if not image_bytes_match_extension(safe_name, image_bytes):
-        return "", "Bartender tip QR upload does not look like a valid image file."
+def store_prepared_bartender_tip_image(prepared: dict[str, object]) -> tuple[str, str]:
+    image_id = uuid4().hex
+    extension = str(prepared.get("extension", "") or "")
+    image_bytes = prepared.get("bytes")
+    if extension not in ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS or not isinstance(image_bytes, bytes):
+        return "", "Bartender tip QR upload could not be prepared."
 
-    upload_dir = app.config["BARTENDER_TIP_UPLOAD_DIR"]
-    os.makedirs(upload_dir, exist_ok=True)
-    filename = f"bartender-tip-{uuid4().hex}{extension}"
-    upload_path = os.path.join(upload_dir, filename)
-    with open(upload_path, "wb") as image_file:
-        image_file.write(image_bytes)
+    if redis_state_available:
+        try:
+            image_key = redis_key(
+                f"bartender-tip-image:{image_id}:{extension.lstrip('.')}"
+            )
+            if has_request_context():
+                redis_binary_client.setex(image_key, 60 * 60, image_bytes)
+                candidate_keys = list(getattr(g, "bartender_tip_candidate_keys", []))
+                candidate_keys.append(image_key)
+                g.bartender_tip_candidate_keys = candidate_keys
+            else:
+                redis_binary_client.set(image_key, image_bytes)
+        except redis.RedisError as exc:
+            app.logger.warning("Unable to store uploaded bartender tip image: %s", exc)
+            return "", "Bartender tip image storage is temporarily unavailable."
+    else:
+        bartender_tip_image_memory[f"{image_id}{extension}"] = image_bytes
 
-    return f"{BARTENDER_TIP_UPLOAD_URL_PREFIX}/{filename}", ""
+    return f"{BARTENDER_TIP_IMAGE_URL_PREFIX}/{image_id}{extension}", ""
+
+
+def managed_bartender_tip_image_key(image_url: str) -> str:
+    match = re.fullmatch(
+        r"/bartender-tip-images/([0-9a-f]{32})\.(gif|jpe?g|png|webp)",
+        str(image_url or ""),
+    )
+    if not match:
+        return ""
+    return redis_key(f"bartender-tip-image:{match.group(1)}:{match.group(2)}")
+
+
+def retire_bartender_tip_image(image_url: str) -> None:
+    key = managed_bartender_tip_image_key(image_url)
+    if not key:
+        return
+    if redis_state_available:
+        try:
+            redis_binary_client.expire(key, STATE_BACKUP_TTL_SECONDS)
+        except redis.RedisError as exc:
+            app.logger.warning("Unable to schedule old bartender tip image cleanup: %s", exc)
+    else:
+        filename = image_url.rsplit("/", 1)[-1]
+        bartender_tip_image_memory.pop(filename, None)
 
 
 def normalize_menu_category(raw_category: object) -> str:
@@ -2176,6 +2258,49 @@ def split_legacy_drink_recipe(raw_recipe: object) -> tuple[str, str]:
     return "\n".join(ingredients), "\n".join(instructions)
 
 
+def normalize_bartender_tip_qr_entry(
+    raw_entry: object,
+    *,
+    fallback_seed: str = "",
+    fallback_payment_method: str = "",
+) -> dict[str, object] | None:
+    if not isinstance(raw_entry, dict):
+        return None
+    name = str(raw_entry.get("name", "") or "").strip()[:BARTENDER_TIP_QR_NAME_MAX_LENGTH]
+    image_url = safe_image_url(str(raw_entry.get("image_url", "") or ""))
+    if not name or not image_url:
+        return None
+    raw_id = str(raw_entry.get("id", "") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{32}", raw_id):
+        raw_id = hashlib.sha256(
+            f"bartender-tip-qr:{fallback_seed}:{name}:{image_url}".encode("utf-8")
+        ).hexdigest()[:32]
+    created_at = str(raw_entry.get("created_at", "") or "")
+    updated_at = str(raw_entry.get("updated_at", "") or created_at)
+    payment_method = str(
+        raw_entry.get("payment_method", "") or fallback_payment_method
+    ).strip().lower()
+    if payment_method not in BARTENDER_TIP_PAYMENT_METHODS:
+        folded_name = name.casefold()
+        payment_method = next(
+            (
+                method
+                for method, label in BARTENDER_TIP_PAYMENT_METHODS.items()
+                if label.casefold() in folded_name
+            ),
+            "",
+        )
+    return {
+        "id": raw_id,
+        "name": name,
+        "image_url": image_url,
+        "enabled": bool(raw_entry.get("enabled", True)),
+        "payment_method": payment_method,
+        "created_at": created_at,
+        "updated_at": updated_at,
+    }
+
+
 def normalize_bartender_tip_settings(raw_settings: object) -> dict[str, object]:
     settings = copy.deepcopy(DEFAULT_BARTENDER_TIP_SETTINGS)
     if not isinstance(raw_settings, dict):
@@ -2184,8 +2309,73 @@ def normalize_bartender_tip_settings(raw_settings: object) -> dict[str, object]:
     settings["enabled"] = bool(raw_settings.get("enabled", False))
     for key in ("display_name", "note", "zelle", "paypal", "venmo", "cash_app"):
         settings[key] = str(raw_settings.get(key, settings.get(key, "")) or "").strip()
-    settings["image_url"] = safe_image_url(str(raw_settings.get("image_url", "") or ""))
+    legacy_image_url = safe_image_url(str(raw_settings.get("image_url", "") or ""))
+    settings["image_url"] = legacy_image_url
+    raw_qr_codes = raw_settings.get("qr_codes")
+    configured_methods = [
+        method
+        for method in BARTENDER_TIP_PAYMENT_METHODS
+        if str(settings.get(method, "") or "").strip()
+    ]
+    singleton_method = configured_methods[0] if len(configured_methods) == 1 else ""
+    normalized_qr_codes: list[dict[str, object]] = []
+    if isinstance(raw_qr_codes, list):
+        used_ids: set[str] = set()
+        for index, raw_entry in enumerate(raw_qr_codes[:BARTENDER_TIP_QR_LIMIT]):
+            entry = normalize_bartender_tip_qr_entry(
+                raw_entry,
+                fallback_seed=str(index),
+                fallback_payment_method=singleton_method if len(raw_qr_codes) == 1 else "",
+            )
+            if not entry:
+                continue
+            entry_id = str(entry["id"])
+            if entry_id in used_ids:
+                entry["id"] = hashlib.sha256(
+                    f"{entry_id}:{index}:{entry['name']}:{entry['image_url']}".encode("utf-8")
+                ).hexdigest()[:32]
+            used_ids.add(str(entry["id"]))
+            normalized_qr_codes.append(entry)
+    elif legacy_image_url:
+        legacy_name = str(settings.get("display_name", "") or "Your Bartender")
+        legacy_entry = normalize_bartender_tip_qr_entry(
+            {
+                "name": legacy_name,
+                "image_url": legacy_image_url,
+                "enabled": True,
+            },
+            fallback_seed="legacy",
+            fallback_payment_method=singleton_method,
+        )
+        if legacy_entry:
+            normalized_qr_codes.append(legacy_entry)
+    settings["qr_codes"] = normalized_qr_codes
     return settings
+
+
+def enabled_bartender_tip_qr_codes(
+    settings: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    source = normalize_bartender_tip_settings(settings or bartender_tip_settings)
+    entries: list[dict[str, object]] = []
+    for entry in source.get("qr_codes", []):
+        if not isinstance(entry, dict) or not entry.get("enabled") or not entry.get("image_url"):
+            continue
+        view = copy.deepcopy(entry)
+        method = str(view.get("payment_method", "") or "")
+        view["method_label"] = BARTENDER_TIP_PAYMENT_METHODS.get(method, "Payment QR")
+        view["method_value"] = str(source.get(method, "") or "").strip()
+        entries.append(view)
+    return entries
+
+
+def find_bartender_tip_qr_index(entry_id: str) -> int | None:
+    matches = [
+        index
+        for index, entry in enumerate(bartender_tip_settings.get("qr_codes", []))
+        if isinstance(entry, dict) and str(entry.get("id", "")) == entry_id
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def normalize_specialty_drink_allowances(raw_allowances: object) -> dict[str, dict[str, object]]:
@@ -2534,16 +2724,25 @@ def ready_order_is_visible_on_dashboard(order: dict[str, object], now: datetime 
 
 def bartender_tip_methods(settings: dict[str, object] | None = None) -> list[dict[str, str]]:
     source = settings or bartender_tip_settings
-    labels = {
-        "zelle": "Zelle",
-        "paypal": "PayPal",
-        "venmo": "Venmo",
-        "cash_app": "Cash App",
+    return [
+        {"key": key, "label": label, "value": str(source.get(key, "") or "").strip()}
+        for key, label in BARTENDER_TIP_PAYMENT_METHODS.items()
+        if str(source.get(key, "") or "").strip()
+    ]
+
+
+def bartender_tip_methods_without_qr(
+    settings: dict[str, object] | None = None,
+) -> list[dict[str, str]]:
+    source = settings or bartender_tip_settings
+    assigned_methods = {
+        str(entry.get("payment_method", "") or "")
+        for entry in enabled_bartender_tip_qr_codes(source)
     }
     return [
-        {"label": label, "value": str(source.get(key, "") or "").strip()}
-        for key, label in labels.items()
-        if str(source.get(key, "") or "").strip()
+        method
+        for method in bartender_tip_methods(source)
+        if method["key"] not in assigned_methods
     ]
 
 
@@ -5460,6 +5659,71 @@ def backup_legacy_menu_identity_state(data: dict[str, object]) -> str | None:
     return backup_key
 
 
+def backup_legacy_bartender_tip_state(data: dict[str, object]) -> str | None:
+    """Retain the raw pre-schema-25 singleton bartender-tip settings."""
+    try:
+        schema_version = int(data.get("schema_version", 1) or 1)
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version >= 25:
+        return None
+
+    backup_key = redis_key("state:backup:schema25-bartender-tip-qr")
+    if redis_client.exists(backup_key):
+        return backup_key
+
+    backup_payload = copy.deepcopy(data)
+    backup_payload["backup_reason"] = "schema25-bartender-tip-qr"
+    backup_payload["backup_key"] = backup_key
+    redis_client.setex(
+        backup_key,
+        STATE_BACKUP_TTL_SECONDS,
+        json.dumps(backup_payload, sort_keys=True),
+    )
+    return backup_key
+
+
+def import_legacy_bartender_tip_upload(data: dict[str, object]) -> bool:
+    """Move a release-local singleton upload into shared Redis media storage."""
+    raw_settings = data.get("bartender_tip_settings")
+    if not isinstance(raw_settings, dict) or isinstance(raw_settings.get("qr_codes"), list):
+        return False
+    image_url = str(raw_settings.get("image_url", "") or "")
+    match = re.fullmatch(
+        r"/static/uploads/bartender-tips/(bartender-tip-[0-9a-f]{32}\.(?:gif|jpe?g|png|webp))",
+        image_url,
+    )
+    if not match:
+        return False
+    upload_path = os.path.join(
+        app.static_folder or "static",
+        "uploads",
+        "bartender-tips",
+        match.group(1),
+    )
+    try:
+        with open(upload_path, "rb") as legacy_file:
+            prepared, upload_error = prepare_uploaded_bartender_tip_image(
+                FileStorage(stream=io.BytesIO(legacy_file.read()), filename=match.group(1))
+            )
+    except OSError as exc:
+        app.logger.warning("Legacy bartender tip image could not be imported: %s", exc)
+        return False
+    if upload_error or prepared is None:
+        app.logger.warning("Legacy bartender tip image could not be imported: %s", upload_error)
+        return False
+
+    image_id = uuid4().hex
+    extension = str(prepared["extension"])
+    image_bytes = prepared["bytes"]
+    redis_binary_client.set(
+        redis_key(f"bartender-tip-image:{image_id}:{extension.lstrip('.')}"),
+        image_bytes,
+    )
+    raw_settings["image_url"] = f"{BARTENDER_TIP_IMAGE_URL_PREFIX}/{image_id}{extension}"
+    return True
+
+
 def repair_menu_item_identities(data: dict[str, object]) -> dict[str, int]:
     """Repair missing/duplicate menu IDs and unambiguous order references."""
     raw_items = data.get("menu_items", [])
@@ -5982,9 +6246,11 @@ def load_state_from_redis() -> bool:
 
     backup_legacy_drink_preparation_state(parsed_state)
     backup_legacy_menu_identity_state(parsed_state)
+    backup_legacy_bartender_tip_state(parsed_state)
+    import_legacy_bartender_tip_upload(parsed_state)
     menu_repair = repair_menu_item_identities(parsed_state)
     apply_state_snapshot(parsed_state)
-    if loaded_schema_version < 24 or menu_repair["reassigned_items"]:
+    if loaded_schema_version < STATE_SCHEMA_VERSION or menu_repair["reassigned_items"]:
         save_state_to_redis()
         if menu_repair["reassigned_items"]:
             app.logger.warning(
@@ -6258,12 +6524,25 @@ def save_and_unlock_state_after_mutation(response):
     if lock_owned:
         try:
             if not bool(getattr(g, "redis_state_saved_during_request", False)):
-                persist_state_if_available()
+                state_saved = persist_state_if_available()
+            else:
+                state_saved = True
+            if state_saved:
+                for candidate_key in getattr(g, "bartender_tip_candidate_keys", []):
+                    try:
+                        redis_binary_client.persist(candidate_key)
+                    except redis.RedisError as exc:
+                        app.logger.error(
+                            "Unable to finalize bartender tip image %s: %s",
+                            candidate_key,
+                            exc,
+                        )
         finally:
             release_state_lock(state_lock)
             g.redis_state_lock = None
             g.redis_state_lock_owned = False
             g.redis_state_saved_during_request = False
+            g.bartender_tip_candidate_keys = []
 
     return response
 
@@ -8697,6 +8976,41 @@ def menu_image(image_id: str, extension: str):
     return response
 
 
+@app.route("/bartender-tip-images/<image_id>.<extension>")
+def bartender_tip_image(image_id: str, extension: str):
+    normalized_id = image_id.strip().lower()
+    normalized_extension = f".{extension.strip().lower()}"
+    if not re.fullmatch(r"[0-9a-f]{32}", normalized_id):
+        abort(404)
+    if normalized_extension not in ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS:
+        abort(404)
+
+    image_bytes: bytes | None = None
+    if redis_state_available:
+        try:
+            stored = redis_binary_client.get(
+                redis_key(
+                    f"bartender-tip-image:{normalized_id}:{normalized_extension.lstrip('.')}"
+                )
+            )
+        except redis.RedisError:
+            abort(503)
+        if isinstance(stored, bytes):
+            image_bytes = stored
+        elif isinstance(stored, str):
+            image_bytes = stored.encode("latin-1")
+    else:
+        image_bytes = bartender_tip_image_memory.get(
+            f"{normalized_id}{normalized_extension}"
+        )
+
+    if not image_bytes:
+        abort(404)
+    response = Response(image_bytes, mimetype=MENU_IMAGE_MIME_TYPES[normalized_extension])
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
 @app.route("/live-display")
 def live_display():
     cleanup_expired_display_notices()
@@ -9068,14 +9382,39 @@ def party_dashboard():
             tip_content = str(bartender_tip_settings.get("note", "") or "Tips are never required, always appreciated.")
             if method_text:
                 tip_content = f"{tip_content} {method_text}."
-            slides.append(
-                {
-                    "title": f"Tip {bartender_tip_settings.get('display_name') or 'the Bartender'}",
-                    "content": tip_content,
-                    "image_url": str(bartender_tip_settings.get("image_url", "") or ""),
-                    "methods": tip_methods,
-                }
-            )
+            tip_qr_codes = enabled_bartender_tip_qr_codes()
+            if tip_qr_codes:
+                for qr_code in tip_qr_codes:
+                    qr_methods = []
+                    if qr_code.get("method_value"):
+                        qr_methods.append(
+                            {
+                                "label": str(qr_code.get("method_label", "") or "Payment"),
+                                "value": str(qr_code.get("method_value", "") or ""),
+                            }
+                        )
+                    slides.append(
+                        {
+                            "title": f"Tip {qr_code['name']} with {qr_code['method_label']}",
+                            "content": str(bartender_tip_settings.get("note", "") or "Tips are never required, always appreciated."),
+                            "image_url": str(qr_code.get("image_url", "") or ""),
+                            "is_qr_code": True,
+                            "methods": qr_methods,
+                            "cta_url": url_for("party_bartender_tip"),
+                            "cta_label": "View Tip Options",
+                        }
+                    )
+            else:
+                slides.append(
+                    {
+                        "title": f"Tip {bartender_tip_settings.get('display_name') or 'the Bartender'}",
+                        "content": tip_content,
+                        "image_url": "",
+                        "methods": tip_methods,
+                        "cta_url": url_for("party_bartender_tip"),
+                        "cta_label": "View Tip Options",
+                    }
+                )
         winner = contest_state.get("winner")
         if winner:
             slides.append(
@@ -10672,7 +11011,8 @@ def party_bartender_tip():
     return render_template(
         "bartender_tip.html",
         bartender_tip_settings=bartender_tip_settings,
-        bartender_tip_methods=bartender_tip_methods(),
+        bartender_tip_qr_codes=enabled_bartender_tip_qr_codes(),
+        bartender_tip_methods=bartender_tip_methods_without_qr(),
         show_admin_link=False,
     )
 
@@ -11513,27 +11853,16 @@ def admin_portal(admin_view: str):
         )
 
     def bartender_tip_settings_from_form() -> dict[str, object] | None:
-        image_url = request.form.get("tip_image_url", "").strip()
-        uploaded_image_url, upload_error = save_uploaded_bartender_tip_image(request.files.get("tip_image_upload"))
-        if upload_error:
-            errors.append(upload_error)
-        if uploaded_image_url:
-            image_url = uploaded_image_url
-
-        normalized_image_url = safe_image_url(image_url)
-        if image_url and not normalized_image_url:
-            errors.append("Bartender tip image URL must be http, https, or a /static/ path.")
-
-        settings = {
+        settings = normalize_bartender_tip_settings(bartender_tip_settings)
+        settings.update({
             "enabled": request.form.get("tip_enabled") == "yes",
             "display_name": request.form.get("tip_display_name", "").strip(),
             "note": request.form.get("tip_note", "").strip(),
-            "image_url": normalized_image_url,
             "zelle": request.form.get("tip_zelle", "").strip(),
             "paypal": request.form.get("tip_paypal", "").strip(),
             "venmo": request.form.get("tip_venmo", "").strip(),
             "cash_app": request.form.get("tip_cash_app", "").strip(),
-        }
+        })
         if len(settings["display_name"]) > 80:
             errors.append("Bartender tip display name must be 80 characters or fewer.")
         if len(settings["note"]) > 240:
@@ -11543,6 +11872,65 @@ def admin_portal(admin_view: str):
         if errors:
             return None
         return normalize_bartender_tip_settings(settings)
+
+    def bartender_tip_qr_from_form(
+        existing_entry: dict[str, object] | None = None,
+    ) -> tuple[dict[str, object], dict[str, object] | None] | None:
+        name = request.form.get("tip_qr_name", "").strip()
+        payment_method = request.form.get("tip_qr_payment_method", "").strip().lower()
+        raw_image_url = request.form.get("tip_qr_image_url", "").strip()
+        if existing_entry and not raw_image_url:
+            raw_image_url = str(existing_entry.get("image_url", "") or "")
+        image_url = safe_image_url(raw_image_url)
+        prepared_image, upload_error = prepare_uploaded_bartender_tip_image(
+            request.files.get("tip_qr_image_upload")
+        )
+        if upload_error:
+            errors.append(upload_error)
+        if not name:
+            errors.append("Bartender tip QR name is required.")
+        elif len(name) > BARTENDER_TIP_QR_NAME_MAX_LENGTH:
+            errors.append(
+                f"Bartender tip QR name must be {BARTENDER_TIP_QR_NAME_MAX_LENGTH} characters or fewer."
+            )
+        if payment_method not in BARTENDER_TIP_PAYMENT_METHODS:
+            errors.append("Choose a payment method for this bartender tip QR code.")
+        else:
+            duplicate_method = next(
+                (
+                    entry
+                    for entry in bartender_tip_settings.get("qr_codes", [])
+                    if isinstance(entry, dict)
+                    and str(entry.get("payment_method", "") or "") == payment_method
+                    and str(entry.get("id", "") or "")
+                    != str((existing_entry or {}).get("id", "") or "")
+                ),
+                None,
+            )
+            if duplicate_method:
+                errors.append(
+                    f"{BARTENDER_TIP_PAYMENT_METHODS[payment_method]} already has a QR code. Edit that entry instead."
+                )
+        if raw_image_url and not image_url and prepared_image is None:
+            errors.append(
+                "Bartender tip QR image must be an http/https URL, a /static/ path, or a supported upload."
+            )
+        if not image_url and prepared_image is None:
+            errors.append("Choose an image file or enter an image URL for this QR code.")
+        if errors:
+            return None
+
+        now = _utc_now_iso()
+        entry = {
+            "id": str((existing_entry or {}).get("id", "") or uuid4().hex),
+            "name": name,
+            "image_url": image_url,
+            "enabled": request.form.get("tip_qr_enabled") == "yes",
+            "payment_method": payment_method,
+            "created_at": str((existing_entry or {}).get("created_at", "") or now),
+            "updated_at": now,
+        }
+        return entry, prepared_image
 
     def roles_from_account_form() -> list[str]:
         roles = {"regular"}
@@ -13157,6 +13545,100 @@ def admin_portal(admin_view: str):
                 bartender_tip_settings = updated_tip_settings
                 messages.append("Bartender tip settings updated.")
 
+        elif action == "add_bartender_tip_qr":
+            qr_codes = bartender_tip_settings.setdefault("qr_codes", [])
+            if not isinstance(qr_codes, list):
+                qr_codes = []
+                bartender_tip_settings["qr_codes"] = qr_codes
+            if len(qr_codes) >= BARTENDER_TIP_QR_LIMIT:
+                errors.append(
+                    "Bartender tipping supports one QR code each for Zelle, PayPal, Venmo, and Cash App."
+                )
+            else:
+                entry_result = bartender_tip_qr_from_form()
+                if entry_result:
+                    entry, prepared_image = entry_result
+                    if prepared_image is not None:
+                        uploaded_url, upload_error = store_prepared_bartender_tip_image(
+                            prepared_image
+                        )
+                        if upload_error:
+                            errors.append(upload_error)
+                        else:
+                            entry["image_url"] = uploaded_url
+                    if not errors:
+                        qr_codes.append(entry)
+                        messages.append(f"Added bartender tip QR code {entry['name']}.")
+
+        elif action == "update_bartender_tip_qr":
+            entry_id = request.form.get("tip_qr_id", "").strip()
+            entry_index = find_bartender_tip_qr_index(entry_id)
+            if entry_index is None:
+                errors.append("That bartender tip QR code could not be found.")
+            else:
+                qr_codes = bartender_tip_settings.get("qr_codes", [])
+                existing_entry = qr_codes[entry_index]
+                submitted_revision = request.form.get("tip_qr_updated_at", "").strip()
+                current_revision = str(existing_entry.get("updated_at", "") or "")
+                if submitted_revision != current_revision:
+                    errors.append(
+                        "That bartender tip QR code changed after this form loaded. Refresh and apply your changes again."
+                    )
+                else:
+                    entry_result = bartender_tip_qr_from_form(existing_entry)
+                    if entry_result:
+                        entry, prepared_image = entry_result
+                        previous_image_url = str(existing_entry.get("image_url", "") or "")
+                        if prepared_image is not None:
+                            uploaded_url, upload_error = store_prepared_bartender_tip_image(
+                                prepared_image
+                            )
+                            if upload_error:
+                                errors.append(upload_error)
+                            else:
+                                entry["image_url"] = uploaded_url
+                        if not errors:
+                            qr_codes[entry_index] = entry
+                            if entry["image_url"] != previous_image_url:
+                                retire_bartender_tip_image(previous_image_url)
+                            messages.append(f"Updated bartender tip QR code {entry['name']}.")
+
+        elif action == "delete_bartender_tip_qr":
+            entry_id = request.form.get("tip_qr_id", "").strip()
+            entry_index = find_bartender_tip_qr_index(entry_id)
+            if entry_index is None:
+                errors.append("That bartender tip QR code could not be found.")
+            else:
+                qr_codes = bartender_tip_settings.get("qr_codes", [])
+                existing_entry = qr_codes[entry_index]
+                submitted_revision = request.form.get("tip_qr_updated_at", "").strip()
+                if submitted_revision != str(existing_entry.get("updated_at", "") or ""):
+                    errors.append(
+                        "That bartender tip QR code changed after this form loaded. Refresh and try again."
+                    )
+                else:
+                    removed_entry = qr_codes.pop(entry_index)
+                    retire_bartender_tip_image(str(removed_entry.get("image_url", "") or ""))
+                    messages.append(f"Removed bartender tip QR code {removed_entry['name']}.")
+
+        elif action == "move_bartender_tip_qr":
+            entry_id = request.form.get("tip_qr_id", "").strip()
+            direction = request.form.get("direction", "").strip()
+            entry_index = find_bartender_tip_qr_index(entry_id)
+            qr_codes = bartender_tip_settings.get("qr_codes", [])
+            if entry_index is None:
+                errors.append("That bartender tip QR code could not be found.")
+            elif direction not in {"up", "down"}:
+                errors.append("Choose a valid QR code move direction.")
+            else:
+                target_index = entry_index - 1 if direction == "up" else entry_index + 1
+                if 0 <= target_index < len(qr_codes):
+                    qr_codes[entry_index], qr_codes[target_index] = (
+                        qr_codes[target_index],
+                        qr_codes[entry_index],
+                    )
+                    messages.append("Updated bartender tip QR code order.")
+
         elif action in {"grant_specialty_drink", "reset_specialty_drink_count"}:
             account_id = str(request.form.get("account_id", "") or "").strip()
             account = party_account_by_id(account_id)
@@ -14244,6 +14726,9 @@ def admin_portal(admin_view: str):
         ),
         specialty_allowance_rows=specialty_allowance_admin_rows(),
         bartender_tip_settings=bartender_tip_settings,
+        bartender_tip_qr_codes=copy.deepcopy(bartender_tip_settings.get("qr_codes", [])),
+        bartender_tip_qr_limit=BARTENDER_TIP_QR_LIMIT,
+        bartender_tip_payment_methods=BARTENDER_TIP_PAYMENT_METHODS,
         bartender_tip_methods=bartender_tip_methods(),
         user_accounts=user_accounts,
         dj_playlist=dj_playlist,

@@ -1,0 +1,118 @@
+<section class="tip-qr-admin" aria-labelledby="tip-qr-admin-heading">
+  <div class="menu-workspace__section-heading">
+    <div>
+      <p class="admin-panel__eyebrow">Payment artwork</p>
+      <h4 id="tip-qr-admin-heading">Named QR Codes</h4>
+    </div>
+    <span>{{ bartender_tip_qr_codes|length }} / {{ bartender_tip_qr_limit }}</span>
+  </div>
+  <p>Assign one independently named image to each payment method. Uploads are shared across app instances and deployments.</p>
+  {% set assigned_methods = bartender_tip_qr_codes|map(attribute='payment_method')|list %}
+
+  {% if bartender_tip_qr_codes %}
+    <div class="tip-qr-admin__list">
+      {% for qr_code in bartender_tip_qr_codes %}
+        <details class="admin-entry admin-entry--editable tip-qr-admin__entry" data-view-key="tip-qr:{{ qr_code.id }}">
+          <summary class="admin-entry__summary">
+            <span class="admin-entry__rank">{{ loop.index }}</span>
+            <span class="admin-entry__summary-text">
+              <strong>{{ qr_code.name }}</strong>
+              <span>{{ bartender_tip_payment_methods.get(qr_code.payment_method, 'Payment method needed') }} · {{ 'Visible' if qr_code.enabled else 'Hidden' }}</span>
+            </span>
+          </summary>
+          <img class="tip-qr-admin__preview" src="{{ qr_code.image_url }}" alt="QR code for {{ qr_code.name }}">
+          <form method="post" enctype="multipart/form-data" class="admin-entry__form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="tip_qr_id" value="{{ qr_code.id }}">
+            <input type="hidden" name="tip_qr_updated_at" value="{{ qr_code.updated_at }}">
+            <div class="admin-entry__fields">
+              <label>
+                Payment Method
+                <select name="tip_qr_payment_method" required>
+                  <option value="">Choose a method</option>
+                  {% for method_key, method_label in bartender_tip_payment_methods.items() %}
+                    <option value="{{ method_key }}" {% if qr_code.payment_method == method_key %}selected{% endif %} {% if method_key in assigned_methods and qr_code.payment_method != method_key %}disabled{% endif %}>{{ method_label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label>
+                QR Display Name
+                <input type="text" name="tip_qr_name" maxlength="80" value="{{ qr_code.name }}" required>
+              </label>
+              <label>
+                Image URL
+                <input type="text" name="tip_qr_image_url" maxlength="500" value="{{ qr_code.image_url }}" placeholder="https://... or /static/..." inputmode="url">
+              </label>
+              <label>
+                Replace Local Image
+                <input type="file" name="tip_qr_image_upload" accept="image/png,image/jpeg,image/gif,image/webp">
+                <span class="form-helper">Optional. PNG, JPG, GIF, or WebP up to 5 MB.</span>
+              </label>
+              <label class="form-check">
+                <input type="checkbox" name="tip_qr_enabled" value="yes" {% if qr_code.enabled %}checked{% endif %}>
+                <span>Show this QR code to attendees</span>
+              </label>
+            </div>
+            <div class="admin-entry__actions">
+              <button type="submit" name="action" value="update_bartender_tip_qr" class="button button--primary">Save QR Code</button>
+              <button type="submit" name="action" value="delete_bartender_tip_qr" class="button" onclick="return confirm({{ ('Remove ' ~ qr_code.name ~ ' and its QR code?')|tojson|forceescape }})">Remove</button>
+            </div>
+          </form>
+          <form method="post" class="admin-entry__actions tip-qr-admin__move">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="tip_qr_id" value="{{ qr_code.id }}">
+            <input type="hidden" name="action" value="move_bartender_tip_qr">
+            <button type="submit" name="direction" value="up" class="button button--small" {% if loop.first %}disabled{% endif %}>Move Up</button>
+            <button type="submit" name="direction" value="down" class="button button--small" {% if loop.last %}disabled{% endif %}>Move Down</button>
+          </form>
+        </details>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="admin-empty">No bartender QR codes are configured.</p>
+  {% endif %}
+
+  {% if bartender_tip_qr_codes|length < bartender_tip_qr_limit %}
+    <details class="admin-entry admin-entry--editable tip-qr-admin__entry" data-view-key="tip-qr:add">
+      <summary class="admin-entry__summary">
+        <span class="admin-entry__rank">+</span>
+        <span class="admin-entry__summary-text">
+          <strong>Add QR Code</strong>
+          <span>Upload and name another payment image</span>
+        </span>
+      </summary>
+      <form method="post" enctype="multipart/form-data" class="admin-entry__form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="admin-entry__fields">
+          <label>
+            Payment Method
+            <select name="tip_qr_payment_method" required>
+              <option value="">Choose a method</option>
+              {% for method_key, method_label in bartender_tip_payment_methods.items() %}
+                {% if method_key not in assigned_methods %}<option value="{{ method_key }}">{{ method_label }}</option>{% endif %}
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            QR Display Name
+            <input type="text" name="tip_qr_name" maxlength="80" placeholder="Casey" required>
+          </label>
+          <label>
+            Image URL
+            <input type="text" name="tip_qr_image_url" maxlength="500" placeholder="https://... or /static/..." inputmode="url">
+          </label>
+          <label>
+            Upload Local Image
+            <input type="file" name="tip_qr_image_upload" accept="image/png,image/jpeg,image/gif,image/webp">
+            <span class="form-helper">Choose a PNG, JPG, GIF, or WebP image up to 5 MB. An upload takes precedence over the URL.</span>
+          </label>
+          <label class="form-check">
+            <input type="checkbox" name="tip_qr_enabled" value="yes" checked>
+            <span>Show this QR code to attendees</span>
+          </label>
+        </div>
+        <button type="submit" name="action" value="add_bartender_tip_qr" class="button button--primary">Add QR Code</button>
+      </form>
+    </details>
+  {% endif %}
+</section>

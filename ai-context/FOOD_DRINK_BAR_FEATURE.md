@@ -51,8 +51,12 @@ and schema-19 pickup acknowledgement:
   `updated_at`, and `updated_by` records. Resetting eligibility advances the
   count baseline without deleting historical orders.
 - `bartender_tip_settings`: admin-managed tip prompt settings with `enabled`,
-  `display_name`, `note`, `image_url`, and optional `zelle`, `paypal`,
-  `venmo`, and `cash_app` handles.
+  overall `display_name`, `note`, an ordered `qr_codes` collection with stable
+  IDs, independent names/images/enabled state/revisions, and a unique
+  `payment_method` assignment for each of `zelle`, `paypal`, `venmo`, and
+  `cash_app`. Optional provider handles remain separate settings but render only
+  with the corresponding QR. Schema 25 migrates the legacy
+  singleton image once; new upload bytes use shared Redis binary keys.
 - `user_accounts[normalized_username]["roles"]`: account roles. Existing accounts hydrate to at least `["regular"]`; admins can add/remove `bartender`.
 
 Drink orders snapshot `item_name`, `item_image_url`, `recipe`, `instructions`, drink

@@ -62,8 +62,8 @@
   counts, average prep time, and the signed-in attendee's own queue positions;
   it never exposes other attendees' identities, recipes, or bartender actions.
 - My Orders includes one bartender tip callout when tipping is enabled; it
-  opens the admin-configured QR/payment image and Zelle, PayPal, Venmo, or Cash
-  App handles.
+  opens a dedicated page with the ordered enabled QR cards, their independent
+  names, and optional Zelle, PayPal, Venmo, or Cash App handles.
 - A single logout action inside the shared header menu clears the current
   browser session regardless of role.
 - Regular guest sessions can access attendee UI routes but not admin or live-display routes.
@@ -247,10 +247,13 @@
   URLs, descriptions, separate ingredient and instruction references, specialty/standard
   classification, alcoholic/non-alcoholic classification, and whether a drink is
   orderable from the portal.
-- Admin can configure a bartender tip prompt with an enable switch, display
-  name, note, placeholder/payment QR image URL, and optional Zelle, PayPal,
-  Venmo, or Cash App handles. Enabled tipping appears in party-day Event
-  Highlights and per drink-history order.
+- Admin can configure a bartender tip prompt with an enable switch, overall
+  heading, note, optional payment handles, and one independently named,
+  enabled, ordered QR entry for each supported payment method: Zelle, PayPal,
+  Venmo, and Cash App. Each entry accepts a URL or validated local
+  PNG/JPG/GIF/WebP upload stored in Redis. Enabled entries appear as named,
+  provider-specific party-day Event Highlight slides, while My Orders keeps one
+  tip callout.
 - Admin can add, edit, and delete party account users, reset account passwords
   directly, and assign or remove the `bartender` role.
 - Admin can open the bartender view and see bar operations summary counts.

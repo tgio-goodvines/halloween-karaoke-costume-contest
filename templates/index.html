@@ -192,7 +192,7 @@
     {% for slide in slides %}
       <article class="slide{% if loop.first %} active{% endif %}">
         {% if slide.image_url %}
-          <img class="slide__image" src="{{ slide.image_url }}" alt="{{ slide.title }}">
+          <img class="slide__image{% if slide.is_qr_code %} slide__image--qr{% endif %}" src="{{ slide.image_url }}" alt="{{ slide.title }}">
         {% endif %}
         <h3>{{ slide.title }}</h3>
         <p>{{ slide.content }}</p>
@@ -202,6 +202,9 @@
               <span>{{ method.label }}: {{ method.value }}</span>
             {% endfor %}
           </div>
+        {% endif %}
+        {% if slide.cta_url %}
+          <a class="button" href="{{ slide.cta_url }}">{{ slide.cta_label or 'Open' }}</a>
         {% endif %}
       </article>
     {% endfor %}

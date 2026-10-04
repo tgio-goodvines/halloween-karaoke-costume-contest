@@ -11,6 +11,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/UI_UX_DESIGN_SYSTEM.md` - current lab-terminal visual design system, palette, typography, surfaces, and implementation notes.
 - `ai-context/STYLING_REFINEMENT_PROGRESS.md` - attached-wireframe refinement progress across pages, live display, and generated emails.
 - `ai-context/FOOD_DRINK_BAR_FEATURE.md` - food/drink menu, drink ordering, bartender role, order timing, emails, and live-display drink-ready override.
+- `ai-context/BARTENDER_QR_IMAGE_COLLECTION_IMPLEMENTATION_PLAN.md` - completed implementation record for independently named bartender tip QR entries, Redis-backed uploads, migration, rendering, tests, and rollout.
 - `ai-context/BAR_MENU_ORDER_CONSOLIDATION_PLAN.md` - completed Menu & Orders consolidation, attendee-safe queue status, legacy history compatibility, responsive verification, and preserved bartender boundary.
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` - focused admin workspace architecture and the current scrolling/narrow-screen UX rules.
@@ -53,6 +54,7 @@ Important working notes:
 - Admin can manage food/drink menu items, image URLs, availability, ingredient lists, and separate drink instructions from `/admin`; bartender access is assigned to existing party accounts through account roles.
 - `/bartender` is available to assigned bartenders and admins; drink orders move `received -> in_progress -> complete`, completion tracks prep duration, and estimates are based on recent completed prep times.
 - Schema 20 keeps legacy `recipe` as the ingredient-only compatibility field, adds ordered bartender `instructions` to menu items and drink-order snapshots, and preserves one raw pre-migration Redis backup. Bartender Current Drink shows both references, while Up Next and backlog keep prep details collapsible.
+- Schema 25 stores one independently named, ordered bartender tipping QR entry per supported payment method (Zelle, PayPal, Venmo, and Cash App). New local uploads use Redis binary keys and immutable `/bartender-tip-images/...` URLs; the overall tip heading, note, and payment handles remain separate.
 - Completing a drink order sends the ready email and creates a temporary 10-second live-display `drink_ready` notice with the drink image; attendees also see ready drink cards on `/party`. Drink-ready notices render above any active contest/karaoke/winner event override without replacing it.
 - Halloween outbound email uses the separate `tnq-halloween.com` SES identity and sender `no-reply@tnq-halloween.com`; do not change existing GoodVines SES identities or sender addresses for `appg-v.com` or `goodvines.app`.
 - Admin controls can set the root landing target, replace the RSVP submission party code, configure the host RSVP notification email, edit RSVP party detail/map cards, and post RSVP updates; store only the party code hash, never plaintext.

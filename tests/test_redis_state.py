@@ -215,7 +215,9 @@ class FakeYouTubeService:
 class RedisStateTests(unittest.TestCase):
     def setUp(self):
         self.fake_redis = FakeRedis()
+        self.fake_binary_redis = FakeRedis()
         self.original_redis_client = main.redis_client
+        self.original_redis_binary_client = main.redis_binary_client
         self.original_redis_available = main.redis_state_available
         self.original_config = main.REDIS_CONFIG
         self.original_testing = main.app.config["TESTING"]
@@ -244,6 +246,7 @@ class RedisStateTests(unittest.TestCase):
         }
 
         main.redis_client = self.fake_redis
+        main.redis_binary_client = self.fake_binary_redis
         main.redis_state_available = True
         main.REDIS_CONFIG = main.RedisConfig(
             host="127.0.0.1",
@@ -264,6 +267,7 @@ class RedisStateTests(unittest.TestCase):
 
     def tearDown(self):
         main.redis_client = self.original_redis_client
+        main.redis_binary_client = self.original_redis_binary_client
         main.redis_state_available = self.original_redis_available
         main.REDIS_CONFIG = self.original_config
         main.app.config["TESTING"] = self.original_testing
@@ -3402,7 +3406,7 @@ class RedisStateTests(unittest.TestCase):
         image_id = image_url.rsplit("/", 1)[1].split(".", 1)[0]
         self.assertEqual(
             png_bytes,
-            self.fake_redis.store[main.redis_key(f"menu-image:{image_id}:png")],
+            self.fake_binary_redis.store[main.redis_key(f"menu-image:{image_id}:png")],
         )
         self.assertEqual(200, image_response.status_code)
         self.assertEqual("image/png", image_response.mimetype)
@@ -4312,6 +4316,7 @@ class RedisStateTests(unittest.TestCase):
                 "id": "drink-1",
                 "name": "Witch Margarita",
                 "category": "drink",
+                "image_url": "/menu-images/11111111111111111111111111111111.png",
                 "recipe": "2 oz tequila\n1 oz lime",
                 "instructions": "Shake with ice\nStrain over fresh ice",
             }
@@ -4323,6 +4328,7 @@ class RedisStateTests(unittest.TestCase):
                 "username": "Jamie",
                 "menu_item_id": "drink-1",
                 "item_name": "Witch Margarita",
+                "item_image_url": "",
                 "recipe": "Old ingredient snapshot",
                 "instructions": "",
                 "status": "received",
@@ -4333,10 +4339,19 @@ class RedisStateTests(unittest.TestCase):
         first = main.bartender_queue_context()
         self.assertEqual("2 oz tequila\n1 oz lime", first["current_order"]["recipe"])
         self.assertEqual("Shake with ice\nStrain over fresh ice", first["current_order"]["instructions"])
+        self.assertEqual(
+            "/menu-images/11111111111111111111111111111111.png",
+            first["current_order"]["item_image_url"],
+        )
 
         main.menu_items[0]["instructions"] = "Stir slowly\nServe over one cube"
+        main.menu_items[0]["image_url"] = "/menu-images/22222222222222222222222222222222.webp"
         second = main.bartender_queue_context()
         self.assertEqual("Stir slowly\nServe over one cube", second["current_order"]["instructions"])
+        self.assertEqual(
+            "/menu-images/22222222222222222222222222222222.webp",
+            second["current_order"]["item_image_url"],
+        )
         self.assertNotEqual(first["queue_version"], second["queue_version"])
         self.assertEqual("", main.drink_orders[0]["instructions"])
 

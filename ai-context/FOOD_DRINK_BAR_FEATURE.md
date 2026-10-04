@@ -260,3 +260,8 @@ promotion inclusion/exclusion, and truly empty bar-stage collapse.
   image URL. Validated files up to 5 MB are stored under Redis
   `halloween:menu-image:<id>:<extension>` keys and served from immutable
   `/menu-images/<id>.<extension>` URLs so every API instance sees the same art.
+- Uploaded media uses a binary Redis client rather than the JSON/text state
+  client. Flask and the Halloween nginx server accept 6 MB multipart requests,
+  leaving room for form fields around the enforced 5 MB image limit. Active
+  bartender orders overlay the latest non-empty menu artwork and include it in
+  queue-version refreshes, while completed orders retain their snapshot.

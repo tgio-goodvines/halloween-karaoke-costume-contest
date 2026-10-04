@@ -140,6 +140,7 @@ def _safe_int(value: object, default: int = 0) -> int:
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("HALLOWEEN_APP_SECRET", "dev-secret-key")
+app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
 app.config["ADMIN_PASSWORD"] = os.environ.get("HALLOWEEN_ADMIN_PASSWORD", "")
 app.config["PARTY_CODE"] = os.environ.get("HALLOWEEN_PARTY_CODE", "")
 app.config["PARTY_TITLE"] = os.environ.get(
@@ -317,7 +318,31 @@ def create_redis_client(config: RedisConfig) -> redis.Redis:
     )
 
 
+def create_binary_redis_client(config: RedisConfig) -> redis.Redis:
+    if config.url:
+        return redis.Redis.from_url(
+            config.url,
+            decode_responses=False,
+            socket_timeout=5,
+            socket_connect_timeout=5,
+            health_check_interval=30,
+        )
+
+    return redis.Redis(
+        host=config.host,
+        port=config.port,
+        db=config.db,
+        username=config.username,
+        password=config.password,
+        decode_responses=False,
+        socket_timeout=5,
+        socket_connect_timeout=5,
+        health_check_interval=30,
+    )
+
+
 redis_client = create_redis_client(REDIS_CONFIG)
+redis_binary_client = create_binary_redis_client(REDIS_CONFIG)
 APP_INSTANCE_ID = uuid4().hex
 
 
@@ -2015,7 +2040,7 @@ def store_prepared_menu_image(prepared: dict[str, object]) -> tuple[str, str]:
 
     if redis_state_available:
         try:
-            redis_client.set(
+            redis_binary_client.set(
                 redis_key(f"menu-image:{image_id}:{extension.lstrip('.')}"),
                 image_bytes,
             )
@@ -2432,6 +2457,9 @@ def effective_drink_preparation(order: dict[str, object]) -> dict[str, object]:
         effective["recipe"] = current_recipe
     if current_instructions:
         effective["instructions"] = current_instructions
+    current_image_url = safe_image_url(str(item.get("image_url", "") or ""))
+    if current_image_url:
+        effective["item_image_url"] = current_image_url
     return effective
 
 
@@ -8650,7 +8678,7 @@ def menu_image(image_id: str, extension: str):
     image_bytes: bytes | None = None
     if redis_state_available:
         try:
-            stored = redis_client.get(
+            stored = redis_binary_client.get(
                 redis_key(f"menu-image:{normalized_id}:{normalized_extension.lstrip('.')}")
             )
         except redis.RedisError:
@@ -10673,6 +10701,7 @@ def bartender_queue_context() -> dict[str, object]:
             "completed_at": str(order.get("completed_at", "")),
             "created_at": str(order.get("created_at", "")),
             "item_name": str(order.get("item_name", "")),
+            "item_image_url": str(order.get("item_image_url", "")),
             "username": str(order.get("username", "")),
             "recipe": str(order.get("recipe", "")),
             "instructions": str(order.get("instructions", "")),

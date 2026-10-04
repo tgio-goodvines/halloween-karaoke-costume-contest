@@ -871,9 +871,13 @@ main.container {
   display: block;
 }
 
-.menu-card__image,
-.bartender-card__media img {
+.menu-card__image {
   object-fit: contain;
+  object-position: center;
+}
+
+.bartender-card__media img {
+  object-fit: cover;
   object-position: center;
 }
 
@@ -1064,12 +1068,12 @@ main.container {
 
 .bartender-card__media {
   position: relative;
-  align-self: start;
-  aspect-ratio: 4 / 3;
+  align-self: stretch;
+  aspect-ratio: auto;
   border-right: 1px solid rgba(255, 49, 49, 0.35);
   border-bottom: none;
-  height: auto;
-  min-height: 0;
+  height: 100%;
+  min-height: 100%;
   min-width: 0;
   overflow: hidden;
 }
@@ -6928,7 +6932,7 @@ body {
 }
 
 .bartender-card--compact .bartender-card__media {
-  aspect-ratio: 16 / 9;
+  max-height: 150px;
 }
 
 .bartender-card__no-recipe {
@@ -7028,7 +7032,7 @@ body {
   }
 
   .bartender-card--stage .bartender-card__media {
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 16 / 7;
     height: auto;
     min-height: 0;
     border-right: 0;
@@ -7036,7 +7040,7 @@ body {
   }
 
   .bartender-card--compact .bartender-card__media {
-    aspect-ratio: 16 / 9;
+    max-height: 105px;
   }
 
   .bartender-section-heading {

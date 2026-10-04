@@ -36,6 +36,10 @@
   reorder, and shows one bartender-tip callout when enabled. Successful orders
   and reorders redirect to the My Orders view. Attendee access redirects to
   `/party` until the party date.
+- `GET /menu-images/<image_id>.<extension>` -> public immutable delivery for
+  validated admin-uploaded menu artwork stored in Redis, allowing attendee,
+  bartender, email, and live-display surfaces to share one image across API
+  instances.
 - `GET|POST /party/drink-history` -> compatibility route. GET redirects to
   `/party/menu?view=orders`; temporary POST handling uses the shared
   account-scoped reorder helper and then redirects to the canonical view.

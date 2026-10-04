@@ -47,7 +47,7 @@ class FakeRedis:
         return self.store.get(key)
 
     def set(self, key, value):
-        self.store[key] = str(value)
+        self.store[key] = value if isinstance(value, bytes) else str(value)
         return True
 
     def setex(self, key, ttl, value):
@@ -294,6 +294,7 @@ class RedisStateTests(unittest.TestCase):
         main.karaoke_completion_acknowledgements = {}
         main.password_reset_tokens = {}
         main.menu_items = []
+        main.menu_image_memory = {}
         main.drink_orders = []
         main.specialty_drink_allowances = {}
         main.dj_playlist = []
@@ -3353,6 +3354,86 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("2 oz tequila\n1 oz lime juice\n0.5 oz agave", state["menu_items"][0]["recipe"])
         self.assertEqual("Shake with ice\nStrain over fresh ice\nGarnish with lime", state["menu_items"][0]["instructions"])
         self.assertIn("bartender", state["user_accounts"]["jamie"]["roles"])
+
+    def test_admin_can_upload_and_serve_a_redis_backed_menu_image(self):
+        self.save_current_state()
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"menu-image-payload"
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/menu",
+                data={
+                    "action": "add_menu_item",
+                    "name": "Local Image Drink",
+                    "category": "drink",
+                    "description": "Uploaded from the admin device.",
+                    "available": "yes",
+                    "image_upload": (io.BytesIO(png_bytes), "local-drink.png"),
+                },
+                content_type="multipart/form-data",
+            )
+            state = self.redis_state()
+            image_url = state["menu_items"][0]["image_url"]
+            image_response = client.get(image_url)
+
+            webp_bytes = b"RIFF\x04\x00\x00\x00WEBPmenu-image-replacement"
+            update_response = client.post(
+                "/admin/menu",
+                data={
+                    "action": "update_menu_item",
+                    "item_id": state["menu_items"][0]["id"],
+                    "item_updated_at": state["menu_items"][0]["updated_at"],
+                    "name": "Local Image Drink",
+                    "category": "drink",
+                    "description": "Uploaded from the admin device.",
+                    "available": "yes",
+                    "image_url": image_url,
+                    "image_upload": (io.BytesIO(webp_bytes), "replacement.webp"),
+                },
+                content_type="multipart/form-data",
+            )
+            updated_state = self.redis_state()
+            updated_image_url = updated_state["menu_items"][0]["image_url"]
+            updated_image_response = client.get(updated_image_url)
+
+        self.assertEqual(200, response.status_code)
+        self.assertRegex(image_url, r"^/menu-images/[0-9a-f]{32}\.png$")
+        image_id = image_url.rsplit("/", 1)[1].split(".", 1)[0]
+        self.assertEqual(
+            png_bytes,
+            self.fake_redis.store[main.redis_key(f"menu-image:{image_id}:png")],
+        )
+        self.assertEqual(200, image_response.status_code)
+        self.assertEqual("image/png", image_response.mimetype)
+        self.assertEqual(png_bytes, image_response.data)
+        self.assertIn("immutable", image_response.headers["Cache-Control"])
+        self.assertEqual(200, update_response.status_code)
+        self.assertRegex(updated_image_url, r"^/menu-images/[0-9a-f]{32}\.webp$")
+        self.assertNotEqual(image_url, updated_image_url)
+        self.assertEqual("Uploaded from the admin device.", updated_state["menu_items"][0]["description"])
+        self.assertEqual("image/webp", updated_image_response.mimetype)
+        self.assertEqual(webp_bytes, updated_image_response.data)
+
+    def test_admin_rejects_a_menu_upload_with_mismatched_image_bytes(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/admin/menu",
+                data={
+                    "action": "add_menu_item",
+                    "name": "Invalid Image Drink",
+                    "category": "drink",
+                    "image_upload": (io.BytesIO(b"not really a png"), "fake.png"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn("does not look like a valid image file", response.get_data(as_text=True))
+        self.assertEqual([], main.menu_items)
 
     def test_admin_can_crud_user_accounts_and_reset_passwords(self):
         self.save_current_state()

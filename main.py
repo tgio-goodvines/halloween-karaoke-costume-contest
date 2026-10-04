@@ -569,6 +569,16 @@ BEVERAGE_TYPES = ("alcoholic", "non_alcoholic")
 BARTENDER_TIP_UPLOAD_URL_PREFIX = "/static/uploads/bartender-tips"
 ALLOWED_BARTENDER_TIP_IMAGE_EXTENSIONS = {".gif", ".jpg", ".jpeg", ".png", ".webp"}
 MAX_BARTENDER_TIP_IMAGE_BYTES = 5 * 1024 * 1024
+MENU_IMAGE_URL_PREFIX = "/menu-images"
+ALLOWED_MENU_IMAGE_EXTENSIONS = {".gif", ".jpg", ".jpeg", ".png", ".webp"}
+MENU_IMAGE_MIME_TYPES = {
+    ".gif": "image/gif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+MAX_MENU_IMAGE_BYTES = 5 * 1024 * 1024
 
 DEFAULT_PARTY_DETAILS: dict[str, str] = {
     "date": app.config["PARTY_DATE_LABEL"],
@@ -707,6 +717,7 @@ user_accounts: dict[str, dict[str, object]] = {}
 karaoke_completion_acknowledgements: dict[str, dict[str, str]] = {}
 password_reset_tokens: dict[str, dict[str, object]] = {}
 menu_items: list[dict[str, object]] = []
+menu_image_memory: dict[str, bytes] = {}
 drink_orders: list[dict[str, object]] = []
 specialty_drink_allowances: dict[str, dict[str, object]] = {}
 dj_playlist: list[dict[str, object]] = []
@@ -1954,6 +1965,8 @@ def safe_image_url(raw_url: str) -> str:
         return image_url
     if image_url.startswith("/static/"):
         return image_url
+    if re.fullmatch(r"/menu-images/[0-9a-f]{32}\.(?:gif|jpe?g|png|webp)", image_url):
+        return image_url
     return ""
 
 
@@ -1968,6 +1981,51 @@ def image_bytes_match_extension(filename: str, image_bytes: bytes) -> bool:
     if extension == ".webp":
         return image_bytes.startswith(b"RIFF") and image_bytes[8:12] == b"WEBP"
     return False
+
+
+def prepare_uploaded_menu_image(upload) -> tuple[dict[str, object] | None, str]:
+    if upload is None or not upload.filename:
+        return None, ""
+
+    safe_name = secure_filename(upload.filename)
+    extension = os.path.splitext(safe_name)[1].lower()
+    if extension not in ALLOWED_MENU_IMAGE_EXTENSIONS:
+        return None, "Menu image upload must be a PNG, JPG, GIF, or WebP image."
+
+    image_bytes = upload.stream.read(MAX_MENU_IMAGE_BYTES + 1)
+    if not image_bytes:
+        return None, "Menu image upload was empty."
+    if len(image_bytes) > MAX_MENU_IMAGE_BYTES:
+        return None, "Menu image upload must be 5 MB or smaller."
+    if not image_bytes_match_extension(safe_name, image_bytes):
+        return None, "Menu image upload does not look like a valid image file."
+
+    return {
+        "bytes": image_bytes,
+        "extension": extension,
+    }, ""
+
+
+def store_prepared_menu_image(prepared: dict[str, object]) -> tuple[str, str]:
+    image_id = uuid4().hex
+    extension = str(prepared.get("extension", "") or "")
+    image_bytes = prepared.get("bytes")
+    if extension not in ALLOWED_MENU_IMAGE_EXTENSIONS or not isinstance(image_bytes, bytes):
+        return "", "Menu image upload could not be prepared."
+
+    if redis_state_available:
+        try:
+            redis_client.set(
+                redis_key(f"menu-image:{image_id}:{extension.lstrip('.')}"),
+                image_bytes,
+            )
+        except redis.RedisError as exc:
+            app.logger.warning("Unable to store uploaded menu image: %s", exc)
+            return "", "Menu image storage is temporarily unavailable."
+    else:
+        menu_image_memory[f"{image_id}{extension}"] = image_bytes
+
+    return f"{MENU_IMAGE_URL_PREFIX}/{image_id}{extension}", ""
 
 
 def save_uploaded_bartender_tip_image(upload) -> tuple[str, str]:
@@ -8580,6 +8638,37 @@ def health():
     return jsonify(payload), status_code
 
 
+@app.route("/menu-images/<image_id>.<extension>")
+def menu_image(image_id: str, extension: str):
+    normalized_id = image_id.strip().lower()
+    normalized_extension = f".{extension.strip().lower()}"
+    if not re.fullmatch(r"[0-9a-f]{32}", normalized_id):
+        abort(404)
+    if normalized_extension not in ALLOWED_MENU_IMAGE_EXTENSIONS:
+        abort(404)
+
+    image_bytes: bytes | None = None
+    if redis_state_available:
+        try:
+            stored = redis_client.get(
+                redis_key(f"menu-image:{normalized_id}:{normalized_extension.lstrip('.')}")
+            )
+        except redis.RedisError:
+            abort(503)
+        if isinstance(stored, bytes):
+            image_bytes = stored
+        elif isinstance(stored, str):
+            image_bytes = stored.encode("latin-1")
+    else:
+        image_bytes = menu_image_memory.get(f"{normalized_id}{normalized_extension}")
+
+    if not image_bytes:
+        abort(404)
+    response = Response(image_bytes, mimetype=MENU_IMAGE_MIME_TYPES[normalized_extension])
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
 @app.route("/live-display")
 def live_display():
     cleanup_expired_display_notices()
@@ -11273,12 +11362,21 @@ def admin_portal(admin_view: str):
         )
         return True
 
-    def menu_item_from_form(existing_item: dict[str, object] | None = None) -> dict[str, object] | None:
+    def menu_item_from_form(
+        existing_item: dict[str, object] | None = None,
+    ) -> tuple[dict[str, object], dict[str, object] | None] | None:
         now = _utc_now_iso()
         image_url = request.form.get("image_url", "").strip()
         normalized_image_url = safe_image_url(image_url)
-        if image_url and not normalized_image_url:
-            errors.append("Menu image URL must be http, https, or a /static/ path.")
+        prepared_image, upload_error = prepare_uploaded_menu_image(
+            request.files.get("image_upload")
+        )
+        if upload_error:
+            errors.append(upload_error)
+        if image_url and not normalized_image_url and prepared_image is None:
+            errors.append(
+                "Menu image must be an http/https URL, a /static/ path, or a supported upload."
+            )
 
         category = normalize_menu_category(request.form.get("category", "drink"))
         drink_type = normalize_drink_type(request.form.get("drink_type", "standard"))
@@ -11313,21 +11411,24 @@ def admin_portal(admin_view: str):
         if errors:
             return None
 
-        return {
-            "id": str((existing_item or {}).get("id", "") or uuid4().hex),
-            "name": name,
-            "category": category,
-            "description": description,
-            "image_url": normalized_image_url,
-            "recipe": recipe,
-            "instructions": instructions,
-            "available": request.form.get("available") == "yes",
-            "drink_type": drink_type if category == "drink" else "standard",
-            "beverage_type": beverage_type if category == "drink" else "non_alcoholic",
-            "orderable": orderable if category == "drink" else False,
-            "created_at": str((existing_item or {}).get("created_at", "") or now),
-            "updated_at": now,
-        }
+        return (
+            {
+                "id": str((existing_item or {}).get("id", "") or uuid4().hex),
+                "name": name,
+                "category": category,
+                "description": description,
+                "image_url": normalized_image_url,
+                "recipe": recipe,
+                "instructions": instructions,
+                "available": request.form.get("available") == "yes",
+                "drink_type": drink_type if category == "drink" else "standard",
+                "beverage_type": beverage_type if category == "drink" else "non_alcoholic",
+                "orderable": orderable if category == "drink" else False,
+                "created_at": str((existing_item or {}).get("created_at", "") or now),
+                "updated_at": now,
+            },
+            prepared_image,
+        )
 
     def dj_song_from_form(existing_song: dict[str, object] | None = None) -> dict[str, object] | None:
         raw_artwork_url = request.form.get("artwork_url", "").strip()
@@ -13198,15 +13299,23 @@ def admin_portal(admin_view: str):
                 messages.append(f"Removed RSVP for {removed_rsvp.name}.")
 
         elif action == "add_menu_item":
-            item = menu_item_from_form()
-            if item:
+            item_result = menu_item_from_form()
+            if item_result:
+                item, prepared_image = item_result
                 try:
                     write_state_backup_if_available("menu-add")
                 except RuntimeError as exc:
                     errors.append(f"The menu could not be backed up before adding the item: {exc}")
                 else:
-                    menu_items.append(item)
-                    messages.append(f"Added {item['name']} to the menu.")
+                    if prepared_image is not None:
+                        uploaded_url, upload_error = store_prepared_menu_image(prepared_image)
+                        if upload_error:
+                            errors.append(upload_error)
+                        else:
+                            item["image_url"] = uploaded_url
+                    if not errors:
+                        menu_items.append(item)
+                        messages.append(f"Added {item['name']} to the menu.")
 
         elif action == "update_menu_item":
             item_id = request.form.get("item_id", "").strip()
@@ -13222,15 +13331,23 @@ def admin_portal(admin_view: str):
                         "That menu item changed after this form loaded. Refresh and apply your changes again."
                     )
                 else:
-                    item = menu_item_from_form(existing_item)
-                    if item:
+                    item_result = menu_item_from_form(existing_item)
+                    if item_result:
+                        item, prepared_image = item_result
                         try:
                             write_state_backup_if_available("menu-update")
                         except RuntimeError as exc:
                             errors.append(f"The menu could not be backed up before updating the item: {exc}")
                         else:
-                            menu_items[item_index] = item
-                            messages.append(f"Updated menu item {item['name']}.")
+                            if prepared_image is not None:
+                                uploaded_url, upload_error = store_prepared_menu_image(prepared_image)
+                                if upload_error:
+                                    errors.append(upload_error)
+                                else:
+                                    item["image_url"] = uploaded_url
+                            if not errors:
+                                menu_items[item_index] = item
+                                messages.append(f"Updated menu item {item['name']}.")
 
         elif action == "delete_menu_item":
             item_id = request.form.get("item_id", "").strip()

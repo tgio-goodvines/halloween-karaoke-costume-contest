@@ -1108,7 +1108,7 @@
           <span>Create food or drink options for the portal</span>
         </span>
       </summary>
-      <form method="post" class="admin-entry__form" data-menu-item-form>
+      <form method="post" enctype="multipart/form-data" class="admin-entry__form" data-menu-item-form>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="admin-entry__fields">
           <h4 class="menu-admin-fieldset-title">Guest-facing details</h4>
@@ -1126,6 +1126,11 @@
           <label>
             Image URL
             <input type="text" name="image_url" maxlength="500" placeholder="https://... or /static/..." inputmode="url">
+          </label>
+          <label>
+            Upload Image
+            <input type="file" name="image_upload" accept="image/png,image/jpeg,image/gif,image/webp">
+            <span class="form-helper">Choose a PNG, JPG, GIF, or WebP image up to 5 MB. An upload takes precedence over the URL.</span>
           </label>
           <label>
             Description
@@ -1189,7 +1194,7 @@
             {% if item.image_url %}
               <img class="menu-admin-entry__image" src="{{ item.image_url }}" alt="{{ item.name }}">
             {% endif %}
-            <form method="post" class="admin-entry__form" data-menu-item-form>
+            <form method="post" enctype="multipart/form-data" class="admin-entry__form" data-menu-item-form>
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="item_id" value="{{ item.id }}">
               <input type="hidden" name="item_updated_at" value="{{ item.updated_at }}">
@@ -1209,6 +1214,11 @@
                 <label>
                   Image URL
                   <input type="text" name="image_url" maxlength="500" value="{{ item.image_url }}" placeholder="https://... or /static/..." inputmode="url">
+                </label>
+                <label>
+                  Replace Image
+                  <input type="file" name="image_upload" accept="image/png,image/jpeg,image/gif,image/webp">
+                  <span class="form-helper">Choose a PNG, JPG, GIF, or WebP image up to 5 MB. Leave blank to keep the current image.</span>
                 </label>
                 <label>
                   Description

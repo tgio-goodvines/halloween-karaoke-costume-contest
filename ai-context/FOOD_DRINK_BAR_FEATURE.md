@@ -22,7 +22,8 @@
 - `GET /api/bartender-queue`: authenticated bartender/admin JSON endpoint
   returning the rendered queue fragment and a deterministic queue version for
   real-time bartender page refreshes.
-- `/admin`: includes menu management, specialty/standard drink classification,
+- `/admin`: includes menu management, URL-based or local-file menu artwork,
+  specialty/standard drink classification,
   per-account specialty allowance controls, confirmed bar-history reset,
   bartender tip settings, bar operations summary, bartender-view link, and user
   role assignment.
@@ -146,10 +147,11 @@ active queue, completed history, or available menu item exists.
   responsive ingredient/instruction references, compact staged/backlog disclosures,
   status forms, and recent completed orders, shared by the full page and queue
   JSON endpoint.
-- `templates/admin.html`: menu CRUD with image URL preview, availability toggle,
-  specialty/standard drink controls, orderable toggle, separate ingredients and
-  instructions, specialty allowance controls, full bar reset, bartender tip
-  settings, user bartender role assignment, and bar operations summary.
+- `templates/admin.html`: menu CRUD with image URL preview, Redis-backed
+  PNG/JPG/GIF/WebP upload, availability toggle, specialty/standard drink
+  controls, orderable toggle, separate ingredients and instructions, specialty
+  allowance controls, full bar reset, bartender tip settings, user bartender
+  role assignment, and bar operations summary.
 - `static/styles.css`: menu cards, order cards, bartender cards, admin image previews, and responsive behavior.
 - `static/bartender.js`: authenticated polling refresh for the bartender queue
   fragment with order-relative disclosure, scroll, and focus restoration.
@@ -254,3 +256,7 @@ promotion inclusion/exclusion, and truly empty bar-stage collapse.
 - Menu updates and deletes fail closed unless the submitted ID identifies one
   row, stale forms are rejected through `updated_at`, and menu mutations create
   temporary recovery backups before changing Redis state.
+- Admins may upload menu artwork from their device in addition to entering an
+  image URL. Validated files up to 5 MB are stored under Redis
+  `halloween:menu-image:<id>:<extension>` keys and served from immutable
+  `/menu-images/<id>.<extension>` URLs so every API instance sees the same art.

@@ -38,6 +38,8 @@
 - On the party date, `/party/menu` is a consolidated Menu & Orders workspace
   with Browse Menu and My Orders views. It shows admin-managed cards with
   images, descriptions, and availability.
+- Admin menu records accept either a remote/static image URL or a validated
+  local PNG, JPG, GIF, or WebP upload stored in Redis and served by the app.
 - On the party date, signed-in attendees can order available, orderable drinks
   from `/party/menu`; food items are currently view-only, and drinks can be
   listed as bar-pickup/general availability without enabling portal orders.

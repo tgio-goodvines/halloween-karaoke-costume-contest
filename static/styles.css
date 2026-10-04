@@ -1055,8 +1055,22 @@ main.container {
 .tip-page__qr-grid {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
   gap: 1rem;
+}
+
+.tip-page__payment-layout {
+  width: min(100%, 64rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(17rem, 0.92fr);
+  align-items: start;
+  gap: clamp(1rem, 3vw, 2rem);
+}
+
+.tip-page__payment-layout--qr-only,
+.tip-page__payment-layout--methods-only {
+  width: min(100%, 38rem);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .tip-page__qr-card {
@@ -1072,6 +1086,95 @@ main.container {
 .tip-page__qr-card h3 {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.tip-payment-options {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid rgba(255, 49, 49, 0.48);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255, 49, 49, 0.1), rgba(7, 7, 10, 0.82));
+  box-shadow: 0 0 34px rgba(255, 49, 49, 0.12);
+  text-align: left;
+}
+
+.tip-payment-options__heading {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.tip-payment-options__heading > * {
+  margin: 0;
+}
+
+.tip-payment-options__list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.tip-payment-option {
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+  padding: clamp(1rem, 3vw, 1.35rem);
+  border: 1px solid rgba(255, 49, 49, 0.5);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: inset 3px 0 0 rgba(255, 49, 49, 0.8);
+}
+
+.tip-payment-option__provider {
+  margin: 0;
+  color: #ff8a8a;
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tip-payment-option__value {
+  max-width: 100%;
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: clamp(1.25rem, 4vw, 1.85rem);
+  font-weight: 900;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-shadow: 0 0 18px rgba(255, 49, 49, 0.32);
+  user-select: all;
+}
+
+.slide__payment-option {
+  width: min(100%, 32rem);
+  display: grid;
+  gap: 0.3rem;
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(255, 49, 49, 0.58);
+  border-radius: 14px;
+  background: rgba(255, 49, 49, 0.11);
+  box-shadow: inset 3px 0 0 rgba(255, 49, 49, 0.84), 0 0 24px rgba(255, 49, 49, 0.12);
+}
+
+.slide__payment-provider {
+  color: #ff8a8a;
+  font-family: "Outfit", "Figtree", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.slide__payment-value {
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: clamp(1.15rem, 3.5vw, 1.65rem);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  user-select: all;
 }
 
 .tip-qr-admin {
@@ -1102,8 +1205,14 @@ main.container {
   padding: 0 1rem 1rem;
 }
 
-.tip-page__methods {
-  justify-content: center;
+@media (max-width: 760px) {
+  .tip-page__payment-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tip-payment-options {
+    width: 100%;
+  }
 }
 
 .bartender-grid {

@@ -7,27 +7,41 @@
   <h2>Tip {{ bartender_tip_settings.display_name or 'the Bartender' }}</h2>
   <p>{{ bartender_tip_settings.note }}</p>
 
-  {% if bartender_tip_qr_codes %}
-    <div class="tip-page__qr-grid">
-      {% for qr_code in bartender_tip_qr_codes %}
-        <article class="tip-page__qr-card">
-          <img src="{{ qr_code.image_url }}" alt="Payment QR code for {{ qr_code.name }}" class="tip-page__image">
-          <h3>{{ qr_code.name }}</h3>
-          <p class="order-card__status">{{ qr_code.method_label }}</p>
-          {% if qr_code.method_value %}<p>{{ qr_code.method_value }}</p>{% endif %}
-        </article>
-      {% endfor %}
+  {% if bartender_tip_qr_codes or bartender_tip_methods %}
+    <div class="tip-page__payment-layout{% if not bartender_tip_methods %} tip-page__payment-layout--qr-only{% elif not bartender_tip_qr_codes %} tip-page__payment-layout--methods-only{% endif %}">
+      {% if bartender_tip_qr_codes %}
+        <div class="tip-page__qr-grid">
+          {% for qr_code in bartender_tip_qr_codes %}
+            <article class="tip-page__qr-card">
+              <img src="{{ qr_code.image_url }}" alt="Payment QR code for {{ qr_code.name }}" class="tip-page__image">
+              <h3>{{ qr_code.name }}</h3>
+              <p class="tip-payment-option__provider">{{ qr_code.method_label }}</p>
+              {% if qr_code.method_value %}<p class="tip-payment-option__value">{{ qr_code.method_value }}</p>{% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if bartender_tip_methods %}
+        <section class="tip-payment-options" aria-labelledby="tip-payment-options-heading">
+          <div class="tip-payment-options__heading">
+            <p class="admin-panel__eyebrow">Payment Details</p>
+            <h3 id="tip-payment-options-heading">{% if bartender_tip_qr_codes %}Other Ways to Tip{% else %}Choose a Payment Method{% endif %}</h3>
+            <p>Use the payment information below in the matching app.</p>
+          </div>
+          <div class="tip-payment-options__list">
+            {% for method in bartender_tip_methods %}
+              <article class="tip-payment-option">
+                <p class="tip-payment-option__provider">{{ method.label }}</p>
+                <p class="tip-payment-option__value">{{ method.value }}</p>
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
     </div>
   {% else %}
     <p class="admin-empty">No QR code image is configured yet.</p>
-  {% endif %}
-
-  {% if bartender_tip_methods %}
-    <div class="menu-card__badges tip-page__methods">
-      {% for method in bartender_tip_methods %}
-        <span>{{ method.label }}: {{ method.value }}</span>
-      {% endfor %}
-    </div>
   {% endif %}
 
   <div class="contest-actions">

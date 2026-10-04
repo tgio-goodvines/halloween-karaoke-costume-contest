@@ -196,11 +196,10 @@
         {% endif %}
         <h3>{{ slide.title }}</h3>
         <p>{{ slide.content }}</p>
-        {% if slide.methods %}
-          <div class="menu-card__badges">
-            {% for method in slide.methods %}
-              <span>{{ method.label }}: {{ method.value }}</span>
-            {% endfor %}
+        {% if slide.payment_method_label %}
+          <div class="slide__payment-option">
+            <span class="slide__payment-provider">{{ slide.payment_method_label }}</span>
+            {% if slide.payment_method_value %}<strong class="slide__payment-value">{{ slide.payment_method_value }}</strong>{% endif %}
           </div>
         {% endif %}
         {% if slide.cta_url %}

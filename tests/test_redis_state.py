@@ -3891,15 +3891,18 @@ class RedisStateTests(unittest.TestCase):
                     "tip_enabled": "yes",
                     "tip_display_name": "Your Bartenders",
                     "tip_note": "Thanks for keeping the bar moving.",
+                    "tip_zelle": "casey@example.com",
+                    "tip_paypal": "paypal.me/casey",
                     "tip_venmo": "@casey",
+                    "tip_cash_app": "$casey",
                 },
             )
             admin_response = client.post(
                 "/admin/bar",
                 data={
                     "action": "add_bartender_tip_qr",
-                    "tip_qr_name": "Casey — Venmo",
-                    "tip_qr_payment_method": "venmo",
+                    "tip_qr_name": "Casey — Zelle",
+                    "tip_qr_payment_method": "zelle",
                     "tip_qr_image_url": "https://example.test/tip.png",
                     "tip_qr_enabled": "yes",
                 },
@@ -3916,13 +3919,22 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, admin_response.status_code)
         self.assertTrue(state["bartender_tip_settings"]["enabled"])
         self.assertEqual(200, settings_response.status_code)
-        self.assertIn("Tip Casey — Venmo", overview_html)
+        self.assertIn("Tip Casey — Zelle", overview_html)
         self.assertIn("https://example.test/tip.png", overview_html)
+        self.assertIn("casey@example.com", overview_html)
+        self.assertIn("paypal.me/casey", overview_html)
         self.assertIn("@casey", overview_html)
+        self.assertIn("$casey", overview_html)
         self.assertIn("Tip Bartender", history_html)
         self.assertIn("/party/bartender-tip", history_html)
-        self.assertIn("Payment QR code for Casey — Venmo", tip_html)
+        self.assertIn("Payment QR code for Casey — Zelle", tip_html)
+        self.assertIn("casey@example.com", tip_html)
+        self.assertIn("Other Ways to Tip", tip_html)
+        self.assertIn("paypal.me/casey", tip_html)
         self.assertIn("@casey", tip_html)
+        self.assertIn("$casey", tip_html)
+        self.assertIn("tip-payment-option__value", tip_html)
+        self.assertNotIn("tip-page__methods", tip_html)
 
     def test_admin_can_upload_bartender_tip_qr_image(self):
         self.save_current_state()

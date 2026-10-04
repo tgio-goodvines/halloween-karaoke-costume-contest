@@ -252,8 +252,10 @@
   enabled, ordered QR entry for each supported payment method: Zelle, PayPal,
   Venmo, and Cash App. Each entry accepts a URL or validated local
   PNG/JPG/GIF/WebP upload stored in Redis. Enabled entries appear as named,
-  provider-specific party-day Event Highlight slides, while My Orders keeps one
-  tip callout.
+  provider-specific party-day Event Highlight slides, while configured methods
+  without QR images receive their own prominent text-only slides. The dedicated
+  tip page balances QR cards with large, high-contrast payment-detail cards;
+  My Orders keeps one tip callout.
 - Admin can add, edit, and delete party account users, reset account passwords
   directly, and assign or remove the `bartender` role.
 - Admin can open the bartender view and see bar operations summary counts.

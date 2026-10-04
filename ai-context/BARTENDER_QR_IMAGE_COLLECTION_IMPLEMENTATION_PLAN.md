@@ -7,8 +7,10 @@ migration, one independently named QR entry per supported payment method,
 admin CRUD/reordering, attendee QR cards, provider-specific dashboard slides,
 robust Pillow validation, legacy release-file preservation, and regression
 coverage are complete. The existing admin FormData transport was retained; no
-QR-specific JavaScript controller was necessary. Production deployment and its
-multi-instance smoke test remain external rollout steps.
+QR-specific JavaScript controller was necessary. The initial implementation was
+deployed successfully on 2026-10-04. A follow-up presentation correction makes
+text-only PayPal, Venmo, and Cash App details full payment cards beside a Zelle
+QR and gives non-QR methods their own prominent dashboard slides.
 
 ## Goal
 

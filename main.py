@@ -9377,40 +9377,40 @@ def party_dashboard():
     if party_day:
         slides = list(PARTY_DAY_DASHBOARD_SLIDES)
         if bartender_tip_settings.get("enabled"):
-            tip_methods = bartender_tip_methods()
-            method_text = "; ".join(f"{method['label']}: {method['value']}" for method in tip_methods)
             tip_content = str(bartender_tip_settings.get("note", "") or "Tips are never required, always appreciated.")
-            if method_text:
-                tip_content = f"{tip_content} {method_text}."
             tip_qr_codes = enabled_bartender_tip_qr_codes()
-            if tip_qr_codes:
-                for qr_code in tip_qr_codes:
-                    qr_methods = []
-                    if qr_code.get("method_value"):
-                        qr_methods.append(
-                            {
-                                "label": str(qr_code.get("method_label", "") or "Payment"),
-                                "value": str(qr_code.get("method_value", "") or ""),
-                            }
-                        )
-                    slides.append(
-                        {
-                            "title": f"Tip {qr_code['name']} with {qr_code['method_label']}",
-                            "content": str(bartender_tip_settings.get("note", "") or "Tips are never required, always appreciated."),
-                            "image_url": str(qr_code.get("image_url", "") or ""),
-                            "is_qr_code": True,
-                            "methods": qr_methods,
-                            "cta_url": url_for("party_bartender_tip"),
-                            "cta_label": "View Tip Options",
-                        }
-                    )
-            else:
+            for qr_code in tip_qr_codes:
+                slides.append(
+                    {
+                        "title": f"Tip {qr_code['name']} with {qr_code['method_label']}",
+                        "content": tip_content,
+                        "image_url": str(qr_code.get("image_url", "") or ""),
+                        "is_qr_code": True,
+                        "payment_method_label": str(qr_code.get("method_label", "") or "Payment"),
+                        "payment_method_value": str(qr_code.get("method_value", "") or ""),
+                        "cta_url": url_for("party_bartender_tip"),
+                        "cta_label": "View Tip Options",
+                    }
+                )
+            text_only_methods = bartender_tip_methods_without_qr()
+            for method in text_only_methods:
+                slides.append(
+                    {
+                        "title": f"Tip with {method['label']}",
+                        "content": tip_content,
+                        "image_url": "",
+                        "payment_method_label": method["label"],
+                        "payment_method_value": method["value"],
+                        "cta_url": url_for("party_bartender_tip"),
+                        "cta_label": "View All Tip Options",
+                    }
+                )
+            if not tip_qr_codes and not text_only_methods:
                 slides.append(
                     {
                         "title": f"Tip {bartender_tip_settings.get('display_name') or 'the Bartender'}",
                         "content": tip_content,
                         "image_url": "",
-                        "methods": tip_methods,
                         "cta_url": url_for("party_bartender_tip"),
                         "cta_label": "View Tip Options",
                     }

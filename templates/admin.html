@@ -1192,6 +1192,7 @@
             <form method="post" class="admin-entry__form" data-menu-item-form>
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="item_id" value="{{ item.id }}">
+              <input type="hidden" name="item_updated_at" value="{{ item.updated_at }}">
               <div class="admin-entry__fields">
                 <h4 class="menu-admin-fieldset-title">Guest-facing details</h4>
                 <label>

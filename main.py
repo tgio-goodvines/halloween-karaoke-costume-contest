@@ -359,7 +359,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 23
+STATE_SCHEMA_VERSION = 24
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -2151,6 +2151,11 @@ def menu_item_to_dict(item: dict[str, object]) -> dict[str, object]:
         "beverage_type": beverage_type if category == "drink" else "non_alcoholic",
         "orderable": bool(item.get("orderable", True)) if category == "drink" else False,
         "created_at": str(item.get("created_at", "") or _utc_now_iso()),
+        "updated_at": str(
+            item.get("updated_at", "")
+            or item.get("created_at", "")
+            or _utc_now_iso()
+        ),
     }
 
 
@@ -2162,7 +2167,21 @@ def normalize_menu_item(data: dict[str, object]) -> dict[str, object] | None:
 
 
 def find_menu_item(item_id: str) -> dict[str, object] | None:
-    return next((item for item in menu_items if str(item.get("id", "")) == item_id), None)
+    matches = [item for item in menu_items if str(item.get("id", "")) == item_id]
+    return matches[0] if len(matches) == 1 else None
+
+
+def find_menu_item_index(item_id: str) -> tuple[int | None, str]:
+    matches = [
+        index
+        for index, item in enumerate(menu_items)
+        if str(item.get("id", "")) == item_id
+    ]
+    if not matches:
+        return None, "Menu item could not be found."
+    if len(matches) > 1:
+        return None, "Menu item data has a duplicate ID. Refresh after the menu repair completes."
+    return matches[0], ""
 
 
 def normalize_drink_order(data: dict[str, object]) -> dict[str, object] | None:
@@ -5331,6 +5350,100 @@ def backup_legacy_drink_preparation_state(data: dict[str, object]) -> str | None
     return backup_key
 
 
+def backup_legacy_menu_identity_state(data: dict[str, object]) -> str | None:
+    """Retain the raw pre-schema-24 state before menu IDs are repaired."""
+    try:
+        schema_version = int(data.get("schema_version", 1) or 1)
+    except (TypeError, ValueError):
+        schema_version = 1
+    if schema_version >= 24:
+        return None
+
+    backup_key = redis_key("state:backup:schema24-menu-identity")
+    if redis_client.exists(backup_key):
+        return backup_key
+
+    backup_payload = copy.deepcopy(data)
+    backup_payload["backup_reason"] = "schema24-menu-identity"
+    backup_payload["backup_key"] = backup_key
+    redis_client.setex(
+        backup_key,
+        STATE_BACKUP_TTL_SECONDS,
+        json.dumps(backup_payload, sort_keys=True),
+    )
+    return backup_key
+
+
+def repair_menu_item_identities(data: dict[str, object]) -> dict[str, int]:
+    """Repair missing/duplicate menu IDs and unambiguous order references."""
+    raw_items = data.get("menu_items", [])
+    raw_orders = data.get("drink_orders", [])
+    if not isinstance(raw_items, list):
+        return {"reassigned_items": 0, "relinked_orders": 0, "ambiguous_orders": 0}
+
+    seen_ids: set[str] = set()
+    candidates_by_original_id: dict[str, list[dict[str, str]]] = {}
+    reassigned_items = 0
+
+    for index, raw_item in enumerate(raw_items):
+        if not isinstance(raw_item, dict):
+            continue
+        original_id = str(raw_item.get("id", "") or "").strip()
+        item_id = original_id
+        if not item_id or item_id in seen_ids:
+            seed = json.dumps(raw_item, sort_keys=True, default=str)
+            salt = 0
+            while True:
+                candidate = hashlib.sha256(
+                    f"menu-item:{index}:{salt}:{seed}".encode("utf-8")
+                ).hexdigest()[:32]
+                if candidate not in seen_ids:
+                    item_id = candidate
+                    break
+                salt += 1
+            raw_item["id"] = item_id
+            reassigned_items += 1
+        seen_ids.add(item_id)
+        if original_id:
+            candidates_by_original_id.setdefault(original_id, []).append(
+                {
+                    "id": item_id,
+                    "name": str(raw_item.get("name", "") or "").strip().casefold(),
+                }
+            )
+
+    duplicate_groups = {
+        original_id: candidates
+        for original_id, candidates in candidates_by_original_id.items()
+        if len(candidates) > 1
+    }
+    relinked_orders = 0
+    ambiguous_orders = 0
+    if isinstance(raw_orders, list):
+        for raw_order in raw_orders:
+            if not isinstance(raw_order, dict):
+                continue
+            original_id = str(raw_order.get("menu_item_id", "") or "").strip()
+            candidates = duplicate_groups.get(original_id)
+            if not candidates:
+                continue
+            order_name = str(raw_order.get("item_name", "") or "").strip().casefold()
+            matches = [candidate for candidate in candidates if candidate["name"] == order_name]
+            if len(matches) == 1:
+                repaired_id = matches[0]["id"]
+                if repaired_id != original_id:
+                    raw_order["menu_item_id"] = repaired_id
+                    relinked_orders += 1
+            else:
+                ambiguous_orders += 1
+
+    return {
+        "reassigned_items": reassigned_items,
+        "relinked_orders": relinked_orders,
+        "ambiguous_orders": ambiguous_orders,
+    }
+
+
 def sanitize_game_data_in_state_backups(
     *,
     game_keys: set[str] | None = None,
@@ -5776,8 +5889,24 @@ def load_state_from_redis() -> bool:
     if not isinstance(parsed_state, dict):
         raise RuntimeError(f"Redis state at {redis_key('state')} must be a JSON object.")
 
+    try:
+        loaded_schema_version = int(parsed_state.get("schema_version", 1) or 1)
+    except (TypeError, ValueError):
+        loaded_schema_version = 1
+
     backup_legacy_drink_preparation_state(parsed_state)
+    backup_legacy_menu_identity_state(parsed_state)
+    menu_repair = repair_menu_item_identities(parsed_state)
     apply_state_snapshot(parsed_state)
+    if loaded_schema_version < 24 or menu_repair["reassigned_items"]:
+        save_state_to_redis()
+        if menu_repair["reassigned_items"]:
+            app.logger.warning(
+                "Repaired %s menu item ID(s), relinked %s order(s), and left %s ambiguous order reference(s) unchanged.",
+                menu_repair["reassigned_items"],
+                menu_repair["relinked_orders"],
+                menu_repair["ambiguous_orders"],
+            )
     return True
 
 
@@ -11144,7 +11273,8 @@ def admin_portal(admin_view: str):
         )
         return True
 
-    def menu_item_from_form(existing_id: str | None = None, existing_created_at: str | None = None) -> dict[str, object] | None:
+    def menu_item_from_form(existing_item: dict[str, object] | None = None) -> dict[str, object] | None:
+        now = _utc_now_iso()
         image_url = request.form.get("image_url", "").strip()
         normalized_image_url = safe_image_url(image_url)
         if image_url and not normalized_image_url:
@@ -11154,7 +11284,11 @@ def admin_portal(admin_view: str):
         drink_type = normalize_drink_type(request.form.get("drink_type", "standard"))
         beverage_type = normalize_beverage_type(request.form.get("beverage_type", "alcoholic"))
         name = request.form.get("name", "").strip()
-        description = request.form.get("description", "").strip()
+        description = (
+            request.form.get("description", "").strip()
+            if "description" in request.form
+            else str((existing_item or {}).get("description", "") or "").strip()
+        )
         raw_recipe = request.form.get("recipe", "")
         recipe = normalize_drink_recipe(raw_recipe)
         raw_instructions = request.form.get("instructions", "")
@@ -11180,7 +11314,7 @@ def admin_portal(admin_view: str):
             return None
 
         return {
-            "id": existing_id or uuid4().hex,
+            "id": str((existing_item or {}).get("id", "") or uuid4().hex),
             "name": name,
             "category": category,
             "description": description,
@@ -11191,7 +11325,8 @@ def admin_portal(admin_view: str):
             "drink_type": drink_type if category == "drink" else "standard",
             "beverage_type": beverage_type if category == "drink" else "non_alcoholic",
             "orderable": orderable if category == "drink" else False,
-            "created_at": existing_created_at or _utc_now_iso(),
+            "created_at": str((existing_item or {}).get("created_at", "") or now),
+            "updated_at": now,
         }
 
     def dj_song_from_form(existing_song: dict[str, object] | None = None) -> dict[str, object] | None:
@@ -13065,40 +13200,53 @@ def admin_portal(admin_view: str):
         elif action == "add_menu_item":
             item = menu_item_from_form()
             if item:
-                menu_items.append(item)
-                messages.append(f"Added {item['name']} to the menu.")
+                try:
+                    write_state_backup_if_available("menu-add")
+                except RuntimeError as exc:
+                    errors.append(f"The menu could not be backed up before adding the item: {exc}")
+                else:
+                    menu_items.append(item)
+                    messages.append(f"Added {item['name']} to the menu.")
 
         elif action == "update_menu_item":
             item_id = request.form.get("item_id", "").strip()
-            item_index = next(
-                (index for index, item in enumerate(menu_items) if str(item.get("id", "")) == item_id),
-                None,
-            )
+            item_index, item_error = find_menu_item_index(item_id)
             if item_index is None:
-                errors.append("Menu item could not be found.")
+                errors.append(item_error)
             else:
                 existing_item = menu_items[item_index]
-                item = menu_item_from_form(
-                    existing_id=str(existing_item.get("id", "")),
-                    existing_created_at=str(existing_item.get("created_at", "")),
-                )
-                if item:
-                    menu_items[item_index] = item
-                    messages.append(f"Updated menu item {item['name']}.")
+                submitted_revision = request.form.get("item_updated_at", "").strip()
+                current_revision = str(existing_item.get("updated_at", "") or "").strip()
+                if submitted_revision and submitted_revision != current_revision:
+                    errors.append(
+                        "That menu item changed after this form loaded. Refresh and apply your changes again."
+                    )
+                else:
+                    item = menu_item_from_form(existing_item)
+                    if item:
+                        try:
+                            write_state_backup_if_available("menu-update")
+                        except RuntimeError as exc:
+                            errors.append(f"The menu could not be backed up before updating the item: {exc}")
+                        else:
+                            menu_items[item_index] = item
+                            messages.append(f"Updated menu item {item['name']}.")
 
         elif action == "delete_menu_item":
             item_id = request.form.get("item_id", "").strip()
-            item_index = next(
-                (index for index, item in enumerate(menu_items) if str(item.get("id", "")) == item_id),
-                None,
-            )
+            item_index, item_error = find_menu_item_index(item_id)
             if item_index is None:
-                errors.append("Menu item could not be found.")
+                errors.append(item_error)
             elif any(order.get("menu_item_id") == item_id and order.get("status") != "complete" for order in drink_orders):
                 errors.append("Menu items with active drink orders cannot be removed. Mark it unavailable instead.")
             else:
-                removed_item = menu_items.pop(item_index)
-                messages.append(f"Removed {removed_item.get('name')} from the menu.")
+                try:
+                    write_state_backup_if_available("menu-delete")
+                except RuntimeError as exc:
+                    errors.append(f"The menu could not be backed up before removing the item: {exc}")
+                else:
+                    removed_item = menu_items.pop(item_index)
+                    messages.append(f"Removed {removed_item.get('name')} from the menu.")
 
         elif action == "set_user_roles":
             account_id = request.form.get("account_id", "").strip()

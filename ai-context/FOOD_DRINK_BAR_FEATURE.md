@@ -37,7 +37,8 @@ and schema-19 pickup acknowledgement:
   `description`, `image_url`, ingredient-only compatibility field `recipe`,
   ordered `instructions`, `available`, `drink_type`
   (`standard`/`specialty`), `beverage_type`
-  (`alcoholic`/`non_alcoholic`), `orderable`, and `created_at`.
+  (`alcoholic`/`non_alcoholic`), `orderable`, `created_at`, and schema-24
+  `updated_at` revision metadata.
 - `drink_orders`: list of drink order dictionaries with attendee/account
   snapshot, menu item/ingredient/instruction snapshots, `drink_type`, `beverage_type`, `orderable`,
   `specialty_sequence_number`, `specialty_extra_request`,
@@ -242,3 +243,14 @@ promotion inclusion/exclusion, and truly empty bar-stage collapse.
   workbench, no horizontal overflow, accessible Admin Bar controls, and two
   completed drinks visibly rendered beneath two active queue entries without
   document overflow.
+
+## Schema-24 Menu Identity Repair (2026-10-04)
+
+- Pre-schema-24 state receives one raw 30-day backup before missing or
+  duplicate menu IDs are repaired deterministically.
+- Orders sharing a formerly duplicated ID are relinked only when their stored
+  drink name selects exactly one repaired menu item; ambiguous references are
+  reported and left unchanged.
+- Menu updates and deletes fail closed unless the submitted ID identifies one
+  row, stale forms are rejected through `updated_at`, and menu mutations create
+  temporary recovery backups before changing Redis state.

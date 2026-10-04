@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 23. The following globals in `main.py` are
+`halloween:state` with schema version 24. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -352,6 +352,13 @@ use email-safe inline styling aligned with the dark lab-terminal UI system.
 
 Schema version 1 Redis state with index-aligned `costume_votes` is upgraded on
 load into ID-keyed `costume_ballots`.
+
+Schema version 24 protects menu identity. Loading older state retains a raw
+30-day backup at `halloween:state:backup:schema24-menu-identity`, repairs
+missing or duplicate menu IDs deterministically, and relinks drink orders only
+when their stored drink name identifies one repaired item. Menu mutations
+require exactly one matching ID, reject stale `updated_at` revisions, and save
+a recovery backup before add, update, or delete.
 
 ## Design Shape
 

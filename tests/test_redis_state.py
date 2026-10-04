@@ -3994,7 +3994,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(23, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(24, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])
@@ -4029,6 +4029,124 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("2 oz rum\nShake with ice", backup["menu_items"][0]["recipe"])
         self.assertEqual("2 oz rum", main.menu_items[0]["recipe"])
         self.assertEqual("Shake with ice", main.menu_items[0]["instructions"])
+
+    def test_schema_24_repairs_duplicate_menu_ids_and_relinks_orders_by_name(self):
+        legacy_state = main.snapshot_state()
+        legacy_state["schema_version"] = 23
+        legacy_state["menu_items"] = [
+            {
+                "id": "duplicate-drink-id",
+                "name": "Other Drink",
+                "category": "drink",
+                "description": "Other description",
+                "recipe": "2 oz rum",
+                "instructions": "Stir with ice",
+            },
+            {
+                "id": "duplicate-drink-id",
+                "name": "Vampire's Kiss",
+                "category": "drink",
+                "description": "Vampire description",
+                "recipe": "2 oz vodka",
+                "instructions": "Shake with ice",
+            },
+        ]
+        legacy_state["drink_orders"] = [
+            {
+                "id": "order-vampire",
+                "menu_item_id": "duplicate-drink-id",
+                "item_name": "Vampire's Kiss",
+                "status": "received",
+            }
+        ]
+        self.fake_redis.set(main.redis_key("state"), json.dumps(legacy_state))
+
+        self.assertTrue(main.load_state_from_redis())
+
+        self.assertEqual(["Other Drink", "Vampire's Kiss"], [item["name"] for item in main.menu_items])
+        self.assertEqual(
+            ["Other description", "Vampire description"],
+            [item["description"] for item in main.menu_items],
+        )
+        repaired_ids = [item["id"] for item in main.menu_items]
+        self.assertEqual(2, len(set(repaired_ids)))
+        self.assertEqual(repaired_ids[1], main.drink_orders[0]["menu_item_id"])
+
+        backup_key = main.redis_key("state:backup:schema24-menu-identity")
+        backup = json.loads(self.fake_redis.store[backup_key])
+        self.assertEqual(
+            ["duplicate-drink-id", "duplicate-drink-id"],
+            [item["id"] for item in backup["menu_items"]],
+        )
+        persisted = self.redis_state()
+        self.assertEqual(main.STATE_SCHEMA_VERSION, persisted["schema_version"])
+        self.assertEqual(2, len({item["id"] for item in persisted["menu_items"]}))
+
+    def test_admin_menu_update_targets_one_item_and_rejects_a_stale_form(self):
+        main.menu_items = [
+            main.menu_item_to_dict(
+                {
+                    "id": "other-drink",
+                    "name": "Other Drink",
+                    "category": "drink",
+                    "description": "Other description",
+                    "instructions": "Stir with ice",
+                    "updated_at": "2026-10-04T12:00:00+00:00",
+                }
+            ),
+            main.menu_item_to_dict(
+                {
+                    "id": "vampire-kiss",
+                    "name": "Vampire's Kiss",
+                    "category": "drink",
+                    "description": "Vampire description",
+                    "instructions": "Shake with ice",
+                    "updated_at": "2026-10-04T12:00:00+00:00",
+                }
+            ),
+        ]
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            updated = client.post(
+                "/admin/menu",
+                data={
+                    "action": "update_menu_item",
+                    "item_id": "vampire-kiss",
+                    "item_updated_at": "2026-10-04T12:00:00+00:00",
+                    "name": "Vampire's Kiss",
+                    "category": "drink",
+                    "description": "Vampire description",
+                    "recipe": "2 oz vodka",
+                    "instructions": "Shake with ice\nStrain into a coupe",
+                    "available": "yes",
+                    "drink_type": "specialty",
+                    "beverage_type": "alcoholic",
+                    "orderable": ["no", "yes"],
+                },
+            )
+            stale = client.post(
+                "/admin/menu",
+                data={
+                    "action": "update_menu_item",
+                    "item_id": "vampire-kiss",
+                    "item_updated_at": "2026-10-04T12:00:00+00:00",
+                    "name": "Overwritten Drink",
+                    "category": "drink",
+                    "description": "",
+                },
+            )
+
+        self.assertEqual(200, updated.status_code)
+        self.assertEqual(200, stale.status_code)
+        self.assertIn("changed after this form loaded", stale.get_data(as_text=True))
+        self.assertEqual(["Other Drink", "Vampire's Kiss"], [item["name"] for item in main.menu_items])
+        self.assertEqual(
+            ["Other description", "Vampire description"],
+            [item["description"] for item in main.menu_items],
+        )
+        self.assertEqual("Shake with ice\nStrain into a coupe", main.menu_items[1]["instructions"])
 
     def test_bartender_queue_uses_fifo_for_specialty_and_extra_requests(self):
         account = self.add_user_account(username="Jamie", user_id="user-1", email="jamie@example.com")

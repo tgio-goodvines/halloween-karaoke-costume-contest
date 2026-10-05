@@ -52,6 +52,8 @@ from youtube_karaoke import (
 )
 from party_games import (
     BAD_ADVICE_GAME_KEY,
+    CURSED_OBJECTIVES_GAME_KEY,
+    CURSED_OBJECTIVES_PER_PLAYER,
     DEFAULT_GAMES_STATE,
     FILL_BLANK_GAME_KEY,
     GAME_CATALOG,
@@ -70,17 +72,21 @@ from party_games import (
     TWO_TRUTHS_GAME_KEY,
     WRONG_ANSWERS_GAME_KEY,
     calculate_mmf_results,
+    calculate_cursed_objectives_results,
     calculate_prompt_results,
     calculate_two_truths_results,
     advance_prompt_game_automation,
     build_simulated_game_state,
     empty_mmf_game_state,
+    empty_cursed_objectives_game_state,
     empty_prompt_game_state,
     empty_two_truths_game_state,
     finalize_prompt_round,
     create_automatic_prompt_round,
     game_by_slug,
     game_winners,
+    assign_cursed_objectives,
+    cursed_objectives_statistics,
     generate_game_alias,
     mmf_statistics,
     normalize_games_state,
@@ -383,7 +389,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 25
+STATE_SCHEMA_VERSION = 26
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -817,6 +823,7 @@ STATE_MUTATION_ENDPOINTS = {
     "party_game_submission",
     "party_game_guess",
     "party_game_join",
+    "party_cursed_objective_toggle",
     "party_mmf_answers",
     "party_prompt_response",
     "party_prompt_vote",
@@ -917,6 +924,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_game_submission",
     "party_game_guess",
     "party_game_join",
+    "party_cursed_objective_toggle",
     "party_mmf_answers",
     "party_prompt_response",
     "party_prompt_vote",
@@ -5439,7 +5447,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         for account in user_accounts.values()
         if isinstance(account, dict) and account.get("id")
     }
-    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS):
+    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS, CURSED_OBJECTIVES_GAME_KEY):
         for user_id, participant in games_state[game_key].get("participants", {}).items():
             if isinstance(participant, dict) and not participant.get("display_name"):
                 participant["display_name"] = str(
@@ -6785,6 +6793,8 @@ def party_game_state(game_key: str) -> dict[str, object]:
         game = empty_mmf_game_state()
     elif game_key in PROMPT_GAME_KEYS:
         game = empty_prompt_game_state(game_key)
+    elif game_key == CURSED_OBJECTIVES_GAME_KEY:
+        game = empty_cursed_objectives_game_state()
     else:
         raise KeyError(game_key)
     games_state[game_key] = game
@@ -6948,6 +6958,8 @@ def game_public_score_rows(game_key: str, game: dict[str, object]) -> list[dict[
             row["detail"] = f"{int(score.get('attempts', 0) or 0)} guesses · {float(score.get('accuracy', 0) or 0):g}% accuracy"
         elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
             row["detail"] = f"{int(score.get('completed_rounds', 0) or 0)} of {MMF_ROUND_COUNT} rounds"
+        elif game_key == CURSED_OBJECTIVES_GAME_KEY:
+            row["detail"] = f"{int(score.get('completed_missions', points) or 0)} of {int(score.get('assigned_missions', CURSED_OBJECTIVES_PER_PLAYER) or CURSED_OBJECTIVES_PER_PLAYER)} objectives"
         else:
             row["detail"] = "Anonymous alias" if score.get("anonymous") else "Party account name"
         rows.append(row)
@@ -7001,6 +7013,14 @@ def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]
             {"label": "Rounds saved", "value": completed},
             {"label": "Possible", "value": possible},
             {"label": "Complete", "value": f"{round((completed / possible * 100) if possible else 0):g}%"},
+        ]
+    elif game_key == CURSED_OBJECTIVES_GAME_KEY:
+        stats = cursed_objectives_statistics(game)
+        view["metrics"] = [
+            {"label": "Players", "value": len(participants)},
+            {"label": "Completed", "value": stats["completed_missions"]},
+            {"label": "Assigned", "value": stats["assigned_missions"]},
+            {"label": "Complete", "value": f"{stats['completion_percent']:g}%"},
         ]
     else:
         current_round = prompt_round_for_game(game)
@@ -7793,6 +7813,17 @@ def prompt_admin_view(game_key: str) -> dict[str, object]:
     }
 
 
+def cursed_objectives_admin_view() -> dict[str, object]:
+    game = party_game_state(CURSED_OBJECTIVES_GAME_KEY)
+    return {
+        **copy.deepcopy(game),
+        "key": CURSED_OBJECTIVES_GAME_KEY,
+        "metadata": GAME_CATALOG[CURSED_OBJECTIVES_GAME_KEY],
+        "statistics": cursed_objectives_statistics(game),
+        "winners": game_winners(CURSED_OBJECTIVES_GAME_KEY, game),
+    }
+
+
 def game_admin_view(game_key: str) -> dict[str, object]:
     if game_key == TWO_TRUTHS_GAME_KEY:
         view = two_truths_admin_view()
@@ -7805,6 +7836,8 @@ def game_admin_view(game_key: str) -> dict[str, object]:
         return view
     if game_key == MURDER_MARRY_FUCK_GAME_KEY:
         return mmf_admin_view()
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        return cursed_objectives_admin_view()
     return prompt_admin_view(game_key)
 
 
@@ -8056,7 +8089,7 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             "type": "game_presentation",
             "title": title,
             "highlight": "Results are in",
-            "message": "The host is revealing tonight's blind responses.",
+            "message": "The host is revealing tonight's final results." if game_key == CURSED_OBJECTIVES_GAME_KEY else "The host is revealing tonight's blind responses.",
             "details": [f"{len(game.get('participants', {}))} players"],
         }
     ]
@@ -8073,7 +8106,7 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
                     person_id = str(person.get("id", ""))
                     detail_rows.append(f"{person.get('name', 'Unknown')}: {result.get('totals', {}).get(action, {}).get(person_id, 0)}")
                 slides.append({"type": "game_presentation", "title": f"Round {index + 1} · {labels[action]}", "highlight": ", ".join(winners) if winners else "No votes", "message": f"The party's {labels[action]} choice", "details": detail_rows})
-    else:
+    elif game_key in PROMPT_GAME_KEYS:
         for index, game_round in enumerate(game.get("rounds", [])):
             if game_round.get("status") != "revealed":
                 continue
@@ -8654,6 +8687,25 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 winners = game_winners(game_key, game)
                 entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Game champions"
+        elif game_key == CURSED_OBJECTIVES_GAME_KEY:
+            stats = cursed_objectives_statistics(game)
+            entry["primary"] = "Three private objectives. Complete the ritual before final call."
+            entry["secondary"] = "Every player receives a different mission set."
+            entry["metrics"] = [
+                {"label": "Players", "value": len(participants)},
+                {"label": "Completed", "value": stats.get("completed_missions", 0)},
+                {"label": "Assigned", "value": stats.get("assigned_missions", 0)},
+            ]
+            entry["steps"] = [
+                "Join to receive three private objectives",
+                "Complete them naturally during the party",
+                "Record each completion before final call",
+            ]
+            entry["action_label"] = "Reveal your objectives in Party Games"
+            if phase == "ended":
+                winners = game_winners(game_key, game)
+                entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners) or "Final results ready"
+                entry["secondary"] = "Cursed Objectives champion" if len(winners) == 1 else "Cursed Objectives champions"
         elif game_key in PROMPT_GAME_KEYS:
             current_round = prompt_round_for_game(game)
             if current_round:
@@ -11328,6 +11380,24 @@ def build_party_game_page_context(
                 round_ids[0] if round_ids else "",
             )
 
+    participant_missions = []
+    if game_key == CURSED_OBJECTIVES_GAME_KEY and participant:
+        objective_by_id = {
+            str(entry.get("id", "")): entry
+            for entry in game.get("objectives", [])
+            if isinstance(entry, dict)
+        }
+        completed_ids = set(participant.get("completed_mission_ids", []))
+        participant_missions = [
+            {
+                "id": mission_id,
+                "text": str(objective_by_id.get(mission_id, {}).get("text", "Secret objective")),
+                "completed": mission_id in completed_ids,
+            }
+            for mission_id in participant.get("mission_ids", [])
+            if mission_id in objective_by_id
+        ]
+
     revision_source = json.dumps(
         {
             "game": game,
@@ -11367,6 +11437,7 @@ def build_party_game_page_context(
         "identity_by_player": identity_by_player,
         "show_participation_form": show_participation_form,
         "selected_mmf_round_id": selected_mmf_round_id,
+        "participant_missions": participant_missions,
         "success": success,
         "error": error,
         "statement_max_length": GAME_STATEMENT_MAX_LENGTH,
@@ -11537,13 +11608,47 @@ def party_game_join(game_slug: str):
     if not user_id or not session.get("username"):
         return redirect(url_for("party_login", next=url_for("party_games", game=game_slug)))
     display_name = re.sub(r"\s+", " ", str(session.get("username", "") or "").strip())[:80]
-    participant = add_alias_participant(
-        game,
-        user_id,
-        display_name=display_name,
-    )
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        try:
+            participant = assign_cursed_objectives(game, user_id, display_name=display_name)
+        except ValueError:
+            return redirect(url_for("party_games", game=game_slug, error="All unique objective sets have been assigned. Ask a host to add capacity before joining."))
+    else:
+        participant = add_alias_participant(
+            game,
+            user_id,
+            display_name=display_name,
+        )
     broadcast_display_update()
     return redirect(url_for("party_games", game=game_slug, success="joined"))
+
+
+@app.route("/party/games/cursed-objectives/missions/<mission_id>/toggle", methods=["POST"])
+def party_cursed_objective_toggle(mission_id: str):
+    game = party_game_state(CURSED_OBJECTIVES_GAME_KEY)
+    slug = GAME_CATALOG[CURSED_OBJECTIVES_GAME_KEY]["slug"]
+    if not party_day_has_arrived() or not game.get("enabled"):
+        return redirect(url_for("party_dashboard"))
+    if game.get("phase") != "active":
+        return redirect(url_for("party_games", game=slug, error="Objectives are locked because the game is closed."))
+    user_id = str(session.get("user_id", "") or "")
+    participant = game_alias_participant(game, user_id)
+    if not participant or mission_id not in participant.get("mission_ids", []):
+        return redirect(url_for("party_games", game=slug, error="That objective is not assigned to you."))
+    completed = list(dict.fromkeys(str(value) for value in participant.get("completed_mission_ids", [])))
+    completed_at = participant.setdefault("completed_at", {})
+    if mission_id in completed:
+        completed.remove(mission_id)
+        completed_at.pop(mission_id, None)
+        success = "mission_reopened"
+    else:
+        completed.append(mission_id)
+        completed_at[mission_id] = _utc_now_iso()
+        success = "mission_completed"
+    participant["completed_mission_ids"] = completed
+    participant["updated_at"] = _utc_now_iso()
+    broadcast_display_update()
+    return redirect(url_for("party_games", game=slug, success=success))
 
 
 @app.route("/party/games/murder-marry-fuck/answers", methods=["POST"])
@@ -12909,6 +13014,8 @@ def admin_portal(admin_view: str):
                 elif action == "toggle_game_anonymity":
                     if game_key == TWO_TRUTHS_GAME_KEY:
                         errors.append("Two Truths and a Lie must use account names for identity guesses.")
+                    elif game_key == CURSED_OBJECTIVES_GAME_KEY:
+                        errors.append("Cursed Objectives uses signed-in names for its final leaderboard.")
                     elif game.get("phase") != "signup":
                         errors.append("Player identity can only be changed before the game opens.")
                     else:
@@ -12961,7 +13068,12 @@ def admin_portal(admin_view: str):
                             automation["remaining_seconds"] = 0
                         game["phase"] = "ended"
                         game["ended_at"] = finalized_at
-                        game["results"] = calculate_mmf_results(game, finalized_at=finalized_at) if game_key == MURDER_MARRY_FUCK_GAME_KEY else calculate_prompt_results(game, finalized_at=finalized_at)
+                        if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+                            game["results"] = calculate_mmf_results(game, finalized_at=finalized_at)
+                        elif game_key == CURSED_OBJECTIVES_GAME_KEY:
+                            game["results"] = calculate_cursed_objectives_results(game, finalized_at=finalized_at)
+                        else:
+                            game["results"] = calculate_prompt_results(game, finalized_at=finalized_at)
                         upsert_game_result_archive(game_key)
                         write_state_backup_if_available(f"game-{game_key}-ended")
                         messages.append(f"{title} ended and its scores were finalized.")
@@ -14806,7 +14918,7 @@ def export_games():
     if redis_state_available:
         load_state_from_redis()
     exported_games = copy.deepcopy(games_state)
-    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS):
+    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS, CURSED_OBJECTIVES_GAME_KEY):
         exported_game = exported_games.get(game_key, {})
         if not isinstance(exported_game, dict):
             continue
@@ -14822,7 +14934,14 @@ def export_games():
                 **(
                     {"completed_rounds": len(participant.get("answers", {}))}
                     if game_key == MURDER_MARRY_FUCK_GAME_KEY
-                    else {}
+                    else (
+                        {
+                            "completed_objectives": len(set(participant.get("completed_mission_ids", []))),
+                            "assigned_objectives": len(participant.get("mission_ids", [])),
+                        }
+                        if game_key == CURSED_OBJECTIVES_GAME_KEY
+                        else {}
+                    )
                 ),
             }
             for participant in participants
@@ -14832,7 +14951,7 @@ def export_games():
         {
             "schema_version": STATE_SCHEMA_VERSION,
             "exported_at": _utc_now_iso(),
-            "privacy_note": "Game exports use the admin-selected public identity mode without account IDs. Murder, Marry, F%$@ includes aggregate results only and never account-linked selections.",
+            "privacy_note": "Game exports use public identities without account IDs. Murder, Marry, F%$@ includes aggregate results only; Cursed Objectives exports completion counts without private mission assignments.",
             "games_state": exported_games,
         },
         "halloween-games.json",

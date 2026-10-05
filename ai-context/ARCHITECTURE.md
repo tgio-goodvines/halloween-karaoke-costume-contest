@@ -385,7 +385,7 @@ with no positive score receive a No Winner outcome card instead of silently
 omitting the result.
 
 `build_simulated_game_state()` creates deterministic completed test data for
-all five engines. The admin action backs up Redis, preserves MMF trio and prompt
+all six engines. The admin action backs up Redis, preserves MMF trio and prompt
 configuration, avoids party-account creation, marks the state as simulated,
 and refuses to overwrite non-simulated participants.
 

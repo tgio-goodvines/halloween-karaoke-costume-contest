@@ -101,6 +101,13 @@
   become one-point spotlights without a self-vote; Two Truths can collect clues
   before another mystery guest arrives. The dashboard gives every enabled game its own illustrated
   card immediately below the welcome panel.
+- Cursed Objectives stays open throughout the event. Joining assigns three
+  private objectives drawn without replacement, so active participants never
+  share an objective. Players record and may reopen completions until the host
+  closes the game once; final scoring awards one point per completed objective
+  and preserves tied positive winners. The 60-objective default deck supports
+  20 simultaneous participants and blocks additional joins rather than
+  recycling an assigned objective.
 - The selected game page refreshes attendee-safe server-rendered content every
   five seconds, so late joins, new clues, phase changes, votes, and results
   appear without a full reload. Dirty forms, focus, MMF round selection, and the
@@ -298,7 +305,7 @@
 - Admin mutations broadcast live-display updates when they affect display content.
 - Admin can start, stop, and reset the costume contest; lock winner, show winner, restore display; and start, stop, and reset karaoke party state.
 - The focused `/admin/games?game=<game-key>` workspace shows a compact status
-  selector for all five games and renders one detailed game console at a time.
+  selector for all six games and renders one detailed game console at a time.
   It can enable/disable enrollment, start, end, and confirmed-reset Two Truths
   and a Lie; inspect live participation,
   guess completion, provisional/final scores, truth/lie data, and raw guesses;
@@ -469,7 +476,7 @@ app state.
 
 - Every game has a Reset button with a normal confirmation popup; no typed
   reset phrase is required. Games admin also has Reset All Games for returning
-  all five games to their original disabled state between test runs.
+  all six games to their original disabled state between test runs.
 - Wrap-Up suggests attendees from recorded activity, supports manual roster
   correction and per-game history retention, and can save a side-effect-free draft.
 - Finalization publishes eligible real winners, grants idempotent attendance

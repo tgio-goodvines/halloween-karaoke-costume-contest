@@ -54,6 +54,9 @@
                 {% elif item.detail.game_key == 'murder_marry_fuck' %}
                   <h5>Aggregate Round Results</h5>
                   {% for round in item.detail.detail.rounds %}<article><strong>Round {{ round.round }} · {{ round.respondent_count }} ballots</strong><p>{{ round.people|join(' · ') }}</p><small>Only aggregate totals and pluralities are retained; private ballots are not stored.</small></article>{% endfor %}
+                {% elif item.detail.game_key == 'cursed_objectives' %}
+                  <h5>Final Objective Records</h5>
+                  {% for player in item.detail.detail.players %}<article><strong>{{ player.name }}</strong><ul>{% for objective in player.objectives %}<li>{{ 'Complete' if objective.completed else 'Unfinished' }} — {{ objective.text }}</li>{% endfor %}</ul></article>{% endfor %}
                 {% else %}
                   <h5>Revealed Prompt Rounds</h5>
                   {% for round in item.detail.detail.rounds %}<article><strong>Round {{ round.round }} · {{ round.prompt }}</strong><ul>{% for response in round.responses %}<li>{{ response.name }} — {{ response.text }} · {{ response.votes }} vote{{ 's' if response.votes != 1 else '' }}{% if response.winner %} · Winner{% endif %}</li>{% endfor %}</ul></article>{% endfor %}

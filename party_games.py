@@ -15,6 +15,7 @@ MURDER_MARRY_FUCK_GAME_KEY = "murder_marry_fuck"
 FILL_BLANK_GAME_KEY = "fill_in_the_blank"
 BAD_ADVICE_GAME_KEY = "bad_advice_hotline"
 WRONG_ANSWERS_GAME_KEY = "wrong_answers_only"
+CURSED_OBJECTIVES_GAME_KEY = "cursed_objectives"
 PROMPT_GAME_KEYS = (FILL_BLANK_GAME_KEY, BAD_ADVICE_GAME_KEY, WRONG_ANSWERS_GAME_KEY)
 GAME_PHASES = {"signup", "active", "ended"}
 PROMPT_ROUND_PHASES = {"submissions", "voting", "revealed"}
@@ -29,6 +30,7 @@ GAME_PROMPT_MAX_LENGTH = 240
 GAME_RESPONSE_MAX_LENGTH = 280
 MMF_ROUND_COUNT = 10
 MMF_ACTIONS = ("murder", "marry", "fuck")
+CURSED_OBJECTIVES_PER_PLAYER = 3
 
 
 GAME_CATALOG: dict[str, dict[str, str]] = {
@@ -86,6 +88,17 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "winner_image": "images/games/winners/wrong-answers-only-winner.jpg",
         "personality": "Accuracy is suspicious. Confidence earns the applause.",
         "solo_note": "Solo spotlight supported.",
+    },
+    CURSED_OBJECTIVES_GAME_KEY: {
+        "slug": "cursed-objectives",
+        "title": "Cursed Objectives",
+        "short_title": "Cursed Objectives",
+        "engine": "secret_missions",
+        "description": "Complete three private social missions before the hosts close the game.",
+        "image": "images/games/cursed-objectives.jpg",
+        "winner_image": "images/games/winners/cursed-objectives-winner.jpg",
+        "personality": "Three secret objectives. One night to finish the ritual.",
+        "solo_note": "Every player receives a different, private mission set.",
     },
 }
 
@@ -199,6 +212,70 @@ DEFAULT_PROMPTS: dict[str, list[str]] = {
         "What is the secret ingredient in a lasting relationship?",
     ],
 }
+
+
+DEFAULT_CURSED_OBJECTIVES: list[str] = [
+    "Get someone to say, ‘That is definitely haunted.’",
+    "Convince someone to recommend a karaoke song for you.",
+    "Get two people to disagree about the best Halloween candy.",
+    "Make someone laugh using only a dramatic facial expression.",
+    "Get someone to tell you the story behind their costume.",
+    "Start a three-person toast to something ridiculous.",
+    "Get someone to use the word ‘ominous’ in conversation.",
+    "Find someone who has watched a horror movie this week.",
+    "Get someone to show you their best villain pose.",
+    "Persuade someone that a harmless decoration has a secret name.",
+    "Get two people to rank vampire, werewolf, and ghost.",
+    "Find someone whose costume includes something handmade.",
+    "Get someone to hum a spooky song without naming it.",
+    "Make someone say, ‘I would survive a horror movie.’",
+    "Get someone to invent a title for an imaginary horror sequel.",
+    "Find two people wearing the same color and introduce them.",
+    "Get someone to name a fictional monster they could defeat.",
+    "Convince someone to describe the party in exactly three words.",
+    "Get someone to demonstrate their emergency dance move.",
+    "Find someone who can name three actors from horror movies.",
+    "Get someone to say which room they would never enter in a haunted house.",
+    "Make someone choose between a cursed mirror and a haunted doll.",
+    "Get two people to create a secret handshake with you.",
+    "Find someone who has worn more than one costume this Halloween season.",
+    "Get someone to give a one-sentence ghost story.",
+    "Make someone say, ‘That sounds like a terrible idea.’",
+    "Get someone to name the worst possible superpower.",
+    "Find someone who would volunteer to investigate a strange noise.",
+    "Get someone to rate their own costume entrance from one to ten.",
+    "Persuade someone to give an ordinary object a sinister backstory.",
+    "Get someone to name their ideal monster-fighting sidekick.",
+    "Find someone who prefers practical effects to computer effects.",
+    "Get someone to act out being startled by an invisible ghost.",
+    "Make someone choose a theme song for their costume.",
+    "Get two people to agree on the most suspicious party snack.",
+    "Find someone who knows a Halloween joke and get them to tell it.",
+    "Get someone to describe their costume as if it were a luxury product.",
+    "Make someone say, ‘We should not open that.’",
+    "Get someone to invent a warning label for the fog machine.",
+    "Find someone who has carved a pumpkin this year.",
+    "Get someone to name a song that would wake the dead.",
+    "Convince someone to narrate ten seconds of the party like a nature documentary.",
+    "Get someone to choose which guest would make the best detective.",
+    "Find someone with a costume prop and learn what it does.",
+    "Get someone to pitch a haunted-house attraction in one sentence.",
+    "Make someone say, ‘I have questions.’",
+    "Get two people to pose for an imaginary album cover.",
+    "Find someone who can name a classic movie monster.",
+    "Get someone to invent a cocktail name inspired by the party.",
+    "Make someone choose whether to explore a crypt or an abandoned carnival.",
+    "Get someone to demonstrate a silent movie scream.",
+    "Find someone wearing an accessory they almost left at home.",
+    "Get someone to name the least useful item in a zombie apocalypse.",
+    "Convince someone to announce an imaginary plot twist.",
+    "Get someone to describe the DJ as a supernatural creature.",
+    "Find someone who would spend a night in a reportedly haunted hotel.",
+    "Get someone to invent a spell using three party-related words.",
+    "Make someone say, ‘This is how the curse starts.’",
+    "Get two people to choose a mascot for the party.",
+    "Find someone who can do an evil laugh and ask for a demonstration.",
+]
 
 
 PROMPT_GENERATOR_PARTS: dict[str, dict[str, list[str]]] = {
@@ -362,10 +439,32 @@ def empty_prompt_game_state(game_key: str, *, enabled: bool = False) -> dict[str
     }
 
 
+def default_cursed_objective_records() -> list[dict[str, Any]]:
+    return [
+        {"id": f"cursed-objective-{index + 1:02d}", "text": text, "enabled": True}
+        for index, text in enumerate(DEFAULT_CURSED_OBJECTIVES)
+    ]
+
+
+def empty_cursed_objectives_game_state(*, enabled: bool = False) -> dict[str, Any]:
+    return {
+        "enabled": bool(enabled),
+        "phase": "active" if enabled else "signup",
+        "started_at": "",
+        "ended_at": "",
+        "objectives": default_cursed_objective_records(),
+        "participants": {},
+        "results": {"finalized_at": "", "scores": [], "winner_player_ids": []},
+        "presentation": {"active": False, "slide_index": 0},
+        "simulation": {"is_simulated": False, "player_count": 0, "generated_at": ""},
+    }
+
+
 DEFAULT_GAMES_STATE: dict[str, Any] = {
     TWO_TRUTHS_GAME_KEY: empty_two_truths_game_state(),
     MURDER_MARRY_FUCK_GAME_KEY: empty_mmf_game_state(),
     **{game_key: empty_prompt_game_state(game_key) for game_key in PROMPT_GAME_KEYS},
+    CURSED_OBJECTIVES_GAME_KEY: empty_cursed_objectives_game_state(),
 }
 
 
@@ -969,12 +1068,183 @@ def normalize_prompt_game_state(raw: object, game_key: str) -> dict[str, Any]:
     return state
 
 
+def normalize_cursed_objectives_game_state(raw: object) -> dict[str, Any]:
+    state = empty_cursed_objectives_game_state()
+    if not isinstance(raw, dict):
+        return state
+    state["enabled"] = bool(raw.get("enabled"))
+    state["phase"] = _phase(raw.get("phase"))
+    if state["enabled"] and state["phase"] == "signup":
+        state["phase"] = "active"
+    state["started_at"] = str(raw.get("started_at", "") or "")
+    state["ended_at"] = str(raw.get("ended_at", "") or "")
+
+    objectives = []
+    seen_objective_ids: set[str] = set()
+    raw_objectives = raw.get("objectives", [])
+    if isinstance(raw_objectives, list):
+        for index, entry in enumerate(raw_objectives):
+            if not isinstance(entry, dict):
+                continue
+            objective_id = _slug_id(entry.get("id"), f"cursed-objective-{index + 1:02d}")
+            text = normalize_statement(entry.get("text"))
+            if text and objective_id not in seen_objective_ids:
+                objectives.append({"id": objective_id, "text": text, "enabled": bool(entry.get("enabled", True))})
+                seen_objective_ids.add(objective_id)
+    state["objectives"] = objectives or default_cursed_objective_records()
+    valid_objective_ids = {entry["id"] for entry in state["objectives"]}
+
+    participants = {}
+    globally_assigned: set[str] = set()
+    raw_participants = raw.get("participants", {})
+    if isinstance(raw_participants, dict):
+        for user_id, raw_participant in raw_participants.items():
+            participant = normalize_alias_participant(raw_participant, str(user_id))
+            if not participant:
+                continue
+            raw_mission_ids = raw_participant.get("mission_ids", []) if isinstance(raw_participant, dict) else []
+            mission_ids = list(dict.fromkeys(
+                str(value)
+                for value in raw_mission_ids
+                if str(value) in valid_objective_ids and str(value) not in globally_assigned
+            ))[:CURSED_OBJECTIVES_PER_PLAYER]
+            for objective in state["objectives"]:
+                objective_id = str(objective["id"])
+                if len(mission_ids) >= CURSED_OBJECTIVES_PER_PLAYER:
+                    break
+                if objective.get("enabled") and objective_id not in globally_assigned and objective_id not in mission_ids:
+                    mission_ids.append(objective_id)
+            if not mission_ids:
+                continue
+            globally_assigned.update(mission_ids)
+            raw_completed = raw_participant.get("completed_mission_ids", [])
+            completed = [str(value) for value in raw_completed if str(value) in mission_ids] if isinstance(raw_completed, list) else []
+            completed_at = raw_participant.get("completed_at", {})
+            participant["mission_ids"] = mission_ids
+            participant["completed_mission_ids"] = list(dict.fromkeys(completed))
+            participant["completed_at"] = {
+                mission_id: str(completed_at.get(mission_id, "") or "")
+                for mission_id in participant["completed_mission_ids"]
+            } if isinstance(completed_at, dict) else {}
+            participants[str(user_id)] = participant
+    state["participants"] = participants
+    state["results"] = (
+        calculate_cursed_objectives_results(
+            state,
+            finalized_at=str(raw.get("results", {}).get("finalized_at", "") if isinstance(raw.get("results"), dict) else ""),
+        )
+        if state["phase"] == "ended"
+        else copy.deepcopy(state["results"])
+    )
+    state["presentation"] = _presentation(raw.get("presentation"))
+    state["simulation"] = _simulation(raw.get("simulation"))
+    return state
+
+
+def assign_cursed_objectives(
+    game: dict[str, Any],
+    user_id: str,
+    *,
+    display_name: str,
+    rng: random.Random | None = None,
+) -> dict[str, Any]:
+    existing = game.get("participants", {}).get(user_id)
+    if isinstance(existing, dict):
+        existing["display_name"] = normalize_player_name(display_name)
+        existing["alias"] = existing["display_name"] or str(existing.get("alias", "Player"))
+        existing["updated_at"] = utc_now_iso()
+        return existing
+    assigned = {
+        str(mission_id)
+        for participant in game.get("participants", {}).values()
+        if isinstance(participant, dict)
+        for mission_id in participant.get("mission_ids", [])
+    }
+    available = [
+        str(objective.get("id", ""))
+        for objective in game.get("objectives", [])
+        if isinstance(objective, dict)
+        and objective.get("enabled")
+        and objective.get("id")
+        and str(objective.get("id")) not in assigned
+    ]
+    if len(available) < CURSED_OBJECTIVES_PER_PLAYER:
+        raise ValueError("No complete set of unused objectives remains.")
+    chooser = rng or random.SystemRandom()
+    mission_ids = chooser.sample(available, CURSED_OBJECTIVES_PER_PLAYER)
+    timestamp = utc_now_iso()
+    participant = {
+        "player_id": uuid4().hex,
+        "display_name": normalize_player_name(display_name),
+        "alias": normalize_player_name(display_name) or "Player",
+        "mission_ids": mission_ids,
+        "completed_mission_ids": [],
+        "completed_at": {},
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+    game.setdefault("participants", {})[user_id] = participant
+    return participant
+
+
+def calculate_cursed_objectives_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
+    scores = []
+    for participant in game.get("participants", {}).values():
+        if not isinstance(participant, dict):
+            continue
+        mission_ids = list(dict.fromkeys(str(value) for value in participant.get("mission_ids", [])))
+        completed_ids = {
+            str(value) for value in participant.get("completed_mission_ids", [])
+            if str(value) in mission_ids
+        }
+        scores.append(
+            {
+                "player_id": str(participant.get("player_id", "")),
+                "name": normalize_player_name(participant.get("display_name")) or "Player",
+                "points": len(completed_ids),
+                "completed_missions": len(completed_ids),
+                "assigned_missions": len(mission_ids),
+            }
+        )
+    scores.sort(key=lambda entry: (-entry["points"], entry["name"].casefold()))
+    top = scores[0]["points"] if scores else 0
+    return {
+        "finalized_at": finalized_at or utc_now_iso(),
+        "scores": scores,
+        "winner_player_ids": [entry["player_id"] for entry in scores if top > 0 and entry["points"] == top],
+    }
+
+
+def cursed_objectives_statistics(game: dict[str, Any]) -> dict[str, Any]:
+    participants = game.get("participants", {})
+    completed = sum(
+        len(set(participant.get("completed_mission_ids", [])))
+        for participant in participants.values()
+        if isinstance(participant, dict)
+    )
+    assigned = sum(
+        len(participant.get("mission_ids", []))
+        for participant in participants.values()
+        if isinstance(participant, dict)
+    )
+    provisional = calculate_cursed_objectives_results(game, finalized_at="")
+    return {
+        "participant_count": len(participants),
+        "completed_missions": completed,
+        "assigned_missions": assigned,
+        "completion_percent": round((completed / assigned * 100) if assigned else 0.0, 1),
+        "available_objectives": max(0, sum(1 for entry in game.get("objectives", []) if entry.get("enabled")) - assigned),
+        "scores": provisional["scores"],
+    }
+
+
 def normalize_games_state(raw: object) -> dict[str, Any]:
     raw_games = raw if isinstance(raw, dict) else {}
     return {
         TWO_TRUTHS_GAME_KEY: normalize_two_truths_game_state(raw_games.get(TWO_TRUTHS_GAME_KEY)),
         MURDER_MARRY_FUCK_GAME_KEY: normalize_mmf_game_state(raw_games.get(MURDER_MARRY_FUCK_GAME_KEY)),
         **{game_key: normalize_prompt_game_state(raw_games.get(game_key), game_key) for game_key in PROMPT_GAME_KEYS},
+        CURSED_OBJECTIVES_GAME_KEY: normalize_cursed_objectives_game_state(raw_games.get(CURSED_OBJECTIVES_GAME_KEY)),
     }
 
 
@@ -1141,6 +1411,32 @@ def build_simulated_game_state(
         game["started_at"] = timestamp
         game["ended_at"] = timestamp
         game["results"] = calculate_mmf_results(game, finalized_at=timestamp)
+        game["simulation"] = simulation
+        return game
+
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        game = empty_cursed_objectives_game_state(enabled=True)
+        objective_ids = [entry["id"] for entry in game["objectives"]]
+        for index in range(count):
+            number = index + 1
+            start = index * CURSED_OBJECTIVES_PER_PLAYER
+            mission_ids = objective_ids[start : start + CURSED_OBJECTIVES_PER_PLAYER]
+            user_id = f"simulation:{game_key}:player-{number:02d}"
+            completed_count = (index % CURSED_OBJECTIVES_PER_PLAYER) + 1
+            game["participants"][user_id] = {
+                "player_id": f"simulation-player-{number:02d}",
+                "display_name": f"Test Player {number:02d}",
+                "alias": f"Test Player {number:02d}",
+                "mission_ids": mission_ids,
+                "completed_mission_ids": mission_ids[:completed_count],
+                "completed_at": {mission_id: timestamp for mission_id in mission_ids[:completed_count]},
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        game["phase"] = "ended"
+        game["started_at"] = timestamp
+        game["ended_at"] = timestamp
+        game["results"] = calculate_cursed_objectives_results(game, finalized_at=timestamp)
         game["simulation"] = simulation
         return game
 

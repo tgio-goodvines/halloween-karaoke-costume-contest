@@ -5,6 +5,7 @@ from collections import Counter
 from typing import Any
 
 from party_games import (
+    CURSED_OBJECTIVES_GAME_KEY,
     GAME_CATALOG,
     MURDER_MARRY_FUCK_GAME_KEY,
     PROMPT_GAME_KEYS,
@@ -160,6 +161,12 @@ def _game_activity(game_key: str, game: dict[str, Any]) -> tuple[int, str]:
         responses = sum(len(game_round.get("responses", {})) for game_round in game.get("rounds", []))
         votes = sum(len(game_round.get("votes", {})) for game_round in game.get("rounds", []))
         return responses + votes, "responses + votes"
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        return sum(
+            len(set(participant.get("completed_mission_ids", [])))
+            for participant in game.get("participants", {}).values()
+            if isinstance(participant, dict)
+        ), "objectives completed"
     return 0, "interactions"
 
 

@@ -43,12 +43,16 @@ Important working notes:
 - Before the party date, `/party` shows pre-party RSVP details and host updates in Event Highlights and hides/blocks attendee menu, costume, karaoke, drink-order, and voting actions. On the party date, `/party` switches to the event-night dashboard.
 - On the party date, enabled games appear on `/party` and at `/party/games`. The
   registry includes Two Truths and a Lie, ten-round Murder/Marry/F%$@,
-  Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only. The last three
+  Fill in the Blank, Bad Advice Hotline, Wrong Answers Only, and Cursed
+  Objectives. The three prompt games
   share prompt submission/voting rounds; all games are operated independently
   from `/admin/games` and new games default to disabled. MMF and prompt games
   default to signed-in names. Admins may switch each game to anonymous aliases
   while enrollment is open; attendees cannot choose their own mode. Blind
   voting and private MMF ballots remain private regardless of the admin setting.
+  Cursed Objectives assigns three private missions per player without reusing
+  an objective across active participants; players record completion throughout
+  the event and the host closes it once for a named final leaderboard.
 - `/party/menu` is the party-day Menu & Orders workspace: signed-in attendees can browse food/drink cards, order available drinks, review/reorder grouped personal history, and see privacy-safe live bar totals plus only their own queue positions. `/party/drink-history` redirects to its My Orders view. Food remains view-only.
 - Keep `/bartender`, its separate bartender/admin dropdown item, operational queue controls, recipe visibility, and protected `/api/bartender-queue` workflow separate from the attendee Menu & Orders workspace.
 - Admin can manage food/drink menu items, image URLs, availability, ingredient lists, and separate drink instructions from `/admin`; bartender access is assigned to existing party accounts through account roles.

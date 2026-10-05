@@ -20,6 +20,9 @@ operations, and host-controlled live-display results.
    voting, and an admin-selected public identity mode.
 5. **Wrong Answers Only** — fictional/general questions, blind wrong answers,
    response voting, and an admin-selected public identity mode.
+6. **Cursed Objectives** — three private, non-overlapping social missions per
+   participant, editable self-reported completion throughout the event, and one
+   final named leaderboard when the host closes the game.
 
 All new games deploy disabled. Enabling a game opens it immediately: its tab,
 dashboard status, enrollment, and gameplay become available without a separate
@@ -99,7 +102,7 @@ players; guessing becomes useful as additional mystery guests join.
 
 ## Admin And Display
 
-- `/admin/games?game=<game-key>` presents a compact five-game status selector
+- `/admin/games?game=<game-key>` presents a compact six-game status selector
   and one detailed operational console, with shared aggregate status. Detailed
   data is constructed only for the selected game.
 - MMF includes a ten-trio editor, optional image URLs, and configurable third
@@ -129,7 +132,8 @@ players; guessing becomes useful as additional mystery guests join.
 - Games were introduced in schema version `12`; the canonical app state is now
   schema version `22`. The schema-22 game lifecycle migration opens legacy
   records whose enabled flag was paired with the old `signup` phase.
-- `games_state` contains all five independent game records.
+- `games_state` contains all six independent game records. Schema 26 adds the
+  Cursed Objectives record and default 60-objective deck.
 - Attendee hub: `GET /party/games?game=<slug>`.
 - Attendee live fragment: `GET /api/party/games/<slug>/view`; it returns a
   signed-in, privacy-scoped server-rendered game fragment plus revision and safe

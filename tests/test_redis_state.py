@@ -4102,7 +4102,7 @@ class RedisStateTests(unittest.TestCase):
 
         persisted = self.redis_state()
         qr_codes = persisted["bartender_tip_settings"]["qr_codes"]
-        self.assertEqual(25, persisted["schema_version"])
+        self.assertEqual(main.STATE_SCHEMA_VERSION, persisted["schema_version"])
         self.assertEqual(1, len(qr_codes))
         self.assertEqual("Casey", qr_codes[0]["name"])
         self.assertEqual("https://example.test/legacy-tip.png", qr_codes[0]["image_url"])
@@ -4271,7 +4271,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(25, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(26, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])
@@ -6986,6 +6986,7 @@ class RedisStateTests(unittest.TestCase):
                 "fill_in_the_blank",
                 "bad_advice_hotline",
                 "wrong_answers_only",
+                "cursed_objectives",
             },
             set(self.redis_state()["games_state"]),
         )
@@ -7830,7 +7831,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn(b"Close Game &amp; Calculate Results", page.data)
         self.assertIn(b"Choose one game to operate", page.data)
         self.assertNotIn(b"Additional Games", page.data)
-        self.assertEqual(5, page.data.count(b'data-view-key="game-selector:'))
+        self.assertEqual(6, page.data.count(b'data-view-key="game-selector:'))
         self.assertEqual(1, page.data.count(b'class="game-admin-card game-admin-card--selected"'))
         self.assertIn(b'id="admin-game-two_truths_and_a_lie"', page.data)
         self.assertIn(b'data-admin-inline="true"', page.data)

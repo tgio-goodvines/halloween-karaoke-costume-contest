@@ -4,11 +4,13 @@ import copy
 from typing import Any, Iterable
 
 from party_games import (
+    CURSED_OBJECTIVES_GAME_KEY,
     GAME_CATALOG,
     MURDER_MARRY_FUCK_GAME_KEY,
     PROMPT_GAME_KEYS,
     TWO_TRUTHS_GAME_KEY,
     empty_mmf_game_state,
+    empty_cursed_objectives_game_state,
     empty_prompt_game_state,
     empty_two_truths_game_state,
     normalize_games_state,
@@ -55,6 +57,8 @@ def pristine_game_state(game_key: str, *, enabled: bool = False) -> dict[str, An
         return empty_mmf_game_state(enabled=enabled)
     if game_key in PROMPT_GAME_KEYS:
         return empty_prompt_game_state(game_key, enabled=enabled)
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        return empty_cursed_objectives_game_state(enabled=enabled)
     raise KeyError(f"Unknown game key: {game_key}")
 
 
@@ -406,6 +410,32 @@ def build_detailed_game_archive(
                 }
             )
         base["detail"] = {"rounds": rounds, "explicit_label": _text(game.get("explicit_label"), 24)}
+        return base
+
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        objective_by_id = {
+            str(entry.get("id", "")): _text(entry.get("text"), 240)
+            for entry in game.get("objectives", [])
+            if isinstance(entry, dict)
+        }
+        players = []
+        for participant in game.get("participants", {}).values():
+            if not isinstance(participant, dict):
+                continue
+            completed_ids = set(str(value) for value in participant.get("completed_mission_ids", []))
+            players.append(
+                {
+                    "name": _text(participant.get("display_name"), 80) or "Player",
+                    "objectives": [
+                        {
+                            "text": objective_by_id.get(str(mission_id), "Secret objective"),
+                            "completed": str(mission_id) in completed_ids,
+                        }
+                        for mission_id in participant.get("mission_ids", [])
+                    ],
+                }
+            )
+        base["detail"] = {"players": players}
         return base
 
     rounds = []

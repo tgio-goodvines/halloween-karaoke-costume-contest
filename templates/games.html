@@ -24,6 +24,8 @@
       {% elif success == 'answer' %}Your round was saved. You can update it until the hosts end the game.
       {% elif success == 'response' %}Your response was saved.
       {% elif success == 'vote' %}Your vote was saved.
+      {% elif success == 'mission_completed' %}Objective recorded as complete. You can reopen it until final call.
+      {% elif success == 'mission_reopened' %}Objective reopened.
       {% elif success == 'submission' %}Your mystery statements were saved and added to the live-display rotation.
       {% elif success == 'guess' %}Your guess was saved. You can update it until the hosts end the game.
       {% endif %}
@@ -43,7 +45,7 @@
       </span>
     </header>
 
-    {% if game_key != 'two_truths_and_a_lie' %}
+    {% if game_key not in ['two_truths_and_a_lie', 'cursed_objectives'] %}
       <aside class="game-content-notice"><strong>Adults only.</strong> This game uses fictional prompts or famous adults. Do not enter attendees, private people, minors, confessions, or personal information.</aside>
     {% endif %}
 
@@ -125,6 +127,30 @@
             {% for action in mmf_actions %}<h4>{{ game.explicit_label if action == 'fuck' else action|title }}</h4><ul>{% for person in round.people %}<li>{{ person.name }} — {{ round.totals[action][person.id] }} vote{{ 's' if round.totals[action][person.id] != 1 else '' }}{% if person.id in round.winners[action] %} <strong>Winner</strong>{% endif %}</li>{% endfor %}</ul>{% endfor %}
           </div></details>{% endfor %}
         </div>
+      {% endif %}
+
+    {% elif game_key == 'cursed_objectives' %}
+      {% if game.phase == 'active' %}
+        {% if participant %}
+          <div class="game-instructions"><h4>Your private dossier · {{ participant.completed_mission_ids|length }} / {{ participant_missions|length }} complete</h4><p>Complete these naturally during the party. Keep the exact wording private, use good judgment, and record each success before final call. Never pressure, embarrass, touch, or interfere with another guest.</p></div>
+          <div class="mystery-grid cursed-objectives-grid">
+            {% for mission in participant_missions %}
+              <article class="mystery-card{% if mission.completed %} mystery-card--revealed{% endif %}" data-view-key="cursed-objective:{{ mission.id }}">
+                <p class="mystery-card__number">Objective {{ loop.index }} · {{ 'Complete' if mission.completed else 'Active' }}</p>
+                <p>{{ mission.text }}</p>
+                <form method="post" action="{{ url_for('party_cursed_objective_toggle', mission_id=mission.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="button{% if not mission.completed %} button--primary{% endif %}" type="submit">{{ 'Reopen Objective' if mission.completed else 'Mark Complete' }}</button>
+                </form>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="game-opt-in"><h4>Accept the curse</h4><p>Join at any time before final call. You will receive three private objectives that are not assigned to any other player. Complete them during the party and record your progress here.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}" data-view-key="game-join:{{ game_key }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Reveal My Objectives</button></form></div>
+        {% endif %}
+      {% else %}
+        {% include '_game_scoreboard.html' %}
+        {% if participant_missions %}<h4>Your final dossier</h4><div class="mystery-grid cursed-objectives-grid">{% for mission in participant_missions %}<article class="mystery-card{% if mission.completed %} mystery-card--revealed{% endif %}"><p class="mystery-card__number">{{ 'Completed' if mission.completed else 'Unfinished' }}</p><p>{{ mission.text }}</p></article>{% endfor %}</div>{% endif %}
       {% endif %}
 
     {% else %}

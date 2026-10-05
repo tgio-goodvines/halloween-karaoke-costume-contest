@@ -15,7 +15,7 @@
   </div>
 
   <div class="game-admin-metrics game-admin-overview">
-    <div><span>Enabled games</span><strong>{{ games_admin.enabled_count }} / 5</strong></div>
+    <div><span>Enabled games</span><strong>{{ games_admin.enabled_count }} / {{ games_admin.games|length }}</strong></div>
     <div><span>Games open</span><strong>{{ games_admin.active_count }}</strong></div>
     <div><span>Total signups</span><strong>{{ games_admin.participant_count }}</strong></div>
     <div><span>Display</span><strong>{% if live_override and live_override.type.startswith('game_') %}Paused{% else %}Rotating{% endif %}</strong></div>
@@ -52,7 +52,7 @@
     </header>
     <p>{{ admin_game.metadata.description }} <strong>{{ admin_game.metadata.solo_note }}</strong></p>
 
-    {% if game_key != 'two_truths_and_a_lie' %}
+    {% if game_key not in ['two_truths_and_a_lie', 'cursed_objectives'] %}
       <section class="game-admin-primary game-admin-identity" data-view-key="game:{{ game_key }}:identity">
         <div><p class="admin-panel__eyebrow">Player identity</p><h5>{{ 'Anonymous aliases' if admin_game.anonymous_mode else 'Signed-in names' }}</h5><p>This setting applies to every player and locks when the game opens.</p></div>
         <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="toggle_game_anonymity"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Use {{ 'Signed-in Names' if admin_game.anonymous_mode else 'Anonymous Aliases' }}</button></form>
@@ -85,7 +85,7 @@
         </div>
       </div>
 
-      {% if game_key not in ['two_truths_and_a_lie', 'murder_marry_fuck'] and admin_game.phase == 'active' %}
+      {% if game_key in ['fill_in_the_blank', 'bad_advice_hotline', 'wrong_answers_only'] and admin_game.phase == 'active' %}
         <div class="game-round-controls" data-view-key="game:{{ game_key }}:round">
           <h5>Automatic rounds · {{ 'Paused' if admin_game.timer.paused else ('Running' if admin_game.timer.enabled else 'Not started') }}</h5>
           <div class="contest-actions">
@@ -113,6 +113,10 @@
           <div><span>Completion</span><strong>{{ admin_game.statistics.completion_percent }}%</strong></div>
         {% elif game_key == 'murder_marry_fuck' %}
           <div><span>Ballots</span><strong>{{ admin_game.statistics.completed_rounds }} / {{ admin_game.statistics.possible_rounds }}</strong></div>
+          <div><span>Complete</span><strong>{{ admin_game.statistics.completion_percent }}%</strong></div>
+        {% elif game_key == 'cursed_objectives' %}
+          <div><span>Objectives</span><strong>{{ admin_game.statistics.completed_missions }} / {{ admin_game.statistics.assigned_missions }}</strong></div>
+          <div><span>Unused</span><strong>{{ admin_game.statistics.available_objectives }}</strong></div>
           <div><span>Complete</span><strong>{{ admin_game.statistics.completion_percent }}%</strong></div>
         {% else %}
           <div><span>Rounds</span><strong>{{ admin_game.statistics.round_count }}</strong></div>
@@ -171,7 +175,7 @@
           <button class="button button--primary" name="action" value="update_mmf_rounds"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Save Ten Rounds</button>
         </form>
       </details>
-    {% elif game_key != 'two_truths_and_a_lie' %}
+    {% elif game_key not in ['two_truths_and_a_lie', 'cursed_objectives'] %}
       <details class="admin-entry" data-view-key="game:{{ game_key }}:configuration"><summary><strong>Prompt deck</strong><span>{{ admin_game.prompts|length }} prompts</span></summary><div class="admin-entry__form">
         <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><label>Add prompt<textarea name="prompt_text" maxlength="240" required></textarea></label><button class="button button--primary" name="action" value="add_game_prompt"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Add Prompt</button></form>
         <ul class="game-prompt-list">{% for prompt in admin_game.prompts %}<li data-view-key="game:{{ game_key }}:prompt:{{ prompt.id }}"><span{% if not prompt.enabled %} class="is-disabled"{% endif %}>{{ prompt.text }}</span><div><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><input type="hidden" name="prompt_id" value="{{ prompt.id }}"><button class="button" name="action" value="toggle_game_prompt"{% if admin_game.phase != 'signup' %} disabled{% endif %}>{{ 'Disable' if prompt.enabled else 'Enable' }}</button></form><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><input type="hidden" name="prompt_id" value="{{ prompt.id }}"><button class="button button--danger" name="action" value="delete_game_prompt"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Remove</button></form></div></li>{% endfor %}</ul>

@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 25. The following globals in `main.py` are
+`halloween:state` with schema version 26. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -247,7 +247,7 @@ the process-local cache:
   details, priority queue revision/retry state, and the latest DJ reset
   acknowledgement. Approved priorities lead Play and Shuffle; an active
   receiver replaces only the remainder after the current song.
-- `games_state`: five-game registry state. Two Truths and a Lie stores clues and
+- `games_state`: six-game registry state. Two Truths and a Lie stores clues and
   identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
   trios, an admin-controlled public identity mode, private ballots, aggregate results,
   and presentation state;
@@ -268,7 +268,11 @@ the process-local cache:
   procedural question generation, bounded repeat protection, pause/resume/skip
   controls, and privacy-safe shuffled question/answer cards on the live game
   stage. Existing games migrate with automation paused; fresh/reset prompt
-  games default to automatic rotation.
+  games start automatic rotation. Schema 26 adds Cursed Objectives: each player
+  receives three private objectives drawn without replacement across active
+  participants, records completion throughout the event, and enters one final
+  named leaderboard when the host closes the game. Joining stops instead of
+  recycling objectives when fewer than three unused objectives remain.
 
 Drink orders move from `received` to `in_progress` to `complete`. Active
 bartender preparation resolves the latest non-empty menu ingredients and

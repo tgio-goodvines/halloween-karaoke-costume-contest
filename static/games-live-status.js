@@ -123,7 +123,7 @@
 
   const updateStatusIndicator = (status, game) => {
     if (!status || !game) return;
-    status.classList.remove('game-status-indicator--signup', 'game-status-indicator--active', 'game-status-indicator--ended');
+    status.classList.remove('game-status-indicator--signup', 'game-status-indicator--active', 'game-status-indicator--review', 'game-status-indicator--ended');
     status.classList.add(`game-status-indicator--${game.phase || 'signup'}`);
     const light = element('span');
     light.setAttribute('aria-hidden', 'true');

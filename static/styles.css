@@ -6160,7 +6160,7 @@ textarea,
 
 .game-admin-selector {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   gap: 0.6rem;
   margin-block: 1rem;
 }
@@ -7181,6 +7181,113 @@ body {
 
 .admin-entry--danger {
   border-color: rgba(255, 49, 49, 0.58);
+}
+
+/* Shared game configuration, data, review, and test-tool alignment. */
+.game-admin-disclosure > .admin-entry__summary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+  padding: 0.2rem 0;
+  text-align: left;
+}
+
+.game-admin-disclosure__meta {
+  max-width: 18rem;
+  color: #a1a1aa;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.game-admin-editor,
+.game-admin-record-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.game-admin-editor label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.game-admin-record {
+  display: grid;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(8, 8, 10, 0.58);
+}
+
+.game-admin-record ol { margin: 0; padding-left: 1.35rem; }
+
+.scavenger-review-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.scavenger-review-group {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid rgba(255, 49, 49, 0.25);
+  border-radius: 12px;
+  background: rgba(20, 8, 12, 0.42);
+}
+
+.scavenger-review-group > div:first-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 1rem;
+  align-items: start;
+}
+
+.scavenger-review-group > div:first-child h5,
+.scavenger-review-group > div:first-child p { margin: 0; }
+.scavenger-review-group > div:first-child span { color: var(--muted); }
+
+.scavenger-item-grid,
+.scavenger-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.scavenger-item-card,
+.scavenger-review-card {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  background: rgba(10, 10, 12, 0.8);
+}
+
+.scavenger-item-card > img,
+.scavenger-review-card > img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.scavenger-item-card > div,
+.scavenger-review-card > div { padding: 1rem; }
+.scavenger-item-card form { display: grid; gap: 0.65rem; margin-top: 0.8rem; }
+.scavenger-review-card h5 { margin: 0; }
+
+@media (max-width: 620px) {
+  .game-admin-disclosure > .admin-entry__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .game-admin-disclosure__meta {
+    max-width: none;
+    text-align: left;
+  }
+  .scavenger-review-group > div:first-child {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 620px) {

@@ -57,6 +57,10 @@
                 {% elif item.detail.game_key == 'cursed_objectives' %}
                   <h5>Final Objective Records</h5>
                   {% for player in item.detail.detail.players %}<article><strong>{{ player.name }}</strong><ul>{% for objective in player.objectives %}<li>{{ 'Complete' if objective.completed else 'Unfinished' }} — {{ objective.text }}</li>{% endfor %}</ul></article>{% endfor %}
+                {% elif item.detail.game_key == 'scavenger_hunt' %}
+                  <h5>Submission Outcomes</h5>
+                  <p>Photo files are intentionally not retained in historical archives.</p>
+                  <ul>{% for submission in item.detail.detail.submissions %}<li>{{ submission.name }} — {{ submission.item }} · {{ submission.review_status|title }}</li>{% else %}<li>No submissions retained.</li>{% endfor %}</ul>
                 {% else %}
                   <h5>Revealed Prompt Rounds</h5>
                   {% for round in item.detail.detail.rounds %}<article><strong>Round {{ round.round }} · {{ round.prompt }}</strong><ul>{% for response in round.responses %}<li>{{ response.name }} — {{ response.text }} · {{ response.votes }} vote{{ 's' if response.votes != 1 else '' }}{% if response.winner %} · Winner{% endif %}</li>{% endfor %}</ul></article>{% endfor %}

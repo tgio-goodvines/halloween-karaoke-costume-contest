@@ -8,11 +8,13 @@ from party_games import (
     GAME_CATALOG,
     MURDER_MARRY_FUCK_GAME_KEY,
     PROMPT_GAME_KEYS,
+    SCAVENGER_HUNT_GAME_KEY,
     TWO_TRUTHS_GAME_KEY,
     empty_mmf_game_state,
     empty_cursed_objectives_game_state,
     empty_prompt_game_state,
     empty_two_truths_game_state,
+    empty_scavenger_hunt_game_state,
     normalize_games_state,
     participant_statements,
 )
@@ -59,6 +61,8 @@ def pristine_game_state(game_key: str, *, enabled: bool = False) -> dict[str, An
         return empty_prompt_game_state(game_key, enabled=enabled)
     if game_key == CURSED_OBJECTIVES_GAME_KEY:
         return empty_cursed_objectives_game_state(enabled=enabled)
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        return empty_scavenger_hunt_game_state(enabled=enabled)
     raise KeyError(f"Unknown game key: {game_key}")
 
 
@@ -85,7 +89,7 @@ def game_has_activity(game: object) -> bool:
         game.get("participants")
         or game.get("guesses")
         or game.get("rounds")
-        or game.get("phase") in {"active", "ended"}
+        or game.get("phase") in {"active", "review", "ended"}
         or game.get("simulation", {}).get("is_simulated")
     )
 
@@ -96,6 +100,7 @@ def game_reset_counts(raw_games: object) -> dict[str, int]:
         "game_count": len(games),
         "enabled_count": sum(1 for game in games.values() if game.get("enabled")),
         "active_count": sum(1 for game in games.values() if game.get("phase") == "active"),
+        "review_count": sum(1 for game in games.values() if game.get("phase") == "review"),
         "ended_count": sum(1 for game in games.values() if game.get("phase") == "ended"),
         "participant_count": sum(len(game.get("participants", {})) for game in games.values()),
         "simulation_count": sum(
@@ -423,12 +428,14 @@ def build_detailed_game_archive(
             if not isinstance(participant, dict):
                 continue
             completed_ids = set(str(value) for value in participant.get("completed_mission_ids", []))
+            mission_snapshots = participant.get("mission_snapshots", {}) if isinstance(participant.get("mission_snapshots"), dict) else {}
             players.append(
                 {
                     "name": _text(participant.get("display_name"), 80) or "Player",
                     "objectives": [
                         {
-                            "text": objective_by_id.get(str(mission_id), "Secret objective"),
+                            "text": _text(mission_snapshots.get(str(mission_id)), 240)
+                            or objective_by_id.get(str(mission_id), "Secret objective"),
                             "completed": str(mission_id) in completed_ids,
                         }
                         for mission_id in participant.get("mission_ids", [])
@@ -436,6 +443,27 @@ def build_detailed_game_archive(
                 }
             )
         base["detail"] = {"players": players}
+        return base
+
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        item_titles = {
+            str(item.get("id", "")): _text(item.get("title"), 80)
+            for item in game.get("items", [])
+            if isinstance(item, dict)
+        }
+        submissions = []
+        for participant in game.get("participants", {}).values():
+            if not isinstance(participant, dict):
+                continue
+            for item_id, submission in (participant.get("submissions", {}) or {}).items():
+                if not isinstance(submission, dict):
+                    continue
+                submissions.append({
+                    "name": _text(participant.get("display_name"), 80) or "Player",
+                    "item": item_titles.get(str(item_id), _text(submission.get("item_title"), 80)),
+                    "review_status": _text(submission.get("review_status"), 20),
+                })
+        base["detail"] = {"items": list(item_titles.values()), "submissions": submissions}
         return base
 
     rounds = []

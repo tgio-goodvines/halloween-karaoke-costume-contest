@@ -9,6 +9,7 @@ from party_games import (
     GAME_CATALOG,
     MURDER_MARRY_FUCK_GAME_KEY,
     PROMPT_GAME_KEYS,
+    SCAVENGER_HUNT_GAME_KEY,
     TWO_TRUTHS_GAME_KEY,
     game_winners,
     normalize_games_state,
@@ -167,6 +168,12 @@ def _game_activity(game_key: str, game: dict[str, Any]) -> tuple[int, str]:
             for participant in game.get("participants", {}).values()
             if isinstance(participant, dict)
         ), "objectives completed"
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        return sum(
+            len(participant.get("submissions", {}))
+            for participant in game.get("participants", {}).values()
+            if isinstance(participant, dict)
+        ), "photos submitted"
     return 0, "interactions"
 
 
@@ -290,6 +297,8 @@ def build_sample_recap_payload() -> dict[str, Any]:
             {"label": "Fill in the Blank", "value": 10},
             {"label": "Bad Advice", "value": 9},
             {"label": "Wrong Answers", "value": 8},
+            {"label": "Cursed Objectives", "value": 7},
+            {"label": "Scavenger Hunt", "value": 11},
         ]
     )
     costume = chart_rows(
@@ -317,14 +326,16 @@ def build_sample_recap_payload() -> dict[str, Any]:
             {"title": "Fill in the Blank: After Dark", "winner_label": "No Winner", "participant_count": 10},
             {"title": "Bad Advice Hotline", "winner_label": "Dr. Disaster", "participant_count": 9},
             {"title": "Wrong Answers Only", "winner_label": "Specimen Seven", "participant_count": 8},
+            {"title": "Cursed Objectives", "winner_label": "Morgan", "participant_count": 7},
+            {"title": "Scavenger Hunt", "winner_label": "Jamie", "participant_count": 11},
         ],
         "costume_result": {"winner": "Specimen Seven", "costume": "Radioactive Vampire"},
         "playlist_snapshot": playlist,
         "analytics_snapshot": {
             "attendee_count": 18,
-            "games_played": 5,
-            "total_game_participations": 54,
-            "total_game_interactions": 187,
+            "games_played": 7,
+            "total_game_participations": 72,
+            "total_game_interactions": 221,
             "participation_by_game": participation,
             "costume_leaderboard": costume,
             "playlist": {

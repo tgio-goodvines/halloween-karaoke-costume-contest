@@ -107,7 +107,18 @@
   closes the game once; final scoring awards one point per completed objective
   and preserves tied positive winners. The 60-objective default deck supports
   20 simultaneous participants and blocks additional joins rather than
-  recycling an assigned objective.
+  recycling an assigned objective. Admins can add, edit, enable, disable,
+  remove, reorder, or restore objectives; each assigned mission snapshots its
+  wording so later deck edits affect only future assignments.
+- Scavenger Hunt stays open throughout the event and uses an admin-editable
+  ordered item deck. Joined participants upload or replace one JPG, PNG, or
+  WebP photo per enabled item. The server validates, strips metadata, bounds,
+  and converts uploads to WebP. Evidence is visible only to its owner and
+  admins. Closing the hunt locks uploads and opens host review, grouped by item;
+  the host approves or rejects every photo before finalizing one point per
+  approved submission and any tied positive winners. Review photos can be
+  stepped through on the authenticated live display but are omitted from data
+  exports and retained detailed archives.
 - The selected game page refreshes attendee-safe server-rendered content every
   five seconds, so late joins, new clues, phase changes, votes, and results
   appear without a full reload. Dirty forms, focus, MMF round selection, and the
@@ -305,7 +316,7 @@
 - Admin mutations broadcast live-display updates when they affect display content.
 - Admin can start, stop, and reset the costume contest; lock winner, show winner, restore display; and start, stop, and reset karaoke party state.
 - The focused `/admin/games?game=<game-key>` workspace shows a compact status
-  selector for all six games and renders one detailed game console at a time.
+  selector for all seven games and renders one detailed game console at a time.
   It can enable/disable enrollment, start, end, and confirmed-reset Two Truths
   and a Lie; inspect live participation,
   guess completion, provisional/final scores, truth/lie data, and raw guesses;
@@ -316,6 +327,9 @@
   edits MMF's ten public-figure trios and optional images, manages three prompt
   decks, advances prompt response/vote/reveal phases, shows aggregate progress,
   and drives previous/next announcer presentation slides after game end.
+- The same workspace manages the Cursed Objectives deck and Scavenger Hunt
+  item deck, shows all assigned missions, and provides a photo-review queue with
+  approve/reject actions and a separate finalization step.
 - Every selected game console includes a test-tool action that can generate a deterministic
   completed game with 2-20 synthetic players. Simulation never creates party
   accounts, preserves MMF/prompt configuration, creates a Redis backup, and
@@ -467,7 +481,7 @@ app state.
 - Dedicated generated jukebox, bar, menu, and karaoke artwork appears on the
   party overview, dedicated attendee/operations pages, and live display. Album
   and menu-item artwork takes precedence where content-specific media exists.
-- Five generated completed-game trophy images distinguish winner/outcome cards
+- Seven generated completed-game trophy images distinguish winner/outcome cards
   from ordinary game-status and final-score cards.
 - Six transparent achievement emblems provide an activity-award-style
   collection across Results & Rewards, Account, and admin Recognition views.
@@ -476,7 +490,7 @@ app state.
 
 - Every game has a Reset button with a normal confirmation popup; no typed
   reset phrase is required. Games admin also has Reset All Games for returning
-  all six games to their original disabled state between test runs.
+  all seven games to their original disabled state between test runs.
 - Wrap-Up suggests attendees from recorded activity, supports manual roster
   correction and per-game history retention, and can save a side-effect-free draft.
 - Finalization publishes eligible real winners, grants idempotent attendance

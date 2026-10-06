@@ -367,7 +367,10 @@ phase metrics instead rotate independently in `layout.games`. Host-controlled
 `game_presentation` overrides walk MMF aggregate action totals or revealed
 prompt winners with previous/next center-stage controls; only the admin-selected
 public identity enters result payloads, and individual MMF ballots
-never enter display payloads. Admin
+never enter display payloads. Scavenger Hunt adds a `review` phase between
+active uploads and finalized results; its presentation walks item dividers and
+private evidence photos through the authenticated display while review controls
+remain in the admin session. Admin
 stop/reset actions clear matching live-display event overrides without deleting
 signup lineups. Starting costume stops active karaoke event mode, and starting
 karaoke closes active costume voting so costume/karaoke do not compete for the
@@ -385,8 +388,9 @@ with no positive score receive a No Winner outcome card instead of silently
 omitting the result.
 
 `build_simulated_game_state()` creates deterministic completed test data for
-all six engines. The admin action backs up Redis, preserves MMF trio and prompt
-configuration, avoids party-account creation, marks the state as simulated,
+all seven engines. The admin action backs up Redis, preserves MMF trio, prompt,
+Cursed Objective, and Scavenger Hunt configuration, creates representative
+approved hunt submissions without real attendee photos, avoids party-account creation, marks the state as simulated,
 and refuses to overwrite non-simulated participants.
 
 The attendee portal has a related but separate date gate: `party_day_has_arrived()`

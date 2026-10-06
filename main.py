@@ -20,7 +20,7 @@ import time
 import warnings
 
 import redis
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -69,24 +69,29 @@ from party_games import (
     PROMPT_RESPONSE_WINDOW_SECONDS,
     PROMPT_REVEAL_WINDOW_SECONDS,
     PROMPT_VOTING_WINDOW_SECONDS,
+    SCAVENGER_HUNT_GAME_KEY,
     TWO_TRUTHS_GAME_KEY,
     WRONG_ANSWERS_GAME_KEY,
     calculate_mmf_results,
     calculate_cursed_objectives_results,
+    calculate_scavenger_hunt_results,
     calculate_prompt_results,
     calculate_two_truths_results,
     advance_prompt_game_automation,
     build_simulated_game_state,
     empty_mmf_game_state,
     empty_cursed_objectives_game_state,
+    empty_scavenger_hunt_game_state,
     empty_prompt_game_state,
     empty_two_truths_game_state,
+    default_cursed_objective_records,
     finalize_prompt_round,
     create_automatic_prompt_round,
     game_by_slug,
     game_winners,
     assign_cursed_objectives,
     cursed_objectives_statistics,
+    scavenger_hunt_statistics,
     generate_game_alias,
     mmf_statistics,
     normalize_games_state,
@@ -149,7 +154,7 @@ def _safe_int(value: object, default: int = 0) -> int:
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("HALLOWEEN_APP_SECRET", "dev-secret-key")
-app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 9 * 1024 * 1024
 app.config["ADMIN_PASSWORD"] = os.environ.get("HALLOWEEN_ADMIN_PASSWORD", "")
 app.config["PARTY_CODE"] = os.environ.get("HALLOWEEN_PARTY_CODE", "")
 app.config["PARTY_TITLE"] = os.environ.get(
@@ -389,7 +394,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 26
+STATE_SCHEMA_VERSION = 27
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -618,6 +623,11 @@ MENU_IMAGE_MIME_TYPES = {
     ".webp": "image/webp",
 }
 MAX_MENU_IMAGE_BYTES = 5 * 1024 * 1024
+SCAVENGER_IMAGE_URL_PREFIX = "/scavenger-hunt-images"
+ALLOWED_SCAVENGER_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_SCAVENGER_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_SCAVENGER_PROCESSED_BYTES = 1_500_000
+MAX_SCAVENGER_IMAGE_DIMENSION = 1920
 
 DEFAULT_PARTY_DETAILS: dict[str, str] = {
     "date": app.config["PARTY_DATE_LABEL"],
@@ -759,6 +769,7 @@ password_reset_tokens: dict[str, dict[str, object]] = {}
 menu_items: list[dict[str, object]] = []
 menu_image_memory: dict[str, bytes] = {}
 bartender_tip_image_memory: dict[str, bytes] = {}
+scavenger_image_memory: dict[str, bytes] = {}
 drink_orders: list[dict[str, object]] = []
 specialty_drink_allowances: dict[str, dict[str, object]] = {}
 dj_playlist: list[dict[str, object]] = []
@@ -824,6 +835,7 @@ STATE_MUTATION_ENDPOINTS = {
     "party_game_guess",
     "party_game_join",
     "party_cursed_objective_toggle",
+    "party_scavenger_upload",
     "party_mmf_answers",
     "party_prompt_response",
     "party_prompt_vote",
@@ -852,6 +864,7 @@ STATE_REFRESH_ENDPOINTS = {
     "party_results",
     "party_games_data",
     "party_game_view_data",
+    "scavenger_hunt_image",
     "party_costume_voting",
     "party_jukebox",
     "party_jukebox_data",
@@ -925,6 +938,7 @@ REGULAR_USER_ENDPOINTS = {
     "party_game_guess",
     "party_game_join",
     "party_cursed_objective_toggle",
+    "party_scavenger_upload",
     "party_mmf_answers",
     "party_prompt_response",
     "party_prompt_vote",
@@ -2012,6 +2026,8 @@ def safe_image_url(raw_url: str) -> str:
         return image_url
     if re.fullmatch(r"/bartender-tip-images/[0-9a-f]{32}\.(?:gif|jpe?g|png|webp)", image_url):
         return image_url
+    if re.fullmatch(r"/scavenger-hunt-images/[0-9a-f]{32}\.webp", image_url):
+        return image_url
     return ""
 
 
@@ -2047,7 +2063,8 @@ def prepare_uploaded_image(
     if not image_bytes:
         return None, f"{label} was empty."
     if len(image_bytes) > max_bytes:
-        return None, f"{label} must be 5 MB or smaller."
+        max_megabytes = max_bytes // (1024 * 1024)
+        return None, f"{label} must be {max_megabytes} MB or smaller."
     if not image_bytes_match_extension(safe_name, image_bytes):
         return None, f"{label} does not look like a valid image file."
 
@@ -2168,6 +2185,82 @@ def retire_bartender_tip_image(image_url: str) -> None:
     else:
         filename = image_url.rsplit("/", 1)[-1]
         bartender_tip_image_memory.pop(filename, None)
+
+
+def prepare_uploaded_scavenger_image(upload) -> tuple[dict[str, object] | None, str]:
+    prepared, error = prepare_uploaded_image(
+        upload,
+        label="Scavenger Hunt photo",
+        allowed_extensions=ALLOWED_SCAVENGER_IMAGE_EXTENSIONS,
+        max_bytes=MAX_SCAVENGER_IMAGE_BYTES,
+    )
+    if error or prepared is None:
+        return prepared, error
+    try:
+        with Image.open(io.BytesIO(prepared["bytes"])) as source:
+            image = ImageOps.exif_transpose(source).convert("RGB")
+            image.thumbnail((MAX_SCAVENGER_IMAGE_DIMENSION, MAX_SCAVENGER_IMAGE_DIMENSION))
+            encoded = b""
+            for quality in (84, 76, 68, 60):
+                output = io.BytesIO()
+                image.save(output, format="WEBP", quality=quality, method=6)
+                encoded = output.getvalue()
+                if len(encoded) <= MAX_SCAVENGER_PROCESSED_BYTES:
+                    break
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        return None, "Scavenger Hunt photo could not be processed."
+    if not encoded or len(encoded) > MAX_SCAVENGER_PROCESSED_BYTES:
+        return None, "Scavenger Hunt photo is too detailed to process safely. Try a smaller image."
+    return {"bytes": encoded, "extension": ".webp"}, ""
+
+
+def store_prepared_scavenger_image(prepared: dict[str, object]) -> tuple[str, str]:
+    image_id = uuid4().hex
+    image_bytes = prepared.get("bytes")
+    if not isinstance(image_bytes, bytes):
+        return "", "Scavenger Hunt photo could not be prepared."
+    image_key = redis_key(f"scavenger-hunt-image:{image_id}:webp")
+    if redis_state_available:
+        try:
+            redis_binary_client.setex(image_key, 60 * 60, image_bytes)
+            candidate_keys = list(getattr(g, "scavenger_candidate_keys", []))
+            candidate_keys.append(image_key)
+            g.scavenger_candidate_keys = candidate_keys
+        except redis.RedisError as exc:
+            app.logger.warning("Unable to store Scavenger Hunt photo: %s", exc)
+            return "", "Scavenger Hunt photo storage is temporarily unavailable."
+    else:
+        scavenger_image_memory[f"{image_id}.webp"] = image_bytes
+    return f"{SCAVENGER_IMAGE_URL_PREFIX}/{image_id}.webp", ""
+
+
+def managed_scavenger_image_key(image_url: str) -> str:
+    match = re.fullmatch(r"/scavenger-hunt-images/([0-9a-f]{32})\.webp", str(image_url or ""))
+    return redis_key(f"scavenger-hunt-image:{match.group(1)}:webp") if match else ""
+
+
+def retire_scavenger_image(image_url: str) -> None:
+    key = managed_scavenger_image_key(image_url)
+    if not key:
+        return
+    if redis_state_available:
+        try:
+            redis_binary_client.expire(key, STATE_BACKUP_TTL_SECONDS)
+        except redis.RedisError as exc:
+            app.logger.warning("Unable to schedule Scavenger Hunt photo cleanup: %s", exc)
+    else:
+        scavenger_image_memory.pop(image_url.rsplit("/", 1)[-1], None)
+
+
+def scavenger_submission_image_urls(game: object | None = None) -> list[str]:
+    source = game if isinstance(game, dict) else games_state.get(SCAVENGER_HUNT_GAME_KEY, {})
+    return [
+        str(submission.get("image_url", "") or "")
+        for participant in source.get("participants", {}).values()
+        if isinstance(participant, dict)
+        for submission in (participant.get("submissions", {}) or {}).values()
+        if isinstance(submission, dict) and submission.get("image_url")
+    ]
 
 
 def normalize_menu_category(raw_category: object) -> str:
@@ -5447,7 +5540,7 @@ def apply_state_snapshot(data: dict[str, object]) -> None:
         for account in user_accounts.values()
         if isinstance(account, dict) and account.get("id")
     }
-    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS, CURSED_OBJECTIVES_GAME_KEY):
+    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS, CURSED_OBJECTIVES_GAME_KEY, SCAVENGER_HUNT_GAME_KEY):
         for user_id, participant in games_state[game_key].get("participants", {}).items():
             if isinstance(participant, dict) and not participant.get("display_name"):
                 participant["display_name"] = str(
@@ -6536,12 +6629,15 @@ def save_and_unlock_state_after_mutation(response):
             else:
                 state_saved = True
             if state_saved:
-                for candidate_key in getattr(g, "bartender_tip_candidate_keys", []):
+                for candidate_key in [
+                    *getattr(g, "bartender_tip_candidate_keys", []),
+                    *getattr(g, "scavenger_candidate_keys", []),
+                ]:
                     try:
                         redis_binary_client.persist(candidate_key)
                     except redis.RedisError as exc:
                         app.logger.error(
-                            "Unable to finalize bartender tip image %s: %s",
+                            "Unable to finalize uploaded image %s: %s",
                             candidate_key,
                             exc,
                         )
@@ -6551,6 +6647,7 @@ def save_and_unlock_state_after_mutation(response):
             g.redis_state_lock_owned = False
             g.redis_state_saved_during_request = False
             g.bartender_tip_candidate_keys = []
+            g.scavenger_candidate_keys = []
 
     return response
 
@@ -6795,6 +6892,8 @@ def party_game_state(game_key: str) -> dict[str, object]:
         game = empty_prompt_game_state(game_key)
     elif game_key == CURSED_OBJECTIVES_GAME_KEY:
         game = empty_cursed_objectives_game_state()
+    elif game_key == SCAVENGER_HUNT_GAME_KEY:
+        game = empty_scavenger_hunt_game_state()
     else:
         raise KeyError(game_key)
     games_state[game_key] = game
@@ -6812,7 +6911,7 @@ def game_is_open(game: object) -> bool:
 def open_game_for_attendees(game: dict[str, object]) -> bool:
     """Enable a non-finalized game and make it immediately joinable."""
     game["enabled"] = True
-    if game.get("phase") == "ended":
+    if game.get("phase") in {"review", "ended"}:
         return False
     game["phase"] = "active"
     if not game.get("started_at"):
@@ -6960,6 +7059,8 @@ def game_public_score_rows(game_key: str, game: dict[str, object]) -> list[dict[
             row["detail"] = f"{int(score.get('completed_rounds', 0) or 0)} of {MMF_ROUND_COUNT} rounds"
         elif game_key == CURSED_OBJECTIVES_GAME_KEY:
             row["detail"] = f"{int(score.get('completed_missions', points) or 0)} of {int(score.get('assigned_missions', CURSED_OBJECTIVES_PER_PLAYER) or CURSED_OBJECTIVES_PER_PLAYER)} objectives"
+        elif game_key == SCAVENGER_HUNT_GAME_KEY:
+            row["detail"] = f"{int(score.get('approved_submissions', points) or 0)} approved photos"
         else:
             row["detail"] = "Anonymous alias" if score.get("anonymous") else "Party account name"
         rows.append(row)
@@ -6988,7 +7089,7 @@ def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]
         "winner_image_url": game_art_url(game_key, winner=True),
         "enabled": bool(game.get("enabled")),
         "phase": phase,
-        "status_label": "Closed · Final results" if phase == "ended" else ("Open · Join anytime" if phase == "active" else "Disabled"),
+        "status_label": "Closed · Final results" if phase == "ended" else ("Reviewing submissions" if phase == "review" else ("Open · Join anytime" if phase == "active" else "Disabled")),
         "participant_count": len(participants),
         "participating": bool(user_id and user_id in participants),
         "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
@@ -7021,6 +7122,14 @@ def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]
             {"label": "Completed", "value": stats["completed_missions"]},
             {"label": "Assigned", "value": stats["assigned_missions"]},
             {"label": "Complete", "value": f"{stats['completion_percent']:g}%"},
+        ]
+    elif game_key == SCAVENGER_HUNT_GAME_KEY:
+        stats = scavenger_hunt_statistics(game)
+        view["metrics"] = [
+            {"label": "Players", "value": len(participants)},
+            {"label": "Photos", "value": stats["submission_count"]},
+            {"label": "Approved", "value": stats["approved_count"]},
+            {"label": "Pending", "value": stats["pending_count"]},
         ]
     else:
         current_round = prompt_round_for_game(game)
@@ -7712,7 +7821,10 @@ def cleanup_completed_wrapup(wrapup: dict[str, object]) -> tuple[bool, str]:
             if str(credit.get("source_ref", "")) in deleted_archive_ids and not credit.get("revoked_at"):
                 credit["revoked_at"] = timestamp
                 credit["revoked_reason"] = "Historical game record deleted during party wrap-up."
+        retired_hunt_images = scavenger_submission_image_urls()
         reset_current_games(set(GAME_CATALOG), preserve_enabled=False, sanitize_backups=False)
+        for image_url in retired_hunt_images:
+            retire_scavenger_image(image_url)
         sanitize_game_data_in_state_backups(
             game_keys=set(GAME_CATALOG),
             delete_official_for=delete_all,
@@ -7824,6 +7936,48 @@ def cursed_objectives_admin_view() -> dict[str, object]:
     }
 
 
+def scavenger_hunt_admin_view() -> dict[str, object]:
+    game = party_game_state(SCAVENGER_HUNT_GAME_KEY)
+    submissions = []
+    for user_id, participant in game.get("participants", {}).items():
+        if not isinstance(participant, dict):
+            continue
+        for item_id, submission in (participant.get("submissions", {}) or {}).items():
+            if not isinstance(submission, dict):
+                continue
+            submissions.append({
+                **copy.deepcopy(submission),
+                "user_id": str(user_id),
+                "player_id": str(participant.get("player_id", "")),
+                "player_name": str(participant.get("display_name", "") or "Player"),
+                "item_id": str(item_id),
+            })
+    item_order = {str(item.get("id", "")): index for index, item in enumerate(game.get("items", []))}
+    submissions.sort(key=lambda entry: (item_order.get(entry["item_id"], 999), entry["player_name"].casefold()))
+    submission_groups = [
+        {
+            "item_id": str(item.get("id", "")),
+            "title": str(item.get("title", "Hunt item") or "Hunt item"),
+            "instructions": str(item.get("instructions", "") or ""),
+            "submissions": [
+                entry for entry in submissions
+                if entry["item_id"] == str(item.get("id", ""))
+            ],
+        }
+        for item in game.get("items", [])
+        if isinstance(item, dict)
+    ]
+    return {
+        **copy.deepcopy(game),
+        "key": SCAVENGER_HUNT_GAME_KEY,
+        "metadata": GAME_CATALOG[SCAVENGER_HUNT_GAME_KEY],
+        "statistics": scavenger_hunt_statistics(game),
+        "submissions_list": submissions,
+        "submission_groups": submission_groups,
+        "winners": game_winners(SCAVENGER_HUNT_GAME_KEY, game),
+    }
+
+
 def game_admin_view(game_key: str) -> dict[str, object]:
     if game_key == TWO_TRUTHS_GAME_KEY:
         view = two_truths_admin_view()
@@ -7838,6 +7992,8 @@ def game_admin_view(game_key: str) -> dict[str, object]:
         return mmf_admin_view()
     if game_key == CURSED_OBJECTIVES_GAME_KEY:
         return cursed_objectives_admin_view()
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        return scavenger_hunt_admin_view()
     return prompt_admin_view(game_key)
 
 
@@ -8088,12 +8244,42 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
         {
             "type": "game_presentation",
             "title": title,
-            "highlight": "Results are in",
-            "message": "The host is revealing tonight's final results." if game_key == CURSED_OBJECTIVES_GAME_KEY else "The host is revealing tonight's blind responses.",
+            "highlight": "Evidence review" if game_key == SCAVENGER_HUNT_GAME_KEY and game.get("phase") == "review" else "Results are in",
+            "message": "The host is reviewing tonight's submitted photos." if game_key == SCAVENGER_HUNT_GAME_KEY else ("The host is revealing tonight's final results." if game_key == CURSED_OBJECTIVES_GAME_KEY else "The host is revealing tonight's blind responses."),
             "details": [f"{len(game.get('participants', {}))} players"],
         }
     ]
-    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        participants = game.get("participants", {})
+        for item_index, item in enumerate(game.get("items", []), start=1):
+            item_id = str(item.get("id", ""))
+            item_submissions = [
+                (participant, submission)
+                for participant in participants.values()
+                if isinstance(participant, dict)
+                for submission in [(participant.get("submissions", {}) or {}).get(item_id)]
+                if isinstance(submission, dict)
+            ]
+            if not item_submissions:
+                continue
+            slides.append({
+                "type": "game_presentation",
+                "title": f"Hunt Item {item_index}",
+                "highlight": str(item.get("title", "Evidence")),
+                "message": str(item.get("instructions", "") or "Review the submitted evidence."),
+                "details": [f"{len(item_submissions)} submitted photo{'s' if len(item_submissions) != 1 else ''}"],
+            })
+            for photo_index, (participant, submission) in enumerate(item_submissions, start=1):
+                slides.append({
+                    "type": "game_presentation",
+                    "title": str(item.get("title", "Scavenger Hunt")),
+                    "highlight": str(participant.get("display_name", "Player") or "Player"),
+                    "message": str(submission.get("review_status", "pending") or "pending").title(),
+                    "details": [f"Photo {photo_index} of {len(item_submissions)}"],
+                    "image_url": str(submission.get("image_url", "") or ""),
+                    "media_treatment": "background",
+                })
+    elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
         explicit_label = str(game.get("explicit_label", "F%$@"))
         labels = {"murder": "Murder", "marry": "Marry", "fuck": explicit_label}
         for index, result in enumerate(game.get("results", {}).get("round_results", [])):
@@ -8125,18 +8311,18 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             for response in winners:
                 winner_detail = "Solo spotlight · 1 point" if results.get("solo_spotlight") else f"{results.get('vote_counts', {}).get(response.get('id'), 0)} votes"
                 slides.append({"type": "game_presentation", "title": f"Round {index + 1} Winner", "highlight": response.get("text", ""), "message": identities_by_player.get(response.get("player_id"), "Player"), "details": [winner_detail]})
-    scoreboard = game_scoreboard_entry(game_key)
+    scoreboard = game_scoreboard_entry(game_key) if game.get("phase") == "ended" else None
     if scoreboard:
         slides.append({"type": "game_presentation", "title": title, "highlight": "Final leaderboard", "message": scoreboard.get("secondary", ""), "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]})
     outcome = game_outcome_entry(game_key)
     if outcome:
         slides.append({"type": "game_winner", "title": outcome["category"], "highlight": outcome["primary"], "message": outcome["secondary"], "details": [outcome["tertiary"]]})
     for slide in slides:
-        slide["image_url"] = game_art_url(
+        slide.setdefault("image_url", game_art_url(
             game_key,
             winner=str(slide.get("type", "")) == "game_winner",
-        )
-        slide["media_treatment"] = "background"
+        ))
+        slide.setdefault("media_treatment", "background")
     return slides
 
 
@@ -8596,7 +8782,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
         phase = str(game.get("phase", "signup") or "signup")
         participants = game.get("participants", {}) if isinstance(game.get("participants"), dict) else {}
         title = GAME_CATALOG[game_key]["title"]
-        presentation = "result" if phase == "ended" else ("active" if phase == "active" else "signup")
+        presentation = "result" if phase == "ended" else ("review" if phase == "review" else ("active" if phase == "active" else "signup"))
         entry: dict[str, object] = {
             "id": game_key,
             "game_key": game_key,
@@ -8706,6 +8892,21 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 winners = game_winners(game_key, game)
                 entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Cursed Objectives champion" if len(winners) == 1 else "Cursed Objectives champions"
+        elif game_key == SCAVENGER_HUNT_GAME_KEY:
+            stats = scavenger_hunt_statistics(game)
+            entry["primary"] = "Photograph every hunt item and submit the evidence before final call."
+            entry["secondary"] = "Uploads are under host review." if phase == "review" else "One point for every approved photo."
+            entry["metrics"] = [
+                {"label": "Players", "value": len(participants)},
+                {"label": "Photos", "value": stats.get("submission_count", 0)},
+                {"label": "Approved", "value": stats.get("approved_count", 0)},
+            ]
+            entry["steps"] = ["Join the hunt", "Photograph each item", "Upload evidence before final call"] if phase == "active" else []
+            entry["action_label"] = "Upload evidence in Party Games" if phase == "active" else "Evidence review in progress"
+            if phase == "ended":
+                winners = game_winners(game_key, game)
+                entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners) or "Final results ready"
+                entry["secondary"] = "Scavenger Hunt champion" if len(winners) == 1 else "Scavenger Hunt champions"
         elif game_key in PROMPT_GAME_KEYS:
             current_round = prompt_round_for_game(game)
             if current_round:
@@ -9060,6 +9261,50 @@ def bartender_tip_image(image_id: str, extension: str):
         abort(404)
     response = Response(image_bytes, mimetype=MENU_IMAGE_MIME_TYPES[normalized_extension])
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+@app.route("/scavenger-hunt-images/<image_id>.webp")
+def scavenger_hunt_image(image_id: str):
+    normalized_id = image_id.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{32}", normalized_id):
+        abort(404)
+    image_url = f"{SCAVENGER_IMAGE_URL_PREFIX}/{normalized_id}.webp"
+    game = party_game_state(SCAVENGER_HUNT_GAME_KEY)
+    owner_id = ""
+    found = False
+    for user_id, participant in game.get("participants", {}).items():
+        if not isinstance(participant, dict):
+            continue
+        for submission in (participant.get("submissions", {}) or {}).values():
+            if isinstance(submission, dict) and submission.get("image_url") == image_url:
+                owner_id = str(user_id)
+                found = True
+                break
+        if found:
+            break
+    if not found or not (
+        session_has_role("admin")
+        or (session_has_role("regular") and str(session.get("user_id", "") or "") == owner_id)
+    ):
+        abort(404)
+    image_bytes: bytes | None = None
+    if redis_state_available:
+        try:
+            stored = redis_binary_client.get(redis_key(f"scavenger-hunt-image:{normalized_id}:webp"))
+        except redis.RedisError:
+            abort(503)
+        if isinstance(stored, bytes):
+            image_bytes = stored
+        elif isinstance(stored, str):
+            image_bytes = stored.encode("latin-1")
+    else:
+        image_bytes = scavenger_image_memory.get(f"{normalized_id}.webp")
+    if not image_bytes:
+        abort(404)
+    response = Response(image_bytes, mimetype="image/webp")
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 
@@ -11388,14 +11633,27 @@ def build_party_game_page_context(
             if isinstance(entry, dict)
         }
         completed_ids = set(participant.get("completed_mission_ids", []))
+        mission_snapshots = participant.get("mission_snapshots", {}) if isinstance(participant.get("mission_snapshots"), dict) else {}
         participant_missions = [
             {
                 "id": mission_id,
-                "text": str(objective_by_id.get(mission_id, {}).get("text", "Secret objective")),
+                "text": str(mission_snapshots.get(mission_id) or objective_by_id.get(mission_id, {}).get("text", "Secret objective")),
                 "completed": mission_id in completed_ids,
             }
             for mission_id in participant.get("mission_ids", [])
             if mission_id in objective_by_id
+        ]
+
+    scavenger_items = []
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        participant_submissions = participant.get("submissions", {}) if participant and isinstance(participant.get("submissions"), dict) else {}
+        scavenger_items = [
+            {
+                **copy.deepcopy(item),
+                "submission": copy.deepcopy(participant_submissions.get(str(item.get("id", "")))) if participant_submissions.get(str(item.get("id", ""))) else None,
+            }
+            for item in game.get("items", [])
+            if isinstance(item, dict) and item.get("enabled")
         ]
 
     revision_source = json.dumps(
@@ -11438,6 +11696,7 @@ def build_party_game_page_context(
         "show_participation_form": show_participation_form,
         "selected_mmf_round_id": selected_mmf_round_id,
         "participant_missions": participant_missions,
+        "scavenger_items": scavenger_items,
         "success": success,
         "error": error,
         "statement_max_length": GAME_STATEMENT_MAX_LENGTH,
@@ -11619,8 +11878,57 @@ def party_game_join(game_slug: str):
             user_id,
             display_name=display_name,
         )
+        if game_key == SCAVENGER_HUNT_GAME_KEY:
+            participant.pop("answers", None)
+            participant.setdefault("submissions", {})
     broadcast_display_update()
     return redirect(url_for("party_games", game=game_slug, success="joined"))
+
+
+@app.post("/party/games/scavenger-hunt/items/<item_id>/photo")
+def party_scavenger_upload(item_id: str):
+    game = party_game_state(SCAVENGER_HUNT_GAME_KEY)
+    slug = GAME_CATALOG[SCAVENGER_HUNT_GAME_KEY]["slug"]
+    if not party_day_has_arrived() or not game_is_open(game):
+        return redirect(url_for("party_games", game=slug, error="Photo uploads are closed."))
+    user_id = str(session.get("user_id", "") or "")
+    participant = game_alias_participant(game, user_id)
+    if not participant:
+        return redirect(url_for("party_games", game=slug, error="Join the hunt before uploading evidence."))
+    item = next(
+        (
+            entry for entry in game.get("items", [])
+            if isinstance(entry, dict) and entry.get("enabled") and str(entry.get("id", "")) == item_id
+        ),
+        None,
+    )
+    if not item:
+        return redirect(url_for("party_games", game=slug, error="That hunt item is not available."))
+    prepared, upload_error = prepare_uploaded_scavenger_image(request.files.get("photo"))
+    if upload_error or prepared is None:
+        return redirect(url_for("party_games", game=slug, error=upload_error or "Choose a photo to upload."))
+    image_url, storage_error = store_prepared_scavenger_image(prepared)
+    if storage_error:
+        return redirect(url_for("party_games", game=slug, error=storage_error))
+    timestamp = _utc_now_iso()
+    submissions = participant.setdefault("submissions", {})
+    previous = submissions.get(item_id, {}) if isinstance(submissions.get(item_id), dict) else {}
+    submissions[item_id] = {
+        "id": str(previous.get("id", "") or uuid4().hex),
+        "item_id": item_id,
+        "item_title": str(item.get("title", "") or "Hunt item"),
+        "item_instructions": str(item.get("instructions", "") or ""),
+        "image_url": image_url,
+        "review_status": "pending",
+        "submitted_at": str(previous.get("submitted_at", "") or timestamp),
+        "updated_at": timestamp,
+        "reviewed_at": "",
+    }
+    participant["updated_at"] = timestamp
+    if previous.get("image_url") and previous.get("image_url") != image_url:
+        retire_scavenger_image(str(previous.get("image_url", "")))
+    broadcast_display_update()
+    return redirect(url_for("party_games", game=slug, success="photo_uploaded"))
 
 
 @app.route("/party/games/cursed-objectives/missions/<mission_id>/toggle", methods=["POST"])
@@ -12225,6 +12533,19 @@ def admin_portal(admin_view: str):
             "next_game_slide",
             "show_game_winner",
             "show_game_results",
+            "add_cursed_objective",
+            "update_cursed_objective",
+            "toggle_cursed_objective",
+            "delete_cursed_objective",
+            "move_cursed_objective",
+            "restore_cursed_objectives",
+            "add_scavenger_item",
+            "update_scavenger_item",
+            "toggle_scavenger_item",
+            "delete_scavenger_item",
+            "move_scavenger_item",
+            "review_scavenger_submission",
+            "finalize_scavenger_hunt",
         }
 
         display_actions = {
@@ -12273,6 +12594,7 @@ def admin_portal(admin_view: str):
         if action == "reset_all_games":
             counts = game_reset_counts(games_state)
             before_reset = snapshot_state()
+            retired_hunt_images = scavenger_submission_image_urls()
             try:
                 sanitized_backup_count = reset_current_games(
                     set(GAME_CATALOG),
@@ -12283,6 +12605,8 @@ def admin_portal(admin_view: str):
                 apply_state_snapshot(before_reset)
                 errors.append(f"Game reset could not sanitize retained state backups: {exc}")
             else:
+                for image_url in retired_hunt_images:
+                    retire_scavenger_image(image_url)
                 messages.append(
                     "All games were restored to their original disabled testing state. "
                     f"Cleared {counts['participant_count']} participant record"
@@ -12992,15 +13316,23 @@ def admin_portal(admin_view: str):
                         should_broadcast = True
 
                 elif action == "enable_game":
-                    opened = open_game_for_attendees(game)
-                    if opened and game_key in PROMPT_GAME_KEYS:
-                        advance_prompt_game_automation(game_key, game)
-                    messages.append(
-                        f"{title} is open. Attendees can join and participate until you close it."
-                        if opened
-                        else f"{title} is visible with its closed results. Reset it to open a new game."
-                    )
-                    should_broadcast = True
+                    enabled_hunt_items = [item for item in game.get("items", []) if item.get("enabled")]
+                    enabled_objectives = [objective for objective in game.get("objectives", []) if objective.get("enabled")]
+                    if game_key == CURSED_OBJECTIVES_GAME_KEY and len(enabled_objectives) < CURSED_OBJECTIVES_PER_PLAYER:
+                        errors.append(f"Enable at least {CURSED_OBJECTIVES_PER_PLAYER} Cursed Objectives before opening the game.")
+                    elif game_key == SCAVENGER_HUNT_GAME_KEY and not enabled_hunt_items:
+                        errors.append("Add or enable at least one Scavenger Hunt item before opening the game.")
+                    else:
+                        opened = open_game_for_attendees(game)
+                        if opened and game_key in PROMPT_GAME_KEYS:
+                            advance_prompt_game_automation(game_key, game)
+                        if opened:
+                            messages.append(f"{title} is open. Attendees can join and participate until you close it.")
+                        elif game.get("phase") == "review":
+                            messages.append(f"{title} is visible in photo review. Finish review or reset it to open a new hunt.")
+                        else:
+                            messages.append(f"{title} is visible with its closed results. Reset it to open a new game.")
+                        should_broadcast = True
 
                 elif action == "disable_game":
                     if game_key in PROMPT_GAME_KEYS and game.get("phase") == "active":
@@ -13014,8 +13346,8 @@ def admin_portal(admin_view: str):
                 elif action == "toggle_game_anonymity":
                     if game_key == TWO_TRUTHS_GAME_KEY:
                         errors.append("Two Truths and a Lie must use account names for identity guesses.")
-                    elif game_key == CURSED_OBJECTIVES_GAME_KEY:
-                        errors.append("Cursed Objectives uses signed-in names for its final leaderboard.")
+                    elif game_key in {CURSED_OBJECTIVES_GAME_KEY, SCAVENGER_HUNT_GAME_KEY}:
+                        errors.append(f"{title} uses signed-in names for its final leaderboard.")
                     elif game.get("phase") != "signup":
                         errors.append("Player identity can only be changed before the game opens.")
                     else:
@@ -13029,7 +13361,7 @@ def admin_portal(admin_view: str):
                         errors.append("Use the existing Two Truths start control.")
                     elif not game.get("enabled"):
                         errors.append(f"Enable {title} before starting it.")
-                    elif game.get("phase") == "ended":
+                    elif game.get("phase") in {"review", "ended"}:
                         errors.append(f"Reset {title} before opening a new game.")
                     elif game_is_open(game):
                         messages.append(f"{title} is already open for attendees.")
@@ -13046,6 +13378,12 @@ def admin_portal(admin_view: str):
                         errors.append("Use the existing Two Truths end control.")
                     elif game.get("phase") != "active":
                         errors.append(f"Start {title} before ending it.")
+                    elif game_key == SCAVENGER_HUNT_GAME_KEY:
+                        game["phase"] = "review"
+                        game["review_started_at"] = _utc_now_iso()
+                        game["presentation"] = {"active": False, "slide_index": 0}
+                        messages.append("Scavenger Hunt uploads are locked. Review every submitted photo before finalizing scores.")
+                        should_broadcast = True
                     else:
                         finalized_at = _utc_now_iso()
                         if game_key in PROMPT_GAME_KEYS:
@@ -13081,6 +13419,15 @@ def admin_portal(admin_view: str):
 
                 elif action == "reset_game":
                     before_reset = snapshot_state()
+                    preserved_objectives = copy.deepcopy(game.get("objectives", [])) if game_key == CURSED_OBJECTIVES_GAME_KEY else None
+                    preserved_hunt_items = copy.deepcopy(game.get("items", [])) if game_key == SCAVENGER_HUNT_GAME_KEY else None
+                    retired_hunt_images = [
+                        str(submission.get("image_url", "") or "")
+                        for participant in game.get("participants", {}).values()
+                        if isinstance(participant, dict)
+                        for submission in (participant.get("submissions", {}) or {}).values()
+                        if isinstance(submission, dict)
+                    ] if game_key == SCAVENGER_HUNT_GAME_KEY else []
                     write_state_backup_if_available(f"game-{game_key}-reset")
                     try:
                         reset_current_games(
@@ -13092,8 +13439,19 @@ def admin_portal(admin_view: str):
                         apply_state_snapshot(before_reset)
                         errors.append(f"{title} could not be reset safely: {exc}")
                     else:
+                        if preserved_objectives is not None:
+                            party_game_state(game_key)["objectives"] = preserved_objectives
+                        if preserved_hunt_items is not None:
+                            party_game_state(game_key)["items"] = preserved_hunt_items
+                        for image_url in retired_hunt_images:
+                            retire_scavenger_image(image_url)
+                        configuration_note = (
+                            "Saved configuration was preserved"
+                            if game_key in {CURSED_OBJECTIVES_GAME_KEY, SCAVENGER_HUNT_GAME_KEY}
+                            else "Configuration defaults were restored"
+                        )
                         messages.append(
-                            f"{title} was reset and reopened. Configuration defaults were restored, current play data was cleared, and official history was preserved."
+                            f"{title} was reset and reopened. {configuration_note}, current play data was cleared, and official history was preserved."
                         )
                         should_broadcast = True
 
@@ -13126,6 +13484,157 @@ def admin_portal(admin_view: str):
                             game["explicit_label"] = explicit_label
                             messages.append("Saved all ten Murder, Marry, F%$@ rounds.")
                             should_broadcast = True
+
+                elif action in {
+                    "add_cursed_objective", "update_cursed_objective", "toggle_cursed_objective",
+                    "delete_cursed_objective", "move_cursed_objective", "restore_cursed_objectives",
+                }:
+                    if game_key != CURSED_OBJECTIVES_GAME_KEY:
+                        errors.append("That objective action does not belong to this game.")
+                    else:
+                        objectives = game.setdefault("objectives", [])
+                        objective_id = str(request.form.get("objective_id", "") or "")
+                        objective_index = next((index for index, entry in enumerate(objectives) if str(entry.get("id", "")) == objective_id), None)
+                        assigned_ids = {
+                            str(mission_id)
+                            for participant in game.get("participants", {}).values()
+                            if isinstance(participant, dict)
+                            for mission_id in participant.get("mission_ids", [])
+                        }
+                        now = _utc_now_iso()
+                        if action == "add_cursed_objective":
+                            text_value = normalize_statement(request.form.get("objective_text", ""))
+                            if not text_value:
+                                errors.append("Enter objective text.")
+                            else:
+                                objectives.append({"id": uuid4().hex, "text": text_value, "enabled": True, "created_at": now, "updated_at": now})
+                                messages.append("Added a Cursed Objective.")
+                                should_broadcast = True
+                        elif action == "restore_cursed_objectives":
+                            if game.get("participants"):
+                                errors.append("Reset the game before restoring the default objective deck.")
+                            else:
+                                game["objectives"] = default_cursed_objective_records()
+                                messages.append("Restored the default Cursed Objectives deck.")
+                                should_broadcast = True
+                        elif objective_index is None:
+                            errors.append("That Cursed Objective could not be found.")
+                        elif action == "update_cursed_objective":
+                            text_value = normalize_statement(request.form.get("objective_text", ""))
+                            if not text_value:
+                                errors.append("Enter objective text.")
+                            else:
+                                objectives[objective_index]["text"] = text_value
+                                objectives[objective_index]["updated_at"] = now
+                                messages.append("Updated the objective. Existing player assignments keep their original wording.")
+                                should_broadcast = True
+                        elif action == "toggle_cursed_objective":
+                            objectives[objective_index]["enabled"] = not bool(objectives[objective_index].get("enabled"))
+                            objectives[objective_index]["updated_at"] = now
+                            messages.append("Updated objective availability for future assignments.")
+                            should_broadcast = True
+                        elif action == "delete_cursed_objective":
+                            if objective_id in assigned_ids:
+                                errors.append("An assigned objective cannot be removed during the current game. Disable it for future players instead.")
+                            else:
+                                objectives.pop(objective_index)
+                                messages.append("Removed the objective.")
+                                should_broadcast = True
+                        else:
+                            direction = str(request.form.get("direction", "") or "")
+                            target = objective_index + (-1 if direction == "up" else 1)
+                            if 0 <= target < len(objectives):
+                                objectives[objective_index], objectives[target] = objectives[target], objectives[objective_index]
+                                messages.append("Moved the objective.")
+                                should_broadcast = True
+
+                elif action in {
+                    "add_scavenger_item", "update_scavenger_item", "toggle_scavenger_item",
+                    "delete_scavenger_item", "move_scavenger_item",
+                }:
+                    if game_key != SCAVENGER_HUNT_GAME_KEY:
+                        errors.append("That hunt-item action does not belong to this game.")
+                    elif game.get("phase") != "signup":
+                        errors.append("Reset or configure the Scavenger Hunt before opening it to edit hunt items.")
+                    else:
+                        items = game.setdefault("items", [])
+                        item_id = str(request.form.get("item_id", "") or "")
+                        item_index = next((index for index, entry in enumerate(items) if str(entry.get("id", "")) == item_id), None)
+                        now = _utc_now_iso()
+                        if action == "add_scavenger_item":
+                            item_title = re.sub(r"\s+", " ", request.form.get("item_title", "").strip())[:80]
+                            instructions = normalize_statement(request.form.get("item_instructions", ""))
+                            if not item_title:
+                                errors.append("Enter a Scavenger Hunt item title.")
+                            else:
+                                items.append({"id": uuid4().hex, "title": item_title, "instructions": instructions, "enabled": True, "created_at": now, "updated_at": now})
+                                messages.append(f"Added hunt item: {item_title}.")
+                                should_broadcast = True
+                        elif item_index is None:
+                            errors.append("That Scavenger Hunt item could not be found.")
+                        elif action == "update_scavenger_item":
+                            item_title = re.sub(r"\s+", " ", request.form.get("item_title", "").strip())[:80]
+                            if not item_title:
+                                errors.append("Enter a Scavenger Hunt item title.")
+                            else:
+                                items[item_index].update({"title": item_title, "instructions": normalize_statement(request.form.get("item_instructions", "")), "updated_at": now})
+                                messages.append(f"Updated hunt item: {item_title}.")
+                                should_broadcast = True
+                        elif action == "toggle_scavenger_item":
+                            items[item_index]["enabled"] = not bool(items[item_index].get("enabled"))
+                            items[item_index]["updated_at"] = now
+                            messages.append("Updated the hunt item.")
+                            should_broadcast = True
+                        elif action == "delete_scavenger_item":
+                            removed = items.pop(item_index)
+                            messages.append(f"Removed hunt item: {removed.get('title', 'item')}.")
+                            should_broadcast = True
+                        else:
+                            direction = str(request.form.get("direction", "") or "")
+                            target = item_index + (-1 if direction == "up" else 1)
+                            if 0 <= target < len(items):
+                                items[item_index], items[target] = items[target], items[item_index]
+                                messages.append("Moved the hunt item.")
+                                should_broadcast = True
+
+                elif action == "review_scavenger_submission":
+                    submission_id = str(request.form.get("submission_id", "") or "")
+                    review_status = str(request.form.get("review_status", "") or "")
+                    submission = next(
+                        (
+                            entry
+                            for participant in game.get("participants", {}).values()
+                            if isinstance(participant, dict)
+                            for entry in (participant.get("submissions", {}) or {}).values()
+                            if isinstance(entry, dict) and str(entry.get("id", "")) == submission_id
+                        ),
+                        None,
+                    )
+                    if game_key != SCAVENGER_HUNT_GAME_KEY or game.get("phase") != "review" or not submission:
+                        errors.append("That Scavenger Hunt submission is not available for review.")
+                    elif review_status not in {"approved", "rejected"}:
+                        errors.append("Choose whether to award credit for that photo.")
+                    else:
+                        submission["review_status"] = review_status
+                        submission["reviewed_at"] = _utc_now_iso()
+                        messages.append(f"Marked the submission {review_status}.")
+                        should_broadcast = True
+
+                elif action == "finalize_scavenger_hunt":
+                    stats = scavenger_hunt_statistics(game)
+                    if game_key != SCAVENGER_HUNT_GAME_KEY or game.get("phase") != "review":
+                        errors.append("Close the Scavenger Hunt for review before finalizing it.")
+                    elif stats["pending_count"]:
+                        errors.append(f"Review all photos first. {stats['pending_count']} submission(s) are still pending.")
+                    else:
+                        finalized_at = _utc_now_iso()
+                        game["phase"] = "ended"
+                        game["ended_at"] = finalized_at
+                        game["results"] = calculate_scavenger_hunt_results(game, finalized_at=finalized_at)
+                        upsert_game_result_archive(game_key)
+                        write_state_backup_if_available("game-scavenger-hunt-ended")
+                        messages.append("Scavenger Hunt scores are final. Winner presentation controls are now available.")
+                        should_broadcast = True
 
                 elif action == "add_game_prompt":
                     if game_key not in PROMPT_GAME_KEYS:
@@ -13295,8 +13804,8 @@ def admin_portal(admin_view: str):
                         should_broadcast = True
 
                 elif action in {"start_game_presentation", "previous_game_slide", "next_game_slide"}:
-                    if game.get("phase") != "ended":
-                        errors.append("End the game before starting its result presentation.")
+                    if game.get("phase") != "ended" and not (game_key == SCAVENGER_HUNT_GAME_KEY and game.get("phase") == "review"):
+                        errors.append("Close the game before starting its presentation.")
                     else:
                         current_index = int(game.get("presentation", {}).get("slide_index", 0) or 0)
                         requested_index = 0 if action == "start_game_presentation" else current_index + (-1 if action == "previous_game_slide" else 1)
@@ -14918,7 +15427,7 @@ def export_games():
     if redis_state_available:
         load_state_from_redis()
     exported_games = copy.deepcopy(games_state)
-    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS, CURSED_OBJECTIVES_GAME_KEY):
+    for game_key in (MURDER_MARRY_FUCK_GAME_KEY, *PROMPT_GAME_KEYS, CURSED_OBJECTIVES_GAME_KEY, SCAVENGER_HUNT_GAME_KEY):
         exported_game = exported_games.get(game_key, {})
         if not isinstance(exported_game, dict):
             continue
@@ -14940,7 +15449,14 @@ def export_games():
                             "assigned_objectives": len(participant.get("mission_ids", [])),
                         }
                         if game_key == CURSED_OBJECTIVES_GAME_KEY
-                        else {}
+                        else (
+                            {
+                                "submitted_photos": len(participant.get("submissions", {})),
+                                "approved_photos": sum(1 for submission in participant.get("submissions", {}).values() if isinstance(submission, dict) and submission.get("review_status") == "approved"),
+                            }
+                            if game_key == SCAVENGER_HUNT_GAME_KEY
+                            else {}
+                        )
                     )
                 ),
             }
@@ -14951,7 +15467,7 @@ def export_games():
         {
             "schema_version": STATE_SCHEMA_VERSION,
             "exported_at": _utc_now_iso(),
-            "privacy_note": "Game exports use public identities without account IDs. Murder, Marry, F%$@ includes aggregate results only; Cursed Objectives exports completion counts without private mission assignments.",
+            "privacy_note": "Game exports use public identities without account IDs. Private ballots, Cursed Objective assignments, and Scavenger Hunt photos are excluded.",
             "games_state": exported_games,
         },
         "halloween-games.json",

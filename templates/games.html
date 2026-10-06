@@ -7,7 +7,7 @@
     <p class="admin-panel__eyebrow">Party games</p>
     <h2>Games</h2>
     <p>Opt in, play from your phone, and watch the hosts reveal the results.</p>
-    <p class="game-live-status game-status-indicator game-status-indicator--{{ game.phase }}" data-selected-game-live-status role="status"><span aria-hidden="true"></span>{{ 'Closed · Final results' if game.phase == 'ended' else 'Open · Join anytime' }} · {{ game.participants|length }} player{{ '' if game.participants|length == 1 else 's' }}</p>
+    <p class="game-live-status game-status-indicator game-status-indicator--{{ game.phase }}" data-selected-game-live-status role="status"><span aria-hidden="true"></span>{{ 'Closed · Final results' if game.phase == 'ended' else ('Closed · Host review' if game.phase == 'review' else 'Open · Join anytime') }} · {{ game.participants|length }} player{{ '' if game.participants|length == 1 else 's' }}</p>
   </header>
 
   <div data-game-live-content data-game-content-revision="{{ game_view_revision }}">
@@ -28,6 +28,7 @@
       {% elif success == 'mission_reopened' %}Objective reopened.
       {% elif success == 'submission' %}Your mystery statements were saved and added to the live-display rotation.
       {% elif success == 'guess' %}Your guess was saved. You can update it until the hosts end the game.
+      {% elif success == 'photo_uploaded' %}Your evidence photo was saved and is waiting for host review. You can replace it until the hunt closes.
       {% endif %}
     </p></div>
   {% endif %}
@@ -41,11 +42,11 @@
         <p>{{ game_metadata.description }}</p>
       </div>
       <span class="game-phase game-phase--{{ game.phase }}">
-        <span aria-hidden="true"></span>{% if game.phase == 'active' %}Open · Join anytime{% elif game.phase == 'ended' %}Closed · Final results{% else %}Disabled{% endif %}
+        <span aria-hidden="true"></span>{% if game.phase == 'active' %}Open · Join anytime{% elif game.phase == 'review' %}Closed · Host review{% elif game.phase == 'ended' %}Closed · Final results{% else %}Disabled{% endif %}
       </span>
     </header>
 
-    {% if game_key not in ['two_truths_and_a_lie', 'cursed_objectives'] %}
+    {% if game_key not in ['two_truths_and_a_lie', 'cursed_objectives', 'scavenger_hunt'] %}
       <aside class="game-content-notice"><strong>Adults only.</strong> This game uses fictional prompts or famous adults. Do not enter attendees, private people, minors, confessions, or personal information.</aside>
     {% endif %}
 
@@ -151,6 +152,33 @@
       {% else %}
         {% include '_game_scoreboard.html' %}
         {% if participant_missions %}<h4>Your final dossier</h4><div class="mystery-grid cursed-objectives-grid">{% for mission in participant_missions %}<article class="mystery-card{% if mission.completed %} mystery-card--revealed{% endif %}"><p class="mystery-card__number">{{ 'Completed' if mission.completed else 'Unfinished' }}</p><p>{{ mission.text }}</p></article>{% endfor %}</div>{% endif %}
+      {% endif %}
+
+    {% elif game_key == 'scavenger_hunt' %}
+      {% if game.phase == 'active' %}
+        {% if participant %}
+          <div class="game-instructions"><h4>Your evidence locker · {{ participant.submissions|length }} / {{ scavenger_items|length }} submitted</h4><p>Upload one photo for each item. Only photograph willing guests. Photos may be shown on the party display during host review, and you may replace them until the hunt closes.</p></div>
+          <div class="scavenger-item-grid">
+            {% for item in scavenger_items %}
+              <article class="scavenger-item-card" data-view-key="scavenger-item:{{ item.id }}">
+                {% if item.submission %}<img src="{{ item.submission.image_url }}" alt="Your submitted evidence for {{ item.title }}" loading="lazy">{% endif %}
+                <div><p class="mystery-card__number">Item {{ loop.index }} · {{ item.submission.review_status|title if item.submission else 'Not submitted' }}</p><h4>{{ item.title }}</h4>{% if item.instructions %}<p>{{ item.instructions }}</p>{% endif %}
+                  <form method="post" enctype="multipart/form-data" action="{{ url_for('party_scavenger_upload', item_id=item.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="hunt-photo-{{ item.id }}">{{ 'Replace photo' if item.submission else 'Evidence photo' }}</label><input id="hunt-photo-{{ item.id }}" type="file" name="photo" accept="image/jpeg,image/png,image/webp" required><span class="form-helper">JPG, PNG, or WebP up to 8 MB.</span>
+                    <button class="button{% if not item.submission %} button--primary{% endif %}" type="submit">{{ 'Replace Evidence' if item.submission else 'Upload Evidence' }}</button>
+                  </form>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}<div class="game-opt-in"><h4>Join the hunt</h4><p>Join at any time before the hosts close submissions. Find each item, upload your evidence, and earn one point for every photo the hosts approve.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Join Scavenger Hunt</button></form></div>{% endif %}
+      {% elif game.phase == 'review' %}
+        <div class="game-opt-in"><h4>Evidence is under review</h4><p>Uploads are locked while the hosts review every submission. Final scores will appear after review.</p></div>
+        {% if participant %}<div class="scavenger-item-grid">{% for item in scavenger_items if item.submission %}<article class="scavenger-item-card"><img src="{{ item.submission.image_url }}" alt="Your submitted evidence for {{ item.title }}"><div><p class="mystery-card__number">{{ item.submission.review_status|title }}</p><h4>{{ item.title }}</h4></div></article>{% endfor %}</div>{% endif %}
+      {% else %}
+        {% include '_game_scoreboard.html' %}
+        {% if participant %}<div class="scavenger-item-grid">{% for item in scavenger_items if item.submission %}<article class="scavenger-item-card"><img src="{{ item.submission.image_url }}" alt="Your submitted evidence for {{ item.title }}"><div><p class="mystery-card__number">{{ 'Credit awarded' if item.submission.review_status == 'approved' else 'No credit' }}</p><h4>{{ item.title }}</h4></div></article>{% endfor %}</div>{% endif %}
       {% endif %}
 
     {% else %}

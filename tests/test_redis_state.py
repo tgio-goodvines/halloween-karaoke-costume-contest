@@ -313,6 +313,7 @@ class RedisStateTests(unittest.TestCase):
         main.menu_items = []
         main.menu_image_memory = {}
         main.bartender_tip_image_memory = {}
+        main.scavenger_image_memory = {}
         main.drink_orders = []
         main.specialty_drink_allowances = {}
         main.dj_playlist = []
@@ -4271,7 +4272,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(26, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(27, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])
@@ -6987,6 +6988,7 @@ class RedisStateTests(unittest.TestCase):
                 "bad_advice_hotline",
                 "wrong_answers_only",
                 "cursed_objectives",
+                "scavenger_hunt",
             },
             set(self.redis_state()["games_state"]),
         )
@@ -7071,6 +7073,124 @@ class RedisStateTests(unittest.TestCase):
                 self.assertEqual({}, game["participants"])
                 self.assertTrue(game["started_at"])
                 self.assertNotIn(b"Start Game", response.data)
+                self.assertIn(b"game-admin-disclosure", response.data)
+                self.assertIn(b"admin-entry__summary-text", response.data)
+
+    def test_admin_can_edit_cursed_objectives_and_scavenger_hunt_items(self):
+        cursed = main.party_game_state(main.CURSED_OBJECTIVES_GAME_KEY)
+        original_objective_id = cursed["objectives"][0]["id"]
+        hunt = main.party_game_state(main.SCAVENGER_HUNT_GAME_KEY)
+        original_item_id = hunt["items"][0]["id"]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            added_objective = admin.post(
+                "/admin/games?game=cursed_objectives",
+                data={
+                    "action": "add_cursed_objective",
+                    "game_key": main.CURSED_OBJECTIVES_GAME_KEY,
+                    "objective_text": "Convince someone the portrait blinked.",
+                },
+            )
+            updated_objective = admin.post(
+                "/admin/games?game=cursed_objectives",
+                data={
+                    "action": "update_cursed_objective",
+                    "game_key": main.CURSED_OBJECTIVES_GAME_KEY,
+                    "objective_id": original_objective_id,
+                    "objective_text": "Get someone to inspect a suspicious portrait.",
+                },
+            )
+            added_item = admin.post(
+                "/admin/games?game=scavenger_hunt",
+                data={
+                    "action": "add_scavenger_item",
+                    "game_key": main.SCAVENGER_HUNT_GAME_KEY,
+                    "item_title": "A dramatic cape",
+                    "item_instructions": "Photograph a willing guest flourishing a cape.",
+                },
+            )
+            updated_item = admin.post(
+                "/admin/games?game=scavenger_hunt",
+                data={
+                    "action": "update_scavenger_item",
+                    "game_key": main.SCAVENGER_HUNT_GAME_KEY,
+                    "item_id": original_item_id,
+                    "item_title": "A handmade costume detail",
+                    "item_instructions": "Photograph a handmade detail with its creator's permission.",
+                },
+            )
+
+        cursed = main.party_game_state(main.CURSED_OBJECTIVES_GAME_KEY)
+        hunt = main.party_game_state(main.SCAVENGER_HUNT_GAME_KEY)
+        self.assertEqual(200, added_objective.status_code)
+        self.assertEqual(200, updated_objective.status_code)
+        self.assertTrue(any(entry["text"] == "Convince someone the portrait blinked." for entry in cursed["objectives"]))
+        self.assertEqual("Get someone to inspect a suspicious portrait.", cursed["objectives"][0]["text"])
+        self.assertEqual(200, added_item.status_code)
+        self.assertEqual(200, updated_item.status_code)
+        self.assertTrue(any(entry["title"] == "A dramatic cape" for entry in hunt["items"]))
+        self.assertEqual("Photograph a handmade detail with its creator's permission.", hunt["items"][0]["instructions"])
+
+    def test_scavenger_hunt_upload_review_finalize_and_private_photo_access(self):
+        game_key = main.SCAVENGER_HUNT_GAME_KEY
+        slug = main.GAME_CATALOG[game_key]["slug"]
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            opened = admin.post("/admin/games?game=scavenger_hunt", data={"action": "enable_game", "game_key": game_key})
+
+        item_id = main.party_game_state(game_key)["items"][0]["id"]
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee, user_id="user-1", username="Jamie")
+            joined = attendee.post(f"/party/games/{slug}/join")
+            uploaded = attendee.post(
+                f"/party/games/scavenger-hunt/items/{item_id}/photo",
+                data={"photo": (io.BytesIO(make_test_image_bytes()), "evidence.png")},
+                content_type="multipart/form-data",
+            )
+            submission = main.party_game_state(game_key)["participants"]["user-1"]["submissions"][item_id]
+            owner_photo = attendee.get(submission["image_url"])
+
+        with main.app.test_client() as other_attendee:
+            self.login_regular(other_attendee, user_id="user-2", username="Morgan")
+            other_photo = other_attendee.get(submission["image_url"])
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            closed = admin.post("/admin/games?game=scavenger_hunt", data={"action": "end_game", "game_key": game_key})
+            review_page = admin.get("/admin/games?game=scavenger_hunt")
+            admin_photo = admin.get(submission["image_url"])
+            reviewed = admin.post(
+                "/admin/games?game=scavenger_hunt",
+                data={
+                    "action": "review_scavenger_submission",
+                    "game_key": game_key,
+                    "submission_id": submission["id"],
+                    "review_status": "approved",
+                },
+            )
+            finalized = admin.post(
+                "/admin/games?game=scavenger_hunt",
+                data={"action": "finalize_scavenger_hunt", "game_key": game_key},
+            )
+
+        game = main.party_game_state(game_key)
+        self.assertEqual(200, opened.status_code)
+        self.assertEqual(302, joined.status_code)
+        self.assertEqual(302, uploaded.status_code)
+        self.assertEqual(200, owner_photo.status_code)
+        self.assertEqual("image/webp", owner_photo.mimetype)
+        self.assertEqual("private, no-store", owner_photo.headers["Cache-Control"])
+        self.assertEqual(404, other_photo.status_code)
+        self.assertEqual(200, admin_photo.status_code)
+        self.assertEqual(200, closed.status_code)
+        self.assertIn(b"Submission review", review_page.data)
+        self.assertIn(submission["image_url"].encode(), review_page.data)
+        self.assertEqual(200, reviewed.status_code)
+        self.assertEqual(200, finalized.status_code)
+        self.assertEqual("ended", game["phase"])
+        self.assertEqual(1, game["results"]["scores"][0]["points"])
+        self.assertEqual([game["participants"]["user-1"]["player_id"]], game["results"]["winner_player_ids"])
 
     def test_two_truths_late_join_appears_in_attendee_live_fragment(self):
         with main.app.test_client() as admin:
@@ -7324,6 +7444,10 @@ class RedisStateTests(unittest.TestCase):
                     if game_key == main.WRONG_ANSWERS_GAME_KEY:
                         for prompt in game["prompts"]:
                             prompt["enabled"] = False
+                elif game_key == main.CURSED_OBJECTIVES_GAME_KEY:
+                    game["objectives"][0]["text"] = "Custom simulated objective."
+                elif game_key == main.SCAVENGER_HUNT_GAME_KEY:
+                    game["items"][0]["title"] = "Custom simulated hunt item"
                 self.save_current_state()
 
                 with main.app.test_client() as admin:
@@ -7352,6 +7476,10 @@ class RedisStateTests(unittest.TestCase):
                     self.assertTrue(game["prompts"][0]["text"].startswith("Custom simulation prompt"))
                     if game_key == main.WRONG_ANSWERS_GAME_KEY:
                         self.assertFalse(any(prompt["enabled"] for prompt in game["prompts"]))
+                elif game_key == main.CURSED_OBJECTIVES_GAME_KEY:
+                    self.assertEqual("Custom simulated objective.", game["objectives"][0]["text"])
+                elif game_key == main.SCAVENGER_HUNT_GAME_KEY:
+                    self.assertEqual("Custom simulated hunt item", game["items"][0]["title"])
 
                 cards = main.generated_game_result_entries(include_hidden=True)
                 card_ids = {entry["id"] for entry in cards}
@@ -7831,7 +7959,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn(b"Close Game &amp; Calculate Results", page.data)
         self.assertIn(b"Choose one game to operate", page.data)
         self.assertNotIn(b"Additional Games", page.data)
-        self.assertEqual(6, page.data.count(b'data-view-key="game-selector:'))
+        self.assertEqual(7, page.data.count(b'data-view-key="game-selector:'))
         self.assertEqual(1, page.data.count(b'class="game-admin-card game-admin-card--selected"'))
         self.assertIn(b'id="admin-game-two_truths_and_a_lie"', page.data)
         self.assertIn(b'data-admin-inline="true"', page.data)

@@ -147,7 +147,7 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 ## State Model
 
 Redis is the database. The canonical state document is stored at
-`halloween:state` with schema version 26. The following globals in `main.py` are
+`halloween:state` with schema version 27. The following globals in `main.py` are
 the process-local cache:
 
 - `costume_signups`: list of `CostumeSignup` dataclass instances with stable IDs
@@ -247,7 +247,7 @@ the process-local cache:
   details, priority queue revision/retry state, and the latest DJ reset
   acknowledgement. Approved priorities lead Play and Shuffle; an active
   receiver replaces only the remainder after the current song.
-- `games_state`: six-game registry state. Two Truths and a Lie stores clues and
+- `games_state`: seven-game registry state. Two Truths and a Lie stores clues and
   identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
   trios, an admin-controlled public identity mode, private ballots, aggregate results,
   and presentation state;
@@ -272,7 +272,12 @@ the process-local cache:
   receives three private objectives drawn without replacement across active
   participants, records completion throughout the event, and enters one final
   named leaderboard when the host closes the game. Joining stops instead of
-  recycling objectives when fewer than three unused objectives remain.
+  recycling objectives when fewer than three unused objectives remain. Schema
+  27 adds Scavenger Hunt with an editable item deck, participant-scoped WebP
+  evidence uploads, a host review phase, and one point per approved photo.
+  Uploaded images remain private to their owner and admins, can be presented by
+  an authenticated live-display session during review, and are excluded from
+  exports and retained game-detail history.
 
 Drink orders move from `received` to `in_progress` to `complete`. Active
 bartender preparation resolves the latest non-empty menu ingredients and

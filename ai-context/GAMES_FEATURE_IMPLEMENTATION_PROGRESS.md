@@ -23,6 +23,9 @@ operations, and host-controlled live-display results.
 6. **Cursed Objectives** — three private, non-overlapping social missions per
    participant, editable self-reported completion throughout the event, and one
    final named leaderboard when the host closes the game.
+7. **Scavenger Hunt** — an editable item deck, private participant photo
+   uploads, host approve/reject review grouped by item, and one point per
+   approved photo before the final named leaderboard.
 
 All new games deploy disabled. Enabling a game opens it immediately: its tab,
 dashboard status, enrollment, and gameplay become available without a separate
@@ -36,6 +39,8 @@ host closes it for final scoring.
   enabled records in this phase to `active`.
 - `active`: the game is open; attendees may join late and participate in any
   currently available submissions, ballots, guesses, or votes.
+- `review`: Scavenger Hunt uploads are locked while hosts review every submitted
+  photo and optionally present the evidence on the authenticated live display.
 - `ended`: answers/votes lock and final scores/winners are snapshotted.
 - `reset`: creates a Redis backup, clears play data, restores configuration
   defaults, and reopens the game when the enabled flag is preserved.
@@ -102,13 +107,17 @@ players; guessing becomes useful as additional mystery guests join.
 
 ## Admin And Display
 
-- `/admin/games?game=<game-key>` presents a compact six-game status selector
+- `/admin/games?game=<game-key>` presents a compact seven-game status selector
   and one detailed operational console, with shared aggregate status. Detailed
   data is constructed only for the selected game.
 - MMF includes a ten-trio editor, optional image URLs, and configurable third
   action label.
 - Prompt games include independent prompt decks, enable/disable/remove prompt
   controls, response/vote counts, round controls, and leaderboards.
+- Cursed Objectives includes a complete deck editor and assignment view; saved
+  mission wording is snapshotted for already-enrolled players.
+- Scavenger Hunt includes its item editor, all-photo review queue, per-photo
+  credit decisions, pending-review guard, and separate score finalization.
 - Ended games provide Start, Previous, and Next announcer presentation controls,
   direct winner/results cards, and normal-rotation resume.
 - MMF presentation walks through each trio and action total. Prompt presentation
@@ -130,16 +139,20 @@ players; guessing becomes useful as additional mystery guests join.
 ## State And Routes
 
 - Games were introduced in schema version `12`; the canonical app state is now
-  schema version `22`. The schema-22 game lifecycle migration opens legacy
+  schema version `27`. The schema-22 game lifecycle migration opens legacy
   records whose enabled flag was paired with the old `signup` phase.
-- `games_state` contains all six independent game records. Schema 26 adds the
-  Cursed Objectives record and default 60-objective deck.
+- `games_state` contains all seven independent game records. Schema 26 adds the
+  Cursed Objectives record and default 60-objective deck. Schema 27 adds
+  Scavenger Hunt item, submission, review, and result state.
 - Attendee hub: `GET /party/games?game=<slug>`.
 - Attendee live fragment: `GET /api/party/games/<slug>/view`; it returns a
   signed-in, privacy-scoped server-rendered game fragment plus revision and safe
   status data for five-second refreshes.
 - Attendee enrollment under the admin-selected identity mode:
   `POST /party/games/<slug>/join`.
+- Scavenger Hunt evidence upload:
+  `POST /party/games/scavenger-hunt/items/<item-id>/photo`; processed images are
+  served by an owner/admin-scoped `/scavenger-hunt-images/<id>.webp` route.
 - MMF ballot round: `POST /party/games/murder-marry-fuck/answers`.
 - Prompt response/vote: `POST /party/games/<slug>/response|vote`.
 - Admin operations continue through the focused `/admin/games` POST handler.

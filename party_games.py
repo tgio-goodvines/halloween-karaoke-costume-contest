@@ -16,8 +16,9 @@ FILL_BLANK_GAME_KEY = "fill_in_the_blank"
 BAD_ADVICE_GAME_KEY = "bad_advice_hotline"
 WRONG_ANSWERS_GAME_KEY = "wrong_answers_only"
 CURSED_OBJECTIVES_GAME_KEY = "cursed_objectives"
+SCAVENGER_HUNT_GAME_KEY = "scavenger_hunt"
 PROMPT_GAME_KEYS = (FILL_BLANK_GAME_KEY, BAD_ADVICE_GAME_KEY, WRONG_ANSWERS_GAME_KEY)
-GAME_PHASES = {"signup", "active", "ended"}
+GAME_PHASES = {"signup", "active", "review", "ended"}
 PROMPT_ROUND_PHASES = {"submissions", "voting", "revealed"}
 PROMPT_RESPONSE_MINIMUM = 3
 PROMPT_RESPONSE_WINDOW_SECONDS = 10 * 60
@@ -31,6 +32,7 @@ GAME_RESPONSE_MAX_LENGTH = 280
 MMF_ROUND_COUNT = 10
 MMF_ACTIONS = ("murder", "marry", "fuck")
 CURSED_OBJECTIVES_PER_PLAYER = 3
+SCAVENGER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
 
 
 GAME_CATALOG: dict[str, dict[str, str]] = {
@@ -99,6 +101,17 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "winner_image": "images/games/winners/cursed-objectives-winner.jpg",
         "personality": "Three secret objectives. One night to finish the ritual.",
         "solo_note": "Every player receives a different, private mission set.",
+    },
+    SCAVENGER_HUNT_GAME_KEY: {
+        "slug": "scavenger-hunt",
+        "title": "Scavenger Hunt",
+        "short_title": "Scavenger Hunt",
+        "engine": "photo_hunt",
+        "description": "Photograph the evidence, submit it for host review, and earn one point per approved find.",
+        "image": "images/games/scavenger-hunt.jpg",
+        "winner_image": "images/games/winners/scavenger-hunt-winner.jpg",
+        "personality": "Find the evidence. Photograph it. Survive host review.",
+        "solo_note": "Join anytime and replace photos until the hunt closes.",
     },
 }
 
@@ -278,6 +291,20 @@ DEFAULT_CURSED_OBJECTIVES: list[str] = [
 ]
 
 
+DEFAULT_SCAVENGER_HUNT_ITEMS: list[tuple[str, str]] = [
+    ("A handmade costume detail", "Photograph a costume detail its wearer made themselves."),
+    ("A tiny hidden pumpkin", "Find and photograph one of the smallest pumpkins at the party."),
+    ("A suspicious shadow", "Capture a shadow that looks like it belongs in a horror movie."),
+    ("Three monsters together", "Photograph three costumed guests striking a monster pose together."),
+    ("The party's creepiest snack", "Photograph the food or drink with the most unsettling presentation."),
+    ("An unexpected reflection", "Create a spooky reflection photo without photographing anyone who objects."),
+    ("A dance-floor apparition", "Capture a clearly willing guest mid-dance like a supernatural sighting."),
+    ("Something that glows", "Photograph a costume, decoration, or drink that glows."),
+    ("A heroic prop", "Photograph a willing guest presenting their costume prop dramatically."),
+    ("The final evidence", "Take a group photo with at least four willing party guests."),
+]
+
+
 PROMPT_GENERATOR_PARTS: dict[str, dict[str, list[str]]] = {
     FILL_BLANK_GAME_KEY: {
         "templates": [
@@ -441,7 +468,13 @@ def empty_prompt_game_state(game_key: str, *, enabled: bool = False) -> dict[str
 
 def default_cursed_objective_records() -> list[dict[str, Any]]:
     return [
-        {"id": f"cursed-objective-{index + 1:02d}", "text": text, "enabled": True}
+        {
+            "id": f"cursed-objective-{index + 1:02d}",
+            "text": text,
+            "enabled": True,
+            "created_at": "",
+            "updated_at": "",
+        }
         for index, text in enumerate(DEFAULT_CURSED_OBJECTIVES)
     ]
 
@@ -460,11 +493,41 @@ def empty_cursed_objectives_game_state(*, enabled: bool = False) -> dict[str, An
     }
 
 
+def default_scavenger_hunt_item_records() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": f"scavenger-item-{index + 1:02d}",
+            "title": title,
+            "instructions": instructions,
+            "enabled": True,
+            "created_at": "",
+            "updated_at": "",
+        }
+        for index, (title, instructions) in enumerate(DEFAULT_SCAVENGER_HUNT_ITEMS)
+    ]
+
+
+def empty_scavenger_hunt_game_state(*, enabled: bool = False) -> dict[str, Any]:
+    return {
+        "enabled": bool(enabled),
+        "phase": "active" if enabled else "signup",
+        "started_at": "",
+        "review_started_at": "",
+        "ended_at": "",
+        "items": default_scavenger_hunt_item_records(),
+        "participants": {},
+        "results": {"finalized_at": "", "scores": [], "winner_player_ids": []},
+        "presentation": {"active": False, "slide_index": 0},
+        "simulation": {"is_simulated": False, "player_count": 0, "generated_at": ""},
+    }
+
+
 DEFAULT_GAMES_STATE: dict[str, Any] = {
     TWO_TRUTHS_GAME_KEY: empty_two_truths_game_state(),
     MURDER_MARRY_FUCK_GAME_KEY: empty_mmf_game_state(),
     **{game_key: empty_prompt_game_state(game_key) for game_key in PROMPT_GAME_KEYS},
     CURSED_OBJECTIVES_GAME_KEY: empty_cursed_objectives_game_state(),
+    SCAVENGER_HUNT_GAME_KEY: empty_scavenger_hunt_game_state(),
 }
 
 
@@ -1089,9 +1152,15 @@ def normalize_cursed_objectives_game_state(raw: object) -> dict[str, Any]:
             objective_id = _slug_id(entry.get("id"), f"cursed-objective-{index + 1:02d}")
             text = normalize_statement(entry.get("text"))
             if text and objective_id not in seen_objective_ids:
-                objectives.append({"id": objective_id, "text": text, "enabled": bool(entry.get("enabled", True))})
+                objectives.append({
+                    "id": objective_id,
+                    "text": text,
+                    "enabled": bool(entry.get("enabled", True)),
+                    "created_at": str(entry.get("created_at", "") or ""),
+                    "updated_at": str(entry.get("updated_at", "") or ""),
+                })
                 seen_objective_ids.add(objective_id)
-    state["objectives"] = objectives or default_cursed_objective_records()
+    state["objectives"] = objectives if isinstance(raw_objectives, list) else default_cursed_objective_records()
     valid_objective_ids = {entry["id"] for entry in state["objectives"]}
 
     participants = {}
@@ -1121,6 +1190,16 @@ def normalize_cursed_objectives_game_state(raw: object) -> dict[str, Any]:
             completed = [str(value) for value in raw_completed if str(value) in mission_ids] if isinstance(raw_completed, list) else []
             completed_at = raw_participant.get("completed_at", {})
             participant["mission_ids"] = mission_ids
+            raw_snapshots = raw_participant.get("mission_snapshots", {}) if isinstance(raw_participant, dict) else {}
+            participant["mission_snapshots"] = {
+                mission_id: normalize_statement(
+                    raw_snapshots.get(mission_id, next(
+                        (entry.get("text", "") for entry in state["objectives"] if entry.get("id") == mission_id),
+                        "Secret objective",
+                    ))
+                ) or "Secret objective"
+                for mission_id in mission_ids
+            }
             participant["completed_mission_ids"] = list(dict.fromkeys(completed))
             participant["completed_at"] = {
                 mission_id: str(completed_at.get(mission_id, "") or "")
@@ -1130,6 +1209,90 @@ def normalize_cursed_objectives_game_state(raw: object) -> dict[str, Any]:
     state["participants"] = participants
     state["results"] = (
         calculate_cursed_objectives_results(
+            state,
+            finalized_at=str(raw.get("results", {}).get("finalized_at", "") if isinstance(raw.get("results"), dict) else ""),
+        )
+        if state["phase"] == "ended"
+        else copy.deepcopy(state["results"])
+    )
+    state["presentation"] = _presentation(raw.get("presentation"))
+    state["simulation"] = _simulation(raw.get("simulation"))
+    return state
+
+
+def normalize_scavenger_hunt_game_state(raw: object) -> dict[str, Any]:
+    state = empty_scavenger_hunt_game_state()
+    if not isinstance(raw, dict):
+        return state
+    state["enabled"] = bool(raw.get("enabled"))
+    phase = str(raw.get("phase", "signup") or "signup")
+    state["phase"] = phase if phase in {"signup", "active", "review", "ended"} else "signup"
+    if state["enabled"] and state["phase"] == "signup":
+        state["phase"] = "active"
+    state["started_at"] = str(raw.get("started_at", "") or "")
+    state["review_started_at"] = str(raw.get("review_started_at", "") or "")
+    state["ended_at"] = str(raw.get("ended_at", "") or "")
+
+    items = []
+    seen_item_ids: set[str] = set()
+    raw_items = raw.get("items", [])
+    if isinstance(raw_items, list):
+        for index, entry in enumerate(raw_items):
+            if not isinstance(entry, dict):
+                continue
+            item_id = _slug_id(entry.get("id"), f"scavenger-item-{index + 1:02d}")
+            title = normalize_player_name(entry.get("title"))
+            instructions = normalize_statement(entry.get("instructions"))
+            if title and item_id not in seen_item_ids:
+                items.append({
+                    "id": item_id,
+                    "title": title,
+                    "instructions": instructions,
+                    "enabled": bool(entry.get("enabled", True)),
+                    "created_at": str(entry.get("created_at", "") or ""),
+                    "updated_at": str(entry.get("updated_at", "") or ""),
+                })
+                seen_item_ids.add(item_id)
+    state["items"] = items if isinstance(raw_items, list) else default_scavenger_hunt_item_records()
+    item_by_id = {entry["id"]: entry for entry in state["items"]}
+
+    participants = {}
+    raw_participants = raw.get("participants", {})
+    if isinstance(raw_participants, dict):
+        for user_id, raw_participant in raw_participants.items():
+            participant = normalize_alias_participant(raw_participant, str(user_id))
+            if not participant:
+                continue
+            submissions = {}
+            raw_submissions = raw_participant.get("submissions", {}) if isinstance(raw_participant, dict) else {}
+            if isinstance(raw_submissions, dict):
+                for item_id, raw_submission in raw_submissions.items():
+                    if str(item_id) not in item_by_id or not isinstance(raw_submission, dict):
+                        continue
+                    image_url = str(raw_submission.get("image_url", "") or "")[:240]
+                    submission_id = str(raw_submission.get("id", "") or "")[:80]
+                    if not submission_id or not image_url:
+                        continue
+                    review_status = str(raw_submission.get("review_status", "pending") or "pending")
+                    if review_status not in SCAVENGER_REVIEW_STATUSES:
+                        review_status = "pending"
+                    item = item_by_id[str(item_id)]
+                    submissions[str(item_id)] = {
+                        "id": submission_id,
+                        "item_id": str(item_id),
+                        "item_title": normalize_player_name(raw_submission.get("item_title")) or item["title"],
+                        "item_instructions": normalize_statement(raw_submission.get("item_instructions")) or item["instructions"],
+                        "image_url": image_url,
+                        "review_status": review_status,
+                        "submitted_at": str(raw_submission.get("submitted_at", "") or ""),
+                        "updated_at": str(raw_submission.get("updated_at", "") or ""),
+                        "reviewed_at": str(raw_submission.get("reviewed_at", "") or ""),
+                    }
+            participant["submissions"] = submissions
+            participants[str(user_id)] = participant
+    state["participants"] = participants
+    state["results"] = (
+        calculate_scavenger_hunt_results(
             state,
             finalized_at=str(raw.get("results", {}).get("finalized_at", "") if isinstance(raw.get("results"), dict) else ""),
         )
@@ -1178,6 +1341,17 @@ def assign_cursed_objectives(
         "display_name": normalize_player_name(display_name),
         "alias": normalize_player_name(display_name) or "Player",
         "mission_ids": mission_ids,
+        "mission_snapshots": {
+            mission_id: next(
+                (
+                    normalize_statement(objective.get("text"))
+                    for objective in game.get("objectives", [])
+                    if str(objective.get("id", "")) == mission_id
+                ),
+                "Secret objective",
+            )
+            for mission_id in mission_ids
+        },
         "completed_mission_ids": [],
         "completed_at": {},
         "created_at": timestamp,
@@ -1238,6 +1412,61 @@ def cursed_objectives_statistics(game: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def calculate_scavenger_hunt_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
+    scores = []
+    for participant in game.get("participants", {}).values():
+        if not isinstance(participant, dict):
+            continue
+        submissions = participant.get("submissions", {}) if isinstance(participant.get("submissions"), dict) else {}
+        approved = sum(
+            1
+            for submission in submissions.values()
+            if isinstance(submission, dict) and submission.get("review_status") == "approved"
+        )
+        scores.append({
+            "player_id": str(participant.get("player_id", "")),
+            "name": normalize_player_name(participant.get("display_name")) or "Player",
+            "points": approved,
+            "approved_submissions": approved,
+            "submitted_items": len(submissions),
+        })
+    scores.sort(key=lambda entry: (-entry["points"], entry["name"].casefold()))
+    top = scores[0]["points"] if scores else 0
+    return {
+        "finalized_at": finalized_at or utc_now_iso(),
+        "scores": scores,
+        "winner_player_ids": [entry["player_id"] for entry in scores if top > 0 and entry["points"] == top],
+    }
+
+
+def scavenger_hunt_statistics(game: dict[str, Any]) -> dict[str, Any]:
+    participants = game.get("participants", {}) if isinstance(game.get("participants"), dict) else {}
+    submissions = [
+        submission
+        for participant in participants.values()
+        if isinstance(participant, dict)
+        for submission in (participant.get("submissions", {}) or {}).values()
+        if isinstance(submission, dict)
+    ]
+    status_counts = {
+        status: sum(1 for submission in submissions if submission.get("review_status") == status)
+        for status in SCAVENGER_REVIEW_STATUSES
+    }
+    enabled_items = sum(1 for item in game.get("items", []) if isinstance(item, dict) and item.get("enabled"))
+    possible = len(participants) * enabled_items
+    provisional = calculate_scavenger_hunt_results(game, finalized_at="")
+    return {
+        "participant_count": len(participants),
+        "item_count": enabled_items,
+        "submission_count": len(submissions),
+        "pending_count": status_counts["pending"],
+        "approved_count": status_counts["approved"],
+        "rejected_count": status_counts["rejected"],
+        "completion_percent": round((len(submissions) / possible * 100) if possible else 0.0, 1),
+        "scores": provisional["scores"],
+    }
+
+
 def normalize_games_state(raw: object) -> dict[str, Any]:
     raw_games = raw if isinstance(raw, dict) else {}
     return {
@@ -1245,6 +1474,7 @@ def normalize_games_state(raw: object) -> dict[str, Any]:
         MURDER_MARRY_FUCK_GAME_KEY: normalize_mmf_game_state(raw_games.get(MURDER_MARRY_FUCK_GAME_KEY)),
         **{game_key: normalize_prompt_game_state(raw_games.get(game_key), game_key) for game_key in PROMPT_GAME_KEYS},
         CURSED_OBJECTIVES_GAME_KEY: normalize_cursed_objectives_game_state(raw_games.get(CURSED_OBJECTIVES_GAME_KEY)),
+        SCAVENGER_HUNT_GAME_KEY: normalize_scavenger_hunt_game_state(raw_games.get(SCAVENGER_HUNT_GAME_KEY)),
     }
 
 
@@ -1416,8 +1646,13 @@ def build_simulated_game_state(
 
     if game_key == CURSED_OBJECTIVES_GAME_KEY:
         game = empty_cursed_objectives_game_state(enabled=True)
-        objective_ids = [entry["id"] for entry in game["objectives"]]
-        for index in range(count):
+        configured_objectives = current_game.get("objectives", [])
+        if isinstance(configured_objectives, list):
+            game["objectives"] = copy.deepcopy(configured_objectives)
+        objective_ids = [entry["id"] for entry in game["objectives"] if entry.get("enabled")]
+        simulated_count = min(count, len(objective_ids) // CURSED_OBJECTIVES_PER_PLAYER)
+        simulation["player_count"] = simulated_count
+        for index in range(simulated_count):
             number = index + 1
             start = index * CURSED_OBJECTIVES_PER_PLAYER
             mission_ids = objective_ids[start : start + CURSED_OBJECTIVES_PER_PLAYER]
@@ -1428,6 +1663,13 @@ def build_simulated_game_state(
                 "display_name": f"Test Player {number:02d}",
                 "alias": f"Test Player {number:02d}",
                 "mission_ids": mission_ids,
+                "mission_snapshots": {
+                    mission_id: next(
+                        (entry["text"] for entry in game["objectives"] if entry["id"] == mission_id),
+                        "Secret objective",
+                    )
+                    for mission_id in mission_ids
+                },
                 "completed_mission_ids": mission_ids[:completed_count],
                 "completed_at": {mission_id: timestamp for mission_id in mission_ids[:completed_count]},
                 "created_at": timestamp,
@@ -1437,6 +1679,48 @@ def build_simulated_game_state(
         game["started_at"] = timestamp
         game["ended_at"] = timestamp
         game["results"] = calculate_cursed_objectives_results(game, finalized_at=timestamp)
+        game["simulation"] = simulation
+        return game
+
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        game = empty_scavenger_hunt_game_state(enabled=True)
+        configured_items = current_game.get("items", [])
+        if isinstance(configured_items, list):
+            game["items"] = copy.deepcopy(configured_items)
+        for index in range(count):
+            number = index + 1
+            user_id = f"simulation:{game_key}:player-{number:02d}"
+            submissions = {}
+            for item_index, item in enumerate(game["items"]):
+                if not item.get("enabled"):
+                    continue
+                if (index + item_index) % 4 == 0:
+                    continue
+                item_id = str(item["id"])
+                submissions[item_id] = {
+                    "id": f"simulation-scavenger-{number:02d}-{item_index + 1:02d}",
+                    "item_id": item_id,
+                    "item_title": item["title"],
+                    "item_instructions": item["instructions"],
+                    "image_url": f"/static/{GAME_CATALOG[SCAVENGER_HUNT_GAME_KEY]['image']}",
+                    "review_status": "approved",
+                    "submitted_at": timestamp,
+                    "updated_at": timestamp,
+                    "reviewed_at": timestamp,
+                }
+            game["participants"][user_id] = {
+                "player_id": f"simulation-player-{number:02d}",
+                "display_name": f"Test Player {number:02d}",
+                "alias": f"Test Player {number:02d}",
+                "submissions": submissions,
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        game["phase"] = "ended"
+        game["started_at"] = timestamp
+        game["review_started_at"] = timestamp
+        game["ended_at"] = timestamp
+        game["results"] = calculate_scavenger_hunt_results(game, finalized_at=timestamp)
         game["simulation"] = simulation
         return game
 

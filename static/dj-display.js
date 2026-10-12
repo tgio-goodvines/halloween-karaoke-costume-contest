@@ -150,7 +150,7 @@
     }
     if (artwork && artworkWrap) {
       if (song?.artwork_url) {
-        artwork.src = song.artwork_url;
+        if (artwork.getAttribute('src') !== song.artwork_url) artwork.src = song.artwork_url;
         artwork.alt = `${song.title} artwork`;
         artworkWrap.removeAttribute('hidden');
       } else {

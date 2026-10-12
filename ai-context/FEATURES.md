@@ -441,6 +441,9 @@ app state.
   own duration and optional schedule.
 - Display data refreshes every 30 seconds via `/api/display-data`.
 - Display also updates immediately through server-sent events from `/api/display-updates`.
+- Routine five-second DJ receiver heartbeats persist without broadcasting a
+  whole-display repaint. Fetched layouts reconcile by region, and unchanged
+  media sources are not reassigned.
 - SSE endpoint sends keep-alive comments on idle intervals.
 - Display supports full-screen event override cards for contest start, winner announcement, and karaoke start. Costume and karaoke event modes are mutually exclusive.
 - Display supports configurable temporary drink-ready notice cards with drink
@@ -459,6 +462,10 @@ app state.
   guidance, and route callouts; game cards include phase-specific play steps;
   bar cards include queue positions, operational summary metrics, a featured
   available drink, and pickup/order guidance.
+- Cast-safe live-display styling removes continuous scanline/pulse/transition
+  motion, keeps current artwork visible until replacement media has decoded,
+  gives game and bar rails explicit TV type floors, and shows no more than
+  three active bar orders at once.
 - Karaoke start override includes countdown and upcoming-singer panel markup for
   the existing client-side karaoke rotator.
 - Display client can cache-bust `display.css` once when an override becomes active.

@@ -87,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let centerRevision = -1;
   let centerTimer = null;
   let centerTimerEntryId = '';
-  let centerTransitionTimer = null;
   let gameIndex = 0;
   let gameEntryId = '';
   let gameTimer = null;
@@ -102,6 +101,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let barRotationTimerKey = '';
   let noticeTimer = null;
   let karaokeTimer = null;
+  const regionSignatures = new Map();
+  const mediaRequests = new WeakMap();
 
   const safeArray = (value) => (Array.isArray(value) ? value : []);
   const asObject = (value) => (value && typeof value === 'object' ? value : {});
@@ -151,6 +152,8 @@ document.addEventListener('DOMContentLoaded', () => {
     entry?.image_url ? (entry.media_treatment === 'foreground' ? 'foreground' : 'background') : 'none'
   ));
   const mediaToneFor = mediaHelpers.toneFor || (() => 'feature');
+  const signatureFor = mediaHelpers.signatureFor || ((value) => JSON.stringify(value));
+  const shouldReplaceSource = mediaHelpers.shouldReplaceSource || ((current, requested) => current !== requested);
   const setHidden = (element, hidden) => {
     if (!element) return;
     if (hidden) element.setAttribute('hidden', '');
@@ -161,6 +164,63 @@ document.addEventListener('DOMContentLoaded', () => {
     const text = value == null ? '' : String(value);
     element.textContent = text;
     setHidden(element, !text);
+  };
+  const renderRegionIfChanged = (name, value, renderer) => {
+    const signature = signatureFor(value);
+    if (regionSignatures.get(name) === signature) return false;
+    regionSignatures.set(name, signature);
+    renderer();
+    return true;
+  };
+  const swapMedia = (image, wrap, requestedSource, { alt = '', onReady, onError } = {}) => {
+    if (!image || !wrap) return;
+    const requested = String(requestedSource || '');
+    const current = String(image.dataset.displaySource || image.getAttribute('src') || '');
+    if (!requested) {
+      mediaRequests.delete(image);
+      image.removeAttribute('src');
+      delete image.dataset.displaySource;
+      image.alt = '';
+      setHidden(wrap, true);
+      return;
+    }
+    if (!shouldReplaceSource(current, requested)) {
+      image.alt = alt;
+      setHidden(wrap, false);
+      return;
+    }
+    const pendingRequest = mediaRequests.get(image);
+    if (pendingRequest?.source === requested) return;
+
+    const requestToken = {};
+    mediaRequests.set(image, { token: requestToken, source: requested });
+    const loader = new Image();
+    let committed = false;
+    const commit = async () => {
+      if (committed) return;
+      committed = true;
+      if (typeof loader.decode === 'function') {
+        try { await loader.decode(); } catch (error) { /* Loaded pixels remain usable. */ }
+      }
+      if (mediaRequests.get(image)?.token !== requestToken) return;
+      image.src = requested;
+      image.dataset.displaySource = requested;
+      image.alt = alt;
+      setHidden(wrap, false);
+      mediaRequests.delete(image);
+      if (typeof onReady === 'function') onReady();
+    };
+    loader.onload = commit;
+    loader.onerror = () => {
+      if (mediaRequests.get(image)?.token !== requestToken) return;
+      mediaRequests.delete(image);
+      if (!current) {
+        setHidden(wrap, true);
+        if (typeof onError === 'function') onError();
+      }
+    };
+    loader.src = requested;
+    if (loader.complete && loader.naturalWidth) commit();
   };
   const gameSecondaryText = (game) => {
     let secondary = game.secondary || '';
@@ -173,9 +233,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return secondary;
   };
-  const boundedSeconds = (value, fallback = 8) => {
+  const boundedSeconds = (value, fallback = 15) => {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? Math.min(30, Math.max(4, parsed)) : fallback;
+    return Number.isFinite(parsed) ? Math.min(30, Math.max(10, parsed)) : fallback;
   };
   const formatDuration = (seconds) => {
     const value = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -386,29 +446,17 @@ document.addEventListener('DOMContentLoaded', () => {
     setOptionalText(elements.centerTertiary, safeEntry.tertiary || '');
     if (elements.centerImage && elements.centerImageWrap) {
       if (safeEntry.image_url) {
-        const requestedSrc = safeEntry.image_url;
-        elements.centerImage.alt = hasBackgroundMedia ? '' : (safeEntry.primary ? `${safeEntry.primary} image` : 'Display image');
         elements.centerImageWrap.setAttribute('aria-hidden', hasBackgroundMedia ? 'true' : 'false');
-        elements.centerImage.onload = () => {
-          if (elements.centerImage.getAttribute('src') !== requestedSrc) return;
-          setHidden(elements.centerImageWrap, false);
-          fitAll();
-        };
-        elements.centerImage.onerror = () => {
-          if (elements.centerImage.getAttribute('src') !== requestedSrc) return;
-          setHidden(elements.centerImageWrap, true);
-          elements.centerStage?.classList.remove('has-media', 'has-background-media', 'has-foreground-media');
-          fitAll();
-        };
-        setHidden(elements.centerImageWrap, true);
-        elements.centerImage.src = requestedSrc;
-        if (elements.centerImage.complete && elements.centerImage.naturalWidth) elements.centerImage.onload();
+        swapMedia(elements.centerImage, elements.centerImageWrap, safeEntry.image_url, {
+          alt: hasBackgroundMedia ? '' : (safeEntry.primary ? `${safeEntry.primary} image` : 'Display image'),
+          onReady: fitAll,
+          onError: () => {
+            elements.centerStage?.classList.remove('has-media', 'has-background-media', 'has-foreground-media');
+            fitAll();
+          },
+        });
       } else {
-        elements.centerImage.onload = null;
-        elements.centerImage.onerror = null;
-        elements.centerImage.removeAttribute('src');
-        elements.centerImage.alt = '';
-        setHidden(elements.centerImageWrap, true);
+        swapMedia(elements.centerImage, elements.centerImageWrap, '');
       }
     }
     if (safeEntry.cta) renderCta(safeEntry);
@@ -465,20 +513,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const currentIndex = currentEntries.findIndex((item) => String(item.id || '') === centerEntryId);
       centerIndex = ((currentIndex >= 0 ? currentIndex : centerIndex) + 1) % currentEntries.length;
-      elements.centerStage?.classList.add('is-transitioning');
-      centerTransitionTimer = window.setTimeout(() => {
-        centerTransitionTimer = null;
-        const latestEntries = safeArray(asObject(layout.center).entries);
-        if (!latestEntries.length) {
-          renderCenter();
-          return;
-        }
-        centerIndex %= latestEntries.length;
-        centerEntryId = String(latestEntries[centerIndex]?.id || '');
-        renderCenterEntry(latestEntries[centerIndex]);
-        if (elements.centerPosition) elements.centerPosition.textContent = `${centerIndex + 1} of ${latestEntries.length}`;
-        scheduleCenterRotation();
-      }, 280);
+      const latestEntries = safeArray(asObject(layout.center).entries);
+      if (!latestEntries.length) {
+        renderCenter();
+        return;
+      }
+      centerIndex %= latestEntries.length;
+      centerEntryId = String(latestEntries[centerIndex]?.id || '');
+      renderCenterEntry(latestEntries[centerIndex]);
+      if (elements.centerPosition) elements.centerPosition.textContent = `${centerIndex + 1} of ${latestEntries.length}`;
+      scheduleCenterRotation();
     }, seconds * 1000);
   };
 
@@ -486,13 +530,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const center = asObject(layout.center);
     const entries = safeArray(center.entries);
     const override = asObject(center.override);
-    const revisionChanged = Number(center.revision) !== centerRevision;
-    if (centerTransitionTimer && !Object.keys(override).length && !center.paused && !center.pinned_card_id && !revisionChanged) return;
-    if (centerTransitionTimer) {
-      window.clearTimeout(centerTransitionTimer);
-      centerTransitionTimer = null;
-      elements.centerStage?.classList.remove('is-transitioning');
-    }
     if (Object.keys(override).length) {
       if (elements.centerMode) elements.centerMode.textContent = 'Host spotlight';
       if (elements.centerPosition) elements.centerPosition.textContent = '';
@@ -518,28 +555,15 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.gameStage?.classList.toggle('has-background-media', Boolean(game.image_url));
     if (elements.gameImage && elements.gameImageWrap) {
       if (game.image_url) {
-        const requestedSrc = game.image_url;
-        elements.gameImage.alt = '';
-        elements.gameImage.onload = () => {
-          if (elements.gameImage.getAttribute('src') !== requestedSrc) return;
-          setHidden(elements.gameImageWrap, false);
-          fitAll();
-        };
-        elements.gameImage.onerror = () => {
-          if (elements.gameImage.getAttribute('src') !== requestedSrc) return;
-          setHidden(elements.gameImageWrap, true);
-          elements.gameStage?.classList.remove('has-background-media');
-          fitAll();
-        };
-        setHidden(elements.gameImageWrap, true);
-        elements.gameImage.src = requestedSrc;
-        if (elements.gameImage.complete && elements.gameImage.naturalWidth) elements.gameImage.onload();
+        swapMedia(elements.gameImage, elements.gameImageWrap, game.image_url, {
+          onReady: fitAll,
+          onError: () => {
+            elements.gameStage?.classList.remove('has-background-media');
+            fitAll();
+          },
+        });
       } else {
-        elements.gameImage.onload = null;
-        elements.gameImage.onerror = null;
-        elements.gameImage.removeAttribute('src');
-        elements.gameImage.alt = '';
-        setHidden(elements.gameImageWrap, true);
+        swapMedia(elements.gameImage, elements.gameImageWrap, '');
       }
     }
     if (elements.gameStatus) elements.gameStatus.textContent = game.status_label || game.phase || '';
@@ -550,16 +574,20 @@ document.addEventListener('DOMContentLoaded', () => {
     setOptionalText(elements.gameFeature, game.feature_text || '');
     if (elements.gameFocusItems) {
       elements.gameFocusItems.innerHTML = '';
-      safeArray(game.focus_items).filter(Boolean).slice(0, 3).forEach((focusItem) => {
+      safeArray(game.focus_items).filter(Boolean).slice(0, 2).forEach((focusItem) => {
         const item = document.createElement('li');
         item.textContent = String(focusItem);
         elements.gameFocusItems.appendChild(item);
       });
       setHidden(elements.gameFocusItems, !elements.gameFocusItems.children.length);
     }
+    const steps = safeArray(game.steps).filter(Boolean).slice(0, 2);
+    const metrics = safeArray(game.metrics).slice(0, 2);
+    const footerMode = steps.length ? 'steps' : (metrics.length ? 'metrics' : (game.action_label ? 'action' : 'none'));
+    if (elements.gameStage) elements.gameStage.dataset.footerMode = footerMode;
     if (elements.gameMetrics) {
       elements.gameMetrics.innerHTML = '';
-      safeArray(game.metrics).slice(0, 3).forEach((metric) => {
+      metrics.forEach((metric) => {
         const item = document.createElement('div');
         const value = document.createElement('strong');
         const label = document.createElement('span');
@@ -568,12 +596,12 @@ document.addEventListener('DOMContentLoaded', () => {
         item.append(value, label);
         elements.gameMetrics.appendChild(item);
       });
-      setHidden(elements.gameMetrics, !elements.gameMetrics.children.length);
+      setHidden(elements.gameMetrics, footerMode !== 'metrics' || !elements.gameMetrics.children.length);
     }
     setHidden(elements.gameSteps, true);
     if (elements.gameSteps) elements.gameSteps.innerHTML = '';
-    renderSteps(elements.gameSteps, game.steps);
-    setOptionalText(elements.gameAction, game.action_label || '');
+    if (footerMode === 'steps') renderSteps(elements.gameSteps, steps, 2);
+    setOptionalText(elements.gameAction, footerMode === 'action' ? (game.action_label || '') : '');
     if (elements.gamePosition) elements.gamePosition.textContent = count > 1 ? `Game ${gameIndex + 1} of ${count}` : 'Game live';
     if (elements.gameProgress) elements.gameProgress.textContent = count > 1 ? 'Rotating' : 'Pinned';
     gameEntryId = String(game.id || '');
@@ -606,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const entryId = String(entries[gameIndex]?.id || '');
       if (gameTimer && gameTimerEntryId === entryId) return;
       clearGameRotationTimer();
-      const seconds = boundedSeconds(games.interval_seconds, 10);
+      const seconds = boundedSeconds(games.interval_seconds, 20);
       gameTimerEntryId = entryId;
       gameTimer = window.setTimeout(() => {
         gameTimer = null;
@@ -692,8 +720,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const scheduleBarRotation = (bar, hasNotice, hasActiveQueue, promotionSlots, historySlots) => {
     const promotions = safeArray(bar.promotion_items);
     const completedOrders = safeArray(bar.completed_orders);
-    const rotatesPromotions = promotions.length > promotionSlots;
-    const rotatesHistory = completedOrders.length > historySlots;
+    const rotatesPromotions = promotionSlots > 0 && promotions.length > promotionSlots;
+    const rotatesHistory = historySlots > 0 && completedOrders.length > historySlots;
     if (hasNotice || (!rotatesPromotions && !rotatesHistory)) {
       clearBarRotationTimer();
       return;
@@ -708,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (barRotationTimer && barRotationTimerKey === key) return;
     clearBarRotationTimer();
     barRotationTimerKey = key;
-    const seconds = boundedSeconds(bar.promotion_interval_seconds, 8);
+    const seconds = boundedSeconds(bar.promotion_interval_seconds, 20);
     barRotationTimer = window.setTimeout(() => {
       barRotationTimer = null;
       barRotationTimerKey = '';
@@ -728,27 +756,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const requestedSrc = String(imageUrl || '');
     elements.barStage?.classList.toggle('has-background-media', Boolean(requestedSrc));
     if (!requestedSrc) {
-      elements.barImage.onload = null;
-      elements.barImage.onerror = null;
-      elements.barImage.removeAttribute('src');
-      setHidden(elements.barImageWrap, true);
+      swapMedia(elements.barImage, elements.barImageWrap, '');
       return;
     }
-    elements.barImage.alt = '';
-    elements.barImage.onload = () => {
-      if (elements.barImage.getAttribute('src') !== requestedSrc) return;
-      setHidden(elements.barImageWrap, false);
-      fitAll();
-    };
-    elements.barImage.onerror = () => {
-      if (elements.barImage.getAttribute('src') !== requestedSrc) return;
-      setHidden(elements.barImageWrap, true);
-      elements.barStage?.classList.remove('has-background-media');
-      fitAll();
-    };
-    setHidden(elements.barImageWrap, true);
-    elements.barImage.src = requestedSrc;
-    if (elements.barImage.complete && elements.barImage.naturalWidth) elements.barImage.onload();
+    swapMedia(elements.barImage, elements.barImageWrap, requestedSrc, {
+      onReady: fitAll,
+      onError: () => {
+        elements.barStage?.classList.remove('has-background-media');
+        fitAll();
+      },
+    });
   };
 
   const renderBar = () => {
@@ -769,8 +786,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const completedOrders = safeArray(bar.completed_orders);
     const hasActiveQueue = activeOrders.length > 0;
     const hasHistory = completedOrders.length > 0;
-    const promotionSlots = hasActiveQueue ? (hasHistory ? 0 : 1) : (hasHistory ? 2 : 3);
-    const historySlots = hasActiveQueue ? 2 : 3;
+    const promotionSlots = hasActiveQueue || hasHistory ? 0 : 1;
+    const historySlots = hasActiveQueue ? 0 : 3;
     elements.barStage?.classList.toggle('is-idle', !hasNotice && !hasActiveQueue);
     elements.barStage?.classList.toggle('has-history', !hasNotice && !hasActiveQueue && hasHistory);
     if (elements.barStage) elements.barStage.dataset.presentation = hasNotice ? 'notice' : (hasActiveQueue ? 'queue' : 'idle');
@@ -808,7 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (elements.barHeading) {
         elements.barHeading.textContent = hasActiveQueue
           ? `Bar queue · ${Number(bar.active_count) || 0}`
-          : (promotions.length ? 'Tonight\'s menu' : (hasHistory ? 'Drink history' : 'Bar standby'));
+          : (hasHistory ? 'Completed tonight' : (promotions.length ? 'Tonight\'s menu' : 'Bar standby'));
       }
       if (elements.barOrders) {
         elements.barOrders.replaceChildren();
@@ -836,19 +853,17 @@ document.addEventListener('DOMContentLoaded', () => {
         { label: 'Avg prep', value: summary.average_prep_label || 'About 8 min' },
         { label: 'Drinks', value: Number(summary.available_drink_count) || 0 },
       ]);
-      setHidden(elements.barSummary, !hasActiveQueue || hasHistory);
+      setHidden(elements.barSummary, true);
 
       const promotionWindow = rotationWindow(promotions, barPromotionIndex, promotionSlots);
-      const topPromotionCount = hasActiveQueue ? 0 : (hasHistory ? 1 : Math.min(2, promotionWindow.length));
+      const topPromotionCount = Math.min(1, promotionWindow.length);
       renderPromotionCards(elements.barPromotionsTop, promotionWindow.slice(0, topPromotionCount));
       renderPromotionCards(elements.barPromotionsBottom, promotionWindow.slice(topPromotionCount));
-      renderCompletedHistory(completedOrders, hasHistory, historySlots);
+      renderCompletedHistory(completedOrders, !hasActiveQueue && hasHistory, historySlots);
 
-      const backgroundPromotion = hasActiveQueue
-        ? promotionWindow[0]
-        : (promotionWindow[Math.min(1, promotionWindow.length - 1)] || promotionWindow[0]);
+      const backgroundPromotion = hasActiveQueue || hasHistory ? null : promotionWindow[0];
       renderBarBackground(backgroundPromotion?.image_url || bar.image_url || '');
-      if (promotions.length && (!hasActiveQueue || !hasHistory)) renderAction(elements.barAction, bar.action);
+      if (!hasActiveQueue && !hasHistory && promotions.length) renderAction(elements.barAction, bar.action);
       else setOptionalText(elements.barAction, '');
       setOptionalText(
         elements.barPickup,
@@ -888,16 +903,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderLayout = () => {
     const header = asObject(layout.header);
-    if (elements.costumeCount) elements.costumeCount.textContent = Number(header.costume_count) || 0;
-    if (elements.karaokeCount) elements.karaokeCount.textContent = Number(header.karaoke_count) || 0;
-    if (elements.gameCount) elements.gameCount.textContent = Number(header.game_count) || 0;
-    body.classList.remove('display-density--compact', 'display-density--standard', 'display-density--large');
-    body.classList.add(`display-density--${['compact', 'standard', 'large'].includes(layout.density) ? layout.density : 'standard'}`);
-    renderGames();
-    renderBar();
-    renderMusic();
-    renderCenter();
-    fitAll();
+    const density = ['compact', 'standard', 'large'].includes(layout.density) ? layout.density : 'standard';
+    renderRegionIfChanged('density', density, () => {
+      body.classList.remove('display-density--compact', 'display-density--standard', 'display-density--large');
+      body.classList.add(`display-density--${density}`);
+    });
+    renderRegionIfChanged('header', header, () => {
+      if (elements.costumeCount) elements.costumeCount.textContent = Number(header.costume_count) || 0;
+      if (elements.karaokeCount) elements.karaokeCount.textContent = Number(header.karaoke_count) || 0;
+      if (elements.gameCount) elements.gameCount.textContent = Number(header.game_count) || 0;
+    });
+    const gamesChanged = renderRegionIfChanged('games', asObject(layout.games), renderGames);
+    const barChanged = renderRegionIfChanged('bar', asObject(layout.bar), renderBar);
+    const musicChanged = renderRegionIfChanged('music', asObject(layout.music), renderMusic);
+    const centerChanged = renderRegionIfChanged('center', asObject(layout.center), renderCenter);
+    if (gamesChanged || barChanged || musicChanged || centerChanged) fitAll();
   };
 
   const fetchLatest = async () => {

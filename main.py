@@ -594,7 +594,7 @@ DEFAULT_DRINK_ESTIMATE_SECONDS = 8 * 60
 DRINK_READY_OVERRIDE_SECONDS = 10
 DISPLAY_NOTICE_QUEUE_LIMIT = 12
 DRINK_READY_DASHBOARD_SECONDS = 5 * 60
-BAR_PROMOTION_INTERVAL_SECONDS = 8
+BAR_PROMOTION_INTERVAL_SECONDS = 20
 SPECIALTY_DRINK_INCLUDED_LIMIT = 3
 SPECIALTY_EXTRA_ORDER_HOUR = 23
 DRINK_ORDER_STATUSES = ("received", "in_progress", "complete")
@@ -654,14 +654,14 @@ DISPLAY_VISIBILITY_MODES = {"auto", "always", "hidden"}
 DEFAULT_DISPLAY_CONFIG: dict[str, object] = {
     "source_order": list(DISPLAY_SOURCE_KEYS),
     "source_enabled": {source: True for source in DISPLAY_SOURCE_KEYS},
-    "center_interval_seconds": 8,
-    "game_interval_seconds": 10,
+    "center_interval_seconds": 15,
+    "game_interval_seconds": 20,
     "game_mode": "auto",
     "pinned_game_key": "",
     "prompt_answer_cards_enabled": True,
     "bar_mode": "auto",
     "music_mode": "auto",
-    "max_bar_orders": 4,
+    "max_bar_orders": 3,
     "notice_duration_seconds": DRINK_READY_OVERRIDE_SECONDS,
     "density": "standard",
     "game_result_card_enabled": {},
@@ -2927,12 +2927,12 @@ def normalize_display_config(raw_config: object) -> dict[str, object]:
         }
 
     normalized["center_interval_seconds"] = _bounded_int(
-        raw_config.get("center_interval_seconds"), 8, 4, 30
+        raw_config.get("center_interval_seconds"), 15, 12, 30
     )
     normalized["game_interval_seconds"] = _bounded_int(
-        raw_config.get("game_interval_seconds"), 10, 5, 30
+        raw_config.get("game_interval_seconds"), 20, 15, 30
     )
-    normalized["max_bar_orders"] = _bounded_int(raw_config.get("max_bar_orders"), 4, 1, 8)
+    normalized["max_bar_orders"] = _bounded_int(raw_config.get("max_bar_orders"), 3, 1, 3)
     normalized["notice_duration_seconds"] = _bounded_int(
         raw_config.get("notice_duration_seconds"), DRINK_READY_OVERRIDE_SECONDS, 5, 30
     )
@@ -3992,6 +3992,64 @@ def dj_view_state() -> dict[str, object]:
     view["request_count"] = len(dj_song_requests)
     view["flow"] = dj_command_flow()
     return view
+
+
+def dj_display_visual_signature() -> str:
+    """Return only DJ state whose change should repaint a live display.
+
+    Receiver heartbeats update liveness and playback position every five
+    seconds. Those values must still be persisted, but they should not force
+    every game, center, and bar card to repaint while their visible content is
+    unchanged.
+    """
+    receiver = dj_state.get("receiver", {})
+    if not isinstance(receiver, dict):
+        receiver = {}
+
+    def safe_int(value: object, fallback: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    def command_summary(value: object) -> dict[str, object] | None:
+        if not isinstance(value, dict):
+            return None
+        return {
+            "id": str(value.get("id", "") or ""),
+            "action": str(value.get("action", "") or ""),
+            "status": str(value.get("status", "") or ""),
+            "song_id": str(value.get("song_id", "") or ""),
+            "revision": safe_int(value.get("revision")),
+            "error": str(value.get("error", "") or ""),
+        }
+
+    visible_state = {
+        "receiver": {
+            "online": dj_receiver_is_online(receiver),
+            "status": str(receiver.get("status", "") or ""),
+            "authorization_status": str(receiver.get("authorization_status", "") or ""),
+            "audio_enabled": bool(receiver.get("audio_enabled", False)),
+            "playback_status": str(receiver.get("playback_status", "") or ""),
+            "current_song_id": str(receiver.get("current_song_id", "") or ""),
+            "queue_order": [str(song_id or "") for song_id in receiver.get("queue_order", [])]
+            if isinstance(receiver.get("queue_order"), list)
+            else [],
+            "current_queue_index": safe_int(receiver.get("current_queue_index"), -1),
+            "queue_revision": safe_int(receiver.get("queue_revision")),
+            "priority_revision": safe_int(receiver.get("priority_revision")),
+            "last_error": str(receiver.get("last_error", "") or ""),
+        },
+        "current_command": command_summary(dj_state.get("current_command")),
+        "last_command": command_summary(dj_state.get("last_command")),
+        "last_reset": command_summary(dj_state.get("last_reset")),
+        "desired": copy.deepcopy(dj_state.get("desired", {})),
+        "priority_sync_pending": bool(dj_state.get("priority_sync_pending", False)),
+        "priority_sync_error": str(dj_state.get("priority_sync_error", "") or ""),
+        "priority_revision": safe_int(dj_state.get("priority_revision")),
+        "playlist": copy.deepcopy(dj_playlist),
+    }
+    return json.dumps(visible_state, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def apple_music_is_configured() -> bool:
@@ -8425,7 +8483,7 @@ def _display_entry(source: str, entry_id: str, **content: object) -> dict[str, o
     return {
         "id": f"{source}:{entry_id}",
         "source": source,
-        "duration_seconds": int(display_config.get("center_interval_seconds", 8) or 8),
+        "duration_seconds": int(display_config.get("center_interval_seconds", 15) or 15),
         **content,
     }
 
@@ -8760,7 +8818,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 media_tone="custom",
                 link=card.get("link", ""),
                 link_label=card.get("link_label", ""),
-                duration_seconds=card.get("duration_seconds", display_config.get("center_interval_seconds", 8)),
+                duration_seconds=card.get("duration_seconds", display_config.get("center_interval_seconds", 15)),
                 custom=True,
             )
         )
@@ -9063,7 +9121,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
 
 def build_bar_stage() -> dict[str, object]:
     orders = ordered_active_drink_orders()
-    maximum = _bounded_int(display_config.get("max_bar_orders"), 4, 1, 8)
+    maximum = _bounded_int(display_config.get("max_bar_orders"), 3, 1, 3)
     public_orders = [
         {
             "id": str(order.get("id", "")),
@@ -9173,12 +9231,12 @@ def build_display_layout() -> dict[str, object]:
             "index": int(display_runtime.get("center_index", 0) or 0),
             "revision": int(display_runtime.get("center_revision", 0) or 0),
             "pinned_card_id": pinned_card_id,
-            "interval_seconds": int(display_config.get("center_interval_seconds", 8) or 8),
+            "interval_seconds": int(display_config.get("center_interval_seconds", 15) or 15),
         },
         "games": {
             "visible": display_config.get("game_mode") != "hidden" and bool(game_entries),
             "entries": game_entries,
-            "interval_seconds": int(display_config.get("game_interval_seconds", 10) or 10),
+            "interval_seconds": int(display_config.get("game_interval_seconds", 20) or 20),
             "pinned_game_key": str(display_config.get("pinned_game_key", "") or ""),
         },
         "bar": build_bar_stage(),
@@ -9461,9 +9519,13 @@ def dj_receiver_state():
     if not isinstance(payload, dict):
         return jsonify({"error": "Expected a DJ receiver state payload."}), 400
 
+    previous_visual_signature = dj_display_visual_signature()
     receiver_accepted = record_dj_receiver_state(payload)
     if receiver_accepted:
-        broadcast_display_update()
+        if dj_display_visual_signature() != previous_visual_signature:
+            broadcast_display_update()
+        else:
+            persist_state_if_available()
     return jsonify(
         {
             "dj": dj_view_state(),
@@ -13126,13 +13188,13 @@ def admin_portal(admin_view: str):
                     "source_enabled": {
                         source: source in enabled_sources for source in DISPLAY_SOURCE_KEYS
                     },
-                    "center_interval_seconds": request.form.get("center_interval_seconds", "8"),
-                    "game_interval_seconds": request.form.get("game_interval_seconds", "10"),
+                    "center_interval_seconds": request.form.get("center_interval_seconds", "15"),
+                    "game_interval_seconds": request.form.get("game_interval_seconds", "20"),
                     "game_mode": request.form.get("game_mode", "auto"),
                     "prompt_answer_cards_enabled": request.form.get("prompt_answer_cards_enabled") == "1",
                     "bar_mode": request.form.get("bar_mode", "auto"),
                     "music_mode": request.form.get("music_mode", "auto"),
-                    "max_bar_orders": request.form.get("max_bar_orders", "4"),
+                    "max_bar_orders": request.form.get("max_bar_orders", "3"),
                     "notice_duration_seconds": request.form.get("notice_duration_seconds", "10"),
                     "density": request.form.get("density", "standard"),
                 }

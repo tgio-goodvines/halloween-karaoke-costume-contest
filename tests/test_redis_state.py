@@ -2087,6 +2087,76 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(starting_version, main.display_update_version)
         self.assertEqual("casting-display", self.redis_state()["dj_state"]["receiver"]["id"])
 
+    def test_receiver_heartbeat_persists_without_repainting_the_live_display(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "stopped",
+                "current_song_id": "",
+                "playback_position_seconds": 4,
+            }
+        )
+        self.save_current_state()
+        starting_version = main.display_update_version
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/api/dj/receiver-state",
+                json={
+                    "receiver_id": "casting-display",
+                    "status": "ready",
+                    "authorization_status": "authorized",
+                    "audio_enabled": True,
+                    "playback_status": "stopped",
+                    "current_song_id": "",
+                    "playback_position_seconds": 9,
+                    "report_reason": "heartbeat",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertTrue(response.get_json()["receiver_accepted"])
+        self.assertEqual(starting_version, main.display_update_version)
+        self.assertEqual(
+            9,
+            self.redis_state()["dj_state"]["receiver"]["playback_position_seconds"],
+        )
+
+    def test_receiver_visible_state_change_still_broadcasts(self):
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "stopped",
+            }
+        )
+        self.save_current_state()
+        starting_version = main.display_update_version
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            response = client.post(
+                "/api/dj/receiver-state",
+                json={
+                    "receiver_id": "casting-display",
+                    "status": "needs_audio_enable",
+                    "authorization_status": "authorized",
+                    "audio_enabled": False,
+                    "playback_status": "stopped",
+                    "report_reason": "audio_locked",
+                },
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertTrue(response.get_json()["receiver_accepted"])
+        self.assertEqual(starting_version + 1, main.display_update_version)
+
     def test_dj_workflow_reset_preserves_playlist_and_waits_for_display_acknowledgement(self):
         main.dj_playlist = [
             main.normalize_dj_song(
@@ -2807,6 +2877,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, update_response.status_code)
         self.assertEqual(200, pin_response.status_code)
         self.assertEqual(12, state["display_config"]["center_interval_seconds"])
+        self.assertEqual(15, state["display_config"]["game_interval_seconds"])
+        self.assertEqual(3, state["display_config"]["max_bar_orders"])
         self.assertEqual("always", state["display_config"]["music_mode"])
         self.assertEqual("compact", display_payload["layout"]["density"])
         custom_entry = next(entry for entry in display_payload["entries"] if entry["source"] == "custom")
@@ -2991,6 +3063,28 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(main.build_bar_stage()["visible"])
         main.drink_orders = []
         self.assertFalse(main.build_bar_stage()["visible"])
+
+    def test_bar_stage_caps_the_tv_queue_at_three_readable_rows(self):
+        created_at = main._utc_now_iso()
+        main.drink_orders = [
+            main.normalize_drink_order(
+                {
+                    "id": f"order-{index}",
+                    "user_id": f"user-{index}",
+                    "username": f"Guest {index}",
+                    "item_name": f"Drink {index}",
+                    "status": "received",
+                    "created_at": created_at,
+                }
+            )
+            for index in range(1, 5)
+        ]
+
+        bar = main.build_bar_stage()
+
+        self.assertEqual(4, bar["active_count"])
+        self.assertEqual(3, len(bar["orders"]))
+        self.assertEqual(1, bar["overflow_count"])
 
     def test_live_display_renders_enriched_space_utilization_regions(self):
         with main.app.test_client() as client:

@@ -139,6 +139,7 @@ These files are present locally but not tracked by Git at the time this context 
 | `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` | Current YouTube karaoke implementation, verification, production prerequisites, guardrails, and rollout progress. |
 | `ai-context/STYLING_REFINEMENT_PROGRESS.md` | Progress and implementation notes for the attached-wireframe styling refinement across pages, live display, and generated emails. |
 | `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` | Adaptive live-display and admin-control-room implementation, state/payload contract, verification matrix, and rollout notes. |
+| `ai-context/LIVE_DISPLAY_CAST_QUALITY_AND_LEGIBILITY_PLAN.md` | Implementation-ready corrective plan for cast-stable rendering, region-level reconciliation, non-blanking media swaps, TV-readable game/bar rails, and real-device acceptance testing. |
 | `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` | Active GitHub Actions plan for deploying merged `main` commits to the existing EC2 ASG through AWS CLI and SSM, without S3 or GoodVines disruption. |
 | `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` | Durable progress tracker for the GitHub Actions deployment implementation, validation status, and external setup requirements. |
 | `ai-context/GITLAB_AWS_DEPLOYMENT_DESIGN.md` | Legacy GitLab CI/CD design; superseded by the GitHub Actions deployment plan. |

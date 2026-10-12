@@ -17,5 +17,22 @@
     return MEDIA_TONES.has(tone) ? tone : 'feature';
   };
 
-  return { treatmentFor, toneFor };
+  const signatureFor = (value) => {
+    const normalize = (candidate) => {
+      if (Array.isArray(candidate)) return candidate.map(normalize);
+      if (!candidate || typeof candidate !== 'object') return candidate;
+      return Object.keys(candidate).sort().reduce((result, key) => {
+        const normalized = normalize(candidate[key]);
+        if (typeof normalized !== 'undefined') result[key] = normalized;
+        return result;
+      }, {});
+    };
+    return JSON.stringify(normalize(value));
+  };
+
+  const shouldReplaceSource = (currentSource, requestedSource) => (
+    String(currentSource || '') !== String(requestedSource || '')
+  );
+
+  return { treatmentFor, toneFor, signatureFor, shouldReplaceSource };
 });

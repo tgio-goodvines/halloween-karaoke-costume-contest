@@ -25,6 +25,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/GAME_RESULTS_REWARDS_RECOGNITION_PROGRESS.md` - attendee-safe realtime game status, official cross-year result archives, achievements/retroactive recognition, artwork, and rollout verification.
 - `ai-context/GAME_RESET_PARTY_WRAP_UP_IMPLEMENTATION_PLAN.md` - implementation-ready progress tracker for phrase-free game resets, wrap-up finalization, attendance/winner awards, analytics, recap test/official email, post-delivery cleanup, and historical retention controls.
 - `ai-context/LIVE_DISPLAY_ADAPTIVE_LAYOUT_PROGRESS.md` - adaptive TV layout, independent region rotations, admin control room, generated result-card controls, verification, and rollout notes.
+- `ai-context/LIVE_DISPLAY_CAST_QUALITY_AND_LEGIBILITY_PLAN.md` - implementation-ready plan for cast-stable refreshes, crisp media swaps, coordinated motion, and TV-readable game/bar cards.
 - `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md` - active AWS deployment plan using GitHub Actions, AWS CLI, SSM, Vault, and existing EC2/nginx infrastructure.
 - `ai-context/GITHUB_ACTIONS_DEPLOYMENT_IMPLEMENTATION_PROGRESS.md` - durable progress tracker for deployment implementation and remaining external setup.
 - `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md` - launch template version 6 details for automatic Halloween install on replacement API EC2 instances.

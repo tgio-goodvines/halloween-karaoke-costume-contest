@@ -291,7 +291,7 @@ Admin and voting actions that alter display-relevant state call `broadcast_displ
 
 That function increments `display_update_version` and notifies `display_update_condition`.
 
-`/api/display-updates` streams the current version to connected browsers, then waits for changes. The browser does not use the version value semantically; every SSE message triggers a full layout refresh in `static/display.js`.
+`/api/display-updates` streams the current version to connected browsers, then waits for changes. MusicKit receiver heartbeats still persist liveness and playback position, but only display-visible DJ changes advance the version. On an SSE message or fallback poll, `static/display.js` compares stable signatures for header, center, games, bar, music, and density; unchanged regions are DOM no-ops.
 
 `static/display.js` also polls `/api/display-data` every 30 seconds as a fallback.
 
@@ -433,6 +433,11 @@ SSE connections.
 - Measuring inner content occupancy and applying sparse/dense/ultra-dense
   classes; `static/display.css` combines those classes with container-relative
   type sizing so cards can expand as well as compact.
+- Preserving unchanged artwork and preloading/decoding new artwork before an
+  atomic swap, so data refreshes do not blank full-card backgrounds.
+- Enforcing TV-readable side-rail type floors and limiting the bar queue to
+  three rows; game footer content chooses steps, metrics, or one action rather
+  than rendering all three simultaneously.
 - Applying costume/winner styling classes.
 - Rotating cards every 8 seconds.
 - Fetching latest display data.

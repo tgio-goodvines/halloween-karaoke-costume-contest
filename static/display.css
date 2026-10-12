@@ -811,3 +811,76 @@ body.display-mode * { box-sizing: border-box; }
   .display-bar-stage.is-ready { animation: none; }
   .display-center-progress span { animation: none !important; }
 }
+
+/* Cast-safe TV profile: keep large regions stable and side-rail copy readable. */
+body.display-mode::before,
+body.display-mode::after { display: none; }
+
+.display-stage,
+.display-center-stage { transition: none; }
+.display-center-progress { display: none; }
+.display-bar-stage.is-ready { animation: none; }
+.display-center-stage.has-background-media .display-center-card__media img,
+.display-game-stage__image img,
+.display-bar-stage__image img,
+.display-bar-stage.is-ready .display-bar-stage__image img { filter: none; }
+.display-side > .display-region-header { justify-content: flex-start; font-size: clamp(0.88rem, 0.9vw, 1.05rem); }
+
+@media (min-width: 901px) {
+  .display-shell.has-games .display-stage {
+    grid-template-columns: minmax(19rem, 0.95fr) minmax(0, 2.25fr);
+  }
+  .display-shell.has-bar .display-stage {
+    grid-template-columns: minmax(0, 2.25fr) minmax(19rem, 0.95fr);
+  }
+  .display-shell.has-games.has-bar .display-stage {
+    grid-template-columns: minmax(17rem, 0.95fr) minmax(0, 2.25fr) minmax(17rem, 0.95fr);
+  }
+
+  .display-side,
+  .display-side.is-dense,
+  .display-side.is-ultra-dense {
+    --display-side-title: clamp(1.5rem, 6.2cqi, 2rem);
+    --display-side-copy: clamp(1.06rem, 4.2cqi, 1.35rem);
+  }
+  .display-density--large .display-side,
+  .display-density--large .display-side.is-dense,
+  .display-density--large .display-side.is-ultra-dense {
+    --display-side-title: clamp(1.75rem, 6.8cqi, 2.3rem);
+    --display-side-copy: clamp(1.18rem, 4.7cqi, 1.5rem);
+  }
+
+  .display-game-stage__status { font-size: clamp(0.88rem, 3.2cqi, 1rem); }
+  .display-game-stage__focus-label { font-size: clamp(0.88rem, 3.2cqi, 1rem); }
+  .display-game-stage__primary { font-size: clamp(1.25rem, 5.1cqi, 1.7rem); -webkit-line-clamp: 4; }
+  .display-game-stage__secondary { font-size: clamp(1.05rem, 4cqi, 1.3rem); -webkit-line-clamp: 2; }
+  .display-game-stage__feature { font-size: clamp(1.2rem, 4.8cqi, 1.55rem); -webkit-line-clamp: 5; }
+  .display-game-stage__focus-items li { font-size: clamp(1.05rem, 4.1cqi, 1.3rem); -webkit-line-clamp: 3; }
+  .display-game-stage__metrics strong { font-size: clamp(1.2rem, 4.8cqi, 1.6rem); }
+  .display-game-stage__metrics span { font-size: clamp(0.85rem, 3.1cqi, 1rem); }
+  .display-game-stage__steps li,
+  .display-game-stage__action { font-size: clamp(1.05rem, 4cqi, 1.28rem); }
+  .display-game-stage[data-presentation="result"] .display-game-stage__primary { font-size: clamp(1.55rem, 6.2cqi, 2.1rem); }
+
+  .display-bar-queue li { padding: clamp(0.62rem, 2.4cqi, 0.85rem); }
+  .display-bar-queue li strong { font-size: clamp(1.15rem, 4.5cqi, 1.45rem); }
+  .display-bar-queue li small { font-size: clamp(1rem, 3.8cqi, 1.2rem); }
+  .display-bar-queue li em { font-size: clamp(1rem, 3.4cqi, 1.08rem); line-height: 1.15; }
+  .display-bar-stage__overflow { font-size: clamp(0.92rem, 3.3cqi, 1.08rem); }
+  .display-bar-promotion span,
+  .display-bar-history__heading { font-size: clamp(0.88rem, 3.2cqi, 1rem); }
+  .display-bar-promotion strong { font-size: clamp(1.3rem, 5cqi, 1.75rem); }
+  .display-bar-promotion p,
+  .display-bar-action { font-size: clamp(1.02rem, 3.8cqi, 1.25rem); }
+  .display-bar-pickup { font-size: clamp(0.95rem, 3.4cqi, 1.12rem); }
+  .display-ready-notice h2 { font-size: clamp(1.8rem, 7cqi, 2.6rem); }
+  .display-ready-notice__details { font-size: clamp(1rem, 3.8cqi, 1.2rem); }
+  .display-ready-notice small { font-size: clamp(0.9rem, 3.2cqi, 1.05rem); }
+
+  .display-game-stage.is-dense .display-game-stage__summary,
+  .display-game-stage.is-dense .display-game-stage__utility,
+  .display-game-stage.is-ultra-dense .display-game-stage__summary,
+  .display-game-stage.is-ultra-dense .display-game-stage__utility { padding: 0.45rem; }
+  .display-side.is-ultra-dense .display-game-stage__secondary,
+  .display-side.is-ultra-dense .display-bar-stage__overflow { display: block !important; }
+}

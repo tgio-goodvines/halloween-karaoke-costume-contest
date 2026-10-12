@@ -282,3 +282,32 @@ fixed no-scroll track.
   per-game shuffle bag while guaranteeing current status in every cycle.
 - A display setting can suppress all prompt-answer cards, and admins can hide
   individual answers from the TV without affecting attendee voting or scores.
+
+## Cast Stability And TV Legibility (2026-10-11)
+
+- Ordinary five-second MusicKit heartbeats continue to persist receiver
+  freshness and playback position but no longer broadcast unless a
+  display-visible receiver, song, queue, error, or command field changes.
+- The live client keeps deterministic signatures for each layout region.
+  Identical SSE/fallback payloads perform no DOM work, preserve rotation
+  deadlines, and do not reassign image sources.
+- Center, game, and bar artwork now preloads and decodes before an atomic swap.
+  Existing artwork stays visible during the request, failed replacements do
+  not flash an empty card, and stale loads are ignored.
+- The cast-safe presentation removes the scanline overlay, center fade/slide,
+  animated progress line, ready-alert pulse, and large-area image filters.
+  Default center/game/bar intervals are now 15/20/20 seconds.
+- TV aspect ratios give both side rails more width. Game cards show at most two
+  focus items and exactly one footer mode (steps, metrics, or action). The bar
+  queue is capped at three large rows and does not mix active orders with
+  completed history, promotions, and summary tiles.
+- Large density now affects the side rails. Browser QA confirmed readable
+  1280x720 computed sizes (28px game title, 20px game focus, 16.8px game
+  secondary/steps, 18.4px bar names, 16px drink copy and status after the final
+  adjustment), exact viewport sizing, zero region overflow, a disabled
+  scanline pseudo-element, and no browser console warnings/errors. A populated
+  1024x768 fixture also fit without document or region overflow.
+- Verification passed with 258 Python tests plus 37 subtests, all dependency-
+  free JavaScript tests, Python/JavaScript syntax checks, and whitespace
+  validation. Final real-device casting acceptance remains to be run on the
+  party laptop, receiver, Wi-Fi, and television.

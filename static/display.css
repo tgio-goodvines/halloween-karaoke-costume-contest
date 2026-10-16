@@ -1019,3 +1019,17 @@ body.display-mode::after { display: none; }
 .display-ready-notice__details,
 .display-ready-notice small { display: none !important; }
 }
+
+/* The bar rail is the card; queue entries are flat rows, not nested cards. */
+[data-bar-orders] {
+  gap: 0 !important;
+  border-top: 1px solid #3f3f46;
+}
+
+.display-bar-queue [data-bar-orders] > li {
+  padding-inline: 0.25rem;
+  border: 0;
+  border-bottom: 1px solid #3f3f46;
+  border-radius: 0;
+  background: transparent;
+}

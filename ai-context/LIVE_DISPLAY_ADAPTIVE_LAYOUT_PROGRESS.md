@@ -326,6 +326,8 @@ fixed no-scroll track.
 - Active bar views show only three large queue rows and an overflow count. Ready
   alerts show the guest name and one pickup message; queue totals, image art,
   extra details, and repeated pickup guidance are suppressed.
+- The right rail itself is the only queue card surface. Active drink orders are
+  flat, transparent rows separated by rules rather than nested rounded cards.
 - Browser QA used populated 1920x1080, 1280x720, and 1024x768 fixtures. All
   regions and the document had zero overflow, background images computed to
   `none`, no card images were visible, and 1280x720 operational bar copy measured

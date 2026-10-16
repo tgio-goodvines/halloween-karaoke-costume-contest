@@ -3,14 +3,17 @@
 ## Purpose
 
 The DJ workspace lets an authenticated admin create and manage one Apple Music
-playlist while the authenticated live-display browser acts as the only playback
-receiver. Audio is emitted by the device connected to the TV/speakers, not by
-the admin browser.
+playlist while one or more authenticated live-display browsers act as playback
+receivers. Audio is emitted by the devices connected to the TVs/speakers, not
+by the admin browser. The first ready display is the leader; additional ready
+displays follow its confirmed song, queue, position, and play/pause state.
 
 The design intentionally separates a requested command from confirmed playback.
-An admin button only creates a pending Redis command. The live-display receiver
-must acknowledge success or failure before the admin console reports it as
-complete.
+An admin button only creates a pending Redis command. Every ready live-display
+receiver targeted when the command is created must acknowledge success or
+failure before the admin console reports it as complete. The leader remains
+authoritative for attendee-facing song and queue state; a follower cannot
+overwrite the canonical song if it is briefly delayed or unavailable.
 
 ## Routes
 
@@ -79,9 +82,9 @@ stale song text or artwork after a newer track change.
 
 ## Redis State
 
-The DJ model was introduced in schema version 5. Canonical schema version 16
-adds request provenance and priority synchronization state inside the
-`halloween:state` JSON document:
+The DJ model was introduced in schema version 5. Schema version 16 added request
+provenance and priority synchronization state. Canonical schema version 28 adds
+multi-display playback receivers inside the `halloween:state` JSON document:
 
 - `dj_playlist`: ordered song dictionaries with stable app IDs, Apple Music
   catalog song ID, title, artist, album, artwork, duration, explicit flag,
@@ -93,25 +96,30 @@ adds request provenance and priority synchronization state inside the
   `priority_sync_attempted_revision`, and `priority_sync_error`: durable queue
   reconciliation state. A busy/offline receiver does not lose an approved
   priority request; the next ready heartbeat can issue the pending sync once.
-- `dj_state.current_command`: the pending command with a UUID and monotonic
-  revision. A pending command has not yet been confirmed by the display.
+- `dj_state.current_command`: the pending command with a UUID, monotonic
+  revision, a snapshot of targeted ready receiver IDs, and per-receiver
+  acknowledgements. A pending command has not yet been confirmed by every
+  target.
 - `dj_state.last_command`: the final success/failure acknowledgement and any
   error message. Failed commands remain visible until the next command or
   reset; routine heartbeats cannot erase their diagnostics.
 - `dj_state.last_reset`: an audit record for the latest reset request and its
   pending, acknowledged, or failed display acknowledgement.
-- `dj_state.receiver`: receiver identity, heartbeat, Apple Music/audio
+- `dj_state.receiver`: compatibility view of the elected leader receiver,
+  including identity, heartbeat, Apple Music/audio
   readiness, confirmed playback state/current song, MusicKit-resolved local
   queue order/current index/revision, confirmed priority revision, elapsed
   position, and the latest receiver error. The resolved queue is distinct from
   `dj_state.desired.queue_order` so
   a skipped or library-backed MusicKit item cannot silently move display state
   onto a different song.
-- An online, authorized receiver holds a 20-second lease on that receiver slot.
-  Heartbeats from other live-display tabs cannot replace it, and non-owner
-  tabs remain display-only and do not execute DJ commands. An authorized
-  receiver may replace an online unpaired tab immediately; any tab may claim
-  the slot after the current heartbeat becomes stale.
+- `dj_state.receivers`: receiver records keyed by stable tab ID.
+  `dj_state.leader_receiver_id` selects the canonical member. Other ready
+  receivers execute the same targeted commands and keep their own readiness,
+  playback, error, and acknowledgement state without replacing leader truth.
+- The first live display becomes leader. A ready display may replace an online
+  leader that is not audio-ready, and any reporting display may replace a
+  leader after its 20-second heartbeat lease becomes stale.
 - The receiver ID survives a same-tab reload, while each page boot gets a new
   boot ID. MusicKit is configured before the first receiver report so retained
   Apple authorization is rehydrated instead of being overwritten by a false
@@ -145,7 +153,7 @@ durable and leads the next explicit Play/Shuffle queue. Receiver-confirmed
 track changes advance priority status from `pending` to `playing` and then
 `served`, preventing a completed request from being prioritized repeatedly.
 
-The receiver becomes visually `offline` after 20 seconds without a heartbeat.
+Each receiver becomes visually `offline` after 20 seconds without a heartbeat.
 The admin flow marks a pending command as `timed out` after 8 seconds without
 an acknowledgement, but retains it for a possible late display response. A
 failed command is rendered failed—not confirmed—until the operator sends a new
@@ -161,7 +169,9 @@ The DJ workspace always renders these four stages:
 4. **Audio output** — actual playback state and whether the display has been
    locally enabled for browser audio.
 
-Directly below the signal path, the workspace renders receiver-confirmed
+Directly below the signal path, the workspace renders a receiver roster with
+connected/audio-enabled counts, leader designation, readiness, and last-seen
+time. It then renders leader-confirmed
 **Current Song** and **Up Next** cards from the resolved MusicKit queue. The
 playback controls sit beneath those cards and remain disabled until the display
 heartbeat is current, Apple Music is authorized, audio is enabled, and no
@@ -200,11 +210,14 @@ The first **Enable DJ Audio** click authorizes Apple Music when necessary. A
 subsequent page boot lets MusicKit restore that authorization and presents
 **Resume DJ Audio** rather than deliberately invalidating the Music User Token.
 
-There is one playback receiver and any number of admin controllers. Every
-authenticated `/admin/dj` browser reads and writes the same Redis command state;
-admin browsers never claim receiver ownership. The server permits only one
-pending playback command at a time, so simultaneous admins receive the shared
-pending/confirmed state instead of overwriting one another.
+There is one authoritative leader, zero or more follower playback receivers,
+and any number of admin controllers. Every authenticated `/admin/dj` browser
+reads and writes the same Redis command state; admin browsers never claim
+receiver ownership. The server permits only one pending playback command at a
+time, so simultaneous admins receive the shared pending/confirmed state instead
+of overwriting one another. A leader success plus one or more follower failures
+is retained as a visible partial result rather than corrupting canonical
+playback state.
 
 The DJ admin workspace subscribes to the existing display-update stream and
 also polls the display-state API every five seconds. Receiver pairing,
@@ -228,10 +241,13 @@ MusicKit Queue for an exact mapped remainder before acknowledging the command.
 
 ## MusicKit Setup
 
-The display must be opened in an admin-authenticated browser on the device
-attached to party audio. That browser uses the visible **Enable DJ Audio**
-button once to authorize the host Apple Music account and unlock browser audio.
-Remote controls cannot safely bypass that browser gesture.
+The display must be opened in an admin-authenticated browser on every device
+attached to party audio. Each browser uses its visible **Enable DJ Audio**
+button to authorize Apple Music and unlock local browser audio. Remote controls
+cannot safely bypass that browser gesture. MusicKit playback across independent
+browsers is best-effort synchronized: followers join the leader's current queue
+and position and correct drift above 1.5 seconds, but it is not sample-accurate
+multi-room audio.
 
 Store MusicKit settings in Vault at `appsecrets/halloween_app`; the deployment
 wrapper reads them into process environment variables:
@@ -257,11 +273,10 @@ by MusicKit and is not persisted server-side.
 
 ## Operational Recovery
 
-- **Receiver offline:** open or refresh `/live-display` on the TV device.
-- **Another display owns DJ audio:** keep the playback/casting tab open. Other
-  live-display tabs may stay open for viewing and show a disabled **DJ Audio
-  Active Elsewhere** control, but remain display-only until the active receiver
-  has been offline for 20 seconds.
+- **Receiver offline:** open or refresh `/live-display` on that TV device.
+- **Add another audio display:** open `/live-display`, sign in as admin if
+  needed, and press **Enable DJ Audio** on that display. It joins as a follower
+  and appears in the `/admin/dj` receiver roster.
 - **Needs authorization/audio enable:** press Enable DJ Audio on the TV and
   complete the Apple Music prompt there.
 - **Command failed/timed out:** the workspace displays the receiver’s message;
@@ -279,7 +294,9 @@ by MusicKit and is not persisted server-side.
 
 ## Verification
 
-`tests/test_redis_state.py` covers DJ state serialization, playlist CRUD,
+`tests/test_redis_state.py` covers DJ state serialization, schema-28 singleton
+receiver migration, leader/follower registration and authority, multi-target
+command acknowledgement and partial failure, playlist CRUD,
 readiness-gated commands, FIFO priority queue construction, request provenance,
 active non-interrupting priority synchronization/retry, request lifecycle,
 duplicate catalog reuse, resolved queue/current/up-next views, failed-command
@@ -295,5 +312,6 @@ rendering, and stale/out-of-order response rejection. Run:
 python -m compileall main.py
 python -m pytest
 node --test tests/test_dj_queue_state.js
+node --test tests/test_dj_receiver_state.js
 node --test tests/test_dj_live_widgets.js
 ```

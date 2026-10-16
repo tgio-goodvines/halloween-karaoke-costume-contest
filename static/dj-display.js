@@ -55,15 +55,7 @@
   }
 
   const receiver = () => (dj && typeof dj.receiver === 'object' ? dj.receiver : {});
-  const receiverOwnedElsewhere = () => {
-    const activeReceiverId = String(receiver().id || '');
-    return Boolean(
-      activeReceiverId
-      && activeReceiverId !== receiverId
-      && receiver().effective_status !== 'offline'
-      && receiver().online !== false
-    );
-  };
+  const isLeaderReceiver = () => String(dj?.leader_receiver_id || receiver().id || '') === receiverId;
   const songs = () => (Array.isArray(dj.playlist) ? dj.playlist : []);
   const songById = (songId) => songs().find((song) => song && String(song.id) === String(songId));
 
@@ -160,25 +152,20 @@
       }
     }
 
-    const ownedElsewhere = receiverOwnedElsewhere();
     if (enableButton) {
-      enableButton.textContent = receiverState.buttonLabelFor(authorizationStatus, ownedElsewhere);
+      enableButton.textContent = receiverState.buttonLabelFor(authorizationStatus);
       if (audioEnabled || pairingInProgress || receiverInitializing || !appleMusicConfigured) {
         enableButton.setAttribute('hidden', '');
       } else enableButton.removeAttribute('hidden');
-      enableButton.disabled = pairingInProgress || ownedElsewhere;
+      enableButton.disabled = pairingInProgress;
     }
-    if (ownedElsewhere) {
-      setDetail('DJ audio is controlled by another live display. This tab is display-only.');
-    } else {
-      setDetail(receiverState.detailFor({
-        configured: appleMusicConfigured,
-        initializing: receiverInitializing,
-        authorizationStatus,
-        audioEnabled,
-        error: receiverError,
-      }));
-    }
+    setDetail(receiverState.detailFor({
+      configured: appleMusicConfigured,
+      initializing: receiverInitializing,
+      authorizationStatus,
+      audioEnabled,
+      error: receiverError,
+    }));
   };
 
   const statusPayload = (extra = {}) => {
@@ -243,7 +230,6 @@
   // old song back into Redis.
   const report = (extra = {}) => {
     if (receiverInitializing && !extra.report_reason) return Promise.resolve();
-    if (receiverOwnedElsewhere()) return Promise.resolve();
     reportChain = reportChain.then(() => sendReport(extra));
     return reportChain;
   };
@@ -380,11 +366,6 @@
   };
 
   const initializeReceiver = async () => {
-    if (receiverOwnedElsewhere()) {
-      receiverInitializing = false;
-      render();
-      return;
-    }
     if (!appleMusicConfigured) {
       receiverInitializing = false;
       authorizationStatus = 'not_configured';
@@ -459,6 +440,67 @@
     return actualQueueOrder;
   };
 
+  let followerSyncInProgress = false;
+  const synchronizeFollower = async () => {
+    if (followerSyncInProgress || !audioEnabled || !music || isLeaderReceiver()) return;
+    const leader = receiver();
+    const leaderSongId = String(leader.current_song_id || '');
+    const leaderStatus = String(leader.playback_status || 'stopped');
+    if (!leaderSongId || !['playing', 'paused'].includes(leaderStatus)) return;
+
+    followerSyncInProgress = true;
+    try {
+      let snapshot = playbackSnapshot();
+      let synchronized = false;
+      if (snapshot.songId !== leaderSongId) {
+        const leaderQueue = Array.isArray(leader.queue_order) ? leader.queue_order.map(String) : [];
+        const leaderIndex = Math.max(0, Number(leader.current_queue_index) || 0);
+        const remaining = leaderQueue.slice(leaderIndex).filter(Boolean);
+        const followerQueue = remaining[0] === leaderSongId
+          ? remaining
+          : [leaderSongId, ...remaining.filter((songId) => songId !== leaderSongId)];
+        await queueSongs(followerQueue, Number(leader.queue_revision) || 0);
+        snapshot = await waitForConfirmedTrack(() => music.play(), { allowSame: true });
+        playbackSongId = snapshot.songId;
+        applyPlaybackSnapshot(snapshot);
+        synchronized = true;
+      }
+
+      const expectedPosition = receiverState.projectedPlaybackPosition(leader);
+      const localPosition = Math.max(0, Number(music.currentPlaybackTime) || 0);
+      if (Math.abs(localPosition - expectedPosition) > 1.5) {
+        try {
+          if (typeof music.seekToTime === 'function') await music.seekToTime(expectedPosition);
+          else music.currentPlaybackTime = expectedPosition;
+          synchronized = true;
+        } catch (error) { /* MusicKit may not expose seeking in every browser. */ }
+      }
+      if (leaderStatus === 'paused' && music.isPlaying) {
+        await music.pause();
+        synchronized = true;
+      } else if (leaderStatus === 'playing' && !music.isPlaying) {
+        await music.play();
+        synchronized = true;
+      }
+      if (!synchronized) return;
+      snapshot = playbackSnapshot();
+      await report({
+        report_reason: 'follower_synchronized',
+        current_song_id: snapshot.songId || leaderSongId,
+        queue_order: snapshot.queueOrder,
+        current_queue_index: snapshot.queueIndex,
+        playback_status: leaderStatus,
+        error: '',
+        clear_error: true,
+      });
+    } catch (error) {
+      receiverError = errorMessage(error, 'This display could not synchronize with the DJ leader.');
+      setDetail(receiverError);
+    } finally {
+      followerSyncInProgress = false;
+    }
+  };
+
   const syncPriorityQueue = async (command) => {
     const currentSongId = String(command.song_id || playbackSongId || receiver().current_song_id || '');
     const currentSnapshot = playbackSnapshot();
@@ -485,9 +527,9 @@
 
   const executeCommand = async () => {
     if (receiverInitializing) return;
-    if (receiverOwnedElsewhere()) return;
     const command = dj?.current_command;
     if (!command || !command.id || command.id === processingCommandId) return;
+    if (!receiverState.commandTargetsReceiver(command, receiverId)) return;
     processingCommandId = command.id;
 
     if (command.action === 'reset') {
@@ -605,6 +647,7 @@
         dj = payload.dj;
         render();
         await executeCommand();
+        await synchronizeFollower();
       }
     } catch (error) {
       console.error('Unable to refresh DJ state', error);
@@ -612,10 +655,6 @@
   };
 
   enableButton?.addEventListener('click', async () => {
-    if (receiverOwnedElsewhere()) {
-      setDetail('DJ audio is already controlled by another live display.');
-      return;
-    }
     pairingInProgress = true;
     enableButton.disabled = true;
     setDetail('Connecting Apple Music…');

@@ -3389,6 +3389,7 @@ textarea:focus,
 .dj-flow__step--offline .dj-flow__state,
 .dj-flow__step--error .dj-flow__state,
 .dj-flow__step--failed .dj-flow__state,
+.dj-flow__step--partial .dj-flow__state,
 .dj-flow__step--timed-out .dj-flow__state {
   border-color: rgba(255, 85, 85, 0.72);
   background: rgba(255, 49, 49, 0.14);
@@ -3440,6 +3441,7 @@ textarea:focus,
 .dj-flow__step--offline .dj-flow__marker,
 .dj-flow__step--error .dj-flow__marker,
 .dj-flow__step--failed .dj-flow__marker,
+.dj-flow__step--partial .dj-flow__marker,
 .dj-flow__step--timed-out .dj-flow__marker {
   background: #ff5555;
   box-shadow: 0 0 0 4px rgba(255, 85, 85, 0.12), 0 0 18px rgba(255, 49, 49, 0.6);
@@ -3482,6 +3484,65 @@ textarea:focus,
 
 .dj-status-card strong {
   font: 700 1.05rem/1.2 "Outfit", sans-serif;
+}
+
+.dj-receiver-roster {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(255, 49, 49, 0.3);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.dj-receiver-roster > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dj-receiver-roster > header span,
+.dj-receiver-roster small,
+.dj-receiver-roster__empty {
+  color: #a1a1aa;
+}
+
+.dj-receiver-roster ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dj-receiver-roster__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem 0.7rem;
+  padding: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.dj-receiver-roster__item--leader {
+  border-color: rgba(100, 220, 145, 0.5);
+}
+
+.dj-receiver-roster__name {
+  overflow: hidden;
+  color: #f4f4f5;
+  font: 700 0.84rem/1.2 "Outfit", sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dj-receiver-roster small {
+  grid-column: 1 / -1;
+}
+
+.dj-receiver-roster__empty {
+  grid-column: 1 / -1;
 }
 
 .dj-playback-deck {
@@ -3625,6 +3686,7 @@ textarea:focus,
 
 .dj-command-state--pending { border-left-color: #ffd166; }
 .dj-command-state--succeeded { border-left-color: #64dc91; }
+.dj-command-state--partial { border-left-color: #ffd166; }
 .dj-command-state--failed,
 .dj-setup-warning { border-left-color: #ff5555; }
 .dj-command-state--acknowledged { border-left-color: #64dc91; }
@@ -3734,6 +3796,7 @@ textarea:focus,
   .jukebox-page__header,
   .dj-request-queue > header,
   .dj-request-card { align-items: stretch; flex-direction: column; }
+  .dj-receiver-roster > header { align-items: flex-start; flex-direction: column; }
   .jukebox-overview .button { width: 100%; text-align: center; }
   .dj-catalog-pagination { align-items: stretch; flex-wrap: wrap; }
   .dj-catalog-pagination [data-jukebox-page],

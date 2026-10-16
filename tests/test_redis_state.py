@@ -1,3 +1,4 @@
+import copy
 import io
 import json
 import os
@@ -1846,6 +1847,23 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(events[-1]["was_discarded"])
         self.assertEqual("heartbeat", normalized["receiver"]["last_report_reason"])
 
+    def test_schema_28_imports_legacy_receiver_as_multi_display_leader(self):
+        legacy_receiver = copy.deepcopy(main.DEFAULT_DJ_STATE["receiver"])
+        legacy_receiver.update(
+            {
+                "id": "living-room-tv",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+            }
+        )
+
+        normalized = main.normalize_dj_state({"receiver": legacy_receiver})
+
+        self.assertEqual("living-room-tv", normalized["leader_receiver_id"])
+        self.assertEqual(legacy_receiver, normalized["receivers"]["living-room-tv"])
+        self.assertEqual(legacy_receiver, normalized["receiver"])
+
     def test_auto_music_footer_stays_visible_for_an_idle_online_receiver(self):
         main.display_config["music_mode"] = "auto"
         main.record_dj_receiver_state(
@@ -1961,7 +1979,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("armed", flow[0]["detail"])
         self.assertIn("unlocked", flow[3]["detail"])
 
-    def test_ready_dj_receiver_ignores_competing_unpaired_display(self):
+    def test_ready_dj_receiver_tracks_an_unpaired_follower_without_replacing_leader(self):
         accepted = main.record_dj_receiver_state(
             {
                 "receiver_id": "casting-display",
@@ -1971,7 +1989,7 @@ class RedisStateTests(unittest.TestCase):
                 "playback_status": "playing",
             }
         )
-        rejected = main.record_dj_receiver_state(
+        follower_accepted = main.record_dj_receiver_state(
             {
                 "receiver_id": "admin-display",
                 "status": "needs_audio_enable",
@@ -1983,13 +2001,15 @@ class RedisStateTests(unittest.TestCase):
 
         receiver = main.dj_state["receiver"]
         self.assertTrue(accepted)
-        self.assertFalse(rejected)
+        self.assertTrue(follower_accepted)
         self.assertEqual("casting-display", receiver["id"])
         self.assertEqual("ready", receiver["status"])
         self.assertEqual("authorized", receiver["authorization_status"])
         self.assertTrue(receiver["audio_enabled"])
+        self.assertIn("admin-display", main.dj_state["receivers"])
+        self.assertFalse(main.dj_state["receivers"]["admin-display"]["audio_enabled"])
 
-    def test_ready_dj_receiver_keeps_lease_against_second_ready_display(self):
+    def test_ready_dj_receiver_accepts_second_ready_display_and_keeps_leader(self):
         main.record_dj_receiver_state(
             {
                 "receiver_id": "casting-display",
@@ -2008,8 +2028,118 @@ class RedisStateTests(unittest.TestCase):
             }
         )
 
-        self.assertFalse(accepted)
+        self.assertTrue(accepted)
         self.assertEqual("casting-display", main.dj_state["receiver"]["id"])
+        self.assertEqual({"casting-display", "second-display"}, set(main.dj_state["receivers"]))
+
+    def test_dj_command_waits_for_every_targeted_receiver_acknowledgement(self):
+        for receiver_id in ("casting-display", "second-display"):
+            main.record_dj_receiver_state(
+                {
+                    "receiver_id": receiver_id,
+                    "status": "ready",
+                    "authorization_status": "authorized",
+                    "audio_enabled": True,
+                }
+            )
+
+        command = main.queue_dj_command("pause")
+        self.assertEqual(["casting-display", "second-display"], command["target_receiver_ids"])
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "paused",
+                "acknowledged_command_id": command["id"],
+                "command_succeeded": True,
+            }
+        )
+        self.assertIsNotNone(main.dj_state["current_command"])
+        self.assertIn("casting-display", main.dj_state["current_command"]["acknowledgements"])
+
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "second-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "paused",
+                "acknowledged_command_id": command["id"],
+                "command_succeeded": True,
+            }
+        )
+        self.assertIsNone(main.dj_state["current_command"])
+        self.assertEqual("succeeded", main.dj_state["last_command"]["status"])
+
+    def test_follower_playback_report_does_not_replace_authoritative_song(self):
+        main.dj_playlist = [
+            main.normalize_dj_song({"id": "leader-song", "apple_music_id": "1001", "title": "Leader Song", "artist": "Host"}),
+            main.normalize_dj_song({"id": "follower-song", "apple_music_id": "1002", "title": "Follower Song", "artist": "Guest"}),
+        ]
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "current_song_id": "leader-song",
+                "playback_status": "playing",
+            }
+        )
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "second-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "current_song_id": "follower-song",
+                "playback_status": "playing",
+            }
+        )
+
+        self.assertEqual("leader-song", main.dj_state["receiver"]["current_song_id"])
+        self.assertEqual("follower-song", main.dj_state["receivers"]["second-display"]["current_song_id"])
+
+    def test_dj_command_records_partial_success_when_follower_fails(self):
+        for receiver_id in ("casting-display", "second-display"):
+            main.record_dj_receiver_state(
+                {
+                    "receiver_id": receiver_id,
+                    "status": "ready",
+                    "authorization_status": "authorized",
+                    "audio_enabled": True,
+                }
+            )
+        command = main.queue_dj_command("pause")
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "second-display",
+                "status": "error",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "error": "Follower output failed.",
+                "acknowledged_command_id": command["id"],
+                "command_succeeded": False,
+            }
+        )
+        main.record_dj_receiver_state(
+            {
+                "receiver_id": "casting-display",
+                "status": "ready",
+                "authorization_status": "authorized",
+                "audio_enabled": True,
+                "playback_status": "paused",
+                "acknowledged_command_id": command["id"],
+                "command_succeeded": True,
+            }
+        )
+
+        self.assertIsNone(main.dj_state["current_command"])
+        self.assertEqual("partial", main.dj_state["last_command"]["status"])
+        self.assertIn("1 follower display", main.dj_state["last_command"]["error"])
 
     def test_ready_dj_receiver_can_replace_online_unpaired_display(self):
         main.record_dj_receiver_state(
@@ -2058,7 +2188,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("replacement-display", main.dj_state["receiver"]["id"])
         self.assertEqual("needs_audio_enable", main.dj_state["receiver"]["status"])
 
-    def test_receiver_state_route_does_not_broadcast_rejected_heartbeat(self):
+    def test_receiver_state_route_accepts_and_broadcasts_new_follower(self):
         main.record_dj_receiver_state(
             {
                 "receiver_id": "casting-display",
@@ -2083,9 +2213,11 @@ class RedisStateTests(unittest.TestCase):
             )
 
         self.assertEqual(200, response.status_code)
-        self.assertFalse(response.get_json()["receiver_accepted"])
-        self.assertEqual(starting_version, main.display_update_version)
-        self.assertEqual("casting-display", self.redis_state()["dj_state"]["receiver"]["id"])
+        self.assertTrue(response.get_json()["receiver_accepted"])
+        self.assertEqual(starting_version + 1, main.display_update_version)
+        persisted_dj = self.redis_state()["dj_state"]
+        self.assertEqual("casting-display", persisted_dj["receiver"]["id"])
+        self.assertIn("admin-display", persisted_dj["receivers"])
 
     def test_receiver_heartbeat_persists_without_repainting_the_live_display(self):
         main.record_dj_receiver_state(
@@ -2216,6 +2348,28 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         self.assertIn("data-dj-status-root", page)
         self.assertIn("dj-admin-status.js", page)
+
+    def test_dj_admin_workspace_lists_leader_and_follower_audio_receivers(self):
+        for receiver_id in ("casting-display", "second-display"):
+            main.record_dj_receiver_state(
+                {
+                    "receiver_id": receiver_id,
+                    "status": "ready",
+                    "authorization_status": "authorized",
+                    "audio_enabled": True,
+                }
+            )
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            page = client.get("/admin/dj").get_data(as_text=True)
+
+        self.assertIn("Display Audio Receivers", page)
+        self.assertIn("2 Connected", page)
+        self.assertIn("Display casting", page)
+        self.assertIn("Display second-d", page)
+        self.assertIn("Leader", page)
 
     def test_dj_receiver_requires_admin_session_and_json_csrf_outside_testing(self):
         self.save_current_state()
@@ -4368,7 +4522,7 @@ class RedisStateTests(unittest.TestCase):
         }
         normalized = main.normalize_drink_order(legacy_order)
 
-        self.assertEqual(27, main.STATE_SCHEMA_VERSION)
+        self.assertEqual(28, main.STATE_SCHEMA_VERSION)
         self.assertIsNotNone(normalized)
         self.assertEqual("", normalized["picked_up_at"])
         self.assertEqual("2 oz tequila\n1 oz lime juice", normalized["recipe"])

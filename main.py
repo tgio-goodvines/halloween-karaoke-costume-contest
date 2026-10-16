@@ -394,7 +394,7 @@ def build_health_payload() -> tuple[dict[str, object], int]:
     return payload, 200 if healthy else 503
 
 
-STATE_SCHEMA_VERSION = 27
+STATE_SCHEMA_VERSION = 28
 KARAOKE_MAX_SINGERS = 4
 KARAOKE_SINGER_NAME_MAX_LENGTH = 100
 KARAOKE_CUSTOM_SINGER_VALUE = "__custom__"
@@ -562,6 +562,8 @@ DEFAULT_DJ_STATE: dict[str, object] = {
     "last_command": None,
     "last_reset": None,
     "receiver_events": [],
+    "leader_receiver_id": "",
+    "receivers": {},
     "receiver": {
         "id": "",
         "boot_id": "",
@@ -3396,6 +3398,38 @@ def dj_receiver_is_ready(receiver: dict[str, object] | None = None) -> bool:
     )
 
 
+def dj_receiver_records() -> dict[str, dict[str, object]]:
+    """Return all known DJ receivers while preserving the legacy leader view."""
+    receivers = dj_state.setdefault("receivers", {})
+    if not isinstance(receivers, dict):
+        receivers = {}
+        dj_state["receivers"] = receivers
+    leader = dj_state.get("receiver", {})
+    if isinstance(leader, dict):
+        leader_id = str(leader.get("id", "") or "")
+        if leader_id:
+            receivers[leader_id] = copy.deepcopy(leader)
+    return receivers
+
+
+def ready_dj_receiver_ids() -> list[str]:
+    return [
+        receiver_id
+        for receiver_id, receiver in dj_receiver_records().items()
+        if receiver_id and dj_receiver_is_ready(receiver)
+    ]
+
+
+def dj_command_target_receiver_ids() -> list[str]:
+    targets = ready_dj_receiver_ids()
+    leader_id = str(dj_state.get("leader_receiver_id", "") or "")
+    if leader_id and leader_id in targets:
+        return [leader_id, *(receiver_id for receiver_id in targets if receiver_id != leader_id)]
+    receiver = dj_state.get("receiver", {})
+    legacy_id = str(receiver.get("id", "") or "") if isinstance(receiver, dict) else ""
+    return targets or ([legacy_id] if legacy_id and dj_receiver_is_ready(receiver) else [])
+
+
 def normalize_dj_state(raw_state: object) -> dict[str, object]:
     state = copy.deepcopy(DEFAULT_DJ_STATE)
     if not isinstance(raw_state, dict):
@@ -3476,6 +3510,26 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
         receiver["last_seen_at"] = str(raw_receiver.get("last_seen_at", "") or "")
         receiver["last_error"] = str(raw_receiver.get("last_error", "") or "").strip()[:500]
 
+    raw_receivers = raw_state.get("receivers", {})
+    if isinstance(raw_receivers, dict):
+        for raw_receiver_id, raw_receiver_value in raw_receivers.items():
+            receiver_id = str(raw_receiver_id or "").strip()[:120]
+            if not receiver_id or not isinstance(raw_receiver_value, dict):
+                continue
+            normalized_receiver = normalize_dj_state(
+                {"receiver": {**raw_receiver_value, "id": receiver_id}}
+            )["receiver"]
+            state["receivers"][receiver_id] = normalized_receiver
+    legacy_receiver_id = str(state["receiver"].get("id", "") or "")
+    if legacy_receiver_id and legacy_receiver_id not in state["receivers"]:
+        state["receivers"][legacy_receiver_id] = copy.deepcopy(state["receiver"])
+    leader_receiver_id = str(raw_state.get("leader_receiver_id", "") or "").strip()[:120]
+    if leader_receiver_id not in state["receivers"]:
+        leader_receiver_id = legacy_receiver_id
+    state["leader_receiver_id"] = leader_receiver_id
+    if leader_receiver_id and leader_receiver_id in state["receivers"]:
+        state["receiver"] = copy.deepcopy(state["receivers"][leader_receiver_id])
+
     raw_desired = raw_state.get("desired")
     if isinstance(raw_desired, dict):
         desired = state["desired"]
@@ -3519,6 +3573,20 @@ def normalize_dj_state(raw_state: object) -> dict[str, object]:
                 "status": str(raw_command.get("status", "pending") or "pending"),
                 "acknowledged_at": str(raw_command.get("acknowledged_at", "") or ""),
                 "error": str(raw_command.get("error", "") or "")[:500],
+                "target_receiver_ids": [
+                    str(receiver_id or "")[:120]
+                    for receiver_id in raw_command.get("target_receiver_ids", [])
+                    if receiver_id
+                ] if isinstance(raw_command.get("target_receiver_ids"), list) else [],
+                "acknowledgements": {
+                    str(receiver_id or "")[:120]: {
+                        "succeeded": bool(ack.get("succeeded", False)),
+                        "acknowledged_at": str(ack.get("acknowledged_at", "") or ""),
+                        "error": str(ack.get("error", "") or "")[:500],
+                    }
+                    for receiver_id, ack in raw_command.get("acknowledgements", {}).items()
+                    if receiver_id and isinstance(ack, dict)
+                } if isinstance(raw_command.get("acknowledgements"), dict) else {},
             }
 
     raw_reset = raw_state.get("last_reset")
@@ -3579,6 +3647,8 @@ def queue_dj_command(action: str, song_id: str = "", requested_by: str = "Admin"
         "status": "pending",
         "acknowledged_at": "",
         "error": "",
+        "target_receiver_ids": dj_command_target_receiver_ids(),
+        "acknowledgements": {},
     }
     dj_state["current_command"] = command
     dj_state["last_reset"] = None
@@ -3620,6 +3690,8 @@ def maybe_queue_dj_priority_sync_command(requested_by: str = "Priority reconcili
         "status": "pending",
         "acknowledged_at": "",
         "error": "",
+        "target_receiver_ids": dj_command_target_receiver_ids(),
+        "acknowledgements": {},
     }
     dj_state["command_revision"] = revision
     dj_state["current_command"] = command
@@ -3650,6 +3722,8 @@ def queue_dj_workflow_reset(requested_by: str = "Admin") -> dict[str, object]:
         "status": "pending",
         "acknowledged_at": "",
         "error": "",
+        "target_receiver_ids": dj_command_target_receiver_ids(),
+        "acknowledgements": {},
     }
     dj_state["command_revision"] = revision
     dj_state["current_command"] = command
@@ -3685,17 +3759,31 @@ def dj_receiver_report_is_ready(payload: dict[str, object]) -> bool:
 
 
 def record_dj_receiver_state(payload: dict[str, object]) -> bool:
-    receiver = dj_state["receiver"]
+    canonical_receiver = dj_state["receiver"]
+    receivers = dj_receiver_records()
+    leader_receiver_id = str(dj_state.get("leader_receiver_id", "") or "")
     receiver_id = str(payload.get("receiver_id", "") or "").strip()[:120]
-    active_receiver_id = str(receiver.get("id", "") or "")
-    if (
-        receiver_id
-        and active_receiver_id
-        and receiver_id != active_receiver_id
-        and dj_receiver_is_online(receiver)
-        and (dj_receiver_is_ready(receiver) or not dj_receiver_report_is_ready(payload))
+    if not receiver_id:
+        receiver_id = leader_receiver_id or str(canonical_receiver.get("id", "") or "")
+
+    current_leader = receivers.get(leader_receiver_id, canonical_receiver)
+    incoming_ready = dj_receiver_report_is_ready(payload)
+    if receiver_id and (
+        not leader_receiver_id
+        or not dj_receiver_is_online(current_leader)
+        or (incoming_ready and not dj_receiver_is_ready(current_leader))
     ):
-        return False
+        leader_receiver_id = receiver_id
+        dj_state["leader_receiver_id"] = receiver_id
+
+    if receiver_id:
+        receiver = receivers.setdefault(
+            receiver_id,
+            {**copy.deepcopy(DEFAULT_DJ_STATE["receiver"]), "id": receiver_id},
+        )
+    else:
+        receiver = canonical_receiver
+    is_leader = not leader_receiver_id or receiver_id == leader_receiver_id
 
     previous_event_state = (
         str(receiver.get("boot_id", "") or ""),
@@ -3703,7 +3791,7 @@ def record_dj_receiver_state(payload: dict[str, object]) -> bool:
         str(receiver.get("authorization_status", "") or ""),
         bool(receiver.get("audio_enabled", False)),
     )
-    receiver["id"] = receiver_id or active_receiver_id
+    receiver["id"] = receiver_id
     receiver["boot_id"] = str(payload.get("receiver_boot_id", "") or receiver.get("boot_id", ""))[:120]
     receiver["navigation_type"] = str(payload.get("navigation_type", "unknown") or "unknown")[:40]
     receiver["was_discarded"] = bool(payload.get("was_discarded", False))
@@ -3774,25 +3862,36 @@ def record_dj_receiver_state(payload: dict[str, object]) -> bool:
     elif bool(payload.get("clear_error", False)):
         receiver["last_error"] = ""
 
-    if "current_song_id" in payload:
+    if receiver_id:
+        receivers[receiver_id] = receiver
+    if is_leader:
+        dj_state["receiver"] = copy.deepcopy(receiver)
+
+    if is_leader and "current_song_id" in payload:
         update_dj_priority_playback_status(str(receiver.get("current_song_id", "") or ""))
 
     current_command = dj_state.get("current_command")
     acknowledged_id = str(payload.get("acknowledged_command_id", "") or "")
     if isinstance(current_command, dict) and acknowledged_id and acknowledged_id == current_command.get("id"):
         succeeded = bool(payload.get("command_succeeded", False))
-        if current_command.get("action") == "reset":
-            update_dj_priority_playback_status("")
-            reset_record = copy.deepcopy(dj_state.get("last_reset") or {})
-            reset_record["status"] = "acknowledged" if succeeded else "failed"
-            reset_record["acknowledged_at"] = _utc_now_iso()
-            reset_record["error"] = "" if succeeded else receiver["last_error"] or "The live display could not complete the DJ reset."
-            reset_dj_workflow_state(reset_record)
-            return True
-        current_command["status"] = "succeeded" if succeeded else "failed"
-        current_command["acknowledged_at"] = _utc_now_iso()
-        current_command["error"] = "" if succeeded else receiver["last_error"] or "The display could not complete the DJ command."
-        if succeeded:
+        acknowledgement_receiver_id = receiver_id or leader_receiver_id or "legacy-receiver"
+        targets = current_command.get("target_receiver_ids", [])
+        if not isinstance(targets, list) or not targets:
+            targets = [leader_receiver_id or acknowledgement_receiver_id]
+            current_command["target_receiver_ids"] = targets
+        acknowledgements = current_command.setdefault("acknowledgements", {})
+        if not isinstance(acknowledgements, dict):
+            acknowledgements = {}
+            current_command["acknowledgements"] = acknowledgements
+        if acknowledgement_receiver_id in targets:
+            acknowledgements[acknowledgement_receiver_id] = {
+                "succeeded": succeeded,
+                "acknowledged_at": _utc_now_iso(),
+                "error": "" if succeeded else receiver["last_error"] or "The display could not complete the DJ command.",
+            }
+
+        leader_ack = acknowledgements.get(leader_receiver_id or acknowledgement_receiver_id, {})
+        if is_leader and succeeded:
             dj_state["desired"]["playback_status"] = receiver["playback_status"]
             if receiver.get("current_song_id"):
                 dj_state["desired"]["song_id"] = receiver["current_song_id"]
@@ -3807,8 +3906,39 @@ def record_dj_receiver_state(payload: dict[str, object]) -> bool:
                 if command_priority_revision == int(dj_state.get("priority_revision", 0) or 0):
                     dj_state["priority_sync_pending"] = False
                     dj_state["priority_sync_error"] = ""
-        elif current_command.get("action") == "sync_priority_queue":
-            dj_state["priority_sync_error"] = current_command["error"]
+            if receiver_id:
+                receivers[receiver_id] = receiver
+            dj_state["receiver"] = copy.deepcopy(receiver)
+        elif is_leader and current_command.get("action") == "sync_priority_queue":
+            dj_state["priority_sync_error"] = str(
+                acknowledgements.get(acknowledgement_receiver_id, {}).get("error", "")
+            )
+
+        if not all(target in acknowledgements for target in targets):
+            return True
+
+        failed_targets = [
+            target for target in targets
+            if not bool(acknowledgements.get(target, {}).get("succeeded", False))
+        ]
+        leader_succeeded = bool(leader_ack.get("succeeded", False))
+        command_succeeded = leader_succeeded and not failed_targets
+        command_partial = leader_succeeded and bool(failed_targets)
+        current_command["status"] = "succeeded" if command_succeeded else ("partial" if command_partial else "failed")
+        current_command["acknowledged_at"] = _utc_now_iso()
+        current_command["error"] = (
+            f"Audio command failed on {len(failed_targets)} follower display{'s' if len(failed_targets) != 1 else ''}."
+            if command_partial
+            else (str(leader_ack.get("error", "") or "The leader display could not complete the DJ command.") if not command_succeeded else "")
+        )
+        if current_command.get("action") == "reset":
+            update_dj_priority_playback_status("")
+            reset_record = copy.deepcopy(dj_state.get("last_reset") or {})
+            reset_record["status"] = "acknowledged" if command_succeeded else "failed"
+            reset_record["acknowledged_at"] = current_command["acknowledged_at"]
+            reset_record["error"] = current_command["error"]
+            reset_dj_workflow_state(reset_record)
+            return True
         dj_state["last_command"] = copy.deepcopy(current_command)
         dj_state["current_command"] = None
         maybe_queue_dj_priority_sync_command()
@@ -3830,12 +3960,18 @@ def dj_command_flow() -> list[dict[str, str]]:
     command_error = ""
     if isinstance(current_command, dict):
         requested_state = "pending"
+        command_targets = current_command.get("target_receiver_ids", [])
+        command_acknowledgements = current_command.get("acknowledgements", {})
+        target_count = len(command_targets) if isinstance(command_targets, list) else 0
+        acknowledgement_count = len(command_acknowledgements) if isinstance(command_acknowledgements, dict) else 0
         if current_command.get("action") == "reset":
-            requested_detail = "DJ reset is waiting for the live display."
+            requested_detail = "DJ reset is waiting for the targeted live displays."
         elif current_command.get("action") == "sync_priority_queue":
             requested_detail = "MusicKit is updating the remaining queue without interrupting the current song."
         else:
             requested_detail = "Command saved in Redis."
+        if target_count:
+            requested_detail = f"{requested_detail} {acknowledgement_count} of {target_count} displays confirmed."
         requested_at = parse_utc_iso(current_command.get("requested_at"))
         if requested_at and requested_at < datetime.now(timezone.utc) - timedelta(seconds=DJ_COMMAND_TIMEOUT_SECONDS):
             requested_state = "timed_out"
@@ -3853,7 +3989,10 @@ def dj_command_flow() -> list[dict[str, str]]:
             requested_detail = str(last_command.get("error", "") or "The display could not complete the DJ command.")
         elif last_command.get("status") == "succeeded":
             requested_state = "confirmed"
-            requested_detail = "The live display confirmed the last DJ command."
+            requested_detail = "All targeted live displays confirmed the last DJ command."
+        elif last_command.get("status") == "partial":
+            requested_state = "partial"
+            requested_detail = str(last_command.get("error", "") or "The leader confirmed playback, but a follower display failed.")
 
     audio_state = str(receiver.get("playback_status", "stopped") or "stopped")
     audio_detail = command_error or (
@@ -3886,6 +4025,14 @@ def dj_view_state() -> dict[str, object]:
             receiver["effective_status"] = "offline"
         else:
             receiver["effective_status"] = receiver.get("status", "offline")
+    receivers = view.get("receivers", {})
+    if isinstance(receivers, dict):
+        for receiver_id, candidate in receivers.items():
+            if not isinstance(candidate, dict):
+                continue
+            candidate["online"] = dj_receiver_is_online(candidate)
+            candidate["effective_status"] = candidate.get("status", "offline") if candidate["online"] else "offline"
+            candidate["is_leader"] = receiver_id == str(view.get("leader_receiver_id", "") or "")
     current_song = find_dj_song(str(receiver.get("current_song_id", "") if isinstance(receiver, dict) else ""))
     actual_queue_order = receiver.get("queue_order", []) if isinstance(receiver, dict) else []
     if not isinstance(actual_queue_order, list):
@@ -3990,6 +4137,14 @@ def dj_view_state() -> dict[str, object]:
     view["controls_message"] = controls_message
     view["playlist"] = copy.deepcopy(dj_playlist)
     view["request_count"] = len(dj_song_requests)
+    view["online_receiver_count"] = sum(
+        1 for candidate in receivers.values()
+        if isinstance(candidate, dict) and candidate.get("online")
+    ) if isinstance(receivers, dict) else int(bool(receiver.get("online") if isinstance(receiver, dict) else False))
+    view["ready_receiver_count"] = sum(
+        1 for candidate in receivers.values()
+        if isinstance(candidate, dict) and candidate.get("online") and candidate.get("audio_enabled")
+    ) if isinstance(receivers, dict) else int(bool(receiver.get("audio_enabled") if isinstance(receiver, dict) else False))
     view["flow"] = dj_command_flow()
     return view
 
@@ -4022,6 +4177,12 @@ def dj_display_visual_signature() -> str:
             "song_id": str(value.get("song_id", "") or ""),
             "revision": safe_int(value.get("revision")),
             "error": str(value.get("error", "") or ""),
+            "target_receiver_ids": list(value.get("target_receiver_ids", []))
+            if isinstance(value.get("target_receiver_ids"), list)
+            else [],
+            "acknowledged_receiver_ids": sorted(value.get("acknowledgements", {}).keys())
+            if isinstance(value.get("acknowledgements"), dict)
+            else [],
         }
 
     visible_state = {
@@ -4039,6 +4200,17 @@ def dj_display_visual_signature() -> str:
             "queue_revision": safe_int(receiver.get("queue_revision")),
             "priority_revision": safe_int(receiver.get("priority_revision")),
             "last_error": str(receiver.get("last_error", "") or ""),
+        },
+        "receivers": {
+            receiver_id: {
+                "online": dj_receiver_is_online(candidate),
+                "status": str(candidate.get("status", "") or ""),
+                "authorization_status": str(candidate.get("authorization_status", "") or ""),
+                "audio_enabled": bool(candidate.get("audio_enabled", False)),
+                "last_error": str(candidate.get("last_error", "") or ""),
+            }
+            for receiver_id, candidate in dj_receiver_records().items()
+            if isinstance(candidate, dict)
         },
         "current_command": command_summary(dj_state.get("current_command")),
         "last_command": command_summary(dj_state.get("last_command")),

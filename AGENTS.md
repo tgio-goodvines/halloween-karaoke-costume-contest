@@ -16,7 +16,7 @@ Start future repo work by reading these persistent context files:
 - `ai-context/RESPONSIVE_UX_PROGRESS.md` - completed responsive UX work for live display, attendee mobile views, and admin mobile views.
 - `ai-context/ADMIN_WORKSPACE_UX_PROGRESS.md` - focused admin workspace architecture and the current scrolling/narrow-screen UX rules.
 - `ai-context/ADMIN_GAMES_WORKSPACE_REORGANIZATION.md` - selected-game admin architecture, lightweight game summaries, and no-jump inline admin actions.
-- `ai-context/DJ_JUKEBOX_FEATURE.md` - DJ playlist, Redis command/acknowledgement state, MusicKit receiver setup, and operational recovery.
+- `ai-context/DJ_JUKEBOX_FEATURE.md` - DJ playlist, multi-display leader/follower command acknowledgements, MusicKit receiver setup, synchronization limits, and operational recovery.
 - `ai-context/DJ_LIVE_SURFACES_CORRECTIVE_ACTION.md` - cross-surface confirmed-song/artwork synchronization root cause, corrective design, and verification.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PLAN.md` - planned attendee YouTube search, host approval, playlist synchronization, dedicated karaoke admin workflow, stage controls, and manual two-tab playback.
 - `ai-context/YOUTUBE_KARAOKE_IMPLEMENTATION_PROGRESS.md` - implemented YouTube karaoke workflow, verification, production prerequisites, and rollout status.
@@ -103,6 +103,10 @@ Important working notes:
   rotating game rail on the left, dominant center-card rotation, conditional
   bar queue/ready alerts on the right, and conditional DJ footer. Empty regions
   collapse and the center stage expands. Configure it from `/admin/display`.
+- Multiple live displays may independently enable MusicKit audio. Schema 28
+  elects one receiver leader for canonical song/queue state, tracks followers
+  separately, and requires per-target command acknowledgements; `/admin/dj`
+  shows the receiver roster and partial follower failures.
 - Header logout is a single button tucked inside the `Menu` disclosure; do not add separate regular/admin logout controls.
 - Production deploys run `halloween-party.service` behind nginx on `127.0.0.1:8081`.
 - Responsive UX updates are complete: live-display cards scale for normal browser windows, attendee/admin pages are mobile-oriented, and admin add/edit forms are collapsed disclosure rows by default.

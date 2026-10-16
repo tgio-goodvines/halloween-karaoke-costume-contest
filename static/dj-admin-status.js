@@ -29,6 +29,38 @@
     }
   };
 
+  const renderReceivers = (dj) => {
+    const list = root.querySelector('[data-dj-receiver-list]');
+    if (!list) return;
+    const receivers = Object.entries(dj.receivers || {});
+    list.replaceChildren();
+    if (!receivers.length) {
+      const empty = document.createElement('li');
+      empty.className = 'dj-receiver-roster__empty';
+      empty.textContent = 'Open the live display on each TV, then enable DJ audio on that display.';
+      list.append(empty);
+      return;
+    }
+    receivers.forEach(([receiverId, receiver]) => {
+      const item = document.createElement('li');
+      item.className = `dj-receiver-roster__item${receiver.is_leader ? ' dj-receiver-roster__item--leader' : ''}`;
+      const name = document.createElement('span');
+      name.className = 'dj-receiver-roster__name';
+      name.textContent = `Display ${receiverId.slice(0, 8)}${receiver.is_leader ? ' · Leader' : ''}`;
+      const status = document.createElement('span');
+      const effectiveStatus = receiver.effective_status || receiver.status || 'offline';
+      status.className = `dj-status-pill dj-status-pill--${stateClass(effectiveStatus)}`;
+      status.textContent = titleize(effectiveStatus);
+      const detail = document.createElement('small');
+      const seen = receiver.last_seen_at
+        ? ` · ${new Date(receiver.last_seen_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+        : '';
+      detail.textContent = `${receiver.audio_enabled ? 'Audio enabled' : 'Audio needs a local click'}${seen}`;
+      item.append(name, status, detail);
+      list.append(item);
+    });
+  };
+
   const renderCommand = (dj) => {
     const commandState = root?.querySelector('[data-dj-command-state]');
     if (!commandState) return;
@@ -38,8 +70,15 @@
       return;
     }
     const status = dj.current_command ? 'pending' : (command.status || 'confirmed');
+    const targets = Array.isArray(command.target_receiver_ids) ? command.target_receiver_ids : [];
+    const acknowledgements = command.acknowledgements && typeof command.acknowledgements === 'object'
+      ? Object.keys(command.acknowledgements)
+      : [];
+    const progress = dj.current_command && targets.length
+      ? ` · ${acknowledgements.length} of ${targets.length} displays confirmed`
+      : '';
     commandState.className = `dj-command-state dj-command-state--${stateClass(status)}`;
-    commandState.textContent = `${dj.current_command ? 'Waiting for confirmation' : 'Last command'}: ${titleize(command.action)} — ${titleize(status)}${command.error ? `: ${command.error}` : ''}`;
+    commandState.textContent = `${dj.current_command ? 'Waiting for confirmation' : 'Last command'}: ${titleize(command.action)} — ${titleize(status)}${progress}${command.error ? `: ${command.error}` : ''}`;
     commandState.removeAttribute('hidden');
   };
 
@@ -79,8 +118,10 @@
     setText('[data-dj-queue-detail]', currentPosition
       ? `Confirmed position ${currentPosition} of ${queueSize}`
       : 'Start playback to confirm the resolved queue');
-    setText('[data-dj-heartbeat-status]', receiver.online ? 'Connected' : 'Offline');
-    setText('[data-dj-heartbeat-detail]', receiver.last_seen_at ? `Last seen ${new Date(receiver.last_seen_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Open the live display on the TV');
+    const onlineCount = Math.max(0, Number(dj.online_receiver_count) || 0);
+    const readyCount = Math.max(0, Number(dj.ready_receiver_count) || 0);
+    setText('[data-dj-heartbeat-status]', `${onlineCount} Connected`);
+    setText('[data-dj-heartbeat-detail]', `${readyCount} audio enabled${receiver.id ? ` · leader ${String(receiver.id).slice(0, 8)}` : ''}`);
     setText('[data-dj-audio-status]', receiver.audio_enabled ? 'Enabled' : 'Needs display click');
     setText('[data-dj-audio-detail]', titleize(receiver.authorization_status || 'not configured'));
     setText('[data-dj-current-title]', currentSong?.title || 'No confirmed song');
@@ -97,6 +138,7 @@
       : 'No confirmed queue successor'));
     setArtwork('[data-dj-current-artwork-wrap]', '[data-dj-current-artwork]', currentSong);
     setArtwork('[data-dj-next-artwork-wrap]', '[data-dj-next-artwork]', nextSong);
+    renderReceivers(dj);
 
     const priorityStatus = root.querySelector('[data-dj-priority-status]');
     if (priorityStatus) {

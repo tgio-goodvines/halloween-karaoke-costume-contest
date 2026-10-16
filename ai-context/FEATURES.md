@@ -288,6 +288,11 @@
   → Audio output flow, with pending/confirmed/failed/timed-out command state,
   receiver heartbeat, retained authorization errors, and a readable recovery
   message.
+- Multiple live displays can independently authorize and enable Apple Music
+  audio. One elected leader remains authoritative for public queue state;
+  ready followers execute targeted controls, join the leader's current song,
+  and report their own health. The DJ workspace lists every receiver and waits
+  for per-display command acknowledgements.
 - DJ workspace shows receiver-confirmed Current Song and Up Next cards from the
   MusicKit-resolved queue directly beneath the signal path. Playback controls
   follow those cards and remain unavailable until the display is connected,

@@ -796,9 +796,9 @@
         <p data-dj-queue-detail>{% if dj_state.current_queue_position %}Confirmed position {{ dj_state.current_queue_position }} of {{ dj_state.actual_queue_size }}{% else %}Start playback to confirm the resolved queue{% endif %}</p>
       </article>
       <article class="dj-status-card">
-        <span class="dj-status-card__label">Receiver heartbeat</span>
-        <strong data-dj-heartbeat-status>{% if dj_state.receiver.online %}Connected{% else %}Offline{% endif %}</strong>
-        <p data-dj-heartbeat-detail>{% if dj_state.receiver.last_seen_at %}Last seen {{ format_time_label(dj_state.receiver.last_seen_at) }}{% else %}Open the live display on the TV{% endif %}</p>
+        <span class="dj-status-card__label">Live displays</span>
+        <strong data-dj-heartbeat-status>{{ dj_state.online_receiver_count }} Connected</strong>
+        <p data-dj-heartbeat-detail>{{ dj_state.ready_receiver_count }} audio enabled{% if dj_state.receiver.id %} · leader {{ dj_state.receiver.id[:8] }}{% endif %}</p>
       </article>
       <article class="dj-status-card">
         <span class="dj-status-card__label">Audio readiness</span>
@@ -806,6 +806,24 @@
         <p data-dj-audio-detail>{{ dj_state.receiver.authorization_status|replace('_', ' ')|title }}</p>
       </article>
     </div>
+
+    <section class="dj-receiver-roster" aria-label="Connected live display audio receivers">
+      <header>
+        <strong>Display Audio Receivers</strong>
+        <span>Each display must enable audio locally. The leader remains authoritative for queue state.</span>
+      </header>
+      <ul data-dj-receiver-list>
+        {% for receiver_id, receiver in dj_state.receivers.items() %}
+          <li class="dj-receiver-roster__item{% if receiver.is_leader %} dj-receiver-roster__item--leader{% endif %}">
+            <span class="dj-receiver-roster__name">Display {{ receiver_id[:8] }}{% if receiver.is_leader %} · Leader{% endif %}</span>
+            <span class="dj-status-pill dj-status-pill--{{ receiver.effective_status }}">{{ receiver.effective_status|replace('_', ' ')|title }}</span>
+            <small>{% if receiver.audio_enabled %}Audio enabled{% else %}Audio needs a local click{% endif %}{% if receiver.last_seen_at %} · {{ format_time_label(receiver.last_seen_at) }}{% endif %}</small>
+          </li>
+        {% else %}
+          <li class="dj-receiver-roster__empty">Open the live display on each TV, then enable DJ audio on that display.</li>
+        {% endfor %}
+      </ul>
+    </section>
 
     <section class="dj-playback-deck" aria-label="Confirmed DJ queue" aria-live="polite">
       <article class="dj-playback-card dj-playback-card--current">
@@ -873,7 +891,7 @@
     </div>
 
     <p class="dj-command-state{% if dj_state.current_command %} dj-command-state--pending{% elif dj_state.last_command %} dj-command-state--{{ dj_state.last_command.status }}{% endif %}" data-dj-command-state{% if not dj_state.current_command and not dj_state.last_command %} hidden{% endif %}>
-      {% if dj_state.current_command %}<strong>Waiting for confirmation:</strong> {{ dj_state.current_command.action|replace('_', ' ')|title }} (revision {{ dj_state.current_command.revision }}).{% elif dj_state.last_command %}<strong>Last command:</strong> {{ dj_state.last_command.action|replace('_', ' ')|title }} — {{ dj_state.last_command.status|title }}{% if dj_state.last_command.error %}: {{ dj_state.last_command.error }}{% endif %}{% endif %}
+      {% if dj_state.current_command %}<strong>Waiting for confirmation:</strong> {{ dj_state.current_command.action|replace('_', ' ')|title }} (revision {{ dj_state.current_command.revision }}){% if dj_state.current_command.target_receiver_ids %} · {{ dj_state.current_command.acknowledgements|length }} of {{ dj_state.current_command.target_receiver_ids|length }} displays confirmed{% endif %}.{% elif dj_state.last_command %}<strong>Last command:</strong> {{ dj_state.last_command.action|replace('_', ' ')|title }} — {{ dj_state.last_command.status|title }}{% if dj_state.last_command.error %}: {{ dj_state.last_command.error }}{% endif %}{% endif %}
     </p>
 
     <p class="dj-command-state dj-command-state--failed" data-dj-receiver-error{% if not dj_state.receiver.last_error %} hidden{% endif %}>{% if dj_state.receiver.last_error %}<strong>Receiver message:</strong> {{ dj_state.receiver.last_error }}{% endif %}</p>

@@ -27,6 +27,13 @@ test('requires authorization only when MusicKit did not restore it', () => {
   assert.equal(receiverState.buttonLabelFor('not_authorized'), 'Enable DJ Audio');
 });
 
+test('keeps the DJ control visible with an honest ownership label', () => {
+  assert.equal(
+    receiverState.buttonLabelFor('not_authorized', true),
+    'DJ Audio Active Elsewhere',
+  );
+});
+
 test('keeps authorization and audio readiness as separate state axes', () => {
   assert.equal(receiverState.statusFor({
     authorizationStatus: 'authorized', audioEnabled: false, hasError: false,

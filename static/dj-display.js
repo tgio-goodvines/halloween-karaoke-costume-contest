@@ -162,10 +162,11 @@
 
     const ownedElsewhere = receiverOwnedElsewhere();
     if (enableButton) {
-      enableButton.textContent = receiverState.buttonLabelFor(authorizationStatus);
-      if (audioEnabled || pairingInProgress || receiverInitializing || !appleMusicConfigured || ownedElsewhere) {
+      enableButton.textContent = receiverState.buttonLabelFor(authorizationStatus, ownedElsewhere);
+      if (audioEnabled || pairingInProgress || receiverInitializing || !appleMusicConfigured) {
         enableButton.setAttribute('hidden', '');
       } else enableButton.removeAttribute('hidden');
+      enableButton.disabled = pairingInProgress || ownedElsewhere;
     }
     if (ownedElsewhere) {
       setDetail('DJ audio is controlled by another live display. This tab is display-only.');

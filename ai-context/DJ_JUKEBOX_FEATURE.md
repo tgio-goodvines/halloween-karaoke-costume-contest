@@ -259,8 +259,9 @@ by MusicKit and is not persisted server-side.
 
 - **Receiver offline:** open or refresh `/live-display` on the TV device.
 - **Another display owns DJ audio:** keep the playback/casting tab open. Other
-  live-display tabs may stay open for viewing, but remain display-only until
-  the active receiver has been offline for 20 seconds.
+  live-display tabs may stay open for viewing and show a disabled **DJ Audio
+  Active Elsewhere** control, but remain display-only until the active receiver
+  has been offline for 20 seconds.
 - **Needs authorization/audio enable:** press Enable DJ Audio on the TV and
   complete the Apple Music prompt there.
 - **Command failed/timed out:** the workspace displays the receiver’s message;

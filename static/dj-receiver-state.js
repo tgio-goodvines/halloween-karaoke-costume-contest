@@ -24,9 +24,10 @@
     return audioEnabled ? 'ready' : 'needs_audio_enable';
   };
 
-  const buttonLabelFor = (authorizationStatus) => (
-    authorizationStatus === 'authorized' ? 'Resume DJ Audio' : 'Enable DJ Audio'
-  );
+  const buttonLabelFor = (authorizationStatus, ownedElsewhere = false) => {
+    if (ownedElsewhere) return 'DJ Audio Active Elsewhere';
+    return authorizationStatus === 'authorized' ? 'Resume DJ Audio' : 'Enable DJ Audio';
+  };
 
   const detailFor = ({ configured, initializing, authorizationStatus, audioEnabled, error }) => {
     if (error) return error;

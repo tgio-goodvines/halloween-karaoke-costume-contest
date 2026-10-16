@@ -705,6 +705,7 @@ body.display-mode * { box-sizing: border-box; }
 .display-now-playing__next strong { margin-top: 0.2rem; color: #d4d4d8; }
 .display-now-playing__actions { text-align: right; }
 .display-now-playing__enable { margin-bottom: 0.25rem; padding: 0.48rem 0.68rem; border: 1px solid rgba(255, 49, 49, 0.72); border-radius: 999px; color: #fff; background: rgba(255, 49, 49, 0.18); font: 700 clamp(0.52rem, 0.68vw, 0.72rem)/1 "Outfit", sans-serif; text-transform: uppercase; }
+.display-now-playing__enable:disabled { opacity: 0.72; cursor: not-allowed; }
 
 .display-density--compact { --display-panel-padding: clamp(0.55rem, 1vw, 0.9rem); --display-center-title: clamp(1.8rem, 3.8vw, 4.5rem); --display-center-copy: clamp(0.82rem, 1.4vw, 1.55rem); }
 .display-density--large { --display-center-title: clamp(2.3rem, 5vw, 5.8rem); --display-center-copy: clamp(1.1rem, 2vw, 2.2rem); }
@@ -752,9 +753,12 @@ body.display-mode * { box-sizing: border-box; }
   .display-shell.has-games .display-stage { grid-template-columns: minmax(7.5rem, 0.68fr) minmax(0, 2.5fr); }
   .display-shell.has-bar .display-stage { grid-template-columns: minmax(0, 2.5fr) minmax(7.5rem, 0.68fr); }
   .display-shell.has-games.has-bar .display-stage { grid-template-columns: minmax(7.5rem, 0.62fr) minmax(0, 2fr) minmax(7.5rem, 0.62fr); }
-  .display-now-playing { grid-template-columns: auto minmax(0, 1fr) minmax(5rem, 0.6fr) auto; }
+  .display-now-playing { grid-template-columns: auto minmax(0, 1fr) auto; }
   .display-now-playing__next,
-  .display-now-playing__actions { display: none; }
+  .display-now-playing__progress,
+  .display-now-playing__time,
+  .display-now-playing__detail { display: none; }
+  .display-now-playing__actions { display: block; }
 }
 
 @media (max-width: 620px) {
@@ -794,7 +798,8 @@ body.display-mode * { box-sizing: border-box; }
   .display-bar-queue li strong { font-size: 0.48rem; }
   .display-bar-queue li small { font-size: 0.4rem; }
   .display-ready-notice__details { display: none !important; }
-  .display-now-playing { grid-template-columns: auto minmax(0, 1fr); min-height: 2.8rem; }
+  .display-now-playing { grid-template-columns: minmax(0, 1fr) auto; min-height: 2.8rem; }
+  .display-now-playing__artwork { display: none; }
   .display-now-playing__progress,
   .display-now-playing__time { display: none !important; }
 }

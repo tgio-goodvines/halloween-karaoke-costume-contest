@@ -427,17 +427,17 @@ SSE connections.
   state.
 - Applying display entries to the card DOM.
 - Switching between default, CTA, and scoreboard layouts.
-- Rendering structured fact grids, action steps, game instructions, bar
-  summaries, rotating menu promotions, retained completed history, and pickup
-  details.
+- Selecting one supporting content group for each center card, one focal mode
+  for each game card, and one queue/history/promotion/ready mode for the bar.
 - Measuring inner content occupancy and applying sparse/dense/ultra-dense
   classes; `static/display.css` combines those classes with container-relative
   type sizing so cards can expand as well as compact.
-- Preserving unchanged artwork and preloading/decoding new artwork before an
-  atomic swap, so data refreshes do not blank full-card backgrounds.
-- Enforcing TV-readable side-rail type floors and limiting the bar queue to
-  three rows; game footer content chooses steps, metrics, or one action rather
-  than rendering all three simultaneously.
+- Suppressing background artwork on all live-display cards. Only explicitly
+  requested foreground media is decoded and shown in a contained center-stage
+  image; DJ artwork remains a small footer identifier.
+- Enforcing TV-readable side-rail type floors, limiting the bar queue to three
+  rows, and hiding optional game footer groups whenever the main focus is
+  already present.
 - Applying costume/winner styling classes.
 - Rotating cards every 8 seconds.
 - Fetching latest display data.
@@ -589,17 +589,17 @@ SSE connections.
 
 ## Live-Display Media Treatment
 
-- `static/display-media.js` provides the browser/Node-compatible media contract:
-  any center-stage entry with `image_url` uses background treatment unless it
-  explicitly opts into `media_treatment: "foreground"`.
-- Derived game, karaoke, menu/bar, and custom-card payloads still declare the
-  background treatment for clarity. `media_tone` selects bounded feature,
-  video, custom, or game contrast profiles in `static/display.css`.
-- The right bar rail and drink-ready notice share one decorative edge-to-edge
-  background layer. Confirmed DJ album art stays foreground because it identifies
-  the active track in a status dock rather than a content card.
-- Media treatment remains derived display data. It does not change Redis schema
-  or persisted display configuration.
+- `static/display-media.js` provides the browser/Node-compatible media and focus
+  contract. Background treatment resolves to `none`; an image appears in a card
+  only when the entry explicitly opts into `media_treatment: "foreground"`.
+- Game and bar image layers are absent from `display.html`. Their cards, center
+  background-media cards, event spotlights, and drink-ready notices use stable
+  solid surfaces so a transition does not replace most of the cast frame.
+- Confirmed DJ album art stays foreground because it identifies the active track
+  in a bounded footer tile rather than filling a content card.
+- Media treatment and focus selection remain derived display behavior. They do
+  not change Redis schema or persisted display configuration; older payloads may
+  still declare `background` and are safely ignored by the client.
 
 ## Schema 18 Wrap-Up Architecture
 

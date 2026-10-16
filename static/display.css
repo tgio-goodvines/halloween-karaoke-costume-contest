@@ -884,3 +884,138 @@ body.display-mode::after { display: none; }
   .display-side.is-ultra-dense .display-game-stage__secondary,
   .display-side.is-ultra-dense .display-bar-stage__overflow { display: block !important; }
 }
+
+/* Solid, single-focus TV cards keep cast transitions crisp and copy readable. */
+.display-side,
+.display-center-stage,
+.display-now-playing {
+  background: #18181b;
+}
+
+.display-center-stage.is-spotlight { background: #251517; }
+.display-bar-stage.is-ready { background: #b91c1c; }
+
+.display-center-stage.has-background-media .display-center-card__media,
+.display-game-stage__image,
+.display-bar-stage__image { display: none !important; }
+
+@media (min-width: 901px) {
+.display-center-card__body {
+  gap: clamp(0.85rem, 1.8vh, 1.5rem);
+}
+
+.display-center-card__secondary {
+  max-width: 34em;
+  font-size: clamp(1.35rem, 2.25cqi, 2.15rem);
+  line-height: 1.28;
+}
+
+.display-center-card__action,
+.display-center-card__link {
+  padding: clamp(0.8rem, 1.4cqi, 1.15rem) clamp(1rem, 2cqi, 1.6rem);
+  font-size: clamp(1.2rem, 1.9cqi, 1.75rem);
+  line-height: 1.2;
+}
+
+.display-center-card__cta dt,
+.display-fact-grid dt { font-size: clamp(0.9rem, 1.2cqi, 1.15rem); }
+.display-center-card__cta dd,
+.display-fact-grid dd { font-size: clamp(1.25rem, 1.8cqi, 1.7rem); }
+
+.display-action-steps {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.display-action-steps li {
+  font-size: clamp(1.1rem, 1.55cqi, 1.4rem);
+}
+
+.display-game-stage__content {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(0.7rem, 1.4vh, 1.1rem);
+}
+
+.display-game-stage__summary,
+.display-game-stage__focus {
+  background: transparent;
+}
+
+.display-game-stage__summary { padding: 0; }
+.display-game-stage__focus {
+  align-content: center;
+  gap: clamp(0.65rem, 1.25vh, 1rem);
+  padding: 0;
+}
+
+.display-game-stage__utility,
+.display-game-stage > .display-region-footer { display: none !important; }
+
+.display-game-stage__status,
+.display-game-stage__focus-label {
+  font-size: clamp(1rem, 3.5cqi, 1.15rem);
+}
+
+.display-game-stage h2 {
+  font-size: clamp(1.75rem, 6cqi, 2.2rem);
+}
+
+.display-game-stage__primary {
+  font-size: clamp(1.5rem, 5.7cqi, 2rem);
+  line-height: 1.18;
+  -webkit-line-clamp: 5;
+}
+
+.display-game-stage__secondary {
+  font-size: clamp(1.2rem, 4.4cqi, 1.5rem);
+  line-height: 1.22;
+  -webkit-line-clamp: 2;
+}
+
+.display-game-stage__feature {
+  padding: clamp(0.8rem, 3cqi, 1.15rem);
+  font-size: clamp(1.45rem, 5.5cqi, 1.95rem);
+  line-height: 1.18;
+  -webkit-line-clamp: 5;
+}
+
+.display-game-stage__focus-items {
+  gap: clamp(0.55rem, 1.1vh, 0.85rem);
+}
+
+.display-game-stage__focus-items li {
+  padding: clamp(0.75rem, 2.7cqi, 1rem) clamp(0.7rem, 2.5cqi, 0.95rem) clamp(0.75rem, 2.7cqi, 1rem) clamp(2.3rem, 8.5cqi, 3rem);
+  font-size: clamp(1.4rem, 5cqi, 1.7rem);
+  line-height: 1.18;
+  -webkit-line-clamp: 3;
+}
+
+.display-game-stage.is-dense .display-game-stage__summary,
+.display-game-stage.is-ultra-dense .display-game-stage__summary { padding: 0; }
+.display-game-stage.is-dense .display-game-stage__focus,
+.display-game-stage.is-ultra-dense .display-game-stage__focus { padding: 0; }
+
+.display-bar-queue__content > .display-region-header {
+  font-size: clamp(1.1rem, 4cqi, 1.35rem);
+}
+
+.display-bar-queue li strong { font-size: clamp(1.4rem, 5cqi, 1.7rem); }
+.display-bar-queue li small,
+.display-bar-queue li em { font-size: clamp(1.2rem, 4.2cqi, 1.4rem); }
+.display-bar-stage__overflow { font-size: clamp(1rem, 3.5cqi, 1.2rem); }
+
+.display-bar-promotion span,
+.display-bar-history__heading { font-size: clamp(1rem, 3.5cqi, 1.15rem); }
+.display-bar-promotion strong { font-size: clamp(1.55rem, 5.5cqi, 2rem); }
+.display-bar-promotion p,
+.display-bar-action,
+.display-bar-pickup { font-size: clamp(1.15rem, 4cqi, 1.4rem); }
+
+.display-ready-notice__content {
+  gap: clamp(0.9rem, 1.8vh, 1.35rem);
+  background: rgba(45, 0, 0, 0.42);
+}
+.display-ready-notice h2 { font-size: clamp(2.2rem, 8cqi, 3.25rem); }
+.display-ready-notice p { font-size: clamp(1.3rem, 4.7cqi, 1.7rem); }
+.display-ready-notice__details,
+.display-ready-notice small { display: none !important; }
+}

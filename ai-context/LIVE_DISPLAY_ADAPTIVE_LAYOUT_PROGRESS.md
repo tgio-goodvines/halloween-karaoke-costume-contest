@@ -311,3 +311,22 @@ fixed no-scroll track.
   free JavaScript tests, Python/JavaScript syntax checks, and whitespace
   validation. Final real-device casting acceptance remains to be run on the
   party laptop, receiver, Wi-Fi, and television.
+
+## Solid Single-Focus TV Cards (2026-10-16)
+
+- Full-card artwork is no longer rendered on center, game, bar, spotlight, or
+  drink-ready cards. Those regions now use stable solid surfaces; only explicit
+  contained foreground media and the bounded DJ artwork tile remain eligible.
+- Center cards render the main title plus exactly one supporting group: message,
+  action, access details, scoreboard, karaoke status, facts, steps, or link.
+- Game cards select one focal mode. Choice cards keep the required choices,
+  response cards retain prompt context plus the featured response, and ordinary
+  cards keep the primary message; the former metrics/steps/action footer is not
+  stacked beneath an existing focus.
+- Active bar views show only three large queue rows and an overflow count. Ready
+  alerts show the guest name and one pickup message; queue totals, image art,
+  extra details, and repeated pickup guidance are suppressed.
+- Browser QA used populated 1920x1080, 1280x720, and 1024x768 fixtures. All
+  regions and the document had zero overflow, background images computed to
+  `none`, no card images were visible, and 1280x720 operational bar copy measured
+  19.2px with 22.4px names while game choices measured 22.4px.

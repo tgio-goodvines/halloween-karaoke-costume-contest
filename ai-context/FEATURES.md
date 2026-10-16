@@ -426,12 +426,11 @@ app state.
 - Multiple enabled games rotate independently on the left stage; admins may pin
   one game without pausing center-stage cards.
 - In auto mode, the right stage appears for a ready alert, active drink orders,
-  retained completed history, or available food/drink menu items. Active queues
-  keep their operational layout and rotate a menu promotion at the bottom.
-  Without a queue, promotions occupy the top/middle/bottom around completed
-  history; history-only layouts center the history, and a truly empty stage
-  collapses. Public order data is limited to guest display name, drink, status,
-  completion/pickup label, and estimate.
+  retained completed history, or available food/drink menu items. Each view has
+  one purpose: active queues show at most three large operational rows, idle
+  views show either recent history or one menu promotion, and ready alerts show
+  only the guest plus the pickup message. Public order data is limited to guest
+  display name, drink, status, completion/pickup label, and estimate.
 - Drink-ready alerts temporarily replace the right-stage queue and queued alerts
   play sequentially. The alert fills the whole right stage with a bright neon
   red treatment while center/event spotlights continue independently.
@@ -446,8 +445,8 @@ app state.
   media sources are not reassigned.
 - SSE endpoint sends keep-alive comments on idle intervals.
 - Display supports full-screen event override cards for contest start, winner announcement, and karaoke start. Costume and karaoke event modes are mutually exclusive.
-- Display supports configurable temporary drink-ready notice cards with drink
-  images in the right rail; notices do not replace center-stage event cards.
+- Display supports configurable temporary drink-ready notice cards in the right
+  rail; their solid alert surface does not replace center-stage event cards.
 - `/admin/display` provides live region status, previous/pause/resume/next,
   spotlight-any-card, source enable/order controls, region modes and timing,
   game pinning, alert dismissal, and a scheduled custom-card library.
@@ -458,14 +457,14 @@ app state.
   and overflow wrapping so normal desktop/laptop browser windows and narrow
   browsers do not clip cards.
 - Visible stages use occupancy-aware sparse/dense sizing and card-local
-  container scaling. Center action cards include live fact tiles, ordered phone
-  guidance, and route callouts; game cards include phase-specific play steps;
-  bar cards include queue positions, operational summary metrics, a featured
-  available drink, and pickup/order guidance.
+  container scaling. Center cards select one supporting group beneath the main
+  message, game cards select one focal message/choice/response mode, and bar
+  cards keep queue, history, promotion, and ready content in separate views.
 - Cast-safe live-display styling removes continuous scanline/pulse/transition
-  motion, keeps current artwork visible until replacement media has decoded,
-  gives game and bar rails explicit TV type floors, and shows no more than
-  three active bar orders at once.
+  motion, uses solid card surfaces instead of background artwork, gives game
+  and bar rails explicit TV type floors, and shows no more than three active
+  bar orders at once. Explicit foreground media can still appear as a contained
+  image, while DJ album art remains confined to its footer tile.
 - Karaoke start override includes countdown and upcoming-singer panel markup for
   the existing client-side karaoke rotator.
 - Display client can cache-bust `display.css` once when an override becomes active.

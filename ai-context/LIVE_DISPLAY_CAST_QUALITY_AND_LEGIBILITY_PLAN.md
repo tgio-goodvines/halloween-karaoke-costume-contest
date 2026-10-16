@@ -9,7 +9,9 @@ casting receiver, Wi-Fi, and TV remains an operational rollout check.
 Implemented changes include semantic DJ update broadcasts, region-signature
 DOM reconciliation, decoded non-blanking media swaps, cast-safe static effects,
 longer rotation intervals, TV-size side-rail typography, a three-row bar queue,
-and mutually exclusive game footer content.
+mutually exclusive game footer content, and the October 16 follow-up that
+removed background artwork entirely and enforced one focal content mode per
+card.
 
 ## Objective
 

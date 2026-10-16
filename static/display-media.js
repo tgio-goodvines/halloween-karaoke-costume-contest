@@ -8,7 +8,32 @@
   const treatmentFor = (entry) => {
     const safeEntry = entry && typeof entry === 'object' ? entry : {};
     if (!safeEntry.image_url) return 'none';
-    return safeEntry.media_treatment === 'foreground' ? 'foreground' : 'background';
+    return safeEntry.media_treatment === 'foreground' ? 'foreground' : 'none';
+  };
+
+  const centerFocusMode = (entry) => {
+    const safeEntry = entry && typeof entry === 'object' ? entry : {};
+    if (safeEntry.karaoke) return 'karaoke';
+    if (Array.isArray(safeEntry.scoreboard?.entries) && safeEntry.scoreboard.entries.length) return 'scoreboard';
+    if (safeEntry.cta) return 'cta';
+    if (safeEntry.kind === 'action' && (safeEntry.action?.label || safeEntry.action?.url)) return 'action';
+    if (safeEntry.secondary) return 'message';
+    if (safeEntry.action?.label || safeEntry.action?.url) return 'action';
+    if (Array.isArray(safeEntry.facts) && safeEntry.facts.length) return 'facts';
+    if (Array.isArray(safeEntry.steps) && safeEntry.steps.length) return 'steps';
+    if (safeEntry.link) return 'link';
+    if (safeEntry.tertiary) return 'message';
+    return 'title';
+  };
+
+  const gameFocusMode = (entry) => {
+    const safeEntry = entry && typeof entry === 'object' ? entry : {};
+    if (Array.isArray(safeEntry.focus_items) && safeEntry.focus_items.length) return 'choices';
+    if (safeEntry.feature_text) return 'feature';
+    if (safeEntry.primary) return 'message';
+    if (Array.isArray(safeEntry.metrics) && safeEntry.metrics.length) return 'metrics';
+    if (safeEntry.action_label) return 'action';
+    return 'message';
   };
 
   const toneFor = (entry) => {
@@ -34,5 +59,5 @@
     String(currentSource || '') !== String(requestedSource || '')
   );
 
-  return { treatmentFor, toneFor, signatureFor, shouldReplaceSource };
+  return { treatmentFor, centerFocusMode, gameFocusMode, toneFor, signatureFor, shouldReplaceSource };
 });

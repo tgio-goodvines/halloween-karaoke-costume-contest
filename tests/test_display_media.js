@@ -3,9 +3,23 @@ const assert = require('node:assert/strict');
 
 const media = require('../static/display-media.js');
 
-test('image-bearing display cards use background media by default', () => {
-  assert.equal(media.treatmentFor({ image_url: '/static/images/features/karaoke.jpg' }), 'background');
-  assert.equal(media.treatmentFor({ image_url: 'https://example.test/custom.jpg', media_treatment: '' }), 'background');
+test('background artwork is suppressed for cast-safe solid cards', () => {
+  assert.equal(media.treatmentFor({ image_url: '/static/images/features/karaoke.jpg' }), 'none');
+  assert.equal(media.treatmentFor({ image_url: 'https://example.test/custom.jpg', media_treatment: '' }), 'none');
+  assert.equal(media.treatmentFor({ image_url: '/static/game.jpg', media_treatment: 'background' }), 'none');
+});
+
+test('center cards select one supporting focus group', () => {
+  assert.equal(media.centerFocusMode({ cta: true, secondary: 'Extra copy' }), 'cta');
+  assert.equal(media.centerFocusMode({ kind: 'action', action: { label: 'Join' }, secondary: 'Extra copy' }), 'action');
+  assert.equal(media.centerFocusMode({ secondary: 'One readable message', facts: [{ label: 'Players', value: 4 }] }), 'message');
+  assert.equal(media.centerFocusMode({ scoreboard: { entries: [{ name: 'Sam' }] }, secondary: 'Final' }), 'scoreboard');
+});
+
+test('game cards select one focal presentation', () => {
+  assert.equal(media.gameFocusMode({ focus_items: ['One', 'Two', 'Three'], primary: 'Choose' }), 'choices');
+  assert.equal(media.gameFocusMode({ feature_text: 'Anonymous answer', primary: 'Prompt' }), 'feature');
+  assert.equal(media.gameFocusMode({ primary: 'Current instruction', metrics: [{ value: 4 }] }), 'message');
 });
 
 test('foreground media remains an explicit opt-in and empty cards have no media', () => {

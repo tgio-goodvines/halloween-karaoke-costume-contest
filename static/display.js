@@ -149,8 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const mediaHelpers = window.HalloweenDisplayMedia || {};
   const mediaTreatmentFor = mediaHelpers.treatmentFor || ((entry) => (
-    entry?.image_url ? (entry.media_treatment === 'foreground' ? 'foreground' : 'background') : 'none'
+    entry?.image_url && entry.media_treatment === 'foreground' ? 'foreground' : 'none'
   ));
+  const centerFocusMode = mediaHelpers.centerFocusMode || (() => 'message');
+  const gameFocusMode = mediaHelpers.gameFocusMode || (() => 'message');
   const mediaToneFor = mediaHelpers.toneFor || (() => 'feature');
   const signatureFor = mediaHelpers.signatureFor || ((value) => JSON.stringify(value));
   const shouldReplaceSource = mediaHelpers.shouldReplaceSource || ((current, requested) => current !== requested);
@@ -310,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const renderScoreboard = (scoreboard) => {
-    const rows = safeArray(asObject(scoreboard).entries).slice(0, 6);
+    const rows = safeArray(asObject(scoreboard).entries).slice(0, 3);
     if (!elements.centerScoreboard || !rows.length) return false;
     elements.centerScoreboard.innerHTML = '';
     rows.forEach((row, index) => {
@@ -386,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderKaraokeExtra = (entry) => {
     const karaoke = asObject(entry.karaoke);
     const target = karaoke.countdown_target ? new Date(karaoke.countdown_target) : null;
-    const lineup = safeArray(karaoke.lineup).slice(0, 4);
+    const lineup = safeArray(karaoke.lineup).slice(0, 3);
     if ((!target || Number.isNaN(target.getTime())) && !lineup.length) return;
     setHidden(elements.karaokeExtra, false);
     if (elements.karaokeLineup) {
@@ -427,13 +429,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const safeEntry = asObject(entry);
     const mediaTreatment = mediaTreatmentFor(safeEntry);
     const hasImage = mediaTreatment !== 'none';
-    const hasBackgroundMedia = mediaTreatment === 'background';
     const hasForegroundMedia = mediaTreatment === 'foreground';
+    const focusMode = centerFocusMode(safeEntry);
     clearCenterExtras();
     elements.centerStage?.classList.toggle('is-spotlight', spotlight);
     elements.centerStage?.classList.toggle('is-scoreboard', Boolean(asObject(safeEntry.scoreboard).entries));
     elements.centerStage?.classList.toggle('has-media', hasImage);
-    elements.centerStage?.classList.toggle('has-background-media', hasBackgroundMedia);
+    elements.centerStage?.classList.remove('has-background-media');
     elements.centerStage?.classList.toggle('has-foreground-media', hasForegroundMedia);
     if (elements.centerStage) elements.centerStage.dataset.mediaTone = hasImage ? mediaToneFor(safeEntry) : '';
     ['access', 'action', 'profile', 'status', 'result', 'scoreboard', 'announcement'].forEach((kind) => {
@@ -442,13 +444,16 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.centerStage?.classList.remove('is-transitioning');
     if (elements.centerCategory) elements.centerCategory.textContent = safeEntry.category || 'Live display';
     if (elements.centerPrimary) elements.centerPrimary.textContent = safeEntry.primary || 'Display standby';
-    if (elements.centerSecondary) elements.centerSecondary.textContent = safeEntry.secondary || '';
-    setOptionalText(elements.centerTertiary, safeEntry.tertiary || '');
+    setOptionalText(
+      elements.centerSecondary,
+      focusMode === 'message' ? (safeEntry.secondary || safeEntry.tertiary || '') : '',
+    );
+    setOptionalText(elements.centerTertiary, '');
     if (elements.centerImage && elements.centerImageWrap) {
-      if (safeEntry.image_url) {
-        elements.centerImageWrap.setAttribute('aria-hidden', hasBackgroundMedia ? 'true' : 'false');
+      if (hasForegroundMedia && safeEntry.image_url) {
+        elements.centerImageWrap.setAttribute('aria-hidden', 'false');
         swapMedia(elements.centerImage, elements.centerImageWrap, safeEntry.image_url, {
-          alt: hasBackgroundMedia ? '' : (safeEntry.primary ? `${safeEntry.primary} image` : 'Display image'),
+          alt: safeEntry.primary ? `${safeEntry.primary} image` : 'Display image',
           onReady: fitAll,
           onError: () => {
             elements.centerStage?.classList.remove('has-media', 'has-background-media', 'has-foreground-media');
@@ -459,16 +464,16 @@ document.addEventListener('DOMContentLoaded', () => {
         swapMedia(elements.centerImage, elements.centerImageWrap, '');
       }
     }
-    if (safeEntry.cta) renderCta(safeEntry);
-    renderFacts(elements.centerFacts, safeEntry.facts);
-    renderSteps(elements.centerSteps, safeEntry.steps);
-    renderScoreboard(safeEntry.scoreboard);
-    if (safeEntry.link) {
+    if (focusMode === 'cta') renderCta(safeEntry);
+    if (focusMode === 'facts') renderFacts(elements.centerFacts, safeEntry.facts, 2);
+    if (focusMode === 'steps') renderSteps(elements.centerSteps, safeEntry.steps, 2);
+    if (focusMode === 'scoreboard') renderScoreboard(safeEntry.scoreboard);
+    if (focusMode === 'link' && safeEntry.link) {
       elements.centerLink.textContent = safeEntry.link_label ? `${safeEntry.link_label}: ${safeEntry.link}` : safeEntry.link;
       setHidden(elements.centerLink, false);
     }
-    if (safeEntry.karaoke) renderKaraokeExtra(safeEntry);
-    renderAction(elements.centerAction, safeEntry.action);
+    if (focusMode === 'karaoke') renderKaraokeExtra(safeEntry);
+    if (focusMode === 'action') renderAction(elements.centerAction, safeEntry.action);
     fitAll();
   };
 
@@ -548,42 +553,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderGameEntry = (entry, count) => {
     const game = asObject(entry);
+    const focusMode = gameFocusMode(game);
     const presentation = ['signup', 'active', 'clue', 'prompt', 'voting', 'response', 'reveal', 'result'].includes(game.presentation)
       ? game.presentation
       : (game.phase === 'ended' ? 'result' : (game.phase === 'active' ? 'active' : 'signup'));
     if (elements.gameStage) elements.gameStage.dataset.presentation = presentation;
-    elements.gameStage?.classList.toggle('has-background-media', Boolean(game.image_url));
-    if (elements.gameImage && elements.gameImageWrap) {
-      if (game.image_url) {
-        swapMedia(elements.gameImage, elements.gameImageWrap, game.image_url, {
-          onReady: fitAll,
-          onError: () => {
-            elements.gameStage?.classList.remove('has-background-media');
-            fitAll();
-          },
-        });
-      } else {
-        swapMedia(elements.gameImage, elements.gameImageWrap, '');
-      }
-    }
+    elements.gameStage?.classList.remove('has-background-media');
     if (elements.gameStatus) elements.gameStatus.textContent = game.status_label || game.phase || '';
     if (elements.gameTitle) elements.gameTitle.textContent = game.title || 'Party Games';
-    setOptionalText(elements.gamePrimary, game.primary || 'Follow the live game status here.');
-    setOptionalText(elements.gameSecondary, gameSecondaryText(game));
-    setOptionalText(elements.gameFocusLabel, game.focus_label || 'Live focus');
-    setOptionalText(elements.gameFeature, game.feature_text || '');
+    setOptionalText(elements.gamePrimary, focusMode === 'choices' ? '' : (game.primary || 'Follow the live game status here.'));
+    setOptionalText(elements.gameSecondary, focusMode === 'message' && game.deadline_at ? gameSecondaryText(game) : '');
+    setOptionalText(elements.gameFocusLabel, focusMode === 'choices' || focusMode === 'feature' ? (game.focus_label || 'Live focus') : '');
+    setOptionalText(elements.gameFeature, focusMode === 'feature' ? (game.feature_text || '') : '');
     if (elements.gameFocusItems) {
       elements.gameFocusItems.innerHTML = '';
-      safeArray(game.focus_items).filter(Boolean).slice(0, 2).forEach((focusItem) => {
+      safeArray(game.focus_items).filter(Boolean).slice(0, focusMode === 'choices' ? 3 : 0).forEach((focusItem) => {
         const item = document.createElement('li');
         item.textContent = String(focusItem);
         elements.gameFocusItems.appendChild(item);
       });
       setHidden(elements.gameFocusItems, !elements.gameFocusItems.children.length);
     }
-    const steps = safeArray(game.steps).filter(Boolean).slice(0, 2);
     const metrics = safeArray(game.metrics).slice(0, 2);
-    const footerMode = steps.length ? 'steps' : (metrics.length ? 'metrics' : (game.action_label ? 'action' : 'none'));
+    const footerMode = focusMode === 'metrics' ? 'metrics' : (focusMode === 'action' ? 'action' : 'none');
     if (elements.gameStage) elements.gameStage.dataset.footerMode = footerMode;
     if (elements.gameMetrics) {
       elements.gameMetrics.innerHTML = '';
@@ -600,7 +592,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     setHidden(elements.gameSteps, true);
     if (elements.gameSteps) elements.gameSteps.innerHTML = '';
-    if (footerMode === 'steps') renderSteps(elements.gameSteps, steps, 2);
     setOptionalText(elements.gameAction, footerMode === 'action' ? (game.action_label || '') : '');
     if (elements.gamePosition) elements.gamePosition.textContent = count > 1 ? `Game ${gameIndex + 1} of ${count}` : 'Game live';
     if (elements.gameProgress) elements.gameProgress.textContent = count > 1 ? 'Rotating' : 'Pinned';
@@ -752,20 +743,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const renderBarBackground = (imageUrl) => {
-    if (!elements.barImage || !elements.barImageWrap) return;
-    const requestedSrc = String(imageUrl || '');
-    elements.barStage?.classList.toggle('has-background-media', Boolean(requestedSrc));
-    if (!requestedSrc) {
-      swapMedia(elements.barImage, elements.barImageWrap, '');
-      return;
-    }
-    swapMedia(elements.barImage, elements.barImageWrap, requestedSrc, {
-      onReady: fitAll,
-      onError: () => {
-        elements.barStage?.classList.remove('has-background-media');
-        fitAll();
-      },
-    });
+    elements.barStage?.classList.remove('has-background-media');
+    if (elements.barImage && elements.barImageWrap) swapMedia(elements.barImage, elements.barImageWrap, '');
   };
 
   const renderBar = () => {
@@ -798,23 +777,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (elements.readyName) elements.readyName.textContent = notice.highlight || 'Guest';
       if (elements.readyMessage) elements.readyMessage.textContent = notice.message || 'Your drink is ready at the bar.';
       if (elements.readyQueue) {
-        const remaining = Number(bar.active_count) || 0;
-        const queued = Number(bar.queued_notice_count) || 0;
-        elements.readyQueue.textContent = `${remaining} active order${remaining === 1 ? '' : 's'}${queued ? ` · ${queued} more ready` : ''}`;
+        elements.readyQueue.textContent = '';
+        setHidden(elements.readyQueue, true);
       }
-      setOptionalText(elements.readyPickup, bar.pickup_note || 'Pick up at the bar.');
+      setOptionalText(elements.readyPickup, '');
       if (elements.readyDetails) {
         elements.readyDetails.innerHTML = '';
-        safeArray(notice.details).slice(0, 2).forEach((detail) => {
-          const item = document.createElement('li');
-          item.textContent = String(detail);
-          elements.readyDetails.appendChild(item);
-        });
-        setHidden(elements.readyDetails, !elements.readyDetails.children.length);
+        setHidden(elements.readyDetails, true);
       }
-      const noticeImageUrl = notice.image_url || bar.image_url || '';
       elements.barStage?.classList.add('is-ready');
-      renderBarBackground(noticeImageUrl);
+      renderBarBackground('');
       scheduleNoticeRefresh(notice);
     } else {
       elements.barStage?.classList.remove('is-ready');
@@ -861,14 +833,10 @@ document.addEventListener('DOMContentLoaded', () => {
       renderPromotionCards(elements.barPromotionsBottom, promotionWindow.slice(topPromotionCount));
       renderCompletedHistory(completedOrders, !hasActiveQueue && hasHistory, historySlots);
 
-      const backgroundPromotion = hasActiveQueue || hasHistory ? null : promotionWindow[0];
-      renderBarBackground(backgroundPromotion?.image_url || bar.image_url || '');
+      renderBarBackground('');
       if (!hasActiveQueue && !hasHistory && promotions.length) renderAction(elements.barAction, bar.action);
       else setOptionalText(elements.barAction, '');
-      setOptionalText(
-        elements.barPickup,
-        hasActiveQueue || hasHistory ? (bar.pickup_note || '') : '',
-      );
+      setOptionalText(elements.barPickup, '');
       scheduleBarRotation(bar, false, hasActiveQueue, promotionSlots, historySlots);
     }
     fitAll();
@@ -961,7 +929,10 @@ document.addEventListener('DOMContentLoaded', () => {
   window.setInterval(fetchLatest, 30000);
   window.setInterval(() => {
     const entry = safeArray(asObject(layout.games).entries).find((item) => String(item.id || '') === gameEntryId);
-    if (entry) setOptionalText(elements.gameSecondary, gameSecondaryText(entry));
+    if (entry) {
+      const focusMode = gameFocusMode(entry);
+      setOptionalText(elements.gameSecondary, focusMode === 'message' && entry.deadline_at ? gameSecondaryText(entry) : '');
+    }
   }, 1000);
   startEventStream();
 });

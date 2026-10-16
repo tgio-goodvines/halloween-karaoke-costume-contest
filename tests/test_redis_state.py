@@ -3109,6 +3109,8 @@ class RedisStateTests(unittest.TestCase):
             "data-bar-action",
         ):
             self.assertIn(marker, body)
+        self.assertNotIn("display-bar-history__heading", body)
+        self.assertNotIn("data-bar-history-count", body)
 
     def test_admin_page_shows_rsvp_list(self):
         main.rsvp_signups = [

@@ -646,14 +646,8 @@ body.display-mode * { box-sizing: border-box; }
 .display-bar-promotion p { display: -webkit-box; margin: 0.3rem 0 0; overflow: hidden; color: #d4d4d8; font-size: clamp(0.55rem, 3.2cqi, 0.78rem); line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .display-bar-stage.is-idle:not(.has-history) .display-bar-promotions--top { grid-template-rows: repeat(var(--bar-promotion-count, 1), minmax(0, 1fr)); flex: 1 1 auto; }
 .display-bar-stage.is-idle:not(.has-history) .display-bar-promotion { display: grid; align-content: center; }
-.display-bar-history { display: grid; align-content: center; min-height: 0; margin: clamp(0.55rem, 1.2vh, 0.9rem) 0; padding: clamp(0.55rem, 2.5cqi, 0.85rem); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 0.7rem; background: rgba(0, 0, 0, 0.38); }
-.display-bar-stage[data-presentation="queue"] .display-bar-history { flex: 0 1 auto; margin-bottom: 0; padding-block: clamp(0.42rem, 1.8cqi, 0.65rem); }
-.display-bar-stage[data-presentation="queue"] .display-bar-history ol { gap: clamp(0.22rem, 0.45vh, 0.38rem); }
-.display-bar-stage[data-presentation="queue"] .display-bar-history li { padding-block: clamp(0.32rem, 0.55vh, 0.48rem); }
-.display-bar-stage.is-idle.has-history .display-bar-history { flex: 1 1 auto; }
-.display-bar-history__heading { display: flex; justify-content: space-between; gap: 0.5rem; color: #ff8a8a; font: 700 clamp(0.48rem, 2.8cqi, 0.68rem)/1.1 "Outfit", sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
-.display-bar-history__heading strong { color: #fff; }
-.display-bar-history ol { margin-top: clamp(0.4rem, 0.8vh, 0.65rem); }
+.display-bar-history { display: grid; flex: 1 1 auto; align-content: center; min-height: 0; margin-top: clamp(0.55rem, 1.2vh, 0.9rem); }
+.display-bar-history ol { align-content: center; width: 100%; margin: 0; }
 .display-bar-history li.is-ready > span { background: #ff3131; box-shadow: 0 0 8px #ff3131; }
 .display-bar-history li.is-picked-up > span { background: #f4f4f5; box-shadow: 0 0 6px rgba(244, 244, 245, 0.7); }
 .display-bar-feature { margin-top: auto; padding: clamp(0.65rem, 3cqi, 1rem); border: 1px solid rgba(255, 49, 49, 0.38); border-radius: 0.7rem; background: radial-gradient(circle at 50% 0, rgba(255, 49, 49, 0.16), transparent 70%), rgba(0, 0, 0, 0.22); }
@@ -867,8 +861,7 @@ body.display-mode::after { display: none; }
   .display-bar-queue li small { font-size: clamp(1rem, 3.8cqi, 1.2rem); }
   .display-bar-queue li em { font-size: clamp(1rem, 3.4cqi, 1.08rem); line-height: 1.15; }
   .display-bar-stage__overflow { font-size: clamp(0.92rem, 3.3cqi, 1.08rem); }
-  .display-bar-promotion span,
-  .display-bar-history__heading { font-size: clamp(0.88rem, 3.2cqi, 1rem); }
+  .display-bar-promotion span { font-size: clamp(0.88rem, 3.2cqi, 1rem); }
   .display-bar-promotion strong { font-size: clamp(1.3rem, 5cqi, 1.75rem); }
   .display-bar-promotion p,
   .display-bar-action { font-size: clamp(1.02rem, 3.8cqi, 1.25rem); }
@@ -1003,8 +996,7 @@ body.display-mode::after { display: none; }
 .display-bar-queue li em { font-size: clamp(1.2rem, 4.2cqi, 1.4rem); }
 .display-bar-stage__overflow { font-size: clamp(1rem, 3.5cqi, 1.2rem); }
 
-.display-bar-promotion span,
-.display-bar-history__heading { font-size: clamp(1rem, 3.5cqi, 1.15rem); }
+.display-bar-promotion span { font-size: clamp(1rem, 3.5cqi, 1.15rem); }
 .display-bar-promotion strong { font-size: clamp(1.55rem, 5.5cqi, 2rem); }
 .display-bar-promotion p,
 .display-bar-action,
@@ -1020,13 +1012,15 @@ body.display-mode::after { display: none; }
 .display-ready-notice small { display: none !important; }
 }
 
-/* The bar rail is the card; queue entries are flat rows, not nested cards. */
-[data-bar-orders] {
+/* The bar rail is the card; active and completed orders are flat rows. */
+[data-bar-orders],
+[data-bar-history-orders] {
   gap: 0 !important;
   border-top: 1px solid #3f3f46;
 }
 
-.display-bar-queue [data-bar-orders] > li {
+.display-bar-queue [data-bar-orders] > li,
+.display-bar-queue [data-bar-history-orders] > li {
   padding-inline: 0.25rem;
   border: 0;
   border-bottom: 1px solid #3f3f46;

@@ -328,6 +328,9 @@ fixed no-scroll track.
   extra details, and repeated pickup guidance are suppressed.
 - The right rail itself is the only queue card surface. Active drink orders are
   flat, transparent rows separated by rules rather than nested rounded cards.
+- Completed orders use that same single-surface treatment: the outer rail owns
+  the heading and total, while recent orders render as flat, separated rows
+  without an inset black history panel or repeated heading.
 - Browser QA used populated 1920x1080, 1280x720, and 1024x768 fixtures. All
   regions and the document had zero overflow, background images computed to
   `none`, no card images were visible, and 1280x720 operational bar copy measured

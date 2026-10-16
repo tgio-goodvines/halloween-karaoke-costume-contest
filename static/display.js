@@ -62,7 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
     barPromotionsTop: document.querySelector('[data-bar-promotions-top]'),
     barPromotionsBottom: document.querySelector('[data-bar-promotions-bottom]'),
     barHistory: document.querySelector('[data-bar-history]'),
-    barHistoryCount: document.querySelector('[data-bar-history-count]'),
     barHistoryOrders: document.querySelector('[data-bar-history-orders]'),
     barAction: document.querySelector('[data-bar-action]'),
     barPickup: document.querySelector('[data-bar-pickup]'),
@@ -687,7 +686,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const orders = safeArray(completedOrders);
     setHidden(elements.barHistory, !visible || !orders.length);
     if (!visible || !orders.length || !elements.barHistoryOrders) return;
-    if (elements.barHistoryCount) elements.barHistoryCount.textContent = `${orders.length} total`;
     elements.barHistoryOrders.replaceChildren();
     rotationWindow(orders, barHistoryIndex, capacity).forEach((order) => {
       const item = document.createElement('li');
@@ -797,7 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (elements.barHeading) {
         elements.barHeading.textContent = hasActiveQueue
           ? `Bar queue · ${Number(bar.active_count) || 0}`
-          : (hasHistory ? 'Completed tonight' : (promotions.length ? 'Tonight\'s menu' : 'Bar standby'));
+          : (hasHistory ? `Completed tonight · ${completedOrders.length}` : (promotions.length ? 'Tonight\'s menu' : 'Bar standby'));
       }
       if (elements.barOrders) {
         elements.barOrders.replaceChildren();

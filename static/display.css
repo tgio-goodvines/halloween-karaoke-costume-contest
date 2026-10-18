@@ -606,9 +606,14 @@ body.display-mode * { box-sizing: border-box; }
 }
 .display-game-stage__spotlight {
   display: grid;
+  align-self: stretch;
+  grid-auto-rows: minmax(0, 1fr);
   gap: clamp(0.4rem, 0.9vh, 0.65rem);
+  height: 100%;
 }
 .display-game-stage__spotlight > div {
+  display: grid;
+  align-content: center;
   min-width: 0;
   padding: clamp(0.55rem, 2.6cqi, 0.8rem);
   border-left: 0.28rem solid #c42020;
@@ -621,6 +626,12 @@ body.display-mode * { box-sizing: border-box; }
 .display-game-stage__spotlight span { color: #ff8a8a; font: 800 clamp(0.55rem, 3cqi, 0.75rem)/1 "Outfit", sans-serif; letter-spacing: 0.09em; text-transform: uppercase; }
 .display-game-stage__spotlight strong { margin-top: 0.28rem; color: #fff; font: 800 clamp(0.85rem, 4.8cqi, 1.3rem)/1.08 "Outfit", sans-serif; white-space: nowrap; }
 .display-game-stage__spotlight small { margin-top: 0.22rem; color: #a1a1aa; font-size: clamp(0.55rem, 3cqi, 0.76rem); white-space: nowrap; }
+.display-game-stage[data-presentation="recruitment"] .display-game-stage__focus,
+.display-game-stage[data-presentation="tally"] .display-game-stage__focus,
+.display-game-stage[data-presentation="leaderboard"] .display-game-stage__focus {
+  align-content: stretch;
+  grid-template-rows: auto minmax(0, 1fr);
+}
 .display-game-stage__metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0; }
 .display-game-stage__metrics div { min-width: 0; padding: clamp(0.45rem, 0.8vw, 0.7rem); border: 1px solid #3f3f46; border-radius: 0.5rem; background: rgba(0, 0, 0, 0.25); }
 .display-game-stage__metrics strong,

@@ -7306,10 +7306,10 @@ class RedisStateTests(unittest.TestCase):
 
     def test_live_game_cards_recruit_until_three_players_and_keep_early_two_truths_clues(self):
         recruitment_messages = {
-            main.TWO_TRUTHS_GAME_KEY: "More suspects needed",
-            main.MURDER_MARRY_FUCK_GAME_KEY: "worse judgment",
+            main.TWO_TRUTHS_GAME_KEY: "The interrogation needs you",
+            main.MURDER_MARRY_FUCK_GAME_KEY: "The party needs worse judgment",
             main.CURSED_OBJECTIVES_GAME_KEY: "Help curse the party",
-            main.SCAVENGER_HUNT_GAME_KEY: "more monsters",
+            main.SCAVENGER_HUNT_GAME_KEY: "The hunt needs more monsters",
         }
         for game_key in recruitment_messages:
             main.party_game_state(game_key)["enabled"] = True
@@ -7338,8 +7338,11 @@ class RedisStateTests(unittest.TestCase):
                 if entry["game_key"] == game_key and entry["entry_kind"] == "recruitment"
             )
             self.assertEqual("recruitment", recruitment["presentation"])
-            self.assertEqual("message", recruitment["focus_mode"])
-            self.assertIn(message, recruitment["primary"])
+            self.assertEqual("spotlight", recruitment["focus_mode"])
+            self.assertEqual("Recruiting brave souls", recruitment["status_label"])
+            self.assertEqual(message, recruitment["focus_label"])
+            self.assertEqual(3, len(recruitment["spotlight_rows"]))
+            self.assertNotIn("0 of 3", json.dumps(recruitment))
 
         clue = next(entry for entry in first_entries if entry["entry_kind"] == "mystery_clue" and entry["presentation"] == "clue")
         repeated_clue = next(entry for entry in second_entries if entry.get("id") == clue["id"])

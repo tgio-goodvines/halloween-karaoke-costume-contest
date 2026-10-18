@@ -318,7 +318,9 @@ slide. Non-game image cards retain their foreground-media layout.
 
 - Two Truths, Murder/Marry/F%$@, Cursed Objectives, and Scavenger Hunt now emit
   explicit Halloween recruitment cards while fewer than three attendees are
-  enrolled. The visible message tells guests to open Party Games and join.
+  enrolled. Recruitment uses atmospheric status text instead of a numeric
+  `0 of 3` counter and fills the vertical rail with three game-specific beats:
+  join, perform the core action, and understand the night's payoff.
 - Recruitment does not discard early activity: anonymous Two Truths clues,
   aggregate MMF verdicts, and provisional Scavenger Hunt leaders can rotate
   beside the signup prompt until the three-player threshold is reached.

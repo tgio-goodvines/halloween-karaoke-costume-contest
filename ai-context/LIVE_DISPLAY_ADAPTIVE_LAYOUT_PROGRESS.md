@@ -339,7 +339,9 @@ fixed no-scroll track.
 ## Explicit Game Recruitment And Spotlights (2026-10-18)
 
 - The vertical game rail now supports a structured three-row spotlight focus
-  without restoring the dense utility footer or background artwork.
+  without restoring the dense utility footer or background artwork. Spotlight
+  rows stretch evenly through the available focus height instead of leaving a
+  large unused lower area.
 - Two Truths, MMF, Cursed Objectives, and Scavenger Hunt recruit until three
   attendees enroll. Early clue/tally/leaderboard activity remains eligible for
   rotation, so recruitment never erases content already created that night.

@@ -9009,25 +9009,24 @@ LIVE_GAME_RECRUITMENT_MINIMUM = 3
 def _apply_game_recruitment_card(
     entry: dict[str, object],
     *,
-    participant_count: int,
-    message: str,
+    focus_label: str,
+    spotlight_rows: list[dict[str, str]],
 ) -> None:
-    needed = max(0, LIVE_GAME_RECRUITMENT_MINIMUM - participant_count)
     entry.update(
         {
             "entry_kind": "recruitment",
             "presentation": "recruitment",
-            "status_label": f"{participant_count} of {LIVE_GAME_RECRUITMENT_MINIMUM} souls enrolled",
-            "focus_mode": "message",
-            "focus_label": "Recruiting players",
-            "primary": message,
+            "status_label": "Recruiting brave souls",
+            "focus_mode": "spotlight",
+            "focus_label": focus_label,
+            "primary": "",
             "secondary": "",
             "focus_items": [],
-            "spotlight_rows": [],
+            "spotlight_rows": spotlight_rows[:3],
             "feature_text": "",
             "metrics": [],
             "steps": [],
-            "action_label": f"Join in Party Games · {needed} more needed",
+            "action_label": "Open Party Games and join",
             "priority": 3,
         }
     )
@@ -9209,8 +9208,12 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
                     _apply_game_recruitment_card(
                         entry,
-                        participant_count=len(participants),
-                        message="More suspects needed. Open Party Games, join in, and submit two truths plus one wicked lie for the room to unravel.",
+                        focus_label="The interrogation needs you",
+                        spotlight_rows=[
+                            {"label": "Enter the interrogation", "value": "Open Party Games and join"},
+                            {"label": "Plant your alibi", "value": "Submit two truths and one wicked lie"},
+                            {"label": "Hunt the liar", "value": "Guess the mysterious guests"},
+                        ],
                     )
                 for participant in _stable_two_truths_participants(participants):
                     statements = participant_statements(participant)
@@ -9251,8 +9254,12 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
                     _apply_game_recruitment_card(
                         entry,
-                        participant_count=len(participants),
-                        message="The party needs worse judgment. Open Party Games, join the impossible choices, and help summon a truly scandalous verdict.",
+                        focus_label="The party needs worse judgment",
+                        spotlight_rows=[
+                            {"label": "Join the verdict", "value": "Open Party Games and enter"},
+                            {"label": "Choose their fate", "value": "Make ten terrible decisions"},
+                            {"label": "Feed the chaos", "value": "Shift tonight's live verdict"},
+                        ],
                     )
                 if ballot_count:
                     tally_entry = {
@@ -9299,8 +9306,12 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             elif phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
                 _apply_game_recruitment_card(
                     entry,
-                    participant_count=len(participants),
-                    message="Help curse the party. Open Party Games and join—secret missions create suspicious conversations, strange alliances, and a more intriguing night.",
+                    focus_label="Help curse the party",
+                    spotlight_rows=[
+                        {"label": "Accept the curse", "value": "Open Party Games and join"},
+                        {"label": "Receive your mission", "value": "Get three secret objectives"},
+                        {"label": "Make the night stranger", "value": "Create intrigue without getting caught"},
+                    ],
                 )
             else:
                 completed = int(stats.get("completed_missions", 0) or 0)
@@ -9325,8 +9336,12 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
                     _apply_game_recruitment_card(
                         entry,
-                        participant_count=len(participants),
-                        message="The hunt needs more monsters. Open Party Games, join the search, photograph the evidence, and stalk the leaderboard before the final bell.",
+                        focus_label="The hunt needs more monsters",
+                        spotlight_rows=[
+                            {"label": "Join the hunt", "value": "Open Party Games and enter"},
+                            {"label": "Capture the evidence", "value": "Find clues and submit photos"},
+                            {"label": "Stalk the leaderboard", "value": "Race the other creatures to the top"},
+                        ],
                     )
                 if spotlight_rows:
                     leaderboard_entry = {

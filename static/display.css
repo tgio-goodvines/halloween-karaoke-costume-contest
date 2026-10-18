@@ -1080,3 +1080,175 @@ body.display-mode::after { display: none; }
   border-radius: 0;
   background: transparent;
 }
+
+/* Let center and bar focal content consume the card before reducing its type. */
+@media (min-width: 901px) {
+  .display-center-card__body {
+    align-self: stretch;
+    align-content: stretch;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    height: 100%;
+    padding-block: clamp(1rem, 2.2vh, 1.8rem);
+  }
+
+  .display-center-card__body > .display-pill { align-self: start; }
+  .display-center-card__body > h2 {
+    align-self: end;
+    padding-top: clamp(0.8rem, 2vh, 1.6rem);
+    font-size: clamp(3rem, 7.6cqi, 6.5rem);
+    text-wrap: balance;
+  }
+
+  .display-center-stage[data-focus-mode="title"] .display-center-card__body {
+    align-content: center;
+    grid-template-rows: auto auto;
+  }
+
+  .display-center-card__body > :is(
+    .display-center-card__secondary,
+    .display-center-card__link,
+    .display-center-card__action,
+    .display-center-card__cta,
+    .display-fact-grid,
+    .display-action-steps,
+    .display-scoreboard,
+    .display-karaoke-extra
+  ):not([hidden]) {
+    align-self: stretch;
+    display: grid;
+    align-content: center;
+    justify-self: stretch;
+    min-height: 0;
+    margin-inline: auto;
+  }
+
+  .display-center-card__secondary {
+    max-width: 30em;
+    font-size: clamp(1.75rem, 3.25cqi, 3.25rem);
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+
+  .display-center-card__action,
+  .display-center-card__link {
+    width: min(48rem, 100%);
+    min-height: clamp(7rem, 24vh, 14rem);
+    border-radius: 0.85rem;
+    font-size: clamp(1.7rem, 3cqi, 2.8rem);
+  }
+
+  .display-center-card__cta,
+  .display-fact-grid,
+  .display-action-steps,
+  .display-scoreboard,
+  .display-karaoke-extra { width: min(68rem, 100%); }
+
+  .display-center-card__cta { grid-template-rows: minmax(0, 1fr); }
+  .display-center-card__cta dl,
+  .display-fact-grid,
+  .display-action-steps,
+  .display-scoreboard { height: 100%; }
+  .display-center-card__cta dl { align-self: stretch; }
+
+  .display-center-card__cta dl div,
+  .display-fact-grid div,
+  .display-action-steps li,
+  .display-scoreboard li { align-content: center; }
+
+  .display-center-card__cta dt,
+  .display-fact-grid dt { font-size: clamp(1.15rem, 1.55cqi, 1.45rem); }
+  .display-center-card__cta dd,
+  .display-fact-grid dd { font-size: clamp(2rem, 4cqi, 3.25rem); }
+
+  .display-action-steps {
+    grid-auto-rows: minmax(0, 1fr);
+  }
+  .display-action-steps li {
+    font-size: clamp(1.5rem, 2.25cqi, 2.1rem);
+  }
+
+  .display-scoreboard {
+    grid-auto-rows: minmax(0, 1fr);
+    width: min(58rem, 100%);
+  }
+  .display-scoreboard li { padding: clamp(0.75rem, 1.4vh, 1.2rem) clamp(0.9rem, 1.6vw, 1.5rem); }
+  .display-scoreboard li > span { font-size: clamp(1.25rem, 1.8cqi, 1.7rem); }
+  .display-scoreboard li div strong,
+  .display-scoreboard li div small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .display-scoreboard li div strong { font-size: clamp(1.55rem, 2.3cqi, 2.15rem); }
+  .display-scoreboard li div small { font-size: clamp(1.25rem, 1.8cqi, 1.7rem); }
+  .display-scoreboard li > strong { font-size: clamp(1.4rem, 2cqi, 1.9rem); }
+
+  .display-karaoke-extra { justify-items: center; }
+  .display-karaoke-extra ol { font-size: clamp(1.4rem, 2.2cqi, 2rem); }
+
+  .display-bar-queue__content > .display-region-header {
+    flex: 0 0 auto;
+    font-size: clamp(1.25rem, 4.4cqi, 1.55rem);
+  }
+
+  .display-bar-queue [data-bar-orders]:not([hidden]),
+  .display-bar-queue [data-bar-history-orders]:not([hidden]) {
+    flex: 1 1 auto;
+    grid-auto-rows: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .display-bar-queue [data-bar-history-orders]:not([hidden]) {
+    align-content: stretch;
+    height: 100%;
+  }
+  .display-bar-history {
+    align-content: stretch;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .display-bar-queue [data-bar-orders] > li,
+  .display-bar-queue [data-bar-history-orders] > li {
+    align-content: center;
+    overflow: hidden;
+    padding-block: clamp(0.9rem, 2vh, 1.45rem);
+  }
+
+  .display-bar-queue li strong,
+  .display-bar-queue li small,
+  .display-bar-queue li em {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .display-bar-queue li strong { font-size: clamp(1.65rem, 5.8cqi, 2.15rem); line-height: 1.05; }
+  .display-bar-queue li small { margin-top: 0.3rem; font-size: clamp(1.35rem, 4.7cqi, 1.75rem); line-height: 1.12; }
+  .display-bar-queue li em { font-size: clamp(1.2rem, 4.1cqi, 1.5rem); line-height: 1.12; }
+  .display-bar-stage__overflow { font-size: clamp(1.15rem, 3.8cqi, 1.35rem); }
+
+  .display-bar-promotion {
+    align-content: center;
+    min-height: 0;
+    padding: clamp(1rem, 4cqi, 1.5rem);
+  }
+  .display-bar-promotion span { font-size: clamp(1.05rem, 3.7cqi, 1.3rem); }
+  .display-bar-promotion strong { font-size: clamp(1.85rem, 6.4cqi, 2.5rem); }
+  .display-bar-promotion p {
+    display: block;
+    overflow: visible;
+    font-size: clamp(1.3rem, 4.6cqi, 1.75rem);
+    line-height: 1.2;
+    -webkit-line-clamp: unset;
+  }
+  .display-bar-action { font-size: clamp(1.25rem, 4.4cqi, 1.6rem); }
+
+  .display-ready-notice__content {
+    height: 100%;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .display-ready-notice h2 { font-size: clamp(2.8rem, 9.5cqi, 4rem); }
+  .display-ready-notice p { font-size: clamp(1.65rem, 5.6cqi, 2.2rem); line-height: 1.18; }
+}

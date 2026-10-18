@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameProgress: document.querySelector('[data-game-progress]'),
     centerStage: document.querySelector('[data-center-stage]'),
     centerCard: document.querySelector('[data-center-card]'),
+    centerBody: document.querySelector('[data-center-card] [data-fit-content]'),
     centerMode: document.querySelector('[data-center-mode]'),
     centerPosition: document.querySelector('[data-center-position]'),
     centerCategory: document.querySelector('[data-center-category]'),
@@ -264,18 +265,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  const fitGameSpotlightRows = () => {
-    if (!elements.gameSpotlight || elements.gameSpotlight.hasAttribute('hidden')) return;
-    const wideDisplay = window.innerWidth >= 901;
-    const minimumSizes = { SPAN: wideDisplay ? 13 : 10, STRONG: wideDisplay ? 16 : 12, SMALL: wideDisplay ? 13 : 10 };
-    Array.from(elements.gameSpotlight.children).forEach((row) => {
-      const copy = Array.from(row.children).filter((child) => ['SPAN', 'STRONG', 'SMALL'].includes(child.tagName));
+  const fitTextRows = (rows, selector, minimumSizeFor) => {
+    Array.from(rows || []).forEach((row) => {
+      const copy = Array.from(row.querySelectorAll(selector));
       copy.forEach((child) => { child.style.fontSize = ''; });
       if (!copy.length || row.clientHeight <= 0 || row.scrollHeight <= row.clientHeight + 1) return;
 
-      const baseSizes = copy.map((child) => Number.parseFloat(window.getComputedStyle(child).fontSize) || minimumSizes[child.tagName]);
+      const minimumSizes = copy.map((child) => minimumSizeFor(child));
+      const baseSizes = copy.map((child, index) => Number.parseFloat(window.getComputedStyle(child).fontSize) || minimumSizes[index]);
       const applyScale = (scale) => copy.forEach((child, index) => {
-        child.style.fontSize = `${Math.max(minimumSizes[child.tagName], baseSizes[index] * scale)}px`;
+        child.style.fontSize = `${Math.max(minimumSizes[index], baseSizes[index] * scale)}px`;
       });
       let lower = 0.62;
       let upper = 1;
@@ -291,12 +290,49 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  const fitStructuredDisplayRows = () => {
+    const wideDisplay = window.innerWidth >= 901;
+    if (elements.gameSpotlight && !elements.gameSpotlight.hasAttribute('hidden')) {
+      fitTextRows(
+        elements.gameSpotlight.children,
+        'span, strong, small',
+        (child) => (child.tagName === 'STRONG' ? (wideDisplay ? 16 : 12) : (wideDisplay ? 13 : 10)),
+      );
+    }
+    [elements.barOrders, elements.barHistoryOrders].forEach((list) => {
+      if (!list || list.hasAttribute('hidden')) return;
+      fitTextRows(
+        list.children,
+        'strong, small, em',
+        (child) => (child.tagName === 'STRONG' ? (wideDisplay ? 17 : 11) : (wideDisplay ? 14 : 10)),
+      );
+    });
+    if (elements.centerScoreboard && !elements.centerScoreboard.hasAttribute('hidden')) {
+      fitTextRows(
+        elements.centerScoreboard.children,
+        'strong, small',
+        (child) => (child.tagName === 'STRONG' ? (wideDisplay ? 18 : 12) : (wideDisplay ? 15 : 10)),
+      );
+    }
+    if (elements.centerBody && !elements.centerStage?.hasAttribute('hidden')) {
+      fitTextRows(
+        [elements.centerBody],
+        '.display-pill, h2, .display-center-card__secondary, .display-center-card__link, .display-center-card__action, dt, dd, .display-action-steps li, .display-scoreboard li > span, .display-scoreboard li > strong, .display-karaoke-extra__countdown, .display-karaoke-extra li',
+        (child) => {
+          if (child.tagName === 'H2') return wideDisplay ? 34 : 20;
+          if (child.matches('dd, .display-center-card__secondary, .display-center-card__link, .display-center-card__action')) return wideDisplay ? 19 : 12;
+          return wideDisplay ? 15 : 10;
+        },
+      );
+    }
+  };
+
   const fitAll = () => requestAnimationFrame(() => {
     fitPanel(elements.gameStage);
-    fitGameSpotlightRows();
     fitPanel(elements.centerStage);
     fitPanel(elements.barStage);
     fitPanel(elements.music);
+    fitStructuredDisplayRows();
   });
 
   const startProgress = (element, seconds) => {
@@ -461,6 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasForegroundMedia = mediaTreatment === 'foreground';
     const focusMode = centerFocusMode(safeEntry);
     clearCenterExtras();
+    if (elements.centerStage) elements.centerStage.dataset.focusMode = focusMode;
     elements.centerStage?.classList.toggle('is-spotlight', spotlight);
     elements.centerStage?.classList.toggle('is-scoreboard', Boolean(asObject(safeEntry.scoreboard).entries));
     elements.centerStage?.classList.toggle('has-media', hasImage);
@@ -844,7 +881,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (elements.barHeading) {
         elements.barHeading.textContent = hasActiveQueue
           ? `Bar queue · ${Number(bar.active_count) || 0}`
-          : (hasHistory ? `Completed tonight · ${completedOrders.length}` : (promotions.length ? 'Tonight\'s menu' : 'Bar standby'));
+          : (hasHistory ? `Completed · ${completedOrders.length}` : (promotions.length ? 'Tonight\'s menu' : 'Bar standby'));
       }
       if (elements.barOrders) {
         elements.barOrders.replaceChildren();

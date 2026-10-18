@@ -355,3 +355,22 @@ fixed no-scroll track.
 - Browser QA at 1280x720 confirmed the three-row MMF card and the longer Two
   Truths recruitment card fit without ellipses, document overflow, or
   game-region overflow.
+
+## Full-Height Center And Bar Focus (2026-10-18)
+
+- Center supporting content now receives the flexible remainder of the card.
+  Messages, access details, actions, facts, steps, scoreboards, and karaoke
+  details center within that space with larger TV-scale type instead of
+  clustering in a small band surrounded by unused space.
+- Active and completed bar lists stretch their visible rows evenly through the
+  right rail. Queue names, drinks, status text, menu descriptions, and center
+  scoreboard names wrap in full instead of using single-line ellipses.
+- The same measured row-fitting behavior used by game spotlights now covers bar
+  queue/history rows and center scoreboards. Type starts at the largest display
+  size and is reduced per row only when the complete copy cannot otherwise fit.
+- Drink-ready alerts use the full right stage rather than adding another inset
+  card, keeping the guest name and pickup message dominant across the room.
+- Browser QA at 1280x720 and 1024x768 covered access, action, active-queue,
+  and completed-order cards with long attendee/drink names. The center, bar,
+  and document all retained zero overflow while the three right-stage rows
+  expanded evenly through the available height.

@@ -342,6 +342,10 @@ fixed no-scroll track.
   without restoring the dense utility footer or background artwork. Spotlight
   rows stretch evenly through the available focus height instead of leaving a
   large unused lower area.
+- Spotlight labels, values, and details wrap instead of using single-line
+  ellipses. After each render, resize, and font load, the display measures every
+  spotlight row and reduces only that row's type when needed, preserving the
+  largest readable full-copy treatment that fits its allotted height.
 - Two Truths, MMF, Cursed Objectives, and Scavenger Hunt recruit until three
   attendees enroll. Early clue/tally/leaderboard activity remains eligible for
   rotation, so recruitment never erases content already created that night.
@@ -349,4 +353,5 @@ fixed no-scroll track.
   ranked attendee rows and clearly distinguishes provisional active submissions
   from approved review results.
 - Browser QA at 1280x720 confirmed the three-row MMF card and the longer Two
-  Truths recruitment card fit without document or game-region overflow.
+  Truths recruitment card fit without ellipses, document overflow, or
+  game-region overflow.

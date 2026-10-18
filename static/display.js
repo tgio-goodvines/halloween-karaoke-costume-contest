@@ -263,8 +263,37 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   };
+
+  const fitGameSpotlightRows = () => {
+    if (!elements.gameSpotlight || elements.gameSpotlight.hasAttribute('hidden')) return;
+    const wideDisplay = window.innerWidth >= 901;
+    const minimumSizes = { SPAN: wideDisplay ? 13 : 10, STRONG: wideDisplay ? 16 : 12, SMALL: wideDisplay ? 13 : 10 };
+    Array.from(elements.gameSpotlight.children).forEach((row) => {
+      const copy = Array.from(row.children).filter((child) => ['SPAN', 'STRONG', 'SMALL'].includes(child.tagName));
+      copy.forEach((child) => { child.style.fontSize = ''; });
+      if (!copy.length || row.clientHeight <= 0 || row.scrollHeight <= row.clientHeight + 1) return;
+
+      const baseSizes = copy.map((child) => Number.parseFloat(window.getComputedStyle(child).fontSize) || minimumSizes[child.tagName]);
+      const applyScale = (scale) => copy.forEach((child, index) => {
+        child.style.fontSize = `${Math.max(minimumSizes[child.tagName], baseSizes[index] * scale)}px`;
+      });
+      let lower = 0.62;
+      let upper = 1;
+      applyScale(lower);
+      if (row.scrollHeight > row.clientHeight + 1) return;
+      for (let attempt = 0; attempt < 7; attempt += 1) {
+        const candidate = (lower + upper) / 2;
+        applyScale(candidate);
+        if (row.scrollHeight <= row.clientHeight + 1) lower = candidate;
+        else upper = candidate;
+      }
+      applyScale(lower);
+    });
+  };
+
   const fitAll = () => requestAnimationFrame(() => {
     fitPanel(elements.gameStage);
+    fitGameSpotlightRows();
     fitPanel(elements.centerStage);
     fitPanel(elements.barStage);
     fitPanel(elements.music);
@@ -943,6 +972,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (typeof ResizeObserver === 'function') new ResizeObserver(fitAll).observe(shell);
   renderLayout();
+  if (document.fonts?.ready) document.fonts.ready.then(fitAll);
   fetchLatest();
   window.setInterval(fetchLatest, 30000);
   window.setInterval(() => {

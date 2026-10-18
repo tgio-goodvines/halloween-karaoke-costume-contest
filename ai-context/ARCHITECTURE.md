@@ -322,7 +322,11 @@ That function increments `display_update_version` and notifies `display_update_c
 
 `build_game_stage_entries()` produces privacy-safe per-game summaries, current
 clues/prompts/responses, and ended results for an independent left-stage
-rotation. `build_bar_stage()` exposes only public active/completed-order fields
+rotation. Game entries declare one `focus_mode`; `spotlight_rows` supplies at
+most three labeled rows for live MMF aggregate selections and provisional or
+approved Scavenger Hunt leaders. Open games with fewer than three participants
+also emit a recruitment entry, while submitted Two Truths clues retain their
+stable anonymous shuffled order. `build_bar_stage()` exposes only public active/completed-order fields
 plus the current/queued ready alerts. It derives queue positions,
 mixing/waiting counts, average prep time, available food/drink promotions,
 retained completion/pickup labels, and order guidance without exposing email,

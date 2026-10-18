@@ -335,3 +335,16 @@ fixed no-scroll track.
   regions and the document had zero overflow, background images computed to
   `none`, no card images were visible, and 1280x720 operational bar copy measured
   19.2px with 22.4px names while game choices measured 22.4px.
+
+## Explicit Game Recruitment And Spotlights (2026-10-18)
+
+- The vertical game rail now supports a structured three-row spotlight focus
+  without restoring the dense utility footer or background artwork.
+- Two Truths, MMF, Cursed Objectives, and Scavenger Hunt recruit until three
+  attendees enroll. Early clue/tally/leaderboard activity remains eligible for
+  rotation, so recruitment never erases content already created that night.
+- MMF uses three labeled aggregate verdict rows. Scavenger Hunt uses three
+  ranked attendee rows and clearly distinguishes provisional active submissions
+  from approved review results.
+- Browser QA at 1280x720 confirmed the three-row MMF card and the longer Two
+  Truths recruitment card fit without document or game-region overflow.

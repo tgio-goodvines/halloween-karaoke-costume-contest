@@ -28,7 +28,12 @@
 
   const gameFocusMode = (entry) => {
     const safeEntry = entry && typeof entry === 'object' ? entry : {};
+    const requestedMode = String(safeEntry.focus_mode || '');
+    if (['message', 'choices', 'spotlight', 'feature', 'metrics', 'action'].includes(requestedMode)) {
+      return requestedMode;
+    }
     if (Array.isArray(safeEntry.focus_items) && safeEntry.focus_items.length) return 'choices';
+    if (Array.isArray(safeEntry.spotlight_rows) && safeEntry.spotlight_rows.length) return 'spotlight';
     if (safeEntry.feature_text) return 'feature';
     if (safeEntry.primary) return 'message';
     if (Array.isArray(safeEntry.metrics) && safeEntry.metrics.length) return 'metrics';

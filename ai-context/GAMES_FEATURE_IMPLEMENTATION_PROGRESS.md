@@ -313,3 +313,27 @@ slide. Non-game image cards retain their foreground-media layout.
   attendee recap delivery succeeds. Partial delivery failure preserves games.
 - Detailed history stores Two Truths cards/guesses, MMF aggregates only, and
   revealed prompt responses/totals without blind voter identity.
+
+## Live Game Card Recruitment And Activity (2026-10-18)
+
+- Two Truths, Murder/Marry/F%$@, Cursed Objectives, and Scavenger Hunt now emit
+  explicit Halloween recruitment cards while fewer than three attendees are
+  enrolled. The visible message tells guests to open Party Games and join.
+- Recruitment does not discard early activity: anonymous Two Truths clues,
+  aggregate MMF verdicts, and provisional Scavenger Hunt leaders can rotate
+  beside the signup prompt until the three-player threshold is reached.
+- Two Truths uses the persisted shuffled statement order and deterministically
+  shuffles mystery-card order without revealing the submitter or lie metadata.
+- MMF aggregates all valid saved round choices and renders exactly one stable
+  leader for Murder, Marry, and the configured third label. Individual ballots,
+  account IDs, player IDs, and participant identities remain private.
+- Active Scavenger Hunt rankings use submitted evidence because photos cannot
+  be approved until host review. Review cards switch to approved-photo counts;
+  both views cap the vertical card at three named attendees and omit photo data.
+- Cursed Objectives recruitment emphasizes the social intrigue of joining, and
+  active cards expose only aggregate completion—not private mission wording or
+  assignments.
+- No Redis schema or migration was required. Verification passed with 252
+  Python tests, 27 dependency-free JavaScript tests, syntax/whitespace checks,
+  and 1280x720 browser QA of recruitment and three-row spotlight cards with no
+  document or game-region overflow.

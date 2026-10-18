@@ -430,6 +430,15 @@ app state.
   and the party portal link.
 - Multiple enabled games rotate independently on the left stage; admins may pin
   one game without pausing center-stage cards.
+- Two Truths, Murder/Marry/F%$@, Cursed Objectives, and Scavenger Hunt show
+  Halloween-specific recruitment cards while fewer than three attendees are
+  enrolled. Early Two Truths mystery cards and any live MMF/scavenger activity
+  can still rotate beside the recruitment prompt.
+- Two Truths mystery cards keep submitters anonymous and use each submission's
+  stable shuffled statement order. MMF shows one aggregate live leader for each
+  choice without exposing ballots. Active Scavenger Hunt cards show the top
+  three provisional hunters by submitted evidence, switching to approved finds
+  during host review. Cursed Objectives never exposes private missions.
 - In auto mode, the right stage appears for a ready alert, active drink orders,
   retained completed history, or available food/drink menu items. Each view has
   one purpose: active queues show at most three large operational rows, idle

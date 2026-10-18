@@ -9003,6 +9003,139 @@ def build_rotation_entries() -> List[dict[str, object]]:
     return rotation_entries
 
 
+LIVE_GAME_RECRUITMENT_MINIMUM = 3
+
+
+def _apply_game_recruitment_card(
+    entry: dict[str, object],
+    *,
+    participant_count: int,
+    message: str,
+) -> None:
+    needed = max(0, LIVE_GAME_RECRUITMENT_MINIMUM - participant_count)
+    entry.update(
+        {
+            "entry_kind": "recruitment",
+            "presentation": "recruitment",
+            "status_label": f"{participant_count} of {LIVE_GAME_RECRUITMENT_MINIMUM} souls enrolled",
+            "focus_mode": "message",
+            "focus_label": "Recruiting players",
+            "primary": message,
+            "secondary": "",
+            "focus_items": [],
+            "spotlight_rows": [],
+            "feature_text": "",
+            "metrics": [],
+            "steps": [],
+            "action_label": f"Join in Party Games · {needed} more needed",
+            "priority": 3,
+        }
+    )
+
+
+def _stable_two_truths_participants(participants: dict[str, object]) -> list[dict[str, object]]:
+    valid = [participant for participant in participants.values() if isinstance(participant, dict)]
+    return sorted(
+        valid,
+        key=lambda participant: hashlib.sha256(
+            f"{current_event_id()}:{participant.get('submission_id', '')}".encode("utf-8")
+        ).hexdigest(),
+    )
+
+
+def _mmf_live_spotlight(game: dict[str, object]) -> tuple[list[dict[str, str]], int]:
+    statistics = mmf_statistics(game)
+    explicit_label = str(game.get("explicit_label", "F%$@") or "F%$@")[:24]
+    labels = {"murder": "Murder", "marry": "Marry", "fuck": explicit_label}
+    empty_values = {
+        "murder": "Awaiting a victim",
+        "marry": "Awaiting a match",
+        "fuck": "Awaiting temptation",
+    }
+    candidates: dict[str, dict[str, dict[str, object]]] = {action: {} for action in MMF_ACTIONS}
+    ballot_count = 0
+    for round_index, result in enumerate(statistics.get("round_results", [])):
+        if not isinstance(result, dict):
+            continue
+        ballot_count += int(result.get("respondent_count", 0) or 0)
+        people = result.get("people", []) if isinstance(result.get("people"), list) else []
+        names_by_id = {
+            str(person.get("id", "")): str(person.get("name", "") or "Mysterious guest")[:80]
+            for person in people
+            if isinstance(person, dict)
+        }
+        totals = result.get("totals", {}) if isinstance(result.get("totals"), dict) else {}
+        for action in MMF_ACTIONS:
+            action_totals = totals.get(action, {}) if isinstance(totals.get(action), dict) else {}
+            for person_index, person in enumerate(people):
+                if not isinstance(person, dict):
+                    continue
+                person_id = str(person.get("id", ""))
+                name = names_by_id.get(person_id, "Mysterious guest")
+                identity = name.casefold()
+                candidate = candidates[action].setdefault(
+                    identity,
+                    {"name": name, "votes": 0, "order": (round_index, person_index)},
+                )
+                candidate["votes"] = int(candidate.get("votes", 0) or 0) + int(action_totals.get(person_id, 0) or 0)
+
+    rows: list[dict[str, str]] = []
+    for action in MMF_ACTIONS:
+        ranked = sorted(
+            candidates[action].values(),
+            key=lambda candidate: (
+                -int(candidate.get("votes", 0) or 0),
+                candidate.get("order", (999, 999)),
+                str(candidate.get("name", "")).casefold(),
+            ),
+        )
+        leader = ranked[0] if ranked and int(ranked[0].get("votes", 0) or 0) > 0 else None
+        votes = int(leader.get("votes", 0) or 0) if leader else 0
+        rows.append(
+            {
+                "label": labels[action],
+                "value": str(leader.get("name", "")) if leader else empty_values[action],
+                "detail": f"{votes} vote{'s' if votes != 1 else ''}" if leader else "No verdict yet",
+            }
+        )
+    return rows, ballot_count
+
+
+def _scavenger_live_spotlight(game: dict[str, object], phase: str) -> list[dict[str, str]]:
+    leaders = []
+    for participant in game.get("participants", {}).values():
+        if not isinstance(participant, dict):
+            continue
+        submissions = participant.get("submissions", {}) if isinstance(participant.get("submissions"), dict) else {}
+        approved = sum(
+            1
+            for submission in submissions.values()
+            if isinstance(submission, dict) and submission.get("review_status") == "approved"
+        )
+        count = approved if phase in {"review", "ended"} else len(submissions)
+        if count <= 0:
+            continue
+        leaders.append(
+            {
+                "name": str(participant.get("display_name", "") or "Mysterious hunter")[:80],
+                "count": count,
+            }
+        )
+    leaders.sort(key=lambda leader: (-int(leader["count"]), str(leader["name"]).casefold()))
+    return [
+        {
+            "label": f"#{index}",
+            "value": str(leader["name"]),
+            "detail": (
+                f"{leader['count']} approved find{'' if leader['count'] == 1 else 's'}"
+                if phase in {"review", "ended"}
+                else f"{leader['count']} clue{'' if leader['count'] == 1 else 's'} found"
+            ),
+        }
+        for index, leader in enumerate(leaders[:3], start=1)
+    ]
+
+
 def build_game_stage_entries() -> list[dict[str, object]]:
     if display_config.get("game_mode") == "hidden":
         return []
@@ -9034,7 +9167,9 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 )
             ),
             "focus_label": "Final result" if phase == "ended" else ("Live game" if phase == "active" else "How to play"),
+            "focus_mode": "message",
             "focus_items": [],
+            "spotlight_rows": [],
             "feature_text": "",
             "metrics": [{"label": "Players", "value": len(participants)}],
             "steps": (
@@ -9071,7 +9206,13 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 entry["primary"] = ", ".join(str(winner.get("name", "Guest")) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Two Truths and a Lie winner" if len(winners) == 1 else "Two Truths and a Lie winners"
             else:
-                for participant in participants.values():
+                if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
+                    _apply_game_recruitment_card(
+                        entry,
+                        participant_count=len(participants),
+                        message="More suspects needed. Open Party Games, join in, and submit two truths plus one wicked lie for the room to unravel.",
+                    )
+                for participant in _stable_two_truths_participants(participants):
                     statements = participant_statements(participant)
                     if len(statements) != 3:
                         continue
@@ -9079,7 +9220,9 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                         {
                             **entry,
                             "id": f"{game_key}:{participant.get('submission_id', 'clue')}",
+                            "entry_kind": "mystery_clue",
                             "presentation": "clue",
+                            "focus_mode": "choices",
                             "status_label": "Mystery clue",
                             "focus_label": "Three statements",
                             "primary": "Which statement is the lie?",
@@ -9103,6 +9246,37 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 winners = game_winners(game_key, game)
                 entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Game champions"
+            else:
+                spotlight_rows, ballot_count = _mmf_live_spotlight(game)
+                if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
+                    _apply_game_recruitment_card(
+                        entry,
+                        participant_count=len(participants),
+                        message="The party needs worse judgment. Open Party Games, join the impossible choices, and help summon a truly scandalous verdict.",
+                    )
+                if ballot_count:
+                    tally_entry = {
+                        **entry,
+                        "id": f"{game_key}:live-tally",
+                        "entry_kind": "live_tally",
+                        "presentation": "tally",
+                        "status_label": "Live party verdict",
+                        "focus_mode": "spotlight",
+                        "focus_label": "The party's darkest decisions",
+                        "primary": "",
+                        "secondary": "",
+                        "focus_items": [],
+                        "spotlight_rows": spotlight_rows,
+                        "feature_text": "",
+                        "metrics": [],
+                        "steps": [],
+                        "action_label": "The verdict mutates as new ballots arrive",
+                        "priority": 4,
+                    }
+                    if len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
+                        detail_entries.append(tally_entry)
+                    else:
+                        entry = tally_entry
         elif game_key == CURSED_OBJECTIVES_GAME_KEY:
             stats = cursed_objectives_statistics(game)
             entry["primary"] = "Three private objectives. Complete the ritual before final call."
@@ -9122,6 +9296,15 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 winners = game_winners(game_key, game)
                 entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Cursed Objectives champion" if len(winners) == 1 else "Cursed Objectives champions"
+            elif phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
+                _apply_game_recruitment_card(
+                    entry,
+                    participant_count=len(participants),
+                    message="Help curse the party. Open Party Games and join—secret missions create suspicious conversations, strange alliances, and a more intriguing night.",
+                )
+            else:
+                completed = int(stats.get("completed_missions", 0) or 0)
+                entry["primary"] = f"{completed} secret objective{'s' if completed != 1 else ''} completed. The ritual is spreading—open Party Games to reveal yours."
         elif game_key == SCAVENGER_HUNT_GAME_KEY:
             stats = scavenger_hunt_statistics(game)
             entry["primary"] = "Photograph every hunt item and submit the evidence before final call."
@@ -9137,6 +9320,37 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                 winners = game_winners(game_key, game)
                 entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners) or "Final results ready"
                 entry["secondary"] = "Scavenger Hunt champion" if len(winners) == 1 else "Scavenger Hunt champions"
+            else:
+                spotlight_rows = _scavenger_live_spotlight(game, phase)
+                if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
+                    _apply_game_recruitment_card(
+                        entry,
+                        participant_count=len(participants),
+                        message="The hunt needs more monsters. Open Party Games, join the search, photograph the evidence, and stalk the leaderboard before the final bell.",
+                    )
+                if spotlight_rows:
+                    leaderboard_entry = {
+                        **entry,
+                        "id": f"{game_key}:live-leaders",
+                        "entry_kind": "live_leaderboard",
+                        "presentation": "leaderboard",
+                        "status_label": "Host review" if phase == "review" else "Hunt in progress",
+                        "focus_mode": "spotlight",
+                        "focus_label": "Approved hunt leaders" if phase == "review" else "Provisional creatures leading the hunt",
+                        "primary": "",
+                        "secondary": "",
+                        "focus_items": [],
+                        "spotlight_rows": spotlight_rows,
+                        "feature_text": "",
+                        "metrics": [],
+                        "steps": [],
+                        "action_label": "Official scores follow host review" if phase == "active" else "Evidence review in progress",
+                        "priority": 4,
+                    }
+                    if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
+                        detail_entries.append(leaderboard_entry)
+                    else:
+                        entry = leaderboard_entry
         elif game_key in PROMPT_GAME_KEYS:
             current_round = prompt_round_for_game(game)
             if current_round:
@@ -9198,6 +9412,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                                 "id": f"{game_key}:{response.get('id', 'response')}",
                                 "entry_kind": "current_blind_response" if round_status == "voting" else "round_favorite",
                                 "presentation": "response" if round_status == "voting" else "reveal",
+                                "focus_mode": "feature",
                                 "status_label": f"Round {round_number} · {round_status.title()}",
                                 "focus_label": "Blind response" if round_status == "voting" else "Round reveal",
                                 "primary": str(current_round.get("prompt_text", "") or "Prompt"),
@@ -9230,8 +9445,9 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                             {
                                 **entry,
                                 "id": f"{game_key}:question:{historical_round.get('id', historical_index)}",
-                                "entry_kind": "question_flashback",
-                                "presentation": "prompt",
+                                    "entry_kind": "question_flashback",
+                                    "presentation": "prompt",
+                                    "focus_mode": "message",
                                 "status_label": f"Question of the Night · Round {historical_index}",
                                 "focus_label": "Earlier tonight",
                                 "primary": str(historical_round.get("prompt_text", "") or "Earlier tonight…"),
@@ -9254,6 +9470,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                                     "id": f"{game_key}:flashback:{historical_round.get('id', historical_index)}:{response_id}",
                                     "entry_kind": "round_favorite" if response_id in winner_ids else "anonymous_answer",
                                     "presentation": "reveal",
+                                    "focus_mode": "feature",
                                     "status_label": f"Question of the Night · Round {historical_index}",
                                     "focus_label": "Anonymous round favorite" if response_id in winner_ids else "Anonymous answer",
                                     "primary": str(historical_round.get("prompt_text", "") or "Earlier tonight…"),

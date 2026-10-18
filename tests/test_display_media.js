@@ -18,6 +18,8 @@ test('center cards select one supporting focus group', () => {
 
 test('game cards select one focal presentation', () => {
   assert.equal(media.gameFocusMode({ focus_items: ['One', 'Two', 'Three'], primary: 'Choose' }), 'choices');
+  assert.equal(media.gameFocusMode({ spotlight_rows: [{ label: 'Murder', value: 'A vampire' }], primary: 'Results' }), 'spotlight');
+  assert.equal(media.gameFocusMode({ focus_mode: 'spotlight', primary: 'Explicit mode' }), 'spotlight');
   assert.equal(media.gameFocusMode({ feature_text: 'Anonymous answer', primary: 'Prompt' }), 'feature');
   assert.equal(media.gameFocusMode({ primary: 'Current instruction', metrics: [{ value: 4 }] }), 'message');
 });

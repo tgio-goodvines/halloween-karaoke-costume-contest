@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gameSecondary: document.querySelector('[data-game-secondary]'),
     gameFocusLabel: document.querySelector('[data-game-focus-label]'),
     gameFocusItems: document.querySelector('[data-game-focus-items]'),
+    gameSpotlight: document.querySelector('[data-game-spotlight]'),
     gameFeature: document.querySelector('[data-game-feature]'),
     gameMetrics: document.querySelector('[data-game-metrics]'),
     gameSteps: document.querySelector('[data-game-steps]'),
@@ -553,16 +554,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderGameEntry = (entry, count) => {
     const game = asObject(entry);
     const focusMode = gameFocusMode(game);
-    const presentation = ['signup', 'active', 'clue', 'prompt', 'voting', 'response', 'reveal', 'result'].includes(game.presentation)
+    const presentation = ['signup', 'recruitment', 'active', 'clue', 'tally', 'leaderboard', 'prompt', 'voting', 'response', 'reveal', 'result'].includes(game.presentation)
       ? game.presentation
       : (game.phase === 'ended' ? 'result' : (game.phase === 'active' ? 'active' : 'signup'));
     if (elements.gameStage) elements.gameStage.dataset.presentation = presentation;
     elements.gameStage?.classList.remove('has-background-media');
     if (elements.gameStatus) elements.gameStatus.textContent = game.status_label || game.phase || '';
     if (elements.gameTitle) elements.gameTitle.textContent = game.title || 'Party Games';
-    setOptionalText(elements.gamePrimary, focusMode === 'choices' ? '' : (game.primary || 'Follow the live game status here.'));
+    setOptionalText(elements.gamePrimary, ['choices', 'spotlight'].includes(focusMode) ? '' : (game.primary || 'Follow the live game status here.'));
     setOptionalText(elements.gameSecondary, focusMode === 'message' && game.deadline_at ? gameSecondaryText(game) : '');
-    setOptionalText(elements.gameFocusLabel, focusMode === 'choices' || focusMode === 'feature' ? (game.focus_label || 'Live focus') : '');
+    setOptionalText(elements.gameFocusLabel, ['choices', 'spotlight', 'feature'].includes(focusMode) ? (game.focus_label || 'Live focus') : '');
     setOptionalText(elements.gameFeature, focusMode === 'feature' ? (game.feature_text || '') : '');
     if (elements.gameFocusItems) {
       elements.gameFocusItems.innerHTML = '';
@@ -572,6 +573,25 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.gameFocusItems.appendChild(item);
       });
       setHidden(elements.gameFocusItems, !elements.gameFocusItems.children.length);
+    }
+    if (elements.gameSpotlight) {
+      elements.gameSpotlight.innerHTML = '';
+      safeArray(game.spotlight_rows).slice(0, focusMode === 'spotlight' ? 3 : 0).forEach((spotlightRow) => {
+        const row = asObject(spotlightRow);
+        const item = document.createElement('div');
+        const label = document.createElement('span');
+        const value = document.createElement('strong');
+        label.textContent = row.label || '';
+        value.textContent = row.value || '';
+        item.append(label, value);
+        if (row.detail) {
+          const detail = document.createElement('small');
+          detail.textContent = row.detail;
+          item.append(detail);
+        }
+        elements.gameSpotlight.appendChild(item);
+      });
+      setHidden(elements.gameSpotlight, !elements.gameSpotlight.children.length);
     }
     const metrics = safeArray(game.metrics).slice(0, 2);
     const footerMode = focusMode === 'metrics' ? 'metrics' : (focusMode === 'action' ? 'action' : 'none');

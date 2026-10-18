@@ -3064,7 +3064,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(payload["layout"]["games"]["visible"])
         self.assertTrue(all(entry.get("presentation") for entry in payload["layout"]["games"]["entries"]))
         self.assertTrue(all(entry.get("focus_label") for entry in payload["layout"]["games"]["entries"]))
-        self.assertTrue(all(entry.get("steps") for entry in payload["layout"]["games"]["entries"]))
+        self.assertTrue(all(entry.get("focus_mode") for entry in payload["layout"]["games"]["entries"]))
         self.assertTrue(all(entry.get("action_label") for entry in payload["layout"]["games"]["entries"]))
         self.assertNotIn("private@example.com", json.dumps(payload))
 
@@ -7304,6 +7304,127 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(3, len(game_entry["focus_items"]))
         self.assertEqual([], game_entry["steps"])
 
+    def test_live_game_cards_recruit_until_three_players_and_keep_early_two_truths_clues(self):
+        recruitment_messages = {
+            main.TWO_TRUTHS_GAME_KEY: "More suspects needed",
+            main.MURDER_MARRY_FUCK_GAME_KEY: "worse judgment",
+            main.CURSED_OBJECTIVES_GAME_KEY: "Help curse the party",
+            main.SCAVENGER_HUNT_GAME_KEY: "more monsters",
+        }
+        for game_key in recruitment_messages:
+            main.party_game_state(game_key)["enabled"] = True
+            main.party_game_state(game_key)["phase"] = "active"
+
+        two_truths = main.two_truths_game()
+        two_truths["participants"] = {
+            "user-1": {
+                "submission_id": "submission-one",
+                "user_id": "user-1",
+                "answer_name": "Jamie",
+                "truths": ["I escaped a crypt.", "I own a black cat."],
+                "lie": "I fear no ghost.",
+                "display_order": [2, 0, 1],
+                "created_at": "",
+                "updated_at": "",
+            }
+        }
+
+        first_entries = main.build_game_stage_entries()
+        second_entries = main.build_game_stage_entries()
+        for game_key, message in recruitment_messages.items():
+            recruitment = next(
+                entry
+                for entry in first_entries
+                if entry["game_key"] == game_key and entry["entry_kind"] == "recruitment"
+            )
+            self.assertEqual("recruitment", recruitment["presentation"])
+            self.assertEqual("message", recruitment["focus_mode"])
+            self.assertIn(message, recruitment["primary"])
+
+        clue = next(entry for entry in first_entries if entry["entry_kind"] == "mystery_clue" and entry["presentation"] == "clue")
+        repeated_clue = next(entry for entry in second_entries if entry.get("id") == clue["id"])
+        self.assertEqual(["I fear no ghost.", "I escaped a crypt.", "I own a black cat."], clue["focus_items"])
+        self.assertEqual(clue["focus_items"], repeated_clue["focus_items"])
+        self.assertNotIn("Jamie", json.dumps(clue))
+
+    def test_mmf_live_card_shows_one_aggregate_leader_per_category(self):
+        game = main.empty_mmf_game_state(enabled=True)
+        first_round = game["rounds"][0]
+        person_ids = [person["id"] for person in first_round["people"]]
+        for index, name in enumerate(("Jamie", "Morgan", "Riley"), start=1):
+            game["participants"][f"user-{index}"] = {
+                "player_id": f"player-{index}",
+                "display_name": name,
+                "alias": f"Cursed Guest {index}",
+                "answers": {
+                    first_round["id"]: {
+                        "murder": person_ids[0],
+                        "marry": person_ids[1],
+                        "fuck": person_ids[2],
+                    }
+                },
+                "created_at": "",
+                "updated_at": "",
+            }
+        main.games_state[main.MURDER_MARRY_FUCK_GAME_KEY] = game
+
+        entry = next(
+            entry
+            for entry in main.build_game_stage_entries()
+            if entry["game_key"] == main.MURDER_MARRY_FUCK_GAME_KEY
+        )
+
+        self.assertEqual("live_tally", entry["entry_kind"])
+        self.assertEqual("spotlight", entry["focus_mode"])
+        self.assertEqual(["Murder", "Marry", "F%$@"], [row["label"] for row in entry["spotlight_rows"]])
+        self.assertEqual([person["name"] for person in first_round["people"]], [row["value"] for row in entry["spotlight_rows"]])
+        self.assertTrue(all(row["detail"] == "3 votes" for row in entry["spotlight_rows"]))
+        encoded = json.dumps(entry)
+        self.assertNotIn("user-1", encoded)
+        self.assertNotIn("player-1", encoded)
+        self.assertNotIn("Jamie", encoded)
+
+    def test_scavenger_live_card_uses_submissions_then_approved_results_for_top_three(self):
+        game = main.empty_scavenger_hunt_game_state(enabled=True)
+        counts = (("Jamie", 3), ("Morgan", 2), ("Riley", 1), ("Casey", 0))
+        for player_index, (name, submission_count) in enumerate(counts, start=1):
+            submissions = {
+                f"item-{item_index}": {
+                    "id": f"submission-{player_index}-{item_index}",
+                    "image_url": f"/scavenger-hunt-images/{player_index:032x}.webp",
+                    "review_status": "pending",
+                }
+                for item_index in range(submission_count)
+            }
+            game["participants"][f"user-{player_index}"] = {
+                "player_id": f"player-{player_index}",
+                "display_name": name,
+                "alias": f"Hunter {player_index}",
+                "submissions": submissions,
+            }
+        main.games_state[main.SCAVENGER_HUNT_GAME_KEY] = game
+
+        active_entry = next(
+            entry
+            for entry in main.build_game_stage_entries()
+            if entry["game_key"] == main.SCAVENGER_HUNT_GAME_KEY and entry["entry_kind"] == "live_leaderboard"
+        )
+        self.assertEqual(["Jamie", "Morgan", "Riley"], [row["value"] for row in active_entry["spotlight_rows"]])
+        self.assertEqual(["3 clues found", "2 clues found", "1 clue found"], [row["detail"] for row in active_entry["spotlight_rows"]])
+        self.assertNotIn("scavenger-hunt-images", json.dumps(active_entry))
+
+        game["phase"] = "review"
+        for submission in game["participants"]["user-2"]["submissions"].values():
+            submission["review_status"] = "approved"
+        next(iter(game["participants"]["user-1"]["submissions"].values()))["review_status"] = "approved"
+        review_entry = next(
+            entry
+            for entry in main.build_game_stage_entries()
+            if entry["game_key"] == main.SCAVENGER_HUNT_GAME_KEY and entry["entry_kind"] == "live_leaderboard"
+        )
+        self.assertEqual(["Morgan", "Jamie"], [row["value"] for row in review_entry["spotlight_rows"]])
+        self.assertEqual(["2 approved finds", "1 approved find"], [row["detail"] for row in review_entry["spotlight_rows"]])
+
     def test_enabling_games_opens_them_immediately_without_players(self):
         for game_key in main.GAME_CATALOG:
             with self.subTest(game_key=game_key):
@@ -7538,8 +7659,10 @@ class RedisStateTests(unittest.TestCase):
         response = next(entry for entry in entries if entry["id"] == f"{main.WRONG_ANSWERS_GAME_KEY}:response-1")
 
         self.assertEqual("voting", summary["presentation"])
+        self.assertEqual("message", summary["focus_mode"])
         self.assertEqual("Current prompt", summary["focus_label"])
         self.assertEqual("response", response["presentation"])
+        self.assertEqual("feature", response["focus_mode"])
         self.assertEqual("Blind response", response["focus_label"])
         self.assertEqual("The haunted lab needs ___", response["primary"])
         self.assertEqual("a better alibi", response["feature_text"])

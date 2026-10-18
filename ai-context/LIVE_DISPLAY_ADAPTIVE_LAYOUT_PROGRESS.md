@@ -362,6 +362,13 @@ fixed no-scroll track.
   Messages, access details, actions, facts, steps, scoreboards, and karaoke
   details center within that space with larger TV-scale type instead of
   clustering in a small band surrounded by unused space.
+- Center access details, facts, and numbered steps use full-width landscape
+  rows on TV layouts. Labels and values sit in consistent, vertically centered
+  columns instead of stacking inside narrow portrait tiles, while compact/mobile
+  layouts remain unchanged.
+- Center action and link panels use a bounded landscape height rather than
+  stretching into tall portrait blocks. Their copy is centered as one cohesive
+  group inside the panel, avoiding scattered or edge-biased placement.
 - Active and completed bar lists stretch their visible rows evenly through the
   right rail. Queue names, drinks, status text, menu descriptions, and center
   scoreboard names wrap in full instead of using single-line ellipses.

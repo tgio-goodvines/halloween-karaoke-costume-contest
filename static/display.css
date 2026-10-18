@@ -1132,9 +1132,21 @@ body.display-mode::after { display: none; }
   .display-center-card__action,
   .display-center-card__link {
     width: min(48rem, 100%);
-    min-height: clamp(7rem, 24vh, 14rem);
+    height: clamp(8rem, 26vh, 14rem);
+    min-height: 0;
+    max-height: 14rem;
     border-radius: 0.85rem;
     font-size: clamp(1.7rem, 3cqi, 2.8rem);
+  }
+
+  .display-center-card__body > :is(
+    .display-center-card__action,
+    .display-center-card__link
+  ):not([hidden]) {
+    align-self: center;
+    align-content: center;
+    justify-items: center;
+    text-align: center;
   }
 
   .display-center-card__cta,
@@ -1148,7 +1160,22 @@ body.display-mode::after { display: none; }
   .display-fact-grid,
   .display-action-steps,
   .display-scoreboard { height: 100%; }
-  .display-center-card__cta dl { align-self: stretch; }
+  .display-center-card__cta dl,
+  .display-fact-grid,
+  .display-action-steps {
+    align-self: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(0, 1fr);
+  }
+
+  .display-center-card__cta dl div,
+  .display-fact-grid div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 0.34fr) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(1rem, 2.4cqi, 2rem);
+    padding: clamp(0.85rem, 1.8vh, 1.4rem) clamp(1rem, 2.2cqi, 1.8rem);
+  }
 
   .display-center-card__cta dl div,
   .display-fact-grid div,
@@ -1158,13 +1185,24 @@ body.display-mode::after { display: none; }
   .display-center-card__cta dt,
   .display-fact-grid dt { font-size: clamp(1.15rem, 1.55cqi, 1.45rem); }
   .display-center-card__cta dd,
-  .display-fact-grid dd { font-size: clamp(2rem, 4cqi, 3.25rem); }
+  .display-fact-grid dd {
+    margin: 0;
+    font-size: clamp(2rem, 4cqi, 3.25rem);
+    text-align: left;
+  }
 
   .display-action-steps {
     grid-auto-rows: minmax(0, 1fr);
   }
   .display-action-steps li {
+    padding: clamp(0.85rem, 1.8vh, 1.4rem) clamp(1rem, 2.2cqi, 1.8rem) clamp(0.85rem, 1.8vh, 1.4rem) clamp(4rem, 6.5cqi, 5.2rem);
     font-size: clamp(1.5rem, 2.25cqi, 2.1rem);
+  }
+  .display-action-steps li::before {
+    left: clamp(1.1rem, 2.2cqi, 1.8rem);
+    width: clamp(1.8rem, 2.8cqi, 2.35rem);
+    height: clamp(1.8rem, 2.8cqi, 2.35rem);
+    font-size: clamp(0.9rem, 1.25cqi, 1.1rem);
   }
 
   .display-scoreboard {

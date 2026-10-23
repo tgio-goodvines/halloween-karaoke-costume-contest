@@ -431,6 +431,10 @@ app state.
 - Generated game result cards remain available after attendee enrollment is
   disabled. `/admin/display` lists each card with Show Now and Include/Hide
   controls; the Party Games source toggle remains the master visibility switch.
+- `/admin/display` also lists every currently available built-in center-stage
+  card with individual Show Now and Include/Hide controls. Hiding one card,
+  such as WiFi access, does not disable the rest of its source group, and hidden
+  cards remain listed so the host can restore them later.
 - Signup portal card includes admin-configurable WiFi network/password details
   and the party portal link.
 - Multiple enabled games rotate independently on the left stage; admins may pin

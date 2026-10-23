@@ -203,8 +203,9 @@ the process-local cache:
   `HALLOWEEN_DISPLAY_WIFI_NETWORK` and `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank
   values are allowed so the display can hide either row.
 - `display_config`: source visibility/order, center/game intervals, region
-  visibility modes, queue size, alert duration, density, pinned game, and
-  per-card visibility for generated game winner/final-score cards.
+  visibility modes, queue size, alert duration, density, pinned game, per-card
+  visibility for built-in center-stage cards, and separate visibility for
+  generated game winner/final-score cards.
 - `display_runtime`: center index, pause/pin state, and revision used to push
   host run-of-show changes to connected displays.
 - `display_custom_cards`: ordered, scheduled host-authored cards with optional

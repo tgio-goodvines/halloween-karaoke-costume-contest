@@ -201,6 +201,27 @@
     </section>
 
     <section class="admin-subsection">
+      <h4>System Center-Stage Cards</h4>
+      <p>Hide any individual built-in card without disabling its entire source. Hidden cards stay available here so you can restore them later.</p>
+      {% if center_stage_cards %}
+        <div class="display-admin__game-list">
+          {% for card in center_stage_cards %}
+            <article>
+              <div>
+                <strong>{{ card.primary }}</strong>
+                <small>{{ display_source_labels[card.source] }} · {% if not card.card_enabled %}Hidden{% elif not card.source_enabled %}Hidden by source setting{% else %}Included in rotation{% endif %}</small>
+              </div>
+              <div class="contest-actions">
+                {% if card.included %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entry_id" value="{{ card.id }}"><button class="button button--small" name="action" value="pin_display_entry">Show Now</button></form>{% endif %}
+                <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="card_id" value="{{ card.id }}"><button class="button button--small{% if card.card_enabled %} button--danger{% endif %}" name="action" value="toggle_center_stage_card">{{ 'Hide' if card.card_enabled else 'Include' }}</button></form>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}<p class="empty-state">No system center-stage cards are currently available.</p>{% endif %}
+    </section>
+
+    <section class="admin-subsection">
       <h4>Generated Game Result Cards</h4>
       <p>Ended games create center-stage winner/outcome and final-score cards. Winner-free games use their own result treatment, including the complete Cursed Objectives player-progress card. These remain available even after attendee enrollment is disabled.</p>
       {% if game_result_cards %}
@@ -232,7 +253,7 @@
 
     <section class="admin-subsection">
       <h4>Custom Card Library</h4>
-      <p>Create announcements here, then use <strong>Edit Card</strong> on any saved card to change its text, image, link, timing, schedule, or visibility. System-generated cards are controlled by the source settings above.</p>
+      <p>Create announcements here, then use <strong>Edit Card</strong> on any saved card to change its text, image, link, timing, schedule, or visibility. Built-in cards are managed individually in System Center-Stage Cards above.</p>
       <details class="admin-entry admin-entry--new">
         <summary class="admin-entry__summary"><span class="admin-entry__rank">+</span><span class="admin-entry__summary-text"><strong>Build a custom card</strong><span>Create a scheduled announcement or host callout</span></span></summary>
         <form method="post" class="admin-entry__form display-card-form">

@@ -405,3 +405,28 @@ fixed no-scroll track.
 - Verification passed with 272 Python tests and 37 subtests, all 27
   dependency-free JavaScript tests, Python/JavaScript syntax checks, and
   whitespace validation.
+
+## Center-Stage Title Legibility (2026-10-23)
+
+- Raised both the desktop/TV center-card category label (for example,
+  `Costume Contest`) and the primary heading floor and fluid scale so the card
+  identity and message remain readable across the room, including when both
+  side rails are visible.
+- Title-only cards receive a larger dedicated scale while message, action,
+  scoreboard, and other structured cards retain room for their focal content.
+- The change is scoped to center-stage headings at widths above 900px; side
+  rails and compact/mobile layout behavior are unchanged.
+
+## Individual System Card Visibility (2026-10-23)
+
+- `/admin/display` now lists every currently available built-in center-stage
+  card separately, including the WiFi access card, costume and karaoke prompts
+  and entries, party-game join card, bar promotion, and live-update card.
+- Each card can be hidden from or restored to normal rotation without disabling
+  its whole source. Hidden cards remain in the admin library, and hiding a
+  pinned card safely resumes automatic rotation.
+- Per-card choices persist in `display_config.center_card_enabled`; existing
+  source toggles remain the master visibility controls. Custom cards and
+  generated game result cards keep their more specialized editors and controls.
+- Verification passed with 274 Python tests and 37 subtests, Python compilation,
+  and whitespace validation.

@@ -393,6 +393,13 @@ not replace an active contest/karaoke/winner center card. `build_rotation_entrie
 returns party-night cards even before `HALLOWEEN_PARTY_START` so hosts can
 stage and test the live display ahead of the event.
 
+Individual built-in rotation cards use stable entry IDs and may be hidden
+through `display_config.center_card_enabled`. `build_rotation_entries()` omits
+those cards from the live payload while `build_rotation_entries(include_hidden=True)`
+keeps them available to `/admin/display` for restoration. Source visibility is
+still the master switch. Custom cards retain their own enabled flag and editor,
+while generated game result cards retain their dedicated inclusion controls.
+
 Ended scored-game result cards are derived from finalized `games_state` results with
 stable `games:<game-key>-winner` and `games:<game-key>-scores` IDs. They remain
 available independently of attendee game enablement. Per-card inclusion is

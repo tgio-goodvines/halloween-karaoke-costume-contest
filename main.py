@@ -659,6 +659,7 @@ DISPLAY_VISIBILITY_MODES = {"auto", "always", "hidden"}
 DEFAULT_DISPLAY_CONFIG: dict[str, object] = {
     "source_order": list(DISPLAY_SOURCE_KEYS),
     "source_enabled": {source: True for source in DISPLAY_SOURCE_KEYS},
+    "center_card_enabled": {},
     "center_interval_seconds": 15,
     "game_interval_seconds": 20,
     "game_mode": "auto",
@@ -2929,6 +2930,15 @@ def normalize_display_config(raw_config: object) -> dict[str, object]:
     if isinstance(raw_enabled, dict):
         normalized["source_enabled"] = {
             source: bool(raw_enabled.get(source, True)) for source in DISPLAY_SOURCE_KEYS
+        }
+
+    raw_center_card_enabled = raw_config.get("center_card_enabled", {})
+    if isinstance(raw_center_card_enabled, dict):
+        valid_prefixes = tuple(f"{source}:" for source in DISPLAY_SOURCE_KEYS)
+        normalized["center_card_enabled"] = {
+            str(card_id)[:160]: bool(enabled)
+            for card_id, enabled in raw_center_card_enabled.items()
+            if str(card_id).startswith(valid_prefixes)
         }
 
     normalized["center_interval_seconds"] = _bounded_int(
@@ -8999,7 +9009,14 @@ def display_source_is_enabled(source: str) -> bool:
     return bool(isinstance(enabled, dict) and enabled.get(source, True))
 
 
-def build_rotation_entries() -> List[dict[str, object]]:
+def center_card_is_enabled(card_id: str) -> bool:
+    configured = display_config.get("center_card_enabled", {})
+    if not isinstance(configured, dict):
+        return True
+    return bool(configured.get(card_id, True))
+
+
+def build_rotation_entries(*, include_hidden: bool = False) -> List[dict[str, object]]:
     ensure_costume_votes_alignment()
     wifi_network = display_settings.get("wifi_network", DEFAULT_DISPLAY_SETTINGS["wifi_network"])
     wifi_password = display_settings.get("wifi_password", DEFAULT_DISPLAY_SETTINGS["wifi_password"])
@@ -9147,7 +9164,7 @@ def build_rotation_entries() -> List[dict[str, object]]:
                 action={"label": "Join party games", "url": f"{PARTY_SITE_URL}/party/games"},
             )
         )
-    grouped["games"].extend(generated_game_result_entries())
+    grouped["games"].extend(generated_game_result_entries(include_hidden=True))
 
     grouped["bar"].append(
         _display_entry(
@@ -9215,8 +9232,18 @@ def build_rotation_entries() -> List[dict[str, object]]:
     ordered_sources = display_config.get("source_order", list(DISPLAY_SOURCE_KEYS))
     rotation_entries: list[dict[str, object]] = []
     for source in ordered_sources if isinstance(ordered_sources, list) else DISPLAY_SOURCE_KEYS:
-        if source in grouped and display_source_is_enabled(source):
-            rotation_entries.extend(grouped[source])
+        if source not in grouped:
+            continue
+        source_enabled = display_source_is_enabled(source)
+        for entry in grouped[source]:
+            entry_id = str(entry.get("id", "") or "")
+            card_enabled = center_card_is_enabled(entry_id)
+            result_enabled = bool(entry.get("included", True))
+            entry["card_enabled"] = card_enabled
+            entry["source_enabled"] = source_enabled
+            entry["included"] = source_enabled and card_enabled and result_enabled
+            if include_hidden or entry["included"]:
+                rotation_entries.append(entry)
     return rotation_entries
 
 
@@ -13274,6 +13301,7 @@ def admin_portal(admin_view: str):
             "dismiss_display_notice",
             "toggle_game_result_card",
             "show_game_result_card",
+            "toggle_center_stage_card",
         }
 
         recognition_actions = {
@@ -13912,6 +13940,30 @@ def admin_portal(admin_view: str):
                     display_runtime["center_paused"] = True
                     display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
                     messages.append(f"Pinned {entry.get('primary', 'the selected card')} to center stage.")
+                    should_broadcast = True
+
+            elif action == "toggle_center_stage_card":
+                card_id = str(request.form.get("card_id", "") or "")
+                available_cards = [
+                    entry
+                    for entry in build_rotation_entries(include_hidden=True)
+                    if entry.get("source") != "custom" and entry.get("kind") not in {"result", "scoreboard"}
+                ]
+                card = next((entry for entry in available_cards if entry.get("id") == card_id), None)
+                if card is None:
+                    errors.append("That center-stage card is no longer available.")
+                else:
+                    configured = display_config.setdefault("center_card_enabled", {})
+                    included = center_card_is_enabled(card_id)
+                    configured[card_id] = not included
+                    if included and display_runtime.get("pinned_card_id") == card_id:
+                        display_runtime["pinned_card_id"] = ""
+                        display_runtime["center_paused"] = False
+                    display_runtime["center_revision"] = int(display_runtime.get("center_revision", 0) or 0) + 1
+                    messages.append(
+                        f"{'Included' if not included else 'Hidden'} {card.get('primary', 'the selected card')} "
+                        "in the center-stage rotation."
+                    )
                     should_broadcast = True
 
             elif action in {"toggle_game_result_card", "show_game_result_card"}:
@@ -16138,6 +16190,11 @@ def admin_portal(admin_view: str):
         display_source_labels=DISPLAY_SOURCE_LABELS,
         display_layout=build_display_layout(),
         display_form_datetime_value=display_form_datetime_value,
+        center_stage_cards=[
+            entry
+            for entry in build_rotation_entries(include_hidden=True)
+            if entry.get("source") != "custom" and entry.get("kind") not in {"result", "scoreboard"}
+        ],
         party_details=party_details,
         rsvp_signups=rsvp_signups,
         rsvp_guest_total=sum(signup.guest_count for signup in rsvp_signups),

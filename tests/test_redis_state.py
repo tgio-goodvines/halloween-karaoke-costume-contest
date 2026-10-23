@@ -643,6 +643,7 @@ class RedisStateTests(unittest.TestCase):
                 "game_interval_seconds": 9,
                 "music_mode": "always",
                 "source_order": ["custom", "portal"],
+                "center_card_enabled": {"portal:wifi": False},
             }
         )
         main.display_runtime = main.normalize_display_runtime(
@@ -730,6 +731,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("friends-dont-lie", main.display_settings["wifi_password"])
         self.assertEqual(12, main.display_config["center_interval_seconds"])
         self.assertEqual("always", main.display_config["music_mode"])
+        self.assertFalse(main.display_config["center_card_enabled"]["portal:wifi"])
         self.assertTrue(main.display_runtime["center_paused"])
         self.assertEqual("custom:card-1", main.display_runtime["pinned_card_id"])
         self.assertEqual("Costume voting starts soon", main.display_custom_cards[0]["primary"])
@@ -3045,6 +3047,43 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(any(entry["source"] == "karaoke" for entry in display_payload["entries"]))
         self.assertEqual(portal_entry["id"], state["display_runtime"]["pinned_card_id"])
         self.assertTrue(state["display_runtime"]["center_paused"])
+
+    def test_admin_can_hide_and_restore_an_individual_system_center_stage_card(self):
+        self.save_current_state()
+
+        with main.app.test_client() as client:
+            self.login_admin(client)
+            workspace = client.get("/admin/display")
+            hide_response = client.post(
+                "/admin/display",
+                data={
+                    "action": "toggle_center_stage_card",
+                    "card_id": "portal:wifi",
+                },
+            )
+            hidden_payload = client.get("/api/display-data").get_json()
+            hidden_workspace = client.get("/admin/display")
+            wifi_hidden = not main.display_config["center_card_enabled"]["portal:wifi"]
+            restore_response = client.post(
+                "/admin/display",
+                data={
+                    "action": "toggle_center_stage_card",
+                    "card_id": "portal:wifi",
+                },
+            )
+            restored_payload = client.get("/api/display-data").get_json()
+
+        self.assertEqual(200, workspace.status_code)
+        self.assertIn("System Center-Stage Cards", workspace.get_data(as_text=True))
+        self.assertIn("Connect to the party WiFi", workspace.get_data(as_text=True))
+        self.assertEqual(200, hide_response.status_code)
+        self.assertIn("Hidden Connect to the party WiFi", hide_response.get_data(as_text=True))
+        self.assertTrue(wifi_hidden)
+        self.assertFalse(any(entry["id"] == "portal:wifi" for entry in hidden_payload["entries"]))
+        self.assertIn("Hidden", hidden_workspace.get_data(as_text=True))
+        self.assertEqual(200, restore_response.status_code)
+        self.assertTrue(main.display_config["center_card_enabled"]["portal:wifi"])
+        self.assertTrue(any(entry["id"] == "portal:wifi" for entry in restored_payload["entries"]))
 
     def test_display_layout_rotates_multiple_games_on_left_stage_and_removes_private_costume_contact(self):
         main.costume_signups = [

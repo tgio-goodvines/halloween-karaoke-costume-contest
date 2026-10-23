@@ -1094,17 +1094,27 @@ body.display-mode::after { display: none; }
     padding-block: clamp(1rem, 2.2vh, 1.8rem);
   }
 
-  .display-center-card__body > .display-pill { align-self: start; }
+  .display-center-card__body > .display-pill {
+    align-self: start;
+    padding: clamp(0.45rem, 0.8cqi, 0.7rem) clamp(0.8rem, 1.35cqi, 1.15rem);
+    font-size: clamp(1.5rem, 2.2cqi, 2.25rem);
+    letter-spacing: 0.09em;
+  }
   .display-center-card__body > h2 {
     align-self: end;
     padding-top: clamp(0.8rem, 2vh, 1.6rem);
-    font-size: clamp(3rem, 7.6cqi, 6.5rem);
+    font-size: clamp(4.25rem, 9.5cqi, 8rem);
+    line-height: 1;
     text-wrap: balance;
   }
 
   .display-center-stage[data-focus-mode="title"] .display-center-card__body {
     align-content: center;
     grid-template-rows: auto auto;
+  }
+
+  .display-center-stage[data-focus-mode="title"] .display-center-card__body > h2 {
+    font-size: clamp(5rem, 11cqi, 9rem);
   }
 
   .display-center-card__body > :is(

@@ -48,7 +48,7 @@
 | `static/karaoke-live-status.js` | Shared five-second attendee karaoke status polling, stale-response protection, personal alert/workflow/card reconciliation, protected completion dismissal with visible failure feedback, public lineup labels, and urgent browser-title updates. |
 | `tests/test_karaoke_live_status.js` | Dependency-free Node regression tests for attendee karaoke payload normalization, safe text-only lineup and personal-card rendering, and stale response rejection. |
 | `static/karaoke-singers.js` | Reusable attendee/admin one-to-four singer editor behavior, custom-name toggles, duplicate validation, add/remove controls, and combined review labels. |
-| `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, and workflow polling. |
+| `static/karaoke-admin.js` | Admin async playlist actions, replacement search, playlist loading, workflow polling, and iPhone YouTube-app launch with web fallback. |
 | `static/slides.js` | Dashboard event-highlight slide rotation. |
 | `templates/base.html` | Shared attendee/admin layout with header menu navigation, signed-in identity, single logout action, footer, and script block. |
 | `templates/index.html` | Attendee dashboard for `/party`: contest banners, welcome callout, live receiver-confirmed Jukebox summary/artwork, priority illustrated game gallery, ready drink/order cards with pickup acknowledgement, slides, costume and karaoke summaries. |
@@ -79,9 +79,9 @@
 | `templates/email/_components.html` | Shared inline-safe HTML email macros for the refined lab-terminal shell, buttons, and detail tables used by generated email templates. |
 | `templates/costume_signup.html` | Costume signup form and submitted costume list. |
 | `templates/_karaoke_singers.html` | Shared registered-attendee/custom-name singer fieldset used by attendee and admin karaoke forms. |
-| `templates/karaoke_signup.html` | Attendee one-to-four singer selection plus three-step song details, exact-video selection, live requester/co-singer workflow status/recovery, and synchronized public lineup. |
-| `templates/admin_karaoke.html` | Dedicated YouTube connection, review, attention, run-of-show, history, and stage operations workspace. |
-| `templates/_karaoke_workflow.html` | Shared karaoke media and seven-step workflow macros. |
+| `templates/karaoke_signup.html` | Attendee one-to-four singer selection plus three-step song details, exact-video selection, automatic playlist-add status, and synchronized public lineup. |
+| `templates/admin_karaoke.html` | Dedicated YouTube connection, attention recovery, all-submission request board, per-song launch/completion, ordering, and history workspace. |
+| `templates/_karaoke_workflow.html` | Shared karaoke media and compact four-step workflow macros. |
 | `templates/costume_voting.html` | Costume voting ballot and one-vote confirmation state. |
 | `templates/admin_login.html` | Admin password form for `/admin/login`. |
 | `templates/admin.html` | Workspace-based admin control room and focused guest/public/program/bar/menu/account management views, including specialty allowance and confirmed bar-history reset controls, preserving CSRF-protected admin actions. |

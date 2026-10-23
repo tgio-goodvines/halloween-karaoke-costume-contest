@@ -6020,8 +6020,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn('value="abc123DEF45"', html)
         self.assertIn("Thriller Karaoke", html)
 
-    def test_youtube_karaoke_submission_is_pending_and_hidden_from_public_lineup(self):
-        self.enable_youtube_karaoke()
+    def test_youtube_karaoke_submission_is_automatically_added_to_playlist(self):
+        fake_youtube = self.enable_youtube_karaoke()
 
         with main.app.test_client() as client:
             self.login_regular(client)
@@ -6032,18 +6032,21 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(1, len(main.karaoke_signups))
         signup = main.karaoke_signups[0]
         self.assertEqual("user-1", signup.requester_id)
-        self.assertEqual("pending", signup.workflow["approval_status"])
+        self.assertEqual("approved", signup.workflow["approval_status"])
         self.assertEqual("verified", signup.workflow["video_validation_status"])
+        self.assertEqual("synced", signup.workflow["playlist_sync_status"])
+        self.assertTrue(signup.workflow["playlist_item_id"])
         self.assertEqual("abc123DEF45", signup.youtube["video_id"])
         self.assertEqual("Thriller", signup.song_title)
         self.assertEqual("Michael Jackson", signup.artist)
-        self.assertEqual([], main.public_karaoke_signups())
+        self.assertEqual(1, len(fake_youtube.insert_calls))
+        self.assertEqual([signup.id], [entry.id for entry in main.public_karaoke_signups()])
         html = page.get_data(as_text=True)
         self.assertIn("Your Karaoke Requests", html)
-        self.assertIn("Awaiting host approval", html)
-        self.assertIn("No approved karaoke songs are queued yet", html)
+        self.assertIn("Added to the karaoke playlist", html)
+        self.assertIn("Thriller", html)
 
-    def test_admin_karaoke_workspace_is_protected_and_shows_pending_workflow(self):
+    def test_admin_karaoke_workspace_shows_unserved_request_controls(self):
         self.enable_youtube_karaoke()
         with main.app.test_client() as attendee:
             self.login_regular(attendee)
@@ -6059,12 +6062,16 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         html = response.get_data(as_text=True)
         self.assertIn("Karaoke Operations", html)
-        self.assertIn("Host review", html)
+        self.assertIn("Not yet served", html)
         self.assertIn("Thriller", html)
-        self.assertIn("Approve and Add to Playlist", html)
+        self.assertIn("Open &amp; Play in YouTube", html)
+        self.assertIn('data-youtube-video-id="abc123DEF45"', html)
+        self.assertIn("Mark Request Completed", html)
+        self.assertNotIn("Stage controls", html)
+        self.assertNotIn("Call Next Singer", html)
         self.assertIn("Open YouTube Playlist", html)
         self.assertIn(
-            "Approved songs are written to this playlist",
+            "New requests are added automatically",
             html,
         )
         self.assertIn("Find on YouTube", html)
@@ -6075,6 +6082,30 @@ class RedisStateTests(unittest.TestCase):
         self.assertIn("Queue Management", html)
         self.assertIn("Download Karaoke Backup", html)
         self.assertIn("Clear Queue &amp; YouTube Playlist", html)
+
+    def test_admin_can_mark_any_karaoke_request_complete_without_stage_workflow(self):
+        self.enable_youtube_karaoke()
+        with main.app.test_client() as attendee:
+            self.login_regular(attendee)
+            self.submit_youtube_karaoke_request(attendee)
+        entry_id = main.karaoke_signups[0].id
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(
+                "/admin/karaoke",
+                data={"action": "complete_karaoke_request", "entry_id": entry_id},
+            )
+            page = admin.get("/admin/karaoke")
+
+        self.assertEqual(200, response.status_code)
+        signup = main.find_karaoke_signup(entry_id)
+        self.assertEqual("completed", signup.workflow["performance_status"])
+        self.assertTrue(signup.workflow["completed_at"])
+        self.assertEqual([], main.karaoke_admin_view_state()["outstanding"])
+        html = page.get_data(as_text=True)
+        self.assertIn("Every submitted karaoke request has been served", html)
+        self.assertIn("Completed requests", html)
 
     def test_disabled_youtube_flag_preserves_manual_admin_lineup_and_stage_controls(self):
         main.app.config["YOUTUBE_CLIENT_ID"] = "setup-client-id"
@@ -6211,14 +6242,11 @@ class RedisStateTests(unittest.TestCase):
         )
         with main.app.test_client() as attendee:
             self.login_regular(attendee)
-            self.submit_youtube_karaoke_request(attendee)
+            submitted = self.submit_youtube_karaoke_request(attendee)
         entry_id = main.karaoke_signups[0].id
 
-        with main.app.test_client() as admin:
-            self.login_admin(admin)
-            response = admin.post(f"/api/admin/karaoke/entries/{entry_id}/approve")
-
-        self.assertEqual(502, response.status_code)
+        self.assertEqual(302, submitted.status_code)
+        self.assertIn("request_error=", submitted.headers["Location"])
         signup = main.find_karaoke_signup(entry_id)
         self.assertEqual("approved", signup.workflow["approval_status"])
         self.assertEqual("failed", signup.workflow["playlist_sync_status"])
@@ -6226,12 +6254,24 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual([], main.public_karaoke_signups())
         self.assertTrue(main.karaoke_signup_view(signup)["needs_attention"])
 
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            attention_page = admin.get("/admin/karaoke")
+            fake_youtube.fail_insert = None
+            response = admin.post(f"/api/admin/karaoke/entries/{entry_id}/retry")
+
+        self.assertIn("Retry Add to Playlist", attention_page.get_data(as_text=True))
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("synced", main.find_karaoke_signup(entry_id).workflow["playlist_sync_status"])
+
     def test_reconciliation_recovers_uncertain_operation_from_playlist_note(self):
         fake_youtube = self.enable_youtube_karaoke()
         with main.app.test_client() as attendee:
             self.login_regular(attendee)
             self.submit_youtube_karaoke_request(attendee)
         signup = main.karaoke_signups[0]
+        fake_youtube.playlist_items.clear()
+        signup.workflow["playlist_item_id"] = ""
         signup.workflow["approval_status"] = "approved"
         signup.workflow["playlist_sync_status"] = "failed"
         signup.workflow["last_sync_error_code"] = "operation_result_unknown"
@@ -6262,6 +6302,8 @@ class RedisStateTests(unittest.TestCase):
             self.login_regular(attendee)
             self.submit_youtube_karaoke_request(attendee)
         signup = main.karaoke_signups[0]
+        fake_youtube.playlist_items.clear()
+        signup.workflow["playlist_item_id"] = ""
         signup.workflow["approval_status"] = "approved"
         signup.workflow["playlist_sync_status"] = "failed"
         signup.workflow["last_sync_error_code"] = "operation_result_unknown"
@@ -6286,7 +6328,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("synced", recovered.workflow["playlist_sync_status"])
         self.assertEqual("playlist-item-no-note", recovered.workflow["playlist_item_id"])
 
-    def test_attendee_cannot_cancel_another_users_pending_request(self):
+    def test_attendee_cannot_cancel_another_users_karaoke_request(self):
         self.enable_youtube_karaoke()
         with main.app.test_client() as owner:
             self.login_regular(owner, user_id="user-owner", username="Owner")
@@ -6299,7 +6341,7 @@ class RedisStateTests(unittest.TestCase):
 
         self.assertEqual(302, response.status_code)
         self.assertIn("request_error=", response.headers["Location"])
-        self.assertEqual("pending", main.find_karaoke_signup(entry_id).workflow["approval_status"])
+        self.assertEqual("approved", main.find_karaoke_signup(entry_id).workflow["approval_status"])
 
     def test_stage_workflow_updates_status_and_live_display_without_embedding_video(self):
         self.enable_youtube_karaoke()

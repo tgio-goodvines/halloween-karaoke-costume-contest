@@ -137,8 +137,7 @@
 - Karaoke signup at `/party/karaoke` is attendee-accessible on the party date.
 - The party overview and karaoke page refresh attendee-safe karaoke state every
   five seconds and on tab visibility. Requesters and registered co-singers see
-  explicit Ready, Up Next, Called, On Stage, Complete, and exception states;
-  only the requester can replace or cancel a pending request. Each attendee can
+  playlist-add, Complete, and exception states. Each attendee can
   dismiss an individual completed performance from both surfaces without
   affecting another singer or any later song notification.
 - Karaoke signup accepts one to four singers, defaulting the first singer to
@@ -156,8 +155,8 @@
   image instead of leaving stale cover art on screen.
 - YouTube karaoke search is explicit-submit, paginated, Redis-cached, and
   protected by daily project/account safety budgets with direct-link fallback.
-- Attendees see personal seven-step workflow status and may replace or cancel
-  only their own pending requests.
+- Attendees see a compact Submitted, Video verified, Added to playlist, and
+  Complete workflow.
 - Public karaoke lineups include only approved, playlist-synchronized entries
   while the YouTube workflow is enabled.
 - Karaoke signup success redirect and lineup display.
@@ -198,36 +197,34 @@
   exact versions with preview/select actions, and keeps the user-entered song
   card metadata independent from the chosen video's YouTube title/channel.
 - Editing the song title or artist invalidates stale results and selections.
-  Guests review the completed song card plus selected version before sending it
-  for host approval; a direct-link fallback remains available.
-- Guests then track Submitted, Video verified, Approved, Playlist synced,
-  Ready, On stage, and Complete.
+  Guests review the completed song card plus selected version before adding it
+  to the party playlist; a direct-link fallback remains available.
+- Successful submissions are automatically approved and inserted into the
+  selected YouTube playlist. Guests track Submitted, Video verified, Added to
+  playlist, and Complete.
 - Completion notices are ordered by the latest lifecycle event and carry a
   durable per-user Dismiss action backed by the schema-16 stable-user ledger.
   The exact completion timestamp scopes the acknowledgement so re-completing a
   requeued song creates a new notice. Completed/skipped entries do not remain
   in the attendee public lineup.
-- Complete and Advance and Skip and Call Next atomically call the next ready
-  singer; reordering a different song preserves the current stage, while
-  stop/reset safely returns called or on-stage entries to the waiting queue.
 - `/admin/karaoke` is the dedicated host operations workspace for YouTube
-  connection health, playlist creation/selection, pending review, attention
-  recovery, run-of-show order, history, and stage controls.
-- Approval revalidates the video and synchronizes a dedicated host-owned
-  playlist through idempotent signup/revision markers.
-- Admin can approve, reject, retry, replace, remove, reconcile, move
-  top/up/down/end, and synchronize YouTube playlist order.
+  connection health, playlist creation/selection, attention recovery, all
+  unserved submissions, completed history, and playlist ordering. Each
+  outstanding request has an individual YouTube launch button and a Mark
+  Request Completed action; there are no called/on-stage controls.
+- Submission revalidates the video and synchronizes a dedicated host-owned
+  playlist through idempotent signup/revision markers. Admin can retry,
+  replace, remove, reconcile, move top/up/down/end, and synchronize order.
 - Admin Queue Management can download a lineup backup and clear the karaoke
   lineup plus only app-managed YouTube playlist items behind exact-phrase
   confirmation. Persistent progress reports backup, YouTube deletion, local
   clearing, and completion; partial failures can be retried without deleting
   unmatched/manual playlist items. A separate local-only fallback is available
   for manual YouTube cleanup.
-- Playback stays in the official YouTube site. Stage controls update workflow
-  and live-display singer cards with every singer represented, but never claim
-  remote playback confirmation. Attendee, dashboard, admin, countdown,
-  rotation, stage-override, API, and export surfaces share the same combined
-  singer label and structured singer list.
+- Playback stays in the official YouTube app/site. Per-request admin launch
+  opens playback on the device where it is pressed and never claims remote TV
+  playback confirmation. Attendee, dashboard, admin, rotation, API, and export
+  surfaces share the same combined singer label and structured singer list.
 - The legacy title/artist/optional-link workflow, including the multi-singer
   editor, remains intact when `HALLOWEEN_YOUTUBE_KARAOKE_ENABLED=false`.
 - Admin can start, stop, and reset the Halloween karaoke party if at least one karaoke signup exists for start.

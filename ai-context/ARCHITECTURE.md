@@ -155,7 +155,8 @@
   enabled, the three-step flow collects song-card metadata first, searches for
   an exact version, preserves the user's song/artist independently from
   YouTube metadata, requires server-verified video metadata, and creates a
-  pending workflow entry.
+  workflow entry that is automatically approved and inserted into the selected
+  event playlist.
 - `GET /api/party/karaoke-data` -> regular-user-authenticated, attendee-safe
   live status for `/party` and `/party/karaoke`. It returns the signed-in
   requester's or registered co-singer's entries, derived stage status, safe
@@ -172,10 +173,12 @@
   `song_title`/`artist` parameters become the canonical
   `{song title} {artist} karaoke` query; the legacy `q` parameter remains
   available for compatibility.
-- `POST /party/karaoke/<entry_id>/cancel|replace` -> requester-owned pending
-  request recovery actions.
-- `GET|POST /admin/karaoke` -> dedicated host queue, run-of-show, and stage
-  workspace.
+- `POST /party/karaoke/<entry_id>/cancel|replace` -> legacy requester-owned
+  pending-request recovery actions.
+- `GET|POST /admin/karaoke` -> dedicated host request board with all unserved
+  submissions, individual YouTube launch, completion tracking, playlist order,
+  history, connection, and recovery controls. It intentionally omits
+  called/on-stage operations from the UI.
 - `/api/admin/karaoke/*` -> admin-only search, approval, retry, replacement,
   rejection, removal, playlist setup/order synchronization, connection test,
   and reconciliation endpoints.
@@ -491,11 +494,11 @@ SSE connections.
 - `_karaoke_singers.html`: reusable one-to-four singer fieldset with registered
   attendee choices, a custom-name path, and server-restored row state.
 - `karaoke_signup.html`: multi-singer, song-details-first three-step exact-video
-  search/selection and review, direct-link fallback, live requester/co-singer
-  workflow status, pending-owner recovery, and synchronized public lineup.
-- `admin_karaoke.html`: dedicated YouTube connection, review, run-of-show,
-  reconciliation/history, and stage-control workspace.
-- `_karaoke_workflow.html`: shared media and seven-step workflow macros.
+  search/selection and review, direct-link fallback, automatic playlist-add
+  status, and synchronized public lineup.
+- `admin_karaoke.html`: dedicated YouTube connection, all-request queue,
+  per-song launch/completion, reconciliation, ordering, and history workspace.
+- `_karaoke_workflow.html`: shared media and compact four-step workflow macros.
 - `karaoke-singers.js`: reusable singer-row add/remove/custom-name behavior,
   duplicate checks, accessibility status, and combined singer-label updates.
 - `karaoke.js`: attendee song-detail validation, canonical search, pagination,

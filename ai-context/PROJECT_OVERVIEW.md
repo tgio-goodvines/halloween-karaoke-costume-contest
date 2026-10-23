@@ -107,12 +107,14 @@ redis-cli -h 127.0.0.1 -p 6379 --user '<local-redis-acl-user>' \
 6. On the party date, attendees can submit costume entries at
    `/party/costumes`.
 7. On the party date, attendees can search for and select an exact YouTube
-   karaoke video at `/party/karaoke`, submit it for host approval, and track
-   verification/approval/playlist/stage progress. Requesters and registered
-   co-singers receive live Ready, Up Next, Called, On Stage, and completion
-   status on `/party` and `/party/karaoke` through a safe five-second polling
-   endpoint. Completed notices can be dismissed per attendee and per
-   performance without suppressing any later song lifecycle. The legacy
+   karaoke video at `/party/karaoke`; a successful request is automatically
+   approved and added to the selected YouTube playlist. Requesters and
+   registered co-singers track playlist-add and completion status on `/party`
+   and `/party/karaoke` through a safe five-second polling endpoint. The host
+   chooses the performance order in YouTube and marks served requests complete
+   without maintaining called/on-stage state. Completed notices can be
+   dismissed per attendee and per performance without suppressing any later
+   song lifecycle. The legacy
    optional-link flow remains available while the YouTube feature flag is
    disabled.
 8. On the party date, `/party/menu` is the consolidated Menu & Orders workspace.

@@ -37,7 +37,7 @@
 >
   <img class="feature-page-art" src="{{ feature_art.karaoke }}" alt="">
   <h2>Karaoke Signup</h2>
-  <p>{% if youtube_karaoke_enabled %}Find the exact YouTube karaoke video you want, then send it to the host for approval.{% else %}Pick your favorite song and we'll add you to the karaoke queue.{% endif %}</p>
+  <p>{% if youtube_karaoke_enabled %}Find the exact YouTube karaoke video you want and add it directly to the party playlist.{% else %}Pick your favorite song and we'll add you to the karaoke queue.{% endif %}</p>
 
   {% if submitted and not errors %}
     <div class="success">You're in the karaoke lineup! Warm up those vocal cords.</div>
@@ -96,7 +96,7 @@
         <div>
           <p class="eyebrow">Step 2</p>
           <h3>Choose your YouTube version</h3>
-          <p>Preview any result, then choose the exact version you want the host to add.</p>
+          <p>Preview any result, then choose the exact version you want added to the party playlist.</p>
         </div>
         {% if youtube_search_configured %}
           <p data-karaoke-search-message role="status" aria-live="polite">
@@ -156,7 +156,7 @@
           <button type="button" class="button" data-karaoke-change-video>Change Version</button>
           <button type="button" class="button" data-karaoke-edit-details>Edit Song Details</button>
         </div>
-        <button type="submit" class="button button--primary" data-karaoke-submit{% if not selected_youtube %} disabled{% endif %}>Send for Host Approval</button>
+        <button type="submit" class="button button--primary" data-karaoke-submit{% if not selected_youtube %} disabled{% endif %}>Add to Karaoke Playlist</button>
       </section>
     </form>
   {% else %}

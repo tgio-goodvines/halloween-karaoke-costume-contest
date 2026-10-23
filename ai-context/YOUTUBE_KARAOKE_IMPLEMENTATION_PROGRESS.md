@@ -1,11 +1,29 @@
 # YouTube Karaoke Implementation Progress
 
-## Objective
+## 2026-10-22 Simplified Request Workflow
 
-Add attendee exact-video YouTube karaoke requests, host approval and playlist
-synchronization, a dedicated `/admin/karaoke` workspace, seven-step workflow
-status, run-of-show/stage controls, and live-display singer cards. Playback
-remains in the official YouTube website; no embedded player is included.
+- A verified attendee submission is automatically approved and inserted into
+  the selected event playlist before the success redirect. Insert failures do
+  not lose the request; they remain visible as host-retry work.
+- `/admin/karaoke` now centers on all outstanding submissions and completed
+  history. Stage call/on-stage/advance controls were removed from the UI.
+- Every outstanding request has `Open & Play in YouTube` and `Mark Request
+  Completed` actions. Completion is independent of lineup position and does
+  not auto-call another singer.
+- On iPhone/iPad, the per-request launch action tries the YouTube app URL scheme
+  and falls back to the canonical HTTPS watch page when the app does not open.
+  Other devices follow the normal YouTube HTTPS link.
+- The visible workflow is now Submitted, Video verified, Added to playlist,
+  and Complete. Legacy stage state/endpoints remain load-compatible for stored
+  event data but are not part of the current admin experience.
+
+## Current Objective
+
+Provide attendee exact-video YouTube karaoke requests with automatic playlist
+synchronization and a dedicated `/admin/karaoke` request board. The host opens
+individual videos or the playlist on the playback device, announces singers in
+any desired order, and marks served requests complete. Playback remains in the
+official YouTube app/site; no embedded player is included.
 
 ## Current Status
 
@@ -170,16 +188,17 @@ Deployment record:
   on reads for this channel. Reconciliation was hardened before enablement to
   prefer persisted playlist item IDs, then use unique video/position recovery.
 - `/admin/karaoke` shows the connected channel, private selected playlist,
-  workflow metrics, seven status steps, attention queue, host review, run of
-  show, and stage controls.
+  compact workflow metrics, attention queue, every unserved request,
+  per-request playback/completion actions, ordering, and completed history.
 - The pre-existing legacy manual request for Tony / “The One” is intentionally
   retained and shown as needing a replacement video; no attendee data was
   silently rewritten during activation.
 
 ## Event-Night Operations
 
-- Use `/admin/karaoke` to resolve the retained legacy request, review incoming
-  exact-video requests, approve/synchronize entries, and control stage status.
+- Use `/admin/karaoke` to resolve any playlist issue, choose a request in the
+  desired order, open its exact YouTube video, announce the singers, and mark
+  the request complete after it has been served.
 - Keep the official YouTube playlist open on the playback device; the app does
   not embed or claim control of YouTube playback.
 - Use **Test Connection** and **Reconcile** before showtime. Reconciliation

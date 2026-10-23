@@ -2664,6 +2664,10 @@ textarea:focus,
   align-items: start;
 }
 
+.karaoke-admin__layout--simple {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .karaoke-admin-search {
   margin-block: 1rem;
 }

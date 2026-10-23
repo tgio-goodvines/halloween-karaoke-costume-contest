@@ -11,6 +11,21 @@
     window.location.reload();
   };
 
+  root.querySelectorAll('[data-youtube-launch]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      const videoId = String(link.dataset.youtubeVideoId || '').trim();
+      const isAppleMobile = /iPhone|iPad|iPod/i.test(window.navigator.userAgent);
+      if (!videoId || !isAppleMobile) return;
+
+      event.preventDefault();
+      const fallbackUrl = link.href;
+      window.location.href = `youtube://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+      window.setTimeout(() => {
+        if (document.visibilityState === 'visible') window.location.href = fallbackUrl;
+      }, 900);
+    });
+  });
+
   const setClearStep = (name, state) => {
     const step = clearProgress?.querySelector(`[data-clear-step="${name}"]`);
     if (!step) return;

@@ -16,7 +16,7 @@
   <header class="admin-panel__header">
     <p class="admin-panel__eyebrow">Control room</p>
     <h2>Karaoke</h2>
-    <p>YouTube requests, playlist synchronization, run of show, and stage controls.</p>
+    <p>Review every song request, open the selected YouTube video, and mark served requests complete.</p>
   </header>
 
   {% if karaoke_admin.enabled and karaoke_admin.youtube.playlist_id %}
@@ -24,7 +24,7 @@
       <div>
         <p class="admin-panel__eyebrow">Playback</p>
         <strong>{{ karaoke_admin.youtube.playlist_title or 'YouTube event playlist' }}</strong>
-        <span>Approved songs are written to this playlist. Refresh the YouTube tab if it is already open when the queue changes.</span>
+        <span>New requests are added automatically. Open the playlist for continuous playback or launch an individual request below.</span>
       </div>
       <a
         class="button button--primary"
@@ -131,10 +131,10 @@
     {% endif %}
   </section>
 
-  <section class="karaoke-metrics" aria-label="Karaoke workflow metrics">
-    <article><span>Awaiting review</span><strong>{{ karaoke_admin.metrics.pending }}</strong></article>
+  <section class="karaoke-metrics" aria-label="Karaoke request metrics">
+    <article><span>Not yet served</span><strong>{{ karaoke_admin.metrics.outstanding }}</strong></article>
     <article><span>Needs attention</span><strong>{{ karaoke_admin.metrics.attention }}</strong></article>
-    <article><span>Ready</span><strong>{{ karaoke_admin.metrics.ready }}</strong></article>
+    <article><span>In playlist</span><strong>{{ karaoke_admin.metrics.ready }}</strong></article>
     <article><span>Completed</span><strong>{{ karaoke_admin.metrics.completed }}</strong></article>
     <article><span>Remaining video time</span><strong>{{ karaoke_admin.metrics.remaining_seconds // 60 }} min</strong></article>
   </section>
@@ -158,7 +158,7 @@
   </details>
   {% endif %}
 
-  <div class="karaoke-admin__layout">
+  <div class="karaoke-admin__layout karaoke-admin__layout--simple">
     <div class="karaoke-admin__queues">
       {% if karaoke_admin.attention %}
       <section class="karaoke-attention-panel" data-karaoke-attention>
@@ -175,62 +175,15 @@
       </section>
       {% endif %}
 
-      {% if karaoke_admin.enabled %}
-      <section class="admin-section karaoke-requests" data-karaoke-pending>
-        <header><div><p class="admin-panel__eyebrow">Incoming requests</p><h3>Host review</h3></div><span>{{ karaoke_admin.pending|length }} waiting</span></header>
-        {% if karaoke_admin.pending %}
-          {% for entry in karaoke_admin.pending %}
-            <article class="karaoke-request">
-              {{ media(entry) }}
-              <h4>{{ entry.singer_label }} — “{{ entry.song_title }}” by {{ entry.artist }}</h4>
-              {{ stepper(entry) }}
-              <div class="karaoke-request__actions">
-                {% if entry.youtube.watch_url %}<a class="button" href="{{ entry.youtube.watch_url }}" target="_blank" rel="noopener">Preview on YouTube</a>{% endif %}
-                <button class="button button--primary" type="button" data-karaoke-api="{{ url_for('admin_karaoke_approve', entry_id=entry.id) }}">Approve and Add to Playlist</button>
-                <form data-karaoke-api-form action="{{ url_for('admin_karaoke_replace', entry_id=entry.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="url" name="youtube_link" required placeholder="Replacement YouTube link">
-                  <button
-                    class="button"
-                    type="button"
-                    data-karaoke-find-for
-                    data-karaoke-query="{{ entry.song_title }} {{ entry.artist }} karaoke"
-                  >Find on YouTube</button>
-                  <button class="button" type="submit">Replace Video</button>
-                </form>
-                <details>
-                  <summary>Edit singer and song labels</summary>
-                  <form method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entry_id" value="{{ entry.id }}"><input type="hidden" name="action" value="update_karaoke">
-                    {{ singer_fields(entry.singer_form_rows, karaoke_attendees, karaoke_custom_singer_value, karaoke_max_singers) }}
-                    <label>Song title<input name="song_title" required value="{{ entry.song_title }}"></label>
-                    <label>Artist<input name="artist" required value="{{ entry.artist }}"></label>
-                    <button class="button" type="submit">Save Labels</button>
-                  </form>
-                </details>
-                <form data-karaoke-api-form action="{{ url_for('admin_karaoke_reject', entry_id=entry.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input name="reason" maxlength="500" placeholder="Optional rejection reason">
-                  <button class="button button--danger" type="submit">Reject</button>
-                </form>
-              </div>
-            </article>
-          {% endfor %}
-        {% else %}
-          <p class="admin-empty">No requests are waiting for host approval.</p>
-        {% endif %}
-      </section>
-      {% endif %}
-
       <section class="admin-section karaoke-run-show" data-karaoke-active>
         <header>
-          <div><p class="admin-panel__eyebrow">Run of show</p><h3>Approved lineup</h3></div>
-          {% if karaoke_admin.enabled and karaoke_admin.active %}<button class="button" type="button" data-karaoke-api="{{ url_for('admin_karaoke_sync_order') }}">Sync Playlist Order</button>{% endif %}
+          <div><p class="admin-panel__eyebrow">Song requests</p><h3>Not yet served</h3></div>
+          {% if karaoke_admin.enabled and karaoke_admin.outstanding %}<button class="button" type="button" data-karaoke-api="{{ url_for('admin_karaoke_sync_order') }}">Sync Playlist Order</button>{% endif %}
         </header>
-        {% if karaoke_admin.active %}
+        {% if karaoke_admin.outstanding %}
           <ol class="karaoke-run-list">
-            {% for entry in karaoke_admin.active %}
-              <li class="karaoke-request{% if entry.id == karaoke_state.current_singer_id %} karaoke-request--current{% endif %}">
+            {% for entry in karaoke_admin.outstanding %}
+              <li class="karaoke-request">
                 <details>
                   <summary>
                     <span class="admin-entry__rank">#{{ loop.index }}</span>
@@ -240,6 +193,19 @@
                   {{ media(entry) }}
                   {% if karaoke_admin.enabled %}{{ stepper(entry) }}{% endif %}
                   <div class="karaoke-request__actions">
+                    {% if entry.playback_url %}
+                      <a
+                        class="button button--primary"
+                        href="{{ entry.playback_url }}"
+                        data-youtube-launch
+                        data-youtube-video-id="{{ entry.youtube.video_id }}"
+                      >Open &amp; Play in YouTube</a>
+                    {% endif %}
+                    <form method="post">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                      <button class="button button--primary" name="action" value="complete_karaoke_request">Mark Request Completed</button>
+                    </form>
                     <form method="post">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entry_id" value="{{ entry.id }}">
                       <button class="button" name="action" value="move_karaoke_to_top">Move to Top</button>
@@ -247,8 +213,10 @@
                       <button class="button" name="action" value="move_karaoke_down">Move Down</button>
                       <button class="button" name="action" value="move_karaoke_to_end">Move to End</button>
                     </form>
-                    {% if entry.youtube.watch_url %}<a class="button button--primary" href="{{ entry.youtube.watch_url }}{% if karaoke_admin.youtube.playlist_id %}&list={{ karaoke_admin.youtube.playlist_id }}{% endif %}" target="_blank" rel="noopener">Open Video on This Device</a>{% endif %}
                     {% if karaoke_admin.enabled %}
+                      {% if entry.workflow.playlist_sync_status != 'synced' %}
+                        <button class="button" type="button" data-karaoke-api="{{ url_for('admin_karaoke_approve' if entry.workflow.approval_status == 'pending' else 'admin_karaoke_retry', entry_id=entry.id) }}">Retry Add to Playlist</button>
+                      {% endif %}
                       <form data-karaoke-api-form action="{{ url_for('admin_karaoke_replace', entry_id=entry.id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="url" name="youtube_link" required placeholder="Replacement YouTube link">
@@ -284,56 +252,20 @@
             {% endfor %}
           </ol>
         {% else %}
-          <p class="admin-empty">Approve and synchronize requests to build the run of show.</p>
+          <p class="admin-empty">Every submitted karaoke request has been served.</p>
         {% endif %}
       </section>
 
       <details class="admin-section karaoke-history-section">
-        <summary><strong>Completed and rejected history</strong><span>{{ karaoke_admin.history|length }} records</span></summary>
+        <summary><strong>Completed requests</strong><span>{{ karaoke_admin.history|length }} records</span></summary>
         {% for entry in karaoke_admin.history %}
           <div class="karaoke-history-row"><strong>{{ entry.singer_label }} — {{ entry.song_title }}</strong><span>{{ entry.workflow.performance_status|replace('_', ' ')|title if entry.workflow.approval_status == 'approved' else entry.workflow.approval_status|title }}</span></div>
         {% else %}
-          <p>No completed, skipped, rejected, or cancelled entries yet.</p>
+          <p>No karaoke requests have been marked complete yet.</p>
         {% endfor %}
       </details>
     </div>
 
-    <aside class="karaoke-stage">
-      <p class="admin-panel__eyebrow">Stage controls</p>
-      <h3>{% if karaoke_admin.current %}{{ karaoke_admin.current.singer_label }}{% else %}Stage standby{% endif %}</h3>
-      {% if karaoke_admin.current %}
-        <p>“{{ karaoke_admin.current.song_title }}” by {{ karaoke_admin.current.artist }}</p>
-        {{ stepper(karaoke_admin.current, true) }}
-      {% else %}
-        <p>Call the next ready singer when the microphone and official YouTube tab are ready.</p>
-      {% endif %}
-      {% if karaoke_admin.next %}<p class="karaoke-stage__next"><span>Next ready</span><strong>{{ karaoke_admin.next.singer_label }}</strong><small>{{ karaoke_admin.next.song_title }}</small></p>{% endif %}
-      <div class="karaoke-stage__actions">
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          {% if karaoke_admin.current %}<input type="hidden" name="entry_id" value="{{ karaoke_admin.current.id }}">{% endif %}
-          {% if not karaoke_admin.current or karaoke_admin.current.workflow.performance_status == 'waiting' %}
-            <button class="button button--primary" name="action" value="call_karaoke_singer">Call Next Singer</button>
-          {% endif %}
-          {% if karaoke_admin.current and karaoke_admin.current.workflow.performance_status == 'called' %}
-            <button class="button button--primary" name="action" value="mark_karaoke_on_stage">Mark On Stage</button>
-          {% endif %}
-          {% if karaoke_admin.current and karaoke_admin.current.workflow.performance_status == 'on_stage' %}
-            <button class="button button--primary" name="action" value="complete_karaoke_and_advance">Complete and Advance</button>
-          {% endif %}
-          {% if karaoke_admin.current and karaoke_admin.current.workflow.performance_status in ['called', 'on_stage'] %}
-            <button class="button" name="action" value="show_karaoke_singer_card">Show Singer Card</button>
-          {% endif %}
-          {% if karaoke_admin.current %}
-            <button class="button" name="action" value="move_karaoke_to_end">Move to End</button>
-            <button class="button button--danger" name="action" value="skip_karaoke_singer">Skip and Call Next</button>
-          {% endif %}
-          <button class="button" name="action" value="clear_display_override">Restore Display Rotation</button>
-        </form>
-        {% if karaoke_admin.enabled and karaoke_admin.youtube.playlist_id %}<a class="button button--primary" href="https://www.youtube.com/playlist?list={{ karaoke_admin.youtube.playlist_id }}" target="_blank" rel="noopener">Open YouTube Playlist</a>{% endif %}
-      </div>
-      <p class="karaoke-stage__notice">Stage status tracks the party workflow only. Start and control playback in the official YouTube tab.</p>
-    </aside>
   </div>
 
   {% set clear = karaoke_admin.clear_operation %}
@@ -439,5 +371,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='karaoke-singers.js', v='20260823-multi-singer') }}"></script>
-<script src="{{ url_for('static', filename='karaoke-admin.js', v='20260730-queue-clear') }}"></script>
+<script src="{{ url_for('static', filename='karaoke-admin.js', v='20261022-simple-requests') }}"></script>
 {% endblock %}

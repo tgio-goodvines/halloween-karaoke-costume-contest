@@ -1,5 +1,13 @@
 # Karaoke Attendee Live Status
 
+## 2026-10-22 Simplified Workflow Note
+
+New YouTube requests are automatically added to the selected playlist. The
+current attendee workflow surfaces playlist-add, exception, and completion
+state; the admin no longer maintains Called, Up Next, or On Stage state through
+the UI. The stage-transition material below documents backward-compatible
+legacy behavior and tests rather than the current event-night operator flow.
+
 ## Objective
 
 Keep karaoke workflow, admin stage controls, attendee pages, and the live

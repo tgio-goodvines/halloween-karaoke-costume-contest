@@ -420,3 +420,20 @@ slide. Non-game image cards retain their foreground-media layout.
 - Verification passed with 270 Python tests and 37 subtests, all 27
   dependency-free JavaScript tests, Python/JavaScript syntax checks, and
   whitespace validation.
+
+## Host-Triggered Item And Objective Spotlights (2026-10-23)
+
+- The selected Scavenger Hunt admin console can pause the center stage on one
+  complete card containing every enabled hunt item and its instructions.
+- The selected Cursed Objectives console has separate center-stage actions for
+  completed and uncompleted assigned objectives. Completed rows name the
+  player who completed each mission; incomplete rows name the current assignee.
+- These controls work during open play and after close. They use a live
+  snapshot of current game state, never join automatic rotation, and clear
+  through the existing Resume Rotation action.
+- Automatic game-stage rotation retains its privacy boundary: mission wording
+  and assignee names appear only after an explicit host action.
+- No Redis schema or migration was required.
+- Verification passed with 272 Python tests and 37 subtests, all 27
+  dependency-free JavaScript tests, Python/JavaScript syntax checks, and
+  whitespace validation.

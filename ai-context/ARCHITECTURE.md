@@ -323,6 +323,13 @@ That function increments `display_update_version` and notifies `display_update_c
 - `id`, `source`, and `duration_seconds`: stable operator pin target, source
   grouping, and optional per-card rotation duration.
 
+`build_game_list_display_card()` creates host-triggered center-stage overrides
+for the enabled Scavenger Hunt item deck and for completed or incomplete
+assigned Cursed Objectives. These cards use the complete-roster scoreboard
+shape with ranks disabled so every requested row is retained. Completed
+objective rows identify the completing player; incomplete rows identify the
+current assignee. They are never added to automatic rotation.
+
 `build_game_stage_entries()` produces privacy-safe per-game summaries, current
 clues/prompts/responses, and ended results for an independent left-stage
 rotation. Game entries declare one `focus_mode`; `spotlight_rows` supplies at

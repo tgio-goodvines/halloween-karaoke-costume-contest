@@ -8680,6 +8680,76 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
     return slides
 
 
+def build_game_list_display_card(game_key: str, list_kind: str) -> dict[str, object] | None:
+    game = party_game_state(game_key)
+    rows: list[dict[str, object]] = []
+    if game_key == SCAVENGER_HUNT_GAME_KEY and list_kind == "hunt_items":
+        rows = [
+            {
+                "name": str(item.get("title", "Hunt item") or "Hunt item")[:80],
+                "detail": str(item.get("instructions", "") or "")[:240],
+                "value_label": "",
+            }
+            for item in game.get("items", [])
+            if isinstance(item, dict) and item.get("enabled")
+        ]
+        title = "Scavenger Hunt Items"
+        empty_message = "No hunt items are enabled."
+    elif game_key == CURSED_OBJECTIVES_GAME_KEY and list_kind in {"completed", "incomplete"}:
+        show_completed = list_kind == "completed"
+        for participant in game.get("participants", {}).values():
+            if not isinstance(participant, dict):
+                continue
+            player_name = str(participant.get("display_name", "") or "Player")[:80]
+            completed_ids = {
+                str(mission_id)
+                for mission_id in participant.get("completed_mission_ids", [])
+            }
+            snapshots = participant.get("mission_snapshots", {})
+            if not isinstance(snapshots, dict):
+                snapshots = {}
+            for mission_id in participant.get("mission_ids", []):
+                normalized_id = str(mission_id)
+                if (normalized_id in completed_ids) != show_completed:
+                    continue
+                rows.append(
+                    {
+                        "name": str(snapshots.get(normalized_id, "Secret objective") or "Secret objective")[:240],
+                        "detail": (
+                            f"Completed by {player_name}"
+                            if show_completed
+                            else f"Assigned to {player_name}"
+                        ),
+                        "value_label": "",
+                    }
+                )
+        title = "Completed Cursed Objectives" if show_completed else "Uncompleted Cursed Objectives"
+        empty_message = (
+            "No objectives have been completed yet."
+            if show_completed
+            else "Every assigned objective is complete."
+        )
+    else:
+        return None
+
+    card: dict[str, object] = {
+        "type": f"game_{game_key}_{list_kind}",
+        "title": title,
+        "highlight": f"{len(rows)} {'item' if len(rows) == 1 else 'items'}",
+        "message": empty_message if not rows else "",
+        "details": [],
+        "image_url": game_art_url(game_key),
+        "media_treatment": "background",
+    }
+    if rows:
+        card["scoreboard"] = {
+            "entries": rows,
+            "show_all_entries": True,
+            "show_rank": False,
+        }
+    return card
+
+
 def set_game_presentation_slide(game_key: str, slide_index: int) -> bool:
     global live_display_event_override
     game = party_game_state(game_key)
@@ -13159,6 +13229,9 @@ def admin_portal(admin_view: str):
             "next_game_slide",
             "show_game_winner",
             "show_game_results",
+            "show_scavenger_hunt_items",
+            "show_completed_cursed_objectives",
+            "show_uncompleted_cursed_objectives",
             "add_cursed_objective",
             "update_cursed_objective",
             "toggle_cursed_objective",
@@ -14503,6 +14576,28 @@ def admin_portal(admin_view: str):
                             live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]], "image_url": game_art_url(game_key), "media_treatment": "background"}
                             messages.append(f"Live display paused on the {title} results.")
                         should_broadcast = True
+
+                elif action in {
+                    "show_scavenger_hunt_items",
+                    "show_completed_cursed_objectives",
+                    "show_uncompleted_cursed_objectives",
+                }:
+                    display_request = {
+                        "show_scavenger_hunt_items": (SCAVENGER_HUNT_GAME_KEY, "hunt_items"),
+                        "show_completed_cursed_objectives": (CURSED_OBJECTIVES_GAME_KEY, "completed"),
+                        "show_uncompleted_cursed_objectives": (CURSED_OBJECTIVES_GAME_KEY, "incomplete"),
+                    }[action]
+                    expected_game_key, list_kind = display_request
+                    if game_key != expected_game_key:
+                        errors.append("That live-display list is not available for this game.")
+                    else:
+                        card = build_game_list_display_card(game_key, list_kind)
+                        if not card:
+                            errors.append("That live-display list could not be created.")
+                        else:
+                            live_display_event_override = card
+                            messages.append(f"Live display paused on {str(card['title']).lower()}.")
+                            should_broadcast = True
 
         elif action == "set_role_preview":
             requested_preview = request.form.get("role_preview", "")

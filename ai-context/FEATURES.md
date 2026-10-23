@@ -105,8 +105,8 @@
 - Cursed Objectives stays open throughout the event. Joining assigns three
   private objectives drawn without replacement, so active participants never
   share an objective. Players record and may reopen completions until the host
-  closes the game once; final scoring awards one point per completed objective
-  and preserves tied positive winners. The 60-objective default deck supports
+  closes the game once; final results preserve each player's completed/assigned
+  progress without rankings or winners. The 60-objective default deck supports
   20 simultaneous participants and blocks additional joins rather than
   recycling an assigned objective. Admins can add, edit, enable, disable,
   remove, reorder, or restore objectives; each assigned mission snapshots its
@@ -332,7 +332,11 @@
   and drives previous/next announcer presentation slides after game end.
 - The same workspace manages the Cursed Objectives deck and Scavenger Hunt
   item deck, shows all assigned missions, and provides a photo-review queue with
-  approve/reject actions and a separate finalization step.
+  approve/reject actions and a separate finalization step. Host controls can
+  pause the center stage on every enabled hunt item, every completed assigned
+  objective with the completing player's name, or every assigned objective
+  that remains incomplete; these operational spotlights are available while
+  the games are open as well as after they close.
 - Every selected game console includes a test-tool action that can generate a deterministic
   completed game with 2-20 synthetic players. Simulation never creates party
   accounts, preserves MMF/prompt configuration, creates a Redis backup, and
@@ -437,7 +441,9 @@ app state.
   stable shuffled statement order. MMF shows one aggregate live leader for each
   choice without exposing ballots. Active Scavenger Hunt cards show the top
   three provisional hunters by submitted evidence, switching to approved finds
-  during host review. Cursed Objectives never exposes private missions.
+  during host review. Cursed Objectives keeps missions private during automatic
+  rotation; objective wording and assignee names appear only when the host
+  deliberately selects a completed or uncompleted objective spotlight.
 - In auto mode, the right stage appears for a ready alert, active drink orders,
   retained completed history, or available food/drink menu items. Each view has
   one purpose: active queues show at most three large operational rows, idle

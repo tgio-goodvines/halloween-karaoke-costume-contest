@@ -143,7 +143,27 @@
               <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="show_two_truths_winner"{% if not admin_game.winners %} disabled{% endif %}>Show Winner</button></form>
               <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="show_two_truths_results">Show Results</button></form>
             {% endif %}
-          {% elif admin_game.phase == 'ended' or (game_key == 'scavenger_hunt' and admin_game.phase == 'review') %}
+          {% elif game_key == 'cursed_objectives' %}
+            <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="show_completed_cursed_objectives">Show Completed Objectives</button></form>
+            <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_uncompleted_cursed_objectives">Show Uncompleted Objectives</button></form>
+            {% if admin_game.phase == 'ended' %}
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="start_game_presentation">Start Presentation</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="previous_game_slide">Previous</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="next_game_slide">Next</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_results">Show All Player Progress</button></form>
+            {% endif %}
+          {% elif game_key == 'scavenger_hunt' %}
+            <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="show_scavenger_hunt_items">Show Hunt Item List</button></form>
+            {% if admin_game.phase == 'ended' or admin_game.phase == 'review' %}
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="start_game_presentation">Start Presentation</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="previous_game_slide">Previous</button></form>
+              <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="next_game_slide">Next</button></form>
+              {% if admin_game.phase == 'ended' %}
+                <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_results">Show All Player Progress</button></form>
+                <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_winner"{% if not admin_game.winners %} disabled{% endif %}>Show Complete-Hunt Winner</button></form>
+              {% endif %}
+            {% endif %}
+          {% elif admin_game.phase == 'ended' %}
             <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="start_game_presentation">Start Presentation</button></form>
             <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="previous_game_slide">Previous</button></form>
             <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="next_game_slide">Next</button></form>

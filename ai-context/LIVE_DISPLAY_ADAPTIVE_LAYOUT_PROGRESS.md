@@ -391,3 +391,17 @@ fixed no-scroll track.
   and score; the three-row limit remains the default for other center cards.
 - The winner spotlight names Two Truths and a Lie directly and the active test
   rehearsal can preview both winner and results without ending the game.
+
+## Host-Triggered Game Lists (2026-10-23)
+
+- Scavenger Hunt can place every enabled hunt item and its instructions on the
+  center stage from the selected-game admin console.
+- Cursed Objectives can separately place all completed assigned missions with
+  their completing players or all incomplete assigned missions with their
+  assignees on the center stage.
+- The cards use the existing unranked complete-roster layout, are available
+  during live play, and remain host spotlights until Resume Rotation is used.
+  They do not enter the automatic center or game-stage rotations.
+- Verification passed with 272 Python tests and 37 subtests, all 27
+  dependency-free JavaScript tests, Python/JavaScript syntax checks, and
+  whitespace validation.

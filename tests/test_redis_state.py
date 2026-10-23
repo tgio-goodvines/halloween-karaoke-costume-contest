@@ -2,6 +2,7 @@ import copy
 import io
 import json
 import os
+import random
 import sys
 import tempfile
 import types
@@ -8073,6 +8074,73 @@ class RedisStateTests(unittest.TestCase):
         archive = next(entry for entry in main.result_archives if entry["subject_key"] == game_key)
         self.assertEqual("progress", archive["summary"]["result_mode"])
         self.assertEqual([], archive["winner_links"])
+
+    def test_admin_can_spotlight_hunt_items_and_cursed_objective_status_lists(self):
+        scavenger = main.party_game_state(main.SCAVENGER_HUNT_GAME_KEY)
+        scavenger["enabled"] = True
+        scavenger["phase"] = "active"
+        enabled_hunt_items = [item for item in scavenger["items"] if item["enabled"]]
+
+        cursed = main.party_game_state(main.CURSED_OBJECTIVES_GAME_KEY)
+        cursed["enabled"] = True
+        cursed["phase"] = "active"
+        participant = main.assign_cursed_objectives(
+            cursed,
+            "player-1",
+            display_name="Morgan",
+            rng=random.Random(7),
+        )
+        completed_id = participant["mission_ids"][0]
+        participant["completed_mission_ids"] = [completed_id]
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            scavenger_page = admin.get("/admin/games?game=scavenger_hunt")
+            hunt_response = admin.post(
+                "/admin/games?game=scavenger_hunt",
+                data={"action": "show_scavenger_hunt_items", "game_key": main.SCAVENGER_HUNT_GAME_KEY},
+            )
+            hunt_override = copy.deepcopy(main.live_display_event_override)
+
+            cursed_page = admin.get("/admin/games?game=cursed_objectives")
+            completed_response = admin.post(
+                "/admin/games?game=cursed_objectives",
+                data={"action": "show_completed_cursed_objectives", "game_key": main.CURSED_OBJECTIVES_GAME_KEY},
+            )
+            completed_override = copy.deepcopy(main.live_display_event_override)
+            incomplete_response = admin.post(
+                "/admin/games?game=cursed_objectives",
+                data={"action": "show_uncompleted_cursed_objectives", "game_key": main.CURSED_OBJECTIVES_GAME_KEY},
+            )
+            incomplete_override = copy.deepcopy(main.live_display_event_override)
+
+        self.assertIn(b"Show Hunt Item List", scavenger_page.data)
+        self.assertEqual(200, hunt_response.status_code)
+        self.assertEqual("Scavenger Hunt Items", hunt_override["title"])
+        self.assertEqual(len(enabled_hunt_items), len(hunt_override["scoreboard"]["entries"]))
+        self.assertEqual(
+            [item["title"] for item in enabled_hunt_items],
+            [row["name"] for row in hunt_override["scoreboard"]["entries"]],
+        )
+        self.assertTrue(hunt_override["scoreboard"]["show_all_entries"])
+        self.assertFalse(hunt_override["scoreboard"]["show_rank"])
+
+        self.assertIn(b"Show Completed Objectives", cursed_page.data)
+        self.assertIn(b"Show Uncompleted Objectives", cursed_page.data)
+        self.assertEqual(200, completed_response.status_code)
+        self.assertEqual("Completed Cursed Objectives", completed_override["title"])
+        self.assertEqual(1, len(completed_override["scoreboard"]["entries"]))
+        self.assertEqual(
+            participant["mission_snapshots"][completed_id],
+            completed_override["scoreboard"]["entries"][0]["name"],
+        )
+        self.assertEqual("Completed by Morgan", completed_override["scoreboard"]["entries"][0]["detail"])
+
+        self.assertEqual(200, incomplete_response.status_code)
+        self.assertEqual("Uncompleted Cursed Objectives", incomplete_override["title"])
+        self.assertEqual(2, len(incomplete_override["scoreboard"]["entries"]))
+        self.assertTrue(all(row["detail"] == "Assigned to Morgan" for row in incomplete_override["scoreboard"]["entries"]))
 
     def test_scavenger_hunt_admin_shows_all_progress_and_only_complete_hunt_winner(self):
         game_key = main.SCAVENGER_HUNT_GAME_KEY

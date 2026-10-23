@@ -7771,9 +7771,13 @@ class RedisStateTests(unittest.TestCase):
             exported = admin.get("/admin/export/games")
             winner_override = admin.post("/admin/games", data={"action": "show_two_truths_winner"})
             self.assertEqual("game_winner", main.live_display_event_override["type"])
+            self.assertEqual("Two Truths and a Lie Winners", main.live_display_event_override["title"])
+            self.assertIn("Two Truths and a Lie winners", main.live_display_event_override["message"])
             self.assertEqual("background", main.live_display_event_override["media_treatment"])
             results_override = admin.post("/admin/games", data={"action": "show_two_truths_results"})
             self.assertEqual("game_results", main.live_display_event_override["type"])
+            self.assertEqual(2, len(main.live_display_event_override["scoreboard"]["entries"]))
+            self.assertTrue(main.live_display_event_override["scoreboard"]["show_all_entries"])
             self.assertEqual("background", main.live_display_event_override["media_treatment"])
             resumed = admin.post("/admin/games", data={"action": "resume_game_display"})
 
@@ -7792,6 +7796,11 @@ class RedisStateTests(unittest.TestCase):
         entries = main.build_rotation_entries()
         self.assertTrue(any(entry["category"].startswith("Two Truths and a Lie Winner") for entry in entries))
         self.assertTrue(any(entry.get("primary") == "Final Scores" for entry in entries))
+        left_stage = next(entry for entry in main.build_game_stage_entries() if entry["game_key"] == main.TWO_TRUTHS_GAME_KEY)
+        self.assertEqual("Winners revealed", left_stage["status_label"])
+        self.assertEqual("Two Truths and a Lie Winners", left_stage["focus_label"])
+        self.assertEqual("feature", left_stage["focus_mode"])
+        self.assertEqual("Jamie, Morgan", left_stage["feature_text"])
 
         with main.app.test_client() as admin:
             self.login_admin(admin)
@@ -7825,12 +7834,13 @@ class RedisStateTests(unittest.TestCase):
                 elif game_key == main.SCAVENGER_HUNT_GAME_KEY:
                     game["items"][0]["title"] = "Custom simulated hunt item"
                 self.save_current_state()
+                requested_player_count = 8 if game_key == main.TWO_TRUTHS_GAME_KEY else 6
 
                 with main.app.test_client() as admin:
                     self.login_admin(admin)
                     response = admin.post(
                         "/admin/games",
-                        data={"action": "simulate_game", "game_key": game_key, "player_count": "6"},
+                        data={"action": "simulate_game", "game_key": game_key, "player_count": str(requested_player_count)},
                     )
                     display_page = admin.get("/admin/display")
 
@@ -7838,14 +7848,36 @@ class RedisStateTests(unittest.TestCase):
                 self.assertIn("Simulated", response.get_data(as_text=True))
                 game = main.party_game_state(game_key)
                 self.assertTrue(game["enabled"])
-                self.assertEqual("ended", game["phase"])
-                self.assertEqual(6, len(game["participants"]))
-                self.assertEqual(
-                    {"is_simulated": True, "player_count": 6, "generated_at": game["ended_at"]},
-                    game["simulation"],
-                )
+                self.assertEqual(requested_player_count, len(game["participants"]))
                 self.assertTrue(game["results"]["scores"])
                 self.assertTrue(main.game_winners(game_key, game))
+                if game_key == main.TWO_TRUTHS_GAME_KEY:
+                    self.assertEqual("active", game["phase"])
+                    self.assertEqual("", game["ended_at"])
+                    self.assertEqual(8, game["simulation"]["player_count"])
+                    self.assertTrue(game["simulation"]["generated_at"])
+                    self.assertEqual([], main.generated_game_result_entries(include_hidden=True))
+                    with main.app.test_client() as admin:
+                        self.login_admin(admin)
+                        winner_preview = admin.post("/admin/games", data={"action": "show_two_truths_winner"})
+                        self.assertEqual(200, winner_preview.status_code)
+                        self.assertEqual("Two Truths and a Lie Winner", main.live_display_event_override["title"])
+                        results_preview = admin.post("/admin/games", data={"action": "show_two_truths_results"})
+                        self.assertEqual(200, results_preview.status_code)
+                        self.assertEqual("Test standings preview", main.live_display_event_override["message"])
+                        self.assertEqual(8, len(main.live_display_event_override["scoreboard"]["entries"]))
+                        ended = admin.post("/admin/games", data={"action": "end_two_truths_game"})
+                        self.assertEqual(200, ended.status_code)
+                        display_page = admin.get("/admin/display")
+                    game = main.party_game_state(game_key)
+                    self.assertEqual("ended", game["phase"])
+                else:
+                    self.assertEqual("ended", game["phase"])
+                    self.assertEqual(
+                        {"is_simulated": True, "player_count": 6, "generated_at": game["ended_at"]},
+                        game["simulation"],
+                    )
+
                 if game_key == main.MURDER_MARRY_FUCK_GAME_KEY:
                     self.assertEqual("Choose", game["explicit_label"])
                 elif game_key in main.PROMPT_GAME_KEYS:
@@ -7866,6 +7898,10 @@ class RedisStateTests(unittest.TestCase):
                 self.assertEqual(3, len(winner_card["facts"]))
                 self.assertTrue(winner_card["scoreboard"]["entries"])
                 self.assertLessEqual(len(winner_card["scoreboard"]["entries"]), 3)
+                if game_key == main.TWO_TRUTHS_GAME_KEY:
+                    scores_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-scores")
+                    self.assertEqual(8, len(scores_card["scoreboard"]["entries"]))
+                    self.assertTrue(scores_card["scoreboard"]["show_all_entries"])
                 self.assertIn(b"Generated Game Result Cards", display_page.data)
                 self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
                 persisted = self.redis_state()
@@ -7937,6 +7973,8 @@ class RedisStateTests(unittest.TestCase):
                 generated_at="2026-08-13T12:00:00Z",
             )
         )
+        game["phase"] = "ended"
+        game["ended_at"] = "2026-08-13T12:00:00Z"
         game["guesses"] = {}
         game["results"] = main.calculate_two_truths_results(game, finalized_at=game["ended_at"])
 

@@ -1565,7 +1565,7 @@ def build_simulated_game_state(
     player_count: int = 8,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Build deterministic, completed test data without creating party accounts."""
+    """Build deterministic test data without creating party accounts."""
     if game_key not in GAME_CATALOG:
         raise KeyError(game_key)
     count = min(20, max(2, int(player_count)))
@@ -1604,9 +1604,12 @@ def build_simulated_game_state(
                     "submitted_at": timestamp,
                 }
             game["guesses"][guesser_id] = guesses
-        game["phase"] = "ended"
+        # Two Truths simulation is an in-progress rehearsal: hosts can inspect
+        # the completed guesses, preview the winner/results cards, and choose
+        # when to close the game themselves.
+        game["phase"] = "active"
         game["started_at"] = timestamp
-        game["ended_at"] = timestamp
+        game["ended_at"] = ""
         game["results"] = calculate_two_truths_results(game, finalized_at=timestamp)
         game["simulation"] = simulation
         return game

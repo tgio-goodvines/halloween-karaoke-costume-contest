@@ -339,3 +339,18 @@ slide. Non-game image cards retain their foreground-media layout.
   Python tests, 27 dependency-free JavaScript tests, syntax/whitespace checks,
   and 1280x720 browser QA of recruitment and three-row spotlight cards with no
   document or game-region overflow.
+
+## Two Truths Rehearsal And Results Refinement (2026-10-22)
+
+- The Two Truths test tool creates eight players by default with complete clue
+  submissions and guesses, but leaves the game active. Hosts can inspect the
+  provisional leaderboard, preview the winner/results spotlights, and choose
+  when to end the game; no draft result archive or generated result cards are
+  created until that explicit end action.
+- The ended left-stage card now labels the person or tie as the Two Truths and
+  a Lie winner instead of presenting an unexplained name.
+- Direct winner spotlights use the full game name rather than “mystery game.”
+  Direct results spotlights and the generated final-score card carry every
+  participant and score to the center-stage scoreboard instead of truncating
+  the standings.
+- No Redis schema or migration was required.

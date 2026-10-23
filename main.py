@@ -7047,7 +7047,7 @@ def build_two_truths_scoreboard_card(game: dict[str, object] | None = None) -> d
             "value_label": f"{entry.get('correct', 0)} pts",
             "meta_label": f"{entry.get('attempts', 0)} guesses · {entry.get('accuracy', 0):g}%",
         }
-        for index, entry in enumerate(scores[:5])
+        for index, entry in enumerate(scores)
     ]
     participant_names = [
         entry.get("name", "Guest")
@@ -7062,7 +7062,7 @@ def build_two_truths_scoreboard_card(game: dict[str, object] | None = None) -> d
         "primary": "Final Scores",
         "secondary": f"{len(participant_names)} participant{'s' if len(participant_names) != 1 else ''}",
         "tertiary": f"Players: {participant_note}" if participant_note else "Thanks for playing.",
-        "scoreboard": {"entries": rows},
+        "scoreboard": {"entries": rows, "show_all_entries": True},
     }
 
 
@@ -9202,8 +9202,18 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             ]
             if phase == "ended":
                 winners = two_truths_winners(game)
-                entry["primary"] = ", ".join(str(winner.get("name", "Guest")) for winner in winners) or "Final results ready"
-                entry["secondary"] = "Two Truths and a Lie winner" if len(winners) == 1 else "Two Truths and a Lie winners"
+                winner_names = ", ".join(str(winner.get("name", "Guest")) for winner in winners)
+                entry["status_label"] = "Winner revealed" if len(winners) == 1 else "Winners revealed"
+                entry["focus_label"] = "Two Truths and a Lie Winner" if len(winners) == 1 else "Two Truths and a Lie Winners"
+                entry["focus_mode"] = "feature" if winners else "message"
+                entry["feature_text"] = winner_names
+                entry["primary"] = "" if winners else "Final results ready"
+                top_score = int(winners[0].get("correct", 0) or 0) if winners else 0
+                entry["secondary"] = (
+                    f"{top_score} correct guess{'es' if top_score != 1 else ''}"
+                    if winners
+                    else "Final standings are ready"
+                )
             else:
                 if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
                     _apply_game_recruitment_card(
@@ -9506,7 +9516,8 @@ def build_game_stage_entries() -> list[dict[str, object]]:
 
         if phase == "ended":
             entry["presentation"] = "result"
-            entry["focus_label"] = "Winner" if game_public_winner_names(game_key, game) else "Final outcome"
+            if game_key != TWO_TRUTHS_GAME_KEY:
+                entry["focus_label"] = "Winner" if game_public_winner_names(game_key, game) else "Final outcome"
             entry["steps"] = []
             entry["action_label"] = "See results at tnq-halloween.com/party/results"
         if phase == "ended" and game_public_winner_names(game_key, game):
@@ -13771,14 +13782,19 @@ def admin_portal(admin_view: str):
                             player_count=player_count,
                             generated_at=_utc_now_iso(),
                         )
-                        upsert_game_result_archive(game_key)
-                        card_settings = display_config.setdefault("game_result_card_enabled", {})
-                        card_settings[f"games:{game_key}-winner"] = True
-                        card_settings[f"games:{game_key}-scores"] = True
                         display_config.setdefault("source_enabled", {})["games"] = True
+                        if game_key != TWO_TRUTHS_GAME_KEY:
+                            upsert_game_result_archive(game_key)
+                            card_settings = display_config.setdefault("game_result_card_enabled", {})
+                            card_settings[f"games:{game_key}-winner"] = True
+                            card_settings[f"games:{game_key}-scores"] = True
                         if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
                             live_display_event_override = None
-                        messages.append(f"Simulated {title} with {player_count} test players and finalized its results.")
+                        messages.append(
+                            f"Simulated {title} with {player_count} test players and completed guesses. Review or preview the standings, then end the game when ready."
+                            if game_key == TWO_TRUTHS_GAME_KEY
+                            else f"Simulated {title} with {player_count} test players and finalized its results."
+                        )
                         should_broadcast = True
 
                 elif action == "enable_game":
@@ -15324,7 +15340,8 @@ def admin_portal(admin_view: str):
         elif action == "show_two_truths_winner":
             game = two_truths_game()
             winners = two_truths_winners(game)
-            if game.get("phase") != "ended":
+            simulation_preview = bool(game.get("simulation", {}).get("is_simulated")) and game.get("phase") == "active"
+            if game.get("phase") != "ended" and not simulation_preview:
                 errors.append("End the game before showing its winner.")
             elif not winners:
                 errors.append("This game has no winner because nobody submitted a correct guess.")
@@ -15333,9 +15350,9 @@ def admin_portal(admin_view: str):
                 top_score = int(winners[0].get("correct", 0) or 0)
                 live_display_event_override = {
                     "type": "game_winner",
-                    "title": "Two Truths and a Lie",
+                    "title": "Two Truths and a Lie Winner" if len(winners) == 1 else "Two Truths and a Lie Winners",
                     "highlight": names,
-                    "message": "Tonight's mystery-game winner!" if len(winners) == 1 else "Tonight's mystery-game winners!",
+                    "message": "Tonight's Two Truths and a Lie winner!" if len(winners) == 1 else "Tonight's Two Truths and a Lie winners!",
                     "details": [f"{top_score} correct guess{'es' if top_score != 1 else ''}"],
                     "image_url": game_art_url(TWO_TRUTHS_GAME_KEY, winner=True),
                     "media_treatment": "background",
@@ -15345,21 +15362,18 @@ def admin_portal(admin_view: str):
 
         elif action == "show_two_truths_results":
             game = two_truths_game()
-            results = game.get("results", {})
-            scores = results.get("scores", []) if isinstance(results, dict) else []
-            if game.get("phase") != "ended":
+            simulation_preview = bool(game.get("simulation", {}).get("is_simulated")) and game.get("phase") == "active"
+            scoreboard = build_two_truths_scoreboard_card(game)
+            if game.get("phase") != "ended" and not simulation_preview:
                 errors.append("End the game before showing final results.")
             else:
-                details = [
-                    f"#{index + 1} {entry.get('name', 'Guest')}: {entry.get('correct', 0)} correct of {entry.get('attempts', 0)}"
-                    for index, entry in enumerate(scores[:6])
-                ] or ["No completed guesses were submitted."]
                 live_display_event_override = {
                     "type": "game_results",
                     "title": "Two Truths and a Lie Results",
                     "highlight": f"{len(game.get('participants', {}))} participants",
-                    "message": "Final mystery-game standings",
-                    "details": details,
+                    "message": "Final standings" if game.get("phase") == "ended" else "Test standings preview",
+                    "details": [],
+                    "scoreboard": scoreboard.get("scoreboard", {}) if scoreboard else {},
                     "image_url": game_art_url(TWO_TRUTHS_GAME_KEY),
                     "media_treatment": "background",
                 }

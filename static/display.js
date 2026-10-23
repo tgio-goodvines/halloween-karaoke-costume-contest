@@ -377,7 +377,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const renderScoreboard = (scoreboard) => {
-    const rows = safeArray(asObject(scoreboard).entries).slice(0, 3);
+    const safeScoreboard = asObject(scoreboard);
+    const entries = safeArray(safeScoreboard.entries);
+    const rows = safeScoreboard.show_all_entries ? entries : entries.slice(0, 3);
     if (!elements.centerScoreboard || !rows.length) return false;
     elements.centerScoreboard.innerHTML = '';
     rows.forEach((row, index) => {
@@ -486,6 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
     media_treatment: override.media_treatment || '',
     media_tone: override.media_tone || '',
     karaoke: override.karaoke,
+    scoreboard: override.scoreboard,
     duration_seconds: 8,
     override_type: override.type || '',
   });

@@ -381,3 +381,13 @@ fixed no-scroll track.
   and completed-order cards with long attendee/drink names. The center, bar,
   and document all retained zero overflow while the three right-stage rows
   expanded evenly through the available height.
+
+## Complete Two Truths Results And Winner Labels (2026-10-22)
+
+- Two Truths winner cards on the left rail now include an explicit winner or
+  winners label alongside the game title, winner name, and winner artwork.
+- Host-triggered Two Truths results are rendered as a structured center-stage
+  scoreboard. That scoreboard opts into showing every participating attendee
+  and score; the three-row limit remains the default for other center cards.
+- The winner spotlight names Two Truths and a Lie directly and the active test
+  rehearsal can preview both winner and results without ending the game.

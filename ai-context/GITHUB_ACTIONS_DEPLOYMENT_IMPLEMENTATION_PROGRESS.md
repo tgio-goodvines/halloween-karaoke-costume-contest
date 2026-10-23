@@ -265,3 +265,18 @@ values. Operational details are documented in
 Current durable deployment context should be read from this file,
 `ai-context/GITHUB_ACTIONS_EC2_DEPLOYMENT_PLAN.md`, and
 `ai-context/AWS_LAUNCH_TEMPLATE_HALLOWEEN_BOOTSTRAP.md`.
+
+## Host-Triggered Game Lists Deployment (2026-10-23)
+
+- Feature commit `fbda43599608959e4b259492c3599f61730b12fd` added
+  center-stage controls for the enabled Scavenger Hunt item list and the
+  completed/incomplete assigned Cursed Objectives lists.
+- GitHub Actions run `39982241400` completed successfully. Validation, exact-SHA
+  SSM deployment, and the workflow's public smoke tests all passed.
+- Independent post-deploy checks confirmed healthy Redis-backed Halloween
+  responses from both `https://tnq-halloween.com/health` and
+  `https://www.tnq-halloween.com/health`; `https://appg-v.com/health` remained
+  online.
+- Authenticated production UI verification confirmed `Show Hunt Item List`,
+  `Show Completed Objectives`, and `Show Uncompleted Objectives` are present in
+  their selected-game admin consoles.

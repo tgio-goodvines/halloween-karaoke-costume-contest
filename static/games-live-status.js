@@ -56,6 +56,7 @@
       element('h4', '', game.title || 'Party game'),
     );
     if (game.winners?.length) body.appendChild(element('p', 'live-game-card__winner', `Winner${game.winners.length === 1 ? '' : 's'}: ${game.winners.join(', ')}`));
+    else if (game.result_mode === 'round_review' && game.phase === 'ended') body.appendChild(element('p', '', 'Ballots unsealed · no scores or winners. Open the game for the round-by-round review.'));
     else body.appendChild(element('p', '', game.description || ''));
     const metrics = element('dl', 'live-game-card__metrics');
     (game.metrics || []).forEach((metric) => {
@@ -114,7 +115,7 @@
       const copy = element('div');
       copy.append(element('span', '', `${archive.year || ''} · ${archive.kind === 'costume' ? 'Costume' : 'Game'}`), element('h4', '', archive.title || 'Official result'));
       const winners = archive.summary?.winners || [];
-      copy.appendChild(element('p', '', winners.length ? `Winner${winners.length === 1 ? '' : 's'}: ${winners.join(', ')}` : 'No positive-score winner was recorded.'));
+      copy.appendChild(element('p', '', winners.length ? `Winner${winners.length === 1 ? '' : 's'}: ${winners.join(', ')}` : (archive.summary?.result_mode === 'round_review' ? 'Round review · this game has no winner.' : 'No positive-score winner was recorded.')));
       if (archive.summary?.scores?.length) copy.appendChild(renderScoreboard(archive.summary.scores));
       card.appendChild(copy);
       container.appendChild(card);

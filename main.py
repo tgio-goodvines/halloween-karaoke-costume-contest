@@ -78,6 +78,7 @@ from party_games import (
     calculate_prompt_results,
     calculate_two_truths_results,
     advance_prompt_game_automation,
+    build_mmf_round_reviews,
     build_simulated_game_state,
     empty_mmf_game_state,
     empty_cursed_objectives_game_state,
@@ -7272,6 +7273,8 @@ FEATURE_ART: dict[str, str] = {
 def game_public_score_rows(game_key: str, game: dict[str, object]) -> list[dict[str, object]]:
     if game.get("phase") != "ended":
         return []
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        return []
     results = game.get("results", {}) if isinstance(game.get("results"), dict) else {}
     rows = []
     for index, score in enumerate(results.get("scores", [])):
@@ -7304,7 +7307,12 @@ def game_public_winner_names(game_key: str, game: dict[str, object]) -> list[str
     ]
 
 
-def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]:
+def safe_game_status_view(
+    game_key: str,
+    user_id: str = "",
+    *,
+    include_mmf_review: bool = True,
+) -> dict[str, object]:
     game = party_game_state(game_key)
     metadata = GAME_CATALOG[game_key]
     phase = str(game.get("phase", "signup") or "signup")
@@ -7316,13 +7324,18 @@ def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]
         "short_title": metadata["short_title"],
         "description": metadata["description"],
         "image_url": game_art_url(game_key),
-        "winner_image_url": game_art_url(game_key, winner=True),
+        "winner_image_url": "" if game_key == MURDER_MARRY_FUCK_GAME_KEY else game_art_url(game_key, winner=True),
         "enabled": bool(game.get("enabled")),
         "phase": phase,
-        "status_label": "Closed · Final results" if phase == "ended" else ("Reviewing submissions" if phase == "review" else ("Open · Join anytime" if phase == "active" else "Disabled")),
+        "status_label": (
+            "Closed · Ballot review"
+            if phase == "ended" and game_key == MURDER_MARRY_FUCK_GAME_KEY
+            else ("Closed · Final results" if phase == "ended" else ("Reviewing submissions" if phase == "review" else ("Open · Join anytime" if phase == "active" else "Disabled")))
+        ),
         "participant_count": len(participants),
         "participating": bool(user_id and user_id in participants),
         "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
+        "result_mode": "round_review" if game_key == MURDER_MARRY_FUCK_GAME_KEY else "scored",
         "metrics": [],
         "winners": [],
         "scores": [],
@@ -7386,7 +7399,7 @@ def safe_game_status_view(game_key: str, user_id: str = "") -> dict[str, object]
         view["winners"] = game_public_winner_names(game_key, game)
         view["scores"] = game_public_score_rows(game_key, game)
         if game_key == MURDER_MARRY_FUCK_GAME_KEY:
-            view["rounds"] = copy.deepcopy(game.get("results", {}).get("round_results", []))
+            view["rounds"] = build_mmf_round_reviews(game) if include_mmf_review else []
         elif game_key in PROMPT_GAME_KEYS:
             identities = {
                 str(participant.get("player_id", "")): participant_public_name(
@@ -7462,12 +7475,12 @@ def upsert_game_result_archive(game_key: str) -> dict[str, object] | None:
         "subject_key": game_key,
         "title": GAME_CATALOG[game_key]["title"],
         "image_url": game_art_url(game_key),
-        "winner_image_url": game_art_url(game_key, winner=True),
+        "winner_image_url": "" if game_key == MURDER_MARRY_FUCK_GAME_KEY else game_art_url(game_key, winner=True),
         "status": str(existing.get("status", "draft")) if existing else "draft",
         "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
         "finalized_at": str(game.get("ended_at", "") or game.get("results", {}).get("finalized_at", "") or _utc_now_iso()),
         "published_at": str(existing.get("published_at", "")) if existing else "",
-        "summary": safe_game_status_view(game_key),
+        "summary": safe_game_status_view(game_key, include_mmf_review=False),
         "winner_links": game_winner_links(game_key, game),
     }
     if existing:
@@ -8138,7 +8151,8 @@ def mmf_admin_view() -> dict[str, object]:
         "key": MURDER_MARRY_FUCK_GAME_KEY,
         "metadata": GAME_CATALOG[MURDER_MARRY_FUCK_GAME_KEY],
         "statistics": statistics,
-        "winners": game_winners(MURDER_MARRY_FUCK_GAME_KEY, game),
+        "winners": [],
+        "round_reviews": build_mmf_round_reviews(game),
     }
 
 
@@ -8403,6 +8417,8 @@ def game_history_admin_view() -> dict[str, object]:
 def game_scoreboard_entry(game_key: str) -> dict[str, object] | None:
     if game_key == TWO_TRUTHS_GAME_KEY:
         return build_two_truths_scoreboard_card()
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        return None
     game = party_game_state(game_key)
     scores = game.get("results", {}).get("scores", [])
     if not scores:
@@ -8432,6 +8448,8 @@ def game_winner_entry(game_key: str) -> dict[str, object] | None:
         return None
     if game_key == TWO_TRUTHS_GAME_KEY:
         return build_two_truths_winner_entry()
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        return None
     winners = game_winners(game_key, game)
     if not winners:
         return None
@@ -8449,6 +8467,8 @@ def game_outcome_entry(game_key: str) -> dict[str, object] | None:
     game = party_game_state(game_key)
     if game.get("phase") != "ended":
         return None
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        return None
     winner = game_winner_entry(game_key)
     if winner:
         return winner
@@ -8458,13 +8478,6 @@ def game_outcome_entry(game_key: str) -> dict[str, object] | None:
         "secondary": "No positive score was recorded.",
         "tertiary": "Thanks for playing — the final standings are still available.",
     }
-
-
-def _mmf_person_name(round_result: dict[str, object], person_id: str) -> str:
-    for person in round_result.get("people", []):
-        if str(person.get("id", "")) == person_id:
-            return str(person.get("name", "Unknown"))
-    return "Unknown"
 
 
 def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
@@ -8512,16 +8525,21 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
     elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
         explicit_label = str(game.get("explicit_label", "F%$@"))
         labels = {"murder": "Murder", "marry": "Marry", "fuck": explicit_label}
-        for index, result in enumerate(game.get("results", {}).get("round_results", [])):
-            people = [str(person.get("name", "")) for person in result.get("people", [])]
-            slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": " · ".join(people), "message": "How did the party divide these three?", "details": [f"{result.get('respondent_count', 0)} completed ballots"]})
-            for action in MMF_ACTIONS:
-                winners = [_mmf_person_name(result, person_id) for person_id in result.get("winners", {}).get(action, [])]
+        slides[0].update(
+            {
+                "highlight": "Ballots unsealed",
+                "message": "Round by round, see exactly who chose what.",
+            }
+        )
+        for index, review in enumerate(build_mmf_round_reviews(game)):
+            people = [str(person.get("name", "")) for person in review.get("people", [])]
+            slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": " · ".join(people), "message": "Time to explain your choices.", "details": [f"{review.get('respondent_count', 0)} completed ballots"]})
+            for person in review.get("people", []):
                 detail_rows = []
-                for person in result.get("people", []):
-                    person_id = str(person.get("id", ""))
-                    detail_rows.append(f"{person.get('name', 'Unknown')}: {result.get('totals', {}).get(action, {}).get(person_id, 0)}")
-                slides.append({"type": "game_presentation", "title": f"Round {index + 1} · {labels[action]}", "highlight": ", ".join(winners) if winners else "No votes", "message": f"The party's {labels[action]} choice", "details": detail_rows})
+                for action in MMF_ACTIONS:
+                    identities = person.get("choices", {}).get(action, [])
+                    detail_rows.append(f"{labels[action]}: {', '.join(identities) if identities else 'Nobody'}")
+                slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": person.get("name", "Unknown"), "message": "Who chose what", "details": detail_rows, "image_url": person.get("image_url", "") or game_art_url(game_key)})
     elif game_key in PROMPT_GAME_KEYS:
         for index, game_round in enumerate(game.get("rounds", [])):
             if game_round.get("status") != "revealed":
@@ -9249,16 +9267,17 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                     )
         elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
             completed = sum(1 for participant in participants.values() if len(participant.get("answers", {})) >= 10)
-            entry["primary"] = "Ten rounds · three choices · one private ballot."
+            entry["primary"] = "Ten rounds · three choices · one sealed ballot."
             entry["metrics"] = [
                 {"label": "Players", "value": len(participants)},
                 {"label": "Complete", "value": f"{completed}/{len(participants)}"},
                 {"label": "Rounds", "value": "10"},
             ]
             if phase == "ended":
-                winners = game_winners(game_key, game)
-                entry["primary"] = ", ".join(str(winner.get("name", winner.get("alias", "Player"))) for winner in winners) or "Final results ready"
-                entry["secondary"] = "Game champions"
+                entry["status_label"] = "Ballots unsealed"
+                entry["focus_label"] = "Post-game review"
+                entry["primary"] = "Round-by-round choices are ready for the reveal."
+                entry["secondary"] = "No scores. No winners. Just explanations."
             else:
                 spotlight_rows, ballot_count = _mmf_live_spotlight(game)
                 if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
@@ -9516,7 +9535,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
 
         if phase == "ended":
             entry["presentation"] = "result"
-            if game_key != TWO_TRUTHS_GAME_KEY:
+            if game_key not in {TWO_TRUTHS_GAME_KEY, MURDER_MARRY_FUCK_GAME_KEY}:
                 entry["focus_label"] = "Winner" if game_public_winner_names(game_key, game) else "Final outcome"
             entry["steps"] = []
             entry["action_label"] = "See results at tnq-halloween.com/party/results"
@@ -12172,6 +12191,7 @@ def build_party_game_page_context(
         "identity_by_player": identity_by_player,
         "show_participation_form": show_participation_form,
         "selected_mmf_round_id": selected_mmf_round_id,
+        "mmf_round_reviews": build_mmf_round_reviews(game),
         "participant_missions": participant_missions,
         "scavenger_items": scavenger_items,
         "success": success,
@@ -13785,9 +13805,10 @@ def admin_portal(admin_view: str):
                         display_config.setdefault("source_enabled", {})["games"] = True
                         if game_key != TWO_TRUTHS_GAME_KEY:
                             upsert_game_result_archive(game_key)
-                            card_settings = display_config.setdefault("game_result_card_enabled", {})
-                            card_settings[f"games:{game_key}-winner"] = True
-                            card_settings[f"games:{game_key}-scores"] = True
+                            if game_key != MURDER_MARRY_FUCK_GAME_KEY:
+                                card_settings = display_config.setdefault("game_result_card_enabled", {})
+                                card_settings[f"games:{game_key}-winner"] = True
+                                card_settings[f"games:{game_key}-scores"] = True
                         if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
                             live_display_event_override = None
                         messages.append(
@@ -13896,7 +13917,11 @@ def admin_portal(admin_view: str):
                             game["results"] = calculate_prompt_results(game, finalized_at=finalized_at)
                         upsert_game_result_archive(game_key)
                         write_state_backup_if_available(f"game-{game_key}-ended")
-                        messages.append(f"{title} ended and its scores were finalized.")
+                        messages.append(
+                            f"{title} ended. Its ballots are unsealed for the round-by-round review."
+                            if game_key == MURDER_MARRY_FUCK_GAME_KEY
+                            else f"{title} ended and its scores were finalized."
+                        )
                         should_broadcast = True
 
                 elif action == "reset_game":

@@ -6186,6 +6186,25 @@ textarea,
   object-fit: cover;
 }
 
+.mmf-review-person {
+  display: grid;
+  grid-template-columns: minmax(88px, 150px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  padding-block: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.mmf-review-person:last-child { border-bottom: 0; }
+.mmf-review-person h4 { margin-top: 0; }
+.mmf-review-person ul { margin-bottom: 0; }
+.mmf-review-person img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid rgba(255, 74, 194, 0.42);
+  object-fit: cover;
+}
+
 .mmf-choices label,
 .game-round-controls form {
   display: grid;
@@ -6369,6 +6388,7 @@ textarea,
   .mmf-choices,
   .response-grid,
   .mmf-admin-form fieldset { grid-template-columns: 1fr; }
+  .mmf-review-person { grid-template-columns: 1fr; }
   .game-prompt-list li { align-items: stretch; flex-direction: column; }
   .game-prompt-list li > div { flex-wrap: wrap; }
   .game-admin-selector {

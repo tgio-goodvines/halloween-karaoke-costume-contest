@@ -50,7 +50,9 @@ Important working notes:
   from `/admin/games` and new games default to disabled. MMF and prompt games
   default to signed-in names. Admins may switch each game to anonymous aliases
   while enrollment is open; attendees cannot choose their own mode. Blind
-  voting and private MMF ballots remain private regardless of the admin setting.
+  voting remains private. MMF choices stay hidden during play, then the ended
+  game reveals who chose what using signed-in names or aliases according to the
+  admin setting; raw ballots still stay out of exports and historical archives.
   Cursed Objectives assigns three private missions per player without reusing
   an objective across active participants; players record completion throughout
   the event and the host closes it once for a named final leaderboard. Admins

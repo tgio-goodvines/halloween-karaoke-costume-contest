@@ -25,7 +25,7 @@
           <div class="live-game-card__body">
             <span class="game-phase game-phase--{{ game.phase }}">{{ game.status_label }}</span>
             <h4>{{ game.title }}</h4>
-            {% if game.winners %}<p class="live-game-card__winner">Winner{% if game.winners|length != 1 %}s{% endif %}: {{ game.winners|join(', ') }}</p>{% else %}<p>{{ game.description }}</p>{% endif %}
+            {% if game.winners %}<p class="live-game-card__winner">Winner{% if game.winners|length != 1 %}s{% endif %}: {{ game.winners|join(', ') }}</p>{% elif game.result_mode == 'round_review' and game.phase == 'ended' %}<p>Ballots unsealed · no scores or winners. Open the game for the round-by-round review.</p>{% else %}<p>{{ game.description }}</p>{% endif %}
             <dl class="live-game-card__metrics">{% for metric in game.metrics %}<div><dt>{{ metric.label }}</dt><dd>{{ metric.value }}</dd></div>{% endfor %}</dl>
             {% if game.phase == 'ended' and game.scores %}<ol class="compact-scoreboard">{% for score in game.scores[:5] %}<li><span>#{{ score.rank }} {{ score.name }}</span><strong>{{ score.points }} pts</strong></li>{% endfor %}</ol>{% endif %}
             {% if game.enabled and party_day_has_arrived %}<a class="button" href="{{ url_for('party_games', game=game.slug) }}">{{ 'See Full Results' if game.phase == 'ended' else 'Open Game' }}</a>{% endif %}
@@ -61,7 +61,7 @@
         <article class="history-card">
           {% if archive.winner_image_url or archive.image_url %}<img src="{{ archive.winner_image_url or archive.image_url }}" alt="" class="history-card__image">{% endif %}
           <div><span>{{ archive.year }} · {{ archive.kind|title }}</span><h4>{{ archive.title }}</h4>
-            {% if archive.summary.winners %}<p><strong>Winner{% if archive.summary.winners|length != 1 %}s{% endif %}:</strong> {{ archive.summary.winners|join(', ') }}</p>{% else %}<p>No positive-score winner was recorded.</p>{% endif %}
+            {% if archive.summary.winners %}<p><strong>Winner{% if archive.summary.winners|length != 1 %}s{% endif %}:</strong> {{ archive.summary.winners|join(', ') }}</p>{% elif archive.summary.result_mode == 'round_review' %}<p>Round review · this game has no winner.</p>{% else %}<p>No positive-score winner was recorded.</p>{% endif %}
             {% if archive.summary.scores %}<ol class="compact-scoreboard">{% for score in archive.summary.scores[:5] %}<li><span>#{{ score.rank }} {{ score.name }}</span><strong>{{ score.points }}</strong></li>{% endfor %}</ol>{% endif %}
           </div>
         </article>

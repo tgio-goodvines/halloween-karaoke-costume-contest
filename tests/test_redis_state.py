@@ -7849,8 +7849,13 @@ class RedisStateTests(unittest.TestCase):
                 game = main.party_game_state(game_key)
                 self.assertTrue(game["enabled"])
                 self.assertEqual(requested_player_count, len(game["participants"]))
-                self.assertTrue(game["results"]["scores"])
-                self.assertTrue(main.game_winners(game_key, game))
+                if game_key == main.MURDER_MARRY_FUCK_GAME_KEY:
+                    self.assertEqual([], game["results"]["scores"])
+                    self.assertEqual([], main.game_winners(game_key, game))
+                    self.assertEqual(10, len(main.build_mmf_round_reviews(game)))
+                else:
+                    self.assertTrue(game["results"]["scores"])
+                    self.assertTrue(main.game_winners(game_key, game))
                 if game_key == main.TWO_TRUTHS_GAME_KEY:
                     self.assertEqual("active", game["phase"])
                     self.assertEqual("", game["ended_at"])
@@ -7891,6 +7896,13 @@ class RedisStateTests(unittest.TestCase):
 
                 cards = main.generated_game_result_entries(include_hidden=True)
                 card_ids = {entry["id"] for entry in cards}
+                if game_key == main.MURDER_MARRY_FUCK_GAME_KEY:
+                    self.assertNotIn(f"games:{game_key}-winner", card_ids)
+                    self.assertNotIn(f"games:{game_key}-scores", card_ids)
+                    self.assertNotIn(f"games:{game_key}-winner".encode(), display_page.data)
+                    persisted = self.redis_state()
+                    self.assertTrue(persisted["games_state"][game_key]["simulation"]["is_simulated"])
+                    continue
                 winner_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-winner")
                 self.assertIn(f"games:{game_key}-winner", card_ids)
                 self.assertIn(f"games:{game_key}-scores", card_ids)
@@ -8086,7 +8098,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertFalse(main.party_game_state(main.BAD_ADVICE_GAME_KEY)["anonymous_mode"])
         self.assertEqual("Legacy Guest", main.participant_public_name(participant, anonymous=False))
 
-    def test_mmf_admin_anonymous_lifecycle_scoring_presentation_export_and_reset(self):
+    def test_mmf_admin_anonymous_lifecycle_review_presentation_export_and_reset(self):
         game_key = main.MURDER_MARRY_FUCK_GAME_KEY
         slug = main.GAME_CATALOG[game_key]["slug"]
         with main.app.test_client() as admin:
@@ -8145,14 +8157,36 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, next_slide.status_code)
         game = main.party_game_state(game_key)
         self.assertEqual("ended", game["phase"])
-        self.assertEqual(2, len(game["results"]["winner_player_ids"]))
-        self.assertTrue(all(score["points"] == 30 for score in game["results"]["scores"]))
-        self.assertEqual(set(aliases.values()), {score["name"] for score in game["results"]["scores"]})
+        self.assertEqual([], game["results"]["winner_player_ids"])
+        self.assertEqual([], game["results"]["scores"])
+        round_reviews = main.build_mmf_round_reviews(game)
+        self.assertEqual(10, len(round_reviews))
+        self.assertEqual(
+            set(aliases.values()),
+            set(round_reviews[0]["people"][0]["choices"]["murder"]),
+        )
+        presentation_slides = main.build_game_presentation_slides(game_key)
+        self.assertEqual(41, len(presentation_slides))
+        self.assertEqual("Ballots unsealed", presentation_slides[0]["highlight"])
+        self.assertIn(
+            f"Murder: {', '.join(sorted(aliases.values()))}",
+            presentation_slides[2]["details"],
+        )
+        archive = next(
+            entry
+            for entry in main.result_archives
+            if entry.get("subject_key") == game_key
+        )
+        self.assertEqual("round_review", archive["summary"]["result_mode"])
+        self.assertEqual([], archive["summary"]["rounds"])
+        self.assertEqual([], archive["winner_links"])
+        self.assertEqual("", archive["winner_image_url"])
         public_result_text = json.dumps(
             {
                 "scoreboard": main.game_scoreboard_entry(game_key),
                 "winner": main.game_winner_entry(game_key),
                 "stage": [entry for entry in main.build_game_stage_entries() if entry.get("game_key") == game_key],
+                "review": round_reviews,
             }
         )
         self.assertNotIn("Jamie", public_result_text)
@@ -8295,7 +8329,7 @@ class RedisStateTests(unittest.TestCase):
         late_player_id = main.party_game_state(game_key)["participants"]["user-3"]["player_id"]
         self.assertEqual(response_id, main.prompt_round_for_game(main.party_game_state(game_key))["votes"][late_player_id])
 
-    def test_single_player_games_start_and_score_without_peer_votes(self):
+    def test_single_player_mmf_reveals_ballot_without_creating_a_winner(self):
         game_key = main.MURDER_MARRY_FUCK_GAME_KEY
         slug = main.GAME_CATALOG[game_key]["slug"]
         with main.app.test_client() as admin:
@@ -8322,9 +8356,13 @@ class RedisStateTests(unittest.TestCase):
             self.login_admin(admin)
             admin.post("/admin/games", data={"action": "end_game", "game_key": game_key})
         mmf_results = main.party_game_state(game_key)["results"]
-        self.assertEqual(30, mmf_results["scores"][0]["points"])
-        self.assertEqual(1, len(mmf_results["winner_player_ids"]))
+        self.assertEqual([], mmf_results["scores"])
+        self.assertEqual([], mmf_results["winner_player_ids"])
+        reviews = main.build_mmf_round_reviews(main.party_game_state(game_key))
+        self.assertEqual(["Solo"], reviews[0]["people"][0]["choices"]["murder"])
+        self.assertEqual([], main.generated_game_result_entries(include_hidden=True))
 
+    def test_single_player_prompt_games_score_without_peer_votes(self):
         for game_key in main.PROMPT_GAME_KEYS:
             with self.subTest(game_key=game_key):
                 self.reset_state()

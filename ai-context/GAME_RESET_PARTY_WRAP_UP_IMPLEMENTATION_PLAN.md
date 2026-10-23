@@ -302,7 +302,7 @@ Detailed archive rules by engine:
 
 - Two Truths: cards, public participant identities, final standings, guess
   counts/accuracy, and optionally sanitized individual guess rows.
-- MMF: final standings and round/action aggregates only; never ballots.
+- MMF: round/action aggregates only; never raw ballots or winner standings.
 - Prompt games: prompt text, revealed responses, aggregate vote totals, round
   winners, final standings, and only the configured public identity.
 

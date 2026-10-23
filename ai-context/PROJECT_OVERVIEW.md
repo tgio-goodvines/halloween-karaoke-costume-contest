@@ -249,8 +249,8 @@ the process-local cache:
   receiver replaces only the remainder after the current song.
 - `games_state`: seven-game registry state. Two Truths and a Lie stores clues and
   identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
-  trios, an admin-controlled public identity mode, private ballots, aggregate results,
-  and presentation state;
+  trios, an admin-controlled public identity mode, ballots hidden during play,
+  post-game round/person choice reviews, aggregate results, and presentation state;
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only store independent
   prompt decks, blind submission/voting/reveal rounds, an admin-controlled public
   identity mode, votes, cumulative scores, presentation state, and explicit
@@ -383,7 +383,7 @@ This is intentionally a simple Flask/Jinja app:
 - `static/display.js` drives live-display rotation, override rendering, SSE updates, and polling.
 - `static/slides.js` rotates dashboard highlight slides.
 - `party_games.py` owns the game catalog, defaults, normalization, alias
-  generation, MMF plurality scoring, shared prompt-vote scoring, Two Truths
+  generation, MMF post-game ballot review, shared prompt-vote scoring, Two Truths
   scoring, ties, and statistics while `main.py` keeps Flask routes, admin
   operations, presentation slides, and Redis integration.
 

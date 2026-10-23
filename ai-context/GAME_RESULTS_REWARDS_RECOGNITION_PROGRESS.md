@@ -15,7 +15,8 @@ crediting, and a complete feature/winner artwork system.
 - `GET /api/party/games-data` supplies the polling payload with `Cache-Control:
   no-store`. It is regular-role protected and never exposes account IDs, real
   names behind anonymous game aliases, prompt-response authors during blind
-  voting, or private MMF ballots.
+  voting, or raw MMF ballots. The current ended-game MMF workspace may reveal
+  public identities by choice, but archives retain aggregates only.
 - The party overview links to Results & Rewards in pre-party and party-night
   modes. Party-night overview/game pages also refresh status every five seconds
   and when the tab returns to the foreground.

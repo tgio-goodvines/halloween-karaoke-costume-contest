@@ -368,10 +368,10 @@ Redis-backed `display_settings`, defaulting to
 `HALLOWEEN_DISPLAY_WIFI_NETWORK` and `HALLOWEEN_DISPLAY_WIFI_PASSWORD`; blank
 values hide either row. Current game data, clues/prompts, voting responses, and
 phase metrics instead rotate independently in `layout.games`. Host-controlled
-`game_presentation` overrides walk MMF aggregate action totals or revealed
-prompt winners with previous/next center-stage controls; only the admin-selected
-public identity enters result payloads, and individual MMF ballots
-never enter display payloads. Scavenger Hunt adds a `review` phase between
+`game_presentation` overrides walk MMF round/person choice reviews or revealed
+prompt winners with previous/next center-stage controls. MMF choices stay out
+of display payloads during active play; after close, only the admin-selected
+public identity enters its review payloads. Scavenger Hunt adds a `review` phase between
 active uploads and finalized results; its presentation walks item dividers and
 private evidence photos through the authenticated display while review controls
 remain in the admin session. Admin
@@ -383,13 +383,14 @@ not replace an active contest/karaoke/winner center card. `build_rotation_entrie
 returns party-night cards even before `HALLOWEEN_PARTY_START` so hosts can
 stage and test the live display ahead of the event.
 
-Ended game result cards are derived from finalized `games_state` results with
+Ended scored-game result cards are derived from finalized `games_state` results with
 stable `games:<game-key>-winner` and `games:<game-key>-scores` IDs. They remain
 available independently of attendee game enablement. Per-card inclusion is
 stored in `display_config.game_result_card_enabled`; `/admin/display` can show
 either card immediately or include/hide it from normal center rotation. Games
 with no positive score receive a No Winner outcome card instead of silently
-omitting the result.
+omitting the result. MMF is intentionally unscored and produces neither card;
+its result is the host-stepped round review.
 
 `build_simulated_game_state()` creates deterministic completed test data for
 all seven engines. The admin action backs up Redis, preserves MMF trio, prompt,

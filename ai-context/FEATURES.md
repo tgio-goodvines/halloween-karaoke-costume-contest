@@ -86,8 +86,9 @@
 - Murder, Marry, F%$@ defaults opted-in players to signed-in display names. The
   admin may switch the entire game to anonymous aliases during enrollment. It presents ten
   configurable trios of famous adults. Players use each action once per
-  round, can edit ballots while active, and score one point for every assignment
-  matching the party plurality. Individual ballots are never exposed.
+  round and can edit ballots while active. It has no scores or winners. Choices
+  stay hidden during play, then the ended-game review shows, for each person in
+  each round, which public identities assigned every action.
 - Fill in the Blank: After Dark, Bad Advice Hotline, and Wrong Answers Only use
   independent prompt decks over one shared blind response/voting engine. Players
   default to signed-in display names; the admin can switch each entire game to
@@ -419,10 +420,11 @@ app state.
   center rotation. Persistent `game_*` overrides let admins pause center stage
   on game, winner, or result announcements while ready notices remain isolated
   to the right rail.
-- Blind prompt responses join the left stage only after voting opens. Ended MMF
-  and prompt games use the admin-selected signed-in-name or anonymous-alias mode
-  on winner/outcome and scoreboard cards, while host-controlled
-  presentation overrides walk the display through each aggregate result.
+- Blind prompt responses join the left stage only after voting opens. Ended
+  prompt games use the admin-selected signed-in-name or anonymous-alias mode on
+  winner/outcome and scoreboard cards. MMF generates no winner or score cards;
+  its host-controlled presentation walks each round and public figure, revealing
+  who assigned Murder, Marry, and the configured third choice.
 - Generated game result cards remain available after attendee enrollment is
   disabled. `/admin/display` lists each card with Show Now and Include/Hide
   controls; the Party Games source toggle remains the master visibility switch.

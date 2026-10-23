@@ -734,16 +734,6 @@ def normalize_alias_participant(raw: object, user_id: str, *, include_answers: b
 
 def calculate_mmf_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
     participants = game.get("participants", {})
-    anonymous_mode = bool(game.get("anonymous_mode"))
-    scores_by_player = {str(entry.get("player_id")): 0 for entry in participants.values()}
-    identities = {
-        str(entry.get("player_id")): {
-            "name": participant_public_name(entry, anonymous=anonymous_mode),
-            "alias": str(entry.get("alias", "Player")),
-            "anonymous": anonymous_mode,
-        }
-        for entry in participants.values()
-    }
     round_results = []
     for game_round in game.get("rounds", []):
         round_id = str(game_round.get("id", ""))
@@ -762,28 +752,75 @@ def calculate_mmf_results(game: dict[str, Any], *, finalized_at: str | None = No
         for action in MMF_ACTIONS:
             top = max(totals[action].values(), default=0)
             winners[action] = sorted(person_id for person_id, count in totals[action].items() if top > 0 and count == top)
-        for participant in participants.values():
-            player_id = str(participant.get("player_id", ""))
+        round_results.append({"round_id": round_id, "people": copy.deepcopy(people), "respondent_count": respondent_count, "totals": totals, "winners": winners})
+    return {
+        "finalized_at": finalized_at or utc_now_iso(),
+        "round_results": round_results,
+        "scores": [],
+        "winner_player_ids": [],
+    }
+
+
+def build_mmf_round_reviews(game: dict[str, Any]) -> list[dict[str, Any]]:
+    """Reveal completed MMF ballots after close without retaining them in archives."""
+    if game.get("phase") != "ended":
+        return []
+    anonymous_mode = bool(game.get("anonymous_mode"))
+    participants = [
+        participant
+        for participant in game.get("participants", {}).values()
+        if isinstance(participant, dict)
+    ]
+    participants.sort(
+        key=lambda participant: participant_public_name(
+            participant,
+            anonymous=anonymous_mode,
+        ).casefold()
+    )
+    reviews = []
+    for game_round in game.get("rounds", []):
+        if not isinstance(game_round, dict):
+            continue
+        round_id = str(game_round.get("id", ""))
+        people = [person for person in game_round.get("people", []) if isinstance(person, dict)]
+        person_ids = {str(person.get("id", "")) for person in people}
+        reviewed_people = []
+        respondent_count = 0
+        valid_answers = []
+        for participant in participants:
             answer = participant.get("answers", {}).get(round_id, {})
             if set(answer.values()) != person_ids or len(set(answer.values())) != 3:
                 continue
-            scores_by_player[player_id] += sum(1 for action in MMF_ACTIONS if answer.get(action) in winners[action])
-        round_results.append({"round_id": round_id, "people": copy.deepcopy(people), "respondent_count": respondent_count, "totals": totals, "winners": winners})
-    scores = [
-        {
-            "player_id": player_id,
-            "name": identities.get(player_id, {}).get("name", "Player"),
-            "alias": identities.get(player_id, {}).get("alias", "Player"),
-            "anonymous": bool(identities.get(player_id, {}).get("anonymous", True)),
-            "points": points,
-            "completed_rounds": len(next((entry.get("answers", {}) for entry in participants.values() if str(entry.get("player_id")) == player_id), {})),
-        }
-        for player_id, points in scores_by_player.items()
-    ]
-    scores.sort(key=lambda entry: (-entry["points"], entry["name"].casefold()))
-    top_score = scores[0]["points"] if scores else 0
-    winner_player_ids = [entry["player_id"] for entry in scores if top_score > 0 and entry["points"] == top_score]
-    return {"finalized_at": finalized_at or utc_now_iso(), "round_results": round_results, "scores": scores, "winner_player_ids": winner_player_ids}
+            respondent_count += 1
+            valid_answers.append(
+                (
+                    participant_public_name(participant, anonymous=anonymous_mode),
+                    answer,
+                )
+            )
+        for person in people:
+            person_id = str(person.get("id", ""))
+            reviewed_people.append(
+                {
+                    **copy.deepcopy(person),
+                    "choices": {
+                        action: [
+                            identity
+                            for identity, answer in valid_answers
+                            if str(answer.get(action, "")) == person_id
+                        ]
+                        for action in MMF_ACTIONS
+                    },
+                }
+            )
+        reviews.append(
+            {
+                "round_id": round_id,
+                "respondent_count": respondent_count,
+                "people": reviewed_people,
+            }
+        )
+    return reviews
 
 
 def normalize_mmf_game_state(raw: object) -> dict[str, Any]:
@@ -1549,6 +1586,8 @@ def game_winners(game_key: str, game: dict[str, Any]) -> list[dict[str, Any]]:
     if game_key == TWO_TRUTHS_GAME_KEY:
         winner_ids = set(results.get("winner_ids", []))
         return [entry for entry in results.get("scores", []) if entry.get("user_id") in winner_ids]
+    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+        return []
     winner_ids = set(results.get("winner_player_ids", []))
     return [entry for entry in results.get("scores", []) if entry.get("player_id") in winner_ids]
 

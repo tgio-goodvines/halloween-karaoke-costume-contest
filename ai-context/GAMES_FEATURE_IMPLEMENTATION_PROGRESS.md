@@ -12,8 +12,8 @@ operations, and host-controlled live-display results.
    rotation, identity guesses, tied winners, and final reveal.
 2. **Murder, Marry, F%$@** — admin-selected signed-in-name or anonymous-alias
    mode, ten configurable trios of famous adults, one unique assignment per
-   action and round, aggregate-only results, plurality scoring, and announcer
-   presentation.
+   action and round, ballots hidden during play, and a post-game announcer
+   review that shows who chose what for every person. It has no winners.
 3. **Fill in the Blank: After Dark** — blind prompt responses and voting with
    an admin-selected public identity mode.
 4. **Bad Advice Hotline** — fictional dilemmas, blind bad advice, response
@@ -53,8 +53,7 @@ the next procedurally generated prompt. The host can pause, resume, skip, or
 manually advance a round and can end the game from any phase.
 
 All games can open with zero players. MMF and all three prompt games support a
-one-player session. A solo MMF
-ballot is scored against its own round pluralities. A prompt round with one
+one-player session. A solo MMF ballot remains a valid post-game review. A prompt round with one
 response skips the impossible self-vote step, reveals a solo spotlight, and
 awards one point. Two Truths remains open to clue submission with fewer than two
 players; guessing becomes useful as additional mystery guests join.
@@ -72,9 +71,9 @@ players; guessing becomes useful as additional mystery guests join.
 - Exactly ten rounds and three famous adults per round.
 - Every completed ballot uses Murder, Marry, and the configurable third label
   exactly once.
-- One point when a player's assignment matches the party plurality for an
-  action; tied pluralities all count.
-- Maximum score is 30. Everyone tied at the top positive score wins.
+- There are no scores, rankings, or winners.
+- After the host closes the game, each round is reviewed person by person with
+  the public identities that assigned each action.
 
 ### Prompt Games
 
@@ -91,8 +90,10 @@ players; guessing becomes useful as additional mystery guests join.
 - Prompt responses remain authorless during voting so named enrollment cannot
   bias voting. Reveals, scoreboards, result cards, and presentation slides use
   the admin-selected public identity.
-- MMF individual ballots remain private for named and anonymous players alike.
-  Admin/export surfaces show aggregate selections only.
+- MMF individual ballots remain hidden while the game is active. After close,
+  attendee and authenticated display review surfaces reveal choices using the
+  admin-selected signed-in names or aliases. Exports and historical archives
+  still retain aggregate selections only.
 - The aggregate game export removes account-keyed participant maps from MMF and
   prompt games. Anonymous players' signed-in names are not exported.
 - Active prompt responses rotate only after voting opens, preventing early
@@ -119,8 +120,9 @@ players; guessing becomes useful as additional mystery guests join.
 - Scavenger Hunt includes its item editor, all-photo review queue, per-photo
   credit decisions, pending-review guard, and separate score finalization.
 - Ended games provide Start, Previous, and Next announcer presentation controls,
-  direct winner/results cards, and normal-rotation resume.
-- MMF presentation walks through each trio and action total. Prompt presentation
+  applicable winner/results cards, and normal-rotation resume.
+- MMF presentation walks through each trio and then each person with the public
+  identities behind all three choices. It does not create winner/score cards. Prompt presentation
   walks through each revealed prompt and winning response under its selected
   public identity.
 - Ended winner/scoreboard cards join normal live-display rotation. Prompt
@@ -261,9 +263,8 @@ players; guessing becomes useful as additional mystery guests join.
 - A generated alias is retained for every player as a safe fallback. Schema-v12
   normalization adds the game-level mode and backfills legacy display names from
   registered users when available.
-- Prompt voting remains blind and MMF ballots remain aggregate-only. Selected
-  identities appear only on appropriate reveals, final scoreboards, winner
-  cards, presentation slides, and live-display results.
+- Prompt voting remains blind. MMF ballots remain hidden until the game closes,
+  when selected identities appear in the attendee and live-display round review.
 - The game export redacts MMF and prompt account keys, includes admin-selected
   public names plus game anonymity flags, omits account names in anonymous mode, and still
   excludes individual MMF ballots.
@@ -326,9 +327,10 @@ slide. Non-game image cards retain their foreground-media layout.
   beside the signup prompt until the three-player threshold is reached.
 - Two Truths uses the persisted shuffled statement order and deterministically
   shuffles mystery-card order without revealing the submitter or lie metadata.
-- MMF aggregates all valid saved round choices and renders exactly one stable
+- Active MMF aggregates all valid saved round choices and renders exactly one stable
   leader for Murder, Marry, and the configured third label. Individual ballots,
-  account IDs, player IDs, and participant identities remain private.
+  account IDs, player IDs, and participant identities remain private until the
+  host closes the game; the ended review then reveals public identities only.
 - Active Scavenger Hunt rankings use submitted evidence because photos cannot
   be approved until host review. Review cards switch to approved-photo counts;
   both views cap the vertical card at three named attendees and omit photo data.

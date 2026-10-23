@@ -7,7 +7,7 @@
     <p class="admin-panel__eyebrow">Party games</p>
     <h2>Games</h2>
     <p>Opt in, play from your phone, and watch the hosts reveal the results.</p>
-    <p class="game-live-status game-status-indicator game-status-indicator--{{ game.phase }}" data-selected-game-live-status role="status"><span aria-hidden="true"></span>{{ 'Closed · Final results' if game.phase == 'ended' else ('Closed · Host review' if game.phase == 'review' else 'Open · Join anytime') }} · {{ game.participants|length }} player{{ '' if game.participants|length == 1 else 's' }}</p>
+    <p class="game-live-status game-status-indicator game-status-indicator--{{ game.phase }}" data-selected-game-live-status role="status"><span aria-hidden="true"></span>{{ ('Closed · Ballot review' if game_key == 'murder_marry_fuck' else 'Closed · Final results') if game.phase == 'ended' else ('Closed · Host review' if game.phase == 'review' else 'Open · Join anytime') }} · {{ game.participants|length }} player{{ '' if game.participants|length == 1 else 's' }}</p>
   </header>
 
   <div data-game-live-content data-game-content-revision="{{ game_view_revision }}">
@@ -42,7 +42,7 @@
         <p>{{ game_metadata.description }}</p>
       </div>
       <span class="game-phase game-phase--{{ game.phase }}">
-        <span aria-hidden="true"></span>{% if game.phase == 'active' %}Open · Join anytime{% elif game.phase == 'review' %}Closed · Host review{% elif game.phase == 'ended' %}Closed · Final results{% else %}Disabled{% endif %}
+        <span aria-hidden="true"></span>{% if game.phase == 'active' %}Open · Join anytime{% elif game.phase == 'review' %}Closed · Host review{% elif game.phase == 'ended' %}{{ 'Closed · Ballot review' if game_key == 'murder_marry_fuck' else 'Closed · Final results' }}{% else %}Disabled{% endif %}
       </span>
     </header>
 
@@ -120,12 +120,12 @@
               </form>
             {% endfor %}
           </div>
-        {% else %}<div class="game-opt-in"><h4>Join the private ballot</h4><p>Join at any time before the hosts close the game. You can complete all ten rounds, and individual choices stay private. Results use {{ 'anonymous aliases' if game.anonymous_mode else 'signed-in names' }} selected by the hosts.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}" data-view-key="game-join:{{ game_key }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Join Game</button></form></div>{% endif %}
+        {% else %}<div class="game-opt-in"><h4>Join the sealed ballot</h4><p>Join at any time before the hosts close the game. You can complete all ten rounds, and individual choices stay hidden during play. The post-game review uses {{ 'anonymous aliases' if game.anonymous_mode else 'signed-in names' }} selected by the hosts.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}" data-view-key="game-join:{{ game_key }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Join Game</button></form></div>{% endif %}
       {% else %}
-        {% include '_game_scoreboard.html' %}
+        <div class="game-instructions"><h4>Ballots unsealed</h4><p>There are no scores or winners. Review each round and see who assigned every person to each choice.</p></div>
         <div class="mmf-results">
-          {% for round in results.round_results %}<details class="admin-entry"><summary><strong>Round {{ loop.index }}</strong><span>{{ round.respondent_count }} ballots</span></summary><div class="admin-entry__form">
-            {% for action in mmf_actions %}<h4>{{ game.explicit_label if action == 'fuck' else action|title }}</h4><ul>{% for person in round.people %}<li>{{ person.name }} — {{ round.totals[action][person.id] }} vote{{ 's' if round.totals[action][person.id] != 1 else '' }}{% if person.id in round.winners[action] %} <strong>Winner</strong>{% endif %}</li>{% endfor %}</ul>{% endfor %}
+          {% for round in mmf_round_reviews %}<details class="admin-entry"><summary><strong>Round {{ loop.index }}</strong><span>{{ round.respondent_count }} ballots</span></summary><div class="admin-entry__form">
+            {% for person in round.people %}<article class="mmf-review-person">{% if person.image_url %}<img src="{{ person.image_url }}" alt="{{ person.name }}">{% endif %}<div><h4>{{ person.name }}</h4><ul>{% for action in mmf_actions %}<li><strong>{{ game.explicit_label if action == 'fuck' else action|title }}:</strong> {{ person.choices[action]|join(', ') if person.choices[action] else 'Nobody' }}</li>{% endfor %}</ul></div></article>{% endfor %}
           </div></details>{% endfor %}
         </div>
       {% endif %}

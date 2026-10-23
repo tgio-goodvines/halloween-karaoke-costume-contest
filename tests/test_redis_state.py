@@ -9329,6 +9329,16 @@ class RedisStateTests(unittest.TestCase):
 
     def test_party_wrapup_finalizes_sends_personalized_recaps_and_cleans_games(self):
         self.prepare_real_wrapup_state()
+        main.karaoke_signups = [
+            main.KaraokeSignup(
+                name="Jamie",
+                song_title="Monster Mash",
+                artist="Bobby Pickett",
+                youtube_link="https://www.youtube.com/watch?v=vNuVifA7DSU",
+                id="karaoke-recap-1",
+            )
+        ]
+        main.youtube_karaoke["playlist_id"] = "PLfinalHalloweenKaraoke"
         main.drink_orders = [
             {
                 "id": "bar-order-1",
@@ -9408,6 +9418,19 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(any("Jamie" in html for html in html_bodies))
         self.assertTrue(any("Morgan" in html for html in html_bodies))
         self.assertTrue(all("Participation by Game" in html for html in html_bodies))
+        self.assertTrue(all("Games We Played" in html for html in html_bodies))
+        self.assertTrue(all("Game Winners" not in html for html in html_bodies))
+        self.assertTrue(all("Final Karaoke Songs" in html for html in html_bodies))
+        self.assertTrue(all("Monster Mash" in html for html in html_bodies))
+        self.assertTrue(all("Open Karaoke Playlist" in html for html in html_bodies))
+        self.assertTrue(all("Results &amp; Hall of Fame" not in html for html in html_bodies))
+        text_bodies = [
+            message["Content"]["Simple"]["Body"]["Text"]["Data"]
+            for message in fake_ses.sent_messages
+        ]
+        self.assertTrue(all("Games we played:" in text for text in text_bodies))
+        self.assertTrue(all("Final karaoke songs:" in text for text in text_bodies))
+        self.assertTrue(all("/party/results" not in text for text in text_bodies))
 
     def test_partial_official_delivery_preserves_games_and_retry_skips_sent_recipient(self):
         self.prepare_real_wrapup_state()

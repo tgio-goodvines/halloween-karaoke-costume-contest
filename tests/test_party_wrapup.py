@@ -2,11 +2,13 @@ import json
 import unittest
 
 from party_games import (
+    FILL_BLANK_GAME_KEY,
     GAME_CATALOG,
     MURDER_MARRY_FUCK_GAME_KEY,
     TWO_TRUTHS_GAME_KEY,
     build_simulated_game_state,
     empty_mmf_game_state,
+    empty_prompt_game_state,
     empty_two_truths_game_state,
 )
 from party_wrapup import (
@@ -15,7 +17,12 @@ from party_wrapup import (
     reset_games_state,
     sanitize_mutable_game_data,
 )
-from recap_analytics import build_playlist_snapshot, build_recap_analytics, chart_rows
+from recap_analytics import (
+    build_game_result_snapshots,
+    build_playlist_snapshot,
+    build_recap_analytics,
+    chart_rows,
+)
 
 
 class PartyWrapupHelperTests(unittest.TestCase):
@@ -181,6 +188,40 @@ class PartyWrapupHelperTests(unittest.TestCase):
         self.assertEqual("7 min", analytics["playlist"]["duration_label"])
         self.assertEqual(1, analytics["playlist"]["unique_artist_count"])
         self.assertEqual([100.0, 50.0], [row["percent"] for row in chart_rows([{"label": "A", "value": 2}, {"label": "B", "value": 1}])])
+
+    def test_recap_only_includes_enabled_games_with_participation(self):
+        played = build_simulated_game_state(
+            TWO_TRUTHS_GAME_KEY,
+            empty_two_truths_game_state(enabled=True),
+            player_count=4,
+        )
+        disabled = build_simulated_game_state(
+            MURDER_MARRY_FUCK_GAME_KEY,
+            empty_mmf_game_state(enabled=False),
+            player_count=4,
+        )
+        disabled["enabled"] = False
+        unplayed = empty_prompt_game_state(FILL_BLANK_GAME_KEY, enabled=True)
+
+        snapshots = build_game_result_snapshots(
+            {
+                TWO_TRUTHS_GAME_KEY: played,
+                MURDER_MARRY_FUCK_GAME_KEY: disabled,
+                FILL_BLANK_GAME_KEY: unplayed,
+            }
+        )
+        analytics = build_recap_analytics(
+            {
+                TWO_TRUTHS_GAME_KEY: played,
+                MURDER_MARRY_FUCK_GAME_KEY: disabled,
+                FILL_BLANK_GAME_KEY: unplayed,
+            },
+            attendee_count=4,
+        )
+
+        self.assertEqual([TWO_TRUTHS_GAME_KEY], [row["game_key"] for row in snapshots])
+        self.assertEqual([TWO_TRUTHS_GAME_KEY], [row["game_key"] for row in analytics["participation_by_game"]])
+        self.assertEqual(1, analytics["games_played"])
 
 
 if __name__ == "__main__":

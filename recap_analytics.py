@@ -131,7 +131,7 @@ def build_game_result_snapshots(raw_games: object, *, include_incomplete: bool =
     for game_key, metadata in GAME_CATALOG.items():
         game = games[game_key]
         participant_count = len(game.get("participants", {}))
-        if not participant_count and not include_incomplete:
+        if not game.get("enabled") or not participant_count:
             continue
         ended = game.get("phase") == "ended"
         winners = game_winners(game_key, game) if ended else []
@@ -210,7 +210,7 @@ def build_recap_analytics(
         game = games[game_key]
         participants = game.get("participants", {})
         participant_count = len(participants)
-        if participant_count:
+        if game.get("enabled") and participant_count:
             participation_rows.append(
                 {
                     "game_key": game_key,
@@ -222,7 +222,7 @@ def build_recap_analytics(
             for account_id in participants:
                 participation_by_account[str(account_id)] += 1
         activity_value, activity_label = _game_activity(game_key, game)
-        if participant_count or activity_value:
+        if game.get("enabled") and (participant_count or activity_value):
             activity_rows.append(
                 {
                     "game_key": game_key,
@@ -231,7 +231,7 @@ def build_recap_analytics(
                     "detail": activity_label,
                 }
             )
-        if game.get("phase") == "ended":
+        if game.get("enabled") and game.get("phase") == "ended":
             leaderboard[game_key] = chart_rows(_score_rows(game_key, game)[:3])
 
     depth_counts = Counter(participation_by_account.values())
@@ -274,9 +274,21 @@ def build_recap_analytics(
 
     return {
         "attendee_count": _nonnegative_int(attendee_count),
-        "games_played": sum(1 for game in games.values() if game.get("participants")),
-        "total_game_participations": sum(len(game.get("participants", {})) for game in games.values()),
-        "total_game_interactions": sum(_game_activity(game_key, game)[0] for game_key, game in games.items()),
+        "games_played": sum(
+            1
+            for game in games.values()
+            if game.get("enabled") and game.get("participants")
+        ),
+        "total_game_participations": sum(
+            len(game.get("participants", {}))
+            for game in games.values()
+            if game.get("enabled")
+        ),
+        "total_game_interactions": sum(
+            _game_activity(game_key, game)[0]
+            for game_key, game in games.items()
+            if game.get("enabled")
+        ),
         "participation_by_game": chart_rows(participation_rows),
         "activity_by_game": chart_rows(activity_rows),
         "participation_depth": chart_rows(depth_rows),
@@ -336,16 +348,21 @@ def build_sample_recap_payload() -> dict[str, Any]:
         "test_mode": "sample",
         "recipient_name": "Specimen Seven",
         "game_results": [
-            {"title": "Two Truths and a Lie", "winner_label": "Specimen Seven", "participant_count": 15},
-            {"title": "Murder, Marry, F%$@", "winner_label": "Jamie and Morgan", "participant_count": 12},
-            {"title": "Fill in the Blank: After Dark", "winner_label": "No Winner", "participant_count": 10},
-            {"title": "Bad Advice Hotline", "winner_label": "Dr. Disaster", "participant_count": 9},
-            {"title": "Wrong Answers Only", "winner_label": "Specimen Seven", "participant_count": 8},
-            {"title": "Cursed Objectives", "winner_label": "Objective Progress", "participant_count": 7},
-            {"title": "Scavenger Hunt", "winner_label": "Jamie", "participant_count": 11},
+            {"title": "Two Truths and a Lie", "participant_count": 15},
+            {"title": "Murder, Marry, F%$@", "participant_count": 12},
+            {"title": "Fill in the Blank: After Dark", "participant_count": 10},
+            {"title": "Bad Advice Hotline", "participant_count": 9},
+            {"title": "Wrong Answers Only", "participant_count": 8},
+            {"title": "Cursed Objectives", "participant_count": 7},
+            {"title": "Scavenger Hunt", "participant_count": 11},
         ],
         "costume_result": {"winner": "Specimen Seven", "costume": "Radioactive Vampire"},
         "playlist_snapshot": playlist,
+        "karaoke_snapshot": [
+            {"position": 1, "title": "Monster Mash", "artist": "Bobby Pickett", "singers": "Specimen Seven", "watch_url": "https://www.youtube.com/watch?v=vNuVifA7DSU"},
+            {"position": 2, "title": "I Put a Spell on You", "artist": "Annie Lennox", "singers": "Jamie & Morgan", "watch_url": "https://www.youtube.com/watch?v=3TrSMaOZm3Y"},
+        ],
+        "karaoke_playlist_url": "https://www.youtube.com/playlist?list=PLsampleHalloweenKaraoke",
         "analytics_snapshot": {
             "attendee_count": 18,
             "games_played": 7,

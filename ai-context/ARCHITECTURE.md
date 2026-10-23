@@ -631,8 +631,11 @@ SSE connections.
   aggregate analytics, email bar view models, and deterministic sample data.
 - Schema 18 adds `event_wrapups`, `game_data_archives`, and `test_email_audit`.
   Older snapshots normalize these to empty values without side effects.
-- A wrap-up freezes public results, playlist, analytics, roster, personal
-  summaries, achievements, retention policies, and per-recipient outcomes.
+- A wrap-up freezes public results for durable history, jukebox and karaoke
+  playlist snapshots, analytics, roster, personal summaries, achievements,
+  retention policies, and per-recipient outcomes. Recap email projection lists
+  only enabled games with participation and intentionally omits game winners
+  and the Results & Hall of Fame link.
 - SES calls release the request Redis lock first. Attempt/outcome writes use
   short explicit locks, so successful recipients remain recorded if another fails.
 - Cleanup resets active games, applies history retention, sanitizes retained

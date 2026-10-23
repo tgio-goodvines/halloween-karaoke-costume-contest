@@ -590,6 +590,8 @@ def normalize_event_wrapups(raw: object) -> dict[str, dict[str, Any]]:
             "game_results": _safe_list(raw_wrapup.get("game_results", [])),
             "costume_result": copy.deepcopy(raw_wrapup.get("costume_result", {})) if isinstance(raw_wrapup.get("costume_result"), dict) else {},
             "playlist_snapshot": _safe_list(raw_wrapup.get("playlist_snapshot", [])),
+            "karaoke_snapshot": _safe_list(raw_wrapup.get("karaoke_snapshot", [])),
+            "karaoke_playlist_url": _text(raw_wrapup.get("karaoke_playlist_url"), 500),
             "analytics_snapshot": copy.deepcopy(raw_wrapup.get("analytics_snapshot", {})) if isinstance(raw_wrapup.get("analytics_snapshot"), dict) else {},
             "attendee_account_ids": [_text(value, 120) for value in raw_wrapup.get("attendee_account_ids", []) if _text(value, 120)] if isinstance(raw_wrapup.get("attendee_account_ids"), list) else [],
             "attendance_credit_ids": [_text(value, 180) for value in raw_wrapup.get("attendance_credit_ids", []) if _text(value, 180)] if isinstance(raw_wrapup.get("attendance_credit_ids"), list) else [],

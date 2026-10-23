@@ -7746,6 +7746,38 @@ def current_costume_recap_result() -> dict[str, object]:
     }
 
 
+def current_karaoke_recap_snapshot() -> list[dict[str, object]]:
+    snapshot: list[dict[str, object]] = []
+    youtube_enabled = bool(app.config.get("YOUTUBE_KARAOKE_ENABLED"))
+    for signup in karaoke_signups:
+        workflow = signup.workflow if isinstance(signup.workflow, dict) else {}
+        performance = str(workflow.get("performance_status", "waiting") or "waiting")
+        if performance == "skipped":
+            continue
+        if youtube_enabled and (
+            str(workflow.get("approval_status", "pending") or "pending") != "approved"
+            or str(workflow.get("playlist_sync_status", "not_started") or "not_started")
+            not in {"synced", "out_of_order"}
+        ):
+            continue
+        youtube = signup.youtube if isinstance(signup.youtube, dict) else {}
+        snapshot.append(
+            {
+                "position": len(snapshot) + 1,
+                "title": str(signup.song_title or "Song")[:300],
+                "artist": str(signup.artist or "Artist")[:180],
+                "singers": signup.singer_label,
+                "watch_url": str(youtube.get("watch_url") or signup.youtube_link or "")[:500],
+            }
+        )
+    return snapshot
+
+
+def current_karaoke_playlist_url() -> str:
+    playlist_id = str(youtube_karaoke.get("playlist_id", "") or "").strip()
+    return f"https://www.youtube.com/playlist?list={playlist_id}" if playlist_id else ""
+
+
 def build_current_recap_payload(
     attendee_account_ids: set[str],
     *,
@@ -7762,6 +7794,8 @@ def build_current_recap_payload(
         "game_results": build_game_result_snapshots(games_state, include_incomplete=include_incomplete),
         "costume_result": current_costume_recap_result(),
         "playlist_snapshot": playlist,
+        "karaoke_snapshot": current_karaoke_recap_snapshot(),
+        "karaoke_playlist_url": current_karaoke_playlist_url(),
         "analytics_snapshot": build_recap_analytics(
             games_state,
             attendee_count=len(attendee_account_ids),
@@ -7944,6 +7978,8 @@ def finalize_current_wrapup(
         "game_results": recap_payload["game_results"],
         "costume_result": recap_payload["costume_result"],
         "playlist_snapshot": recap_payload["playlist_snapshot"],
+        "karaoke_snapshot": recap_payload["karaoke_snapshot"],
+        "karaoke_playlist_url": recap_payload["karaoke_playlist_url"],
         "analytics_snapshot": recap_payload["analytics_snapshot"],
         "attendee_account_ids": sorted(attendee_account_ids),
         "attendance_credit_ids": attendance_credit_ids,
@@ -7971,6 +8007,8 @@ def personalized_wrapup_payload(wrapup: dict[str, object], account_id: str) -> d
         "game_results": copy.deepcopy(wrapup.get("game_results", [])),
         "costume_result": copy.deepcopy(wrapup.get("costume_result", {})),
         "playlist_snapshot": copy.deepcopy(wrapup.get("playlist_snapshot", [])),
+        "karaoke_snapshot": copy.deepcopy(wrapup.get("karaoke_snapshot", [])),
+        "karaoke_playlist_url": str(wrapup.get("karaoke_playlist_url", "") or ""),
         "analytics_snapshot": copy.deepcopy(wrapup.get("analytics_snapshot", {})),
         "test_mode": "",
     }
@@ -7995,10 +8033,12 @@ def build_party_recap_text(payload: dict[str, object], *, test_mode: str = "") -
     lines = []
     if test_mode:
         lines.extend(["TEST EMAIL — NOT THE OFFICIAL PARTY RECAP", f"Data source: {test_mode}", ""])
-    lines.extend([str(payload.get("title", "Halloween Party")), "The party results are in!", ""])
-    for result in payload.get("game_results", []):
-        if isinstance(result, dict):
-            lines.append(f"{result.get('title', 'Game')}: {result.get('winner_label', 'Pending')}")
+    lines.extend([str(payload.get("title", "Halloween Party")), "Your party wrap-up", ""])
+    game_results = [result for result in payload.get("game_results", []) if isinstance(result, dict)]
+    if game_results:
+        lines.append("Games we played:")
+        for result in game_results:
+            lines.append(f"- {result.get('title', 'Game')}")
     costume = payload.get("costume_result", {})
     if isinstance(costume, dict) and costume:
         lines.extend(["", f"Costume winner: {costume.get('winner', 'Guest')} — {costume.get('costume', '')}"])
@@ -8007,10 +8047,21 @@ def build_party_recap_text(payload: dict[str, object], *, test_mode: str = "") -
     for song in payload.get("playlist_snapshot", []):
         if isinstance(song, dict):
             lines.append(f"{song.get('position', '')}. {song.get('title', 'Song')} — {song.get('artist', 'Artist')}")
+    karaoke = [song for song in payload.get("karaoke_snapshot", []) if isinstance(song, dict)]
+    if karaoke:
+        lines.extend(["", "Final karaoke songs:"])
+        for song in karaoke:
+            lines.append(
+                f"{song.get('position', '')}. {song.get('title', 'Song')} — "
+                f"{song.get('artist', 'Artist')} ({song.get('singers', 'Guest')})"
+            )
+    if payload.get("karaoke_playlist_url"):
+        if not karaoke:
+            lines.extend(["", "Final karaoke playlist:"])
+        lines.append(str(payload["karaoke_playlist_url"]))
     achievements = payload.get("new_achievements", [])
     if achievements:
         lines.extend(["", "Your newly unlocked achievements: " + ", ".join(str(value) for value in achievements)])
-    lines.extend(["", app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_results")])
     return "\n".join(lines)
 
 
@@ -8030,12 +8081,11 @@ def send_party_recap_message(
     except ImportError:
         return False, "Email sending is enabled, but boto3 is unavailable."
     subject_prefix = "[TEST] " if test_mode else ""
-    subject = f"{subject_prefix}{payload.get('title', 'Halloween Party')} Results & Recap"
+    subject = f"{subject_prefix}{payload.get('title', 'Halloween Party')} Wrap-Up"
     html_body = render_template(
         "email/party_recap.html",
         recap=payload,
         test_mode=test_mode,
-        results_url=app.config["PUBLIC_BASE_URL"].rstrip("/") + url_for("party_results"),
     )
     try:
         ses_client.send_email(

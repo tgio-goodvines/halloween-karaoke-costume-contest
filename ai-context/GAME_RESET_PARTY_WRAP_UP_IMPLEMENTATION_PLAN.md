@@ -410,13 +410,14 @@ official delivery.
 The frozen recap preview includes:
 
 - thank-you introduction;
-- each played game's winner/tied winners or No Winner outcome;
-- compact leaderboards and selected analytics;
+- the names of enabled games that were actually played, without game winners;
+- participation-by-game and selected aggregate analytics;
 - costume winner and leaderboard;
-- resulting jukebox playlist with Apple Music links;
+- resulting jukebox playlist with Apple Music links and Jukebox DNA/source/top-artist analytics;
+- final karaoke song list and the configured YouTube playlist link;
 - aggregate attendance/achievement statistics;
 - a personalized Your Night section; and
-- a Results & Hall of Fame link.
+- no Results & Hall of Fame link.
 
 Send one SES message per selected attendee to protect addresses and enable
 personalization/retry. Never use a shared To/CC recipient list.

@@ -16,7 +16,7 @@
   {% endif %}
 {%- endmacro %}
 
-{% call shell(recap.title, "The Party Results Are In", "You are receiving this because the hosts confirmed your attendance at " ~ recap.title ~ ".") %}
+{% call shell(recap.title, "Your Party Wrap-Up", "You are receiving this because the hosts confirmed your attendance at " ~ recap.title ~ ".") %}
   {% if test_mode %}
     <div style="margin: 0 0 22px; padding: 14px; border: 2px solid #ff3131; background: #38191e; color: #ffffff; font-weight: 700; line-height: 1.5; text-align: center;">TEST EMAIL — NOT THE OFFICIAL PARTY RECAP<br><span style="font-size: 12px; font-weight: 400;">Data source: {{ 'Generated Sample Data' if test_mode == 'sample' else 'Current Party Database' }}</span></div>
   {% endif %}
@@ -30,14 +30,14 @@
     </tr>
   </table>
 
-  <h2 style="margin: 24px 0 12px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Game Winners</h2>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+  {% if recap.game_results %}
+  <h2 style="margin: 24px 0 12px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Games We Played</h2>
+  <ul style="margin: 0 0 20px; padding-left: 22px; color: #f6edf0; line-height: 1.7;">
     {% for game in recap.game_results %}
-      <tr><td style="padding: 10px 0; border-bottom: 1px solid #3d3f43; color: #b9a8b0;">{{ game.title }}</td><td style="padding: 10px 0 10px 12px; border-bottom: 1px solid #3d3f43; color: #f6edf0; font-weight: 700; text-align: right;">{{ game.winner_label }}</td></tr>
-    {% else %}
-      <tr><td style="padding: 10px 0; color: #b9a8b0;">No completed games yet.</td></tr>
+      <li>{{ game.title }}</li>
     {% endfor %}
-  </table>
+  </ul>
+  {% endif %}
 
   {{ bars("Participation by Game", recap.analytics_snapshot.participation_by_game) }}
 
@@ -59,6 +59,16 @@
     </ol>
   {% endif %}
 
+  {% if recap.karaoke_snapshot or recap.karaoke_playlist_url %}
+    <h2 style="margin: 26px 0 10px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Final Karaoke Songs</h2>
+    {% if recap.karaoke_snapshot %}
+    <ol style="margin: 0 0 18px; padding-left: 24px; color: #f6edf0; line-height: 1.7;">
+      {% for song in recap.karaoke_snapshot %}<li>{% if song.watch_url %}<a href="{{ song.watch_url }}" style="color: #ebaeb6;">{{ song.title }}</a>{% else %}{{ song.title }}{% endif %} — {{ song.artist }}{% if song.singers %} · {{ song.singers }}{% endif %}</li>{% endfor %}
+    </ol>
+    {% else %}<p style="margin: 0 0 18px; color: #b9a8b0; line-height: 1.6;">No karaoke songs were recorded.</p>{% endif %}
+    {% if recap.karaoke_playlist_url %}<p style="margin: 0 0 24px;">{{ button(recap.karaoke_playlist_url, "Open Karaoke Playlist") }}</p>{% endif %}
+  {% endif %}
+
   {% if recap.new_achievements %}
     <h2 style="margin: 26px 0 10px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; text-transform: uppercase;">Your New Achievements</h2>
     <p style="margin: 0 0 22px; color: #f6edf0; line-height: 1.6;">{{ recap.new_achievements|join(' · ') }}</p>
@@ -68,6 +78,4 @@
     <h3 style="margin: 26px 0 12px; color: #ebaeb6; font-family: Georgia, 'Times New Roman', serif; font-size: 20px; text-transform: uppercase;">Your Night</h3>
     <p style="margin: 0 0 22px; color: #b9a8b0; line-height: 1.6;">{{ recap.personal_summary.games_joined|default(0) }} games joined · {{ recap.personal_summary.wins|default(0) }} wins · {{ recap.personal_summary.jukebox_requests|default(0) }} jukebox requests · {{ recap.personal_summary.karaoke_appearances|default(0) }} karaoke appearances</p>
   {% endif %}
-
-  <p style="margin: 24px 0 0;">{{ button(results_url, "Results & Hall of Fame") }}</p>
 {% endcall %}

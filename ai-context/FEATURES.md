@@ -524,11 +524,15 @@ app state.
   all seven games to their original disabled state between test runs.
 - Wrap-Up suggests attendees from recorded activity, supports manual roster
   correction and per-game history retention, and can save a side-effect-free draft.
-- Finalization publishes eligible real winners, grants idempotent attendance
-  and winner credit, unlocks Party Attendee on first attendance, and freezes
-  the playlist and recap analytics.
-- The recap includes winners, the costume champion, final playlist, aggregate
-  stat/bar charts, new achievements, and an attendee-specific night summary.
+- Finalization publishes eligible real winners to durable history, grants
+  idempotent attendance and winner credit, unlocks Party Attendee on first
+  attendance, and freezes recap analytics plus the jukebox and karaoke lists.
+- The recap email names only enabled games that were actually played; it does
+  not disclose game winners. It keeps participation by game, the costume
+  champion, Jukebox DNA/source/top-artist analytics, the final jukebox
+  playlist, the final karaoke song list and YouTube playlist link, new
+  achievements, and an attendee-specific Your Night summary. It does not link
+  to Results & Hall of Fame.
 - Sample and current-database tests are labeled `[TEST]` and go only to the
   entered address. Official retries contact only unsent recipients; all-success
   delivery applies retention choices and clears mutable game state.

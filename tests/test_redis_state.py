@@ -7660,12 +7660,54 @@ class RedisStateTests(unittest.TestCase):
             )
             advanced = attendee.get(saved.headers["Location"])
 
-        self.assertEqual(10, initial.data.count(b"data-mmf-round-target="))
+        self.assertEqual(5, initial.data.count(b"data-mmf-round-target="))
         self.assertEqual(302, saved.status_code)
         self.assertIn("round=mmf-02", saved.headers["Location"])
         self.assertIn(b'data-mmf-round-target="mmf-01"', advanced.data)
         self.assertIn(b"Completed", advanced.data)
         self.assertIn(b'data-mmf-round-target="mmf-02"', advanced.data)
+
+    def test_admin_can_configure_mmf_round_count_between_one_and_ten(self):
+        game_key = main.MURDER_MARRY_FUCK_GAME_KEY
+        game = main.party_game_state(game_key)
+        payload = {
+            "action": "update_mmf_rounds",
+            "game_key": game_key,
+            "round_count": "3",
+            "explicit_label": "F%$@",
+        }
+        for round_index, game_round in enumerate(game["rounds"][:3]):
+            for person_index, person in enumerate(game_round["people"]):
+                prefix = f"round_{round_index}_person_{person_index}"
+                payload[f"{prefix}_name"] = person["name"]
+                payload[f"{prefix}_image_url"] = person["image_url"]
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            reduced = admin.post(f"/admin/games?game={game_key}", data=payload)
+            expanded = admin.post(
+                f"/admin/games?game={game_key}",
+                data={**payload, "round_count": "7"},
+            )
+            invalid = admin.post(
+                f"/admin/games?game={game_key}",
+                data={**payload, "round_count": "11"},
+            )
+
+        self.assertEqual(200, reduced.status_code)
+        self.assertEqual(200, expanded.status_code)
+        self.assertEqual(7, len(main.party_game_state(game_key)["rounds"]))
+        self.assertEqual(
+            main.DEFAULT_MMF_ROUNDS[6]["people"],
+            main.party_game_state(game_key)["rounds"][6]["people"],
+        )
+        self.assertIn(b'value="7"', expanded.data)
+        self.assertIn(b"Round count must be between 1 and 10.", invalid.data)
+        self.assertEqual(7, len(main.party_game_state(game_key)["rounds"]))
+        normalized = main.normalize_games_state(
+            {game_key: {"rounds": copy.deepcopy(main.DEFAULT_MMF_ROUNDS)}}
+        )
+        self.assertEqual(10, len(normalized[game_key]["rounds"]))
 
     def test_prompt_game_stage_separates_prompt_response_and_bottom_utility_data(self):
         game = main.party_game_state(main.WRONG_ANSWERS_GAME_KEY)
@@ -7896,7 +7938,7 @@ class RedisStateTests(unittest.TestCase):
                 if game_key == main.MURDER_MARRY_FUCK_GAME_KEY:
                     self.assertEqual([], game["results"]["scores"])
                     self.assertEqual([], main.game_winners(game_key, game))
-                    self.assertEqual(10, len(main.build_mmf_round_reviews(game)))
+                    self.assertEqual(5, len(main.build_mmf_round_reviews(game)))
                 else:
                     self.assertTrue(game["results"]["scores"])
                     if game_key == main.CURSED_OBJECTIVES_GAME_KEY:
@@ -8336,7 +8378,8 @@ class RedisStateTests(unittest.TestCase):
             self.login_regular(attendee, user_id="user-1", username="Jamie")
             active_page = attendee.get(f"/party/games?game={slug}")
         self.assertEqual(200, active_page.status_code)
-        self.assertIn(b"Round 10", active_page.data)
+        self.assertIn(b"Round 5", active_page.data)
+        self.assertNotIn(b"Round 6", active_page.data)
 
         for user_id, username in (("user-1", "Jamie"), ("user-2", "Morgan")):
             with main.app.test_client() as attendee:
@@ -8368,13 +8411,13 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual([], game["results"]["winner_player_ids"])
         self.assertEqual([], game["results"]["scores"])
         round_reviews = main.build_mmf_round_reviews(game)
-        self.assertEqual(10, len(round_reviews))
+        self.assertEqual(5, len(round_reviews))
         self.assertEqual(
             set(aliases.values()),
             set(round_reviews[0]["people"][0]["choices"]["murder"]),
         )
         presentation_slides = main.build_game_presentation_slides(game_key)
-        self.assertEqual(41, len(presentation_slides))
+        self.assertEqual(21, len(presentation_slides))
         self.assertEqual("Ballots unsealed", presentation_slides[0]["highlight"])
         self.assertIn(
             f"Murder: {', '.join(sorted(aliases.values()))}",
@@ -8428,7 +8471,7 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual("active", main.party_game_state(game_key)["phase"])
         self.assertFalse(main.party_game_state(game_key)["anonymous_mode"])
         self.assertEqual({}, main.party_game_state(game_key)["participants"])
-        self.assertEqual(10, len(main.party_game_state(game_key)["rounds"]))
+        self.assertEqual(5, len(main.party_game_state(game_key)["rounds"]))
 
     def test_prompt_games_share_anonymous_response_vote_and_result_engine(self):
         for game_key in main.PROMPT_GAME_KEYS:

@@ -29,7 +29,9 @@ PROMPT_GENERATOR_VERSION = 1
 GAME_STATEMENT_MAX_LENGTH = 240
 GAME_PROMPT_MAX_LENGTH = 240
 GAME_RESPONSE_MAX_LENGTH = 280
-MMF_ROUND_COUNT = 10
+MMF_ROUND_COUNT = 5
+MMF_MIN_ROUND_COUNT = 1
+MMF_MAX_ROUND_COUNT = 10
 MMF_ACTIONS = ("murder", "marry", "fuck")
 CURSED_OBJECTIVES_PER_PLAYER = 3
 SCAVENGER_REVIEW_STATUSES = {"pending", "approved", "rejected"}
@@ -52,10 +54,10 @@ GAME_CATALOG: dict[str, dict[str, str]] = {
         "title": "Murder, Marry, F%$@",
         "short_title": "Murder / Marry / F%$@",
         "engine": "choice",
-        "description": "Assign three famous adults to three impossible choices across ten rounds.",
+        "description": "Assign three famous adults to three impossible choices across configurable rounds.",
         "image": "images/games/murder-marry-fuck.jpg",
         "winner_image": "images/games/winners/murder-marry-fuck-winner.jpg",
-        "personality": "Ten infamous trios. Three irreversible decisions.",
+        "personality": "Infamous trios. Three irreversible decisions.",
         "solo_note": "Solo play supported.",
     },
     FILL_BLANK_GAME_KEY: {
@@ -433,7 +435,7 @@ def empty_mmf_game_state(*, enabled: bool = False) -> dict[str, Any]:
         "started_at": "",
         "ended_at": "",
         "explicit_label": "F%$@",
-        "rounds": copy.deepcopy(DEFAULT_MMF_ROUNDS),
+        "rounds": copy.deepcopy(DEFAULT_MMF_ROUNDS[:MMF_ROUND_COUNT]),
         "participants": {},
         "results": {"finalized_at": "", "round_results": [], "scores": [], "winner_player_ids": []},
         "presentation": {"active": False, "slide_index": 0},
@@ -839,12 +841,12 @@ def normalize_mmf_game_state(raw: object) -> dict[str, Any]:
     seen_rounds: set[str] = set()
     raw_rounds = raw.get("rounds", [])
     if isinstance(raw_rounds, list):
-        for index, raw_round in enumerate(raw_rounds[:MMF_ROUND_COUNT]):
+        for index, raw_round in enumerate(raw_rounds[:MMF_MAX_ROUND_COUNT]):
             game_round = normalize_mmf_round(raw_round, index)
             if game_round and game_round["id"] not in seen_rounds:
                 normalized_rounds.append(game_round)
                 seen_rounds.add(game_round["id"])
-    state["rounds"] = normalized_rounds or copy.deepcopy(DEFAULT_MMF_ROUNDS)
+    state["rounds"] = normalized_rounds or copy.deepcopy(DEFAULT_MMF_ROUNDS[:MMF_ROUND_COUNT])
     valid_rounds = {entry["id"]: {person["id"] for person in entry["people"]} for entry in state["rounds"]}
     participants = {}
     raw_participants = raw.get("participants", {})
@@ -1670,7 +1672,11 @@ def build_simulated_game_state(
         game = empty_mmf_game_state(enabled=True)
         game["anonymous_mode"] = bool(current_game.get("anonymous_mode"))
         configured_rounds = current_game.get("rounds", [])
-        game["rounds"] = copy.deepcopy(configured_rounds if len(configured_rounds) == MMF_ROUND_COUNT else DEFAULT_MMF_ROUNDS)
+        game["rounds"] = copy.deepcopy(
+            configured_rounds
+            if MMF_MIN_ROUND_COUNT <= len(configured_rounds) <= MMF_MAX_ROUND_COUNT
+            else DEFAULT_MMF_ROUNDS[:MMF_ROUND_COUNT]
+        )
         game["explicit_label"] = str(current_game.get("explicit_label", "F%$@") or "F%$@")[:24]
         for index in range(count):
             number = index + 1

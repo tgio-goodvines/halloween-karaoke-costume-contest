@@ -199,11 +199,12 @@
     </section>
 
     {% if game_key == 'murder_marry_fuck' %}
-      <details class="admin-entry game-admin-disclosure" data-view-key="game:{{ game_key }}:configuration"><summary class="admin-entry__summary"><span class="admin-entry__summary-text"><strong>Configure ten trios</strong><span>Game configuration</span></span><span class="game-admin-disclosure__meta">{{ admin_game.rounds|length }} rounds</span></summary>
+      <details class="admin-entry game-admin-disclosure" data-view-key="game:{{ game_key }}:configuration"><summary class="admin-entry__summary"><span class="admin-entry__summary-text"><strong>Configure round trios</strong><span>Game configuration</span></span><span class="game-admin-disclosure__meta">{{ admin_game.rounds|length }} rounds</span></summary>
         <form method="post" class="admin-entry__form mmf-admin-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}">
+          <label for="mmf-round-count">Rounds per game</label><input id="mmf-round-count" name="round_count" type="number" min="{{ admin_game.min_round_count }}" max="{{ admin_game.max_round_count }}" step="1" value="{{ admin_game.rounds|length }}" required aria-describedby="mmf-round-count-help"><span id="mmf-round-count-help" class="form-helper">Choose {{ admin_game.min_round_count }} to {{ admin_game.max_round_count }} rounds. Increasing the count adds built-in trios that you can edit after saving.</span>
           <label for="explicit-label">Third-choice display label</label><input id="explicit-label" name="explicit_label" value="{{ admin_game.explicit_label }}" maxlength="24">
           {% for round in admin_game.rounds %}{% set round_index = loop.index0 %}<fieldset><legend>Round {{ loop.index }}</legend>{% for person in round.people %}{% set person_index = loop.index0 %}<label>Person {{ loop.index }} name<input name="round_{{ round_index }}_person_{{ person_index }}_name" value="{{ person.name }}" maxlength="80" required></label><label>Optional image URL<input name="round_{{ round_index }}_person_{{ person_index }}_image_url" value="{{ person.image_url }}" maxlength="500"></label>{% endfor %}</fieldset>{% endfor %}
-          <button class="button button--primary" name="action" value="update_mmf_rounds"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Save Ten Rounds</button>
+          <button class="button button--primary" name="action" value="update_mmf_rounds"{% if admin_game.phase != 'signup' %} disabled{% endif %}>Save Round Setup</button>
         </form>
       </details>
     {% elif game_key == 'cursed_objectives' %}

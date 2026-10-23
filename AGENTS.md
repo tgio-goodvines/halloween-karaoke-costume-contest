@@ -43,7 +43,8 @@ Important working notes:
 - Party account users can reset forgotten passwords through `/party/password-reset`; reset emails use SES, reset tokens are hashed before storage, expire after 45 minutes, and are single-use.
 - Before the party date, `/party` shows pre-party RSVP details and host updates in Event Highlights and hides/blocks attendee menu, costume, karaoke, drink-order, and voting actions. On the party date, `/party` switches to the event-night dashboard.
 - On the party date, enabled games appear on `/party` and at `/party/games`. The
-  registry includes Two Truths and a Lie, ten-round Murder/Marry/F%$@,
+  registry includes Two Truths and a Lie, Murder/Marry/F%$@ with five rounds
+  by default and a host-configurable one-to-ten round count,
   Fill in the Blank, Bad Advice Hotline, Wrong Answers Only, Cursed
   Objectives, and Scavenger Hunt. The three prompt games
   share prompt submission/voting rounds; all games are operated independently

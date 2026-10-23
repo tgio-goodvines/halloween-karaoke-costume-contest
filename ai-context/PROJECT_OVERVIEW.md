@@ -250,8 +250,9 @@ the process-local cache:
   acknowledgement. Approved priorities lead Play and Shuffle; an active
   receiver replaces only the remainder after the current song.
 - `games_state`: seven-game registry state. Two Truths and a Lie stores clues and
-  identity guesses; Murder/Marry/F%$@ stores ten configurable public-figure
-  trios, an admin-controlled public identity mode, ballots hidden during play,
+  identity guesses; Murder/Marry/F%$@ defaults to five configurable public-figure
+  trios and lets the host choose from one through ten rounds before opening;
+  it also stores an admin-controlled public identity mode, ballots hidden during play,
   post-game round/person choice reviews, aggregate results, and presentation state;
   Fill in the Blank, Bad Advice Hotline, and Wrong Answers Only store independent
   prompt decks, blind submission/voting/reveal rounds, an admin-controlled public

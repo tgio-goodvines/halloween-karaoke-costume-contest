@@ -120,7 +120,7 @@
               </form>
             {% endfor %}
           </div>
-        {% else %}<div class="game-opt-in"><h4>Join the sealed ballot</h4><p>Join at any time before the hosts close the game. You can complete all ten rounds, and individual choices stay hidden during play. The post-game review uses {{ 'anonymous aliases' if game.anonymous_mode else 'signed-in names' }} selected by the hosts.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}" data-view-key="game-join:{{ game_key }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Join Game</button></form></div>{% endif %}
+        {% else %}<div class="game-opt-in"><h4>Join the sealed ballot</h4><p>Join at any time before the hosts close the game. You can complete all {{ game.rounds|length }} round{{ '' if game.rounds|length == 1 else 's' }}, and individual choices stay hidden during play. The post-game review uses {{ 'anonymous aliases' if game.anonymous_mode else 'signed-in names' }} selected by the hosts.</p><form method="post" action="{{ url_for('party_game_join', game_slug=game_metadata.slug) }}" data-view-key="game-join:{{ game_key }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button button--primary" type="submit">Join Game</button></form></div>{% endif %}
       {% else %}
         <div class="game-instructions"><h4>Ballots unsealed</h4><p>There are no scores or winners. Review each round and see who assigned every person to each choice.</p></div>
         <div class="mmf-results">

@@ -11,8 +11,8 @@ operations, and host-controlled live-display results.
 1. **Two Truths and a Lie** — account-named clue submissions, anonymous clue
    rotation, identity guesses, tied winners, and final reveal.
 2. **Murder, Marry, F%$@** — admin-selected signed-in-name or anonymous-alias
-   mode, ten configurable trios of famous adults, one unique assignment per
-   action and round, ballots hidden during play, and a post-game announcer
+   mode, five default trios with a host-configurable one-to-ten round count,
+   one unique assignment per action and round, ballots hidden during play, and a post-game announcer
    review that shows who chose what for every person. It has no winners.
 3. **Fill in the Blank: After Dark** — blind prompt responses and voting with
    an admin-selected public identity mode.
@@ -68,7 +68,8 @@ players; guessing becomes useful as additional mystery guests join.
 
 ### Murder, Marry, F%$@
 
-- Exactly ten rounds and three famous adults per round.
+- Five rounds by default, configurable from one through ten before the game
+  opens, with three famous adults per round.
 - Every completed ballot uses Murder, Marry, and the configurable third label
   exactly once.
 - There are no scores, rankings, or winners.
@@ -126,8 +127,9 @@ players; guessing becomes useful as additional mystery guests join.
 - `/admin/games?game=<game-key>` presents a compact seven-game status selector
   and one detailed operational console, with shared aggregate status. Detailed
   data is constructed only for the selected game.
-- MMF includes a ten-trio editor, optional image URLs, and configurable third
-  action label.
+- MMF includes a one-to-ten round-count control, trio editor, optional image
+  URLs, and configurable third action label. Increasing the count seeds new
+  rounds from the built-in trio deck so they can be edited after saving.
 - Prompt games include independent prompt decks, enable/disable/remove prompt
   controls, response/vote counts, round controls, and leaderboards.
 - Cursed Objectives includes a complete deck editor and assignment view; saved
@@ -190,7 +192,7 @@ players; guessing becomes useful as additional mystery guests join.
 - The selected attendee game fragment refreshes every five seconds and after
   tab visibility returns. Reconciliation preserves dirty form values, focus,
   open disclosures, the selected MMF round, and the viewport anchor.
-- MMF renders ten numbered round controls with selected and completed color/
+- MMF renders the configured number of round controls with selected and completed color/
   indicator states, automatically advancing a saved ballot to the next
   incomplete round.
 - Game phases render as status indicators rather than button-like controls.
@@ -436,4 +438,20 @@ slide. Non-game image cards retain their foreground-media layout.
 - No Redis schema or migration was required.
 - Verification passed with 272 Python tests and 37 subtests, all 27
   dependency-free JavaScript tests, Python/JavaScript syntax checks, and
+  whitespace validation.
+
+## Configurable MMF Round Count (2026-10-23)
+
+- New and reset Murder, Marry, F%$@ games now default to five rounds instead of
+  ten.
+- Before opening the game, the selected-game admin console can choose one
+  through ten rounds. Reducing the count removes later active trios; increasing
+  it restores built-in trios for the new positions so the host can edit them.
+- Existing persisted games with up to ten configured rounds remain intact
+  during normalization. Simulations, attendee navigation, completion metrics,
+  recruitment copy, and announcer presentations all use the saved round count.
+- Regression coverage verifies the five-round default, shrinking and expanding
+  the configured round count, invalid-count rejection, and preservation of
+  existing ten-round state. Full verification passed with 273 Python tests and
+  37 subtests, all 27 dependency-free JavaScript tests, Python compilation, and
   whitespace validation.

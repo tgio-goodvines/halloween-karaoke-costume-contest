@@ -55,6 +55,7 @@ from party_games import (
     CURSED_OBJECTIVES_GAME_KEY,
     CURSED_OBJECTIVES_PER_PLAYER,
     DEFAULT_GAMES_STATE,
+    DEFAULT_MMF_ROUNDS,
     FILL_BLANK_GAME_KEY,
     GAME_CATALOG,
     GAME_KEY_BY_SLUG,
@@ -62,7 +63,8 @@ from party_games import (
     GAME_RESPONSE_MAX_LENGTH,
     GAME_STATEMENT_MAX_LENGTH,
     MMF_ACTIONS,
-    MMF_ROUND_COUNT,
+    MMF_MAX_ROUND_COUNT,
+    MMF_MIN_ROUND_COUNT,
     MURDER_MARRY_FUCK_GAME_KEY,
     PROMPT_GAME_KEYS,
     PROMPT_RESPONSE_MINIMUM,
@@ -7285,7 +7287,7 @@ def game_public_score_rows(game_key: str, game: dict[str, object]) -> list[dict[
         if game_key == TWO_TRUTHS_GAME_KEY:
             row["detail"] = f"{int(score.get('attempts', 0) or 0)} guesses · {float(score.get('accuracy', 0) or 0):g}% accuracy"
         elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
-            row["detail"] = f"{int(score.get('completed_rounds', 0) or 0)} of {MMF_ROUND_COUNT} rounds"
+            row["detail"] = f"{int(score.get('completed_rounds', 0) or 0)} of {len(game.get('rounds', []))} rounds"
         elif game_key == CURSED_OBJECTIVES_GAME_KEY:
             row["detail"] = f"{int(score.get('completed_missions', points) or 0)} of {int(score.get('assigned_missions', CURSED_OBJECTIVES_PER_PLAYER) or CURSED_OBJECTIVES_PER_PLAYER)} objectives"
         elif game_key == SCAVENGER_HUNT_GAME_KEY:
@@ -7359,7 +7361,7 @@ def safe_game_status_view(
         ]
     elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
         completed = sum(len(participant.get("answers", {})) for participant in participants.values() if isinstance(participant, dict))
-        possible = len(participants) * MMF_ROUND_COUNT
+        possible = len(participants) * len(game.get("rounds", []))
         view["metrics"] = [
             {"label": "Players", "value": len(participants)},
             {"label": "Rounds saved", "value": completed},
@@ -8167,6 +8169,8 @@ def mmf_admin_view() -> dict[str, object]:
         "statistics": statistics,
         "winners": [],
         "round_reviews": build_mmf_round_reviews(game),
+        "min_round_count": MMF_MIN_ROUND_COUNT,
+        "max_round_count": MMF_MAX_ROUND_COUNT,
     }
 
 
@@ -9461,12 +9465,14 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                         }
                     )
         elif game_key == MURDER_MARRY_FUCK_GAME_KEY:
-            completed = sum(1 for participant in participants.values() if len(participant.get("answers", {})) >= 10)
-            entry["primary"] = "Ten rounds · three choices · one sealed ballot."
+            round_count = len(game.get("rounds", []))
+            round_label = "round" if round_count == 1 else "rounds"
+            completed = sum(1 for participant in participants.values() if len(participant.get("answers", {})) >= round_count)
+            entry["primary"] = f"{round_count} {round_label} · three choices · one sealed ballot."
             entry["metrics"] = [
                 {"label": "Players", "value": len(participants)},
                 {"label": "Complete", "value": f"{completed}/{len(participants)}"},
-                {"label": "Rounds", "value": "10"},
+                {"label": "Rounds", "value": str(round_count)},
             ]
             if phase == "ended":
                 entry["status_label"] = "Ballots unsealed"
@@ -9481,7 +9487,7 @@ def build_game_stage_entries() -> list[dict[str, object]]:
                         focus_label="The party needs worse judgment",
                         spotlight_rows=[
                             {"label": "Join the verdict", "value": "Open Party Games and enter"},
-                            {"label": "Choose their fate", "value": "Make ten terrible decisions"},
+                            {"label": "Choose their fate", "value": f"Make {round_count} terrible decisions"},
                             {"label": "Feed the chaos", "value": "Shift tonight's live verdict"},
                         ],
                     )
@@ -14175,13 +14181,35 @@ def admin_portal(admin_view: str):
                     elif game.get("phase") != "signup":
                         errors.append("Murder, Marry, F%$@ rounds can only be edited before the game opens.")
                     else:
+                        try:
+                            round_count = int(request.form.get("round_count", str(len(game.get("rounds", [])))))
+                        except (TypeError, ValueError):
+                            round_count = 0
+                        if not MMF_MIN_ROUND_COUNT <= round_count <= MMF_MAX_ROUND_COUNT:
+                            errors.append(
+                                f"Round count must be between {MMF_MIN_ROUND_COUNT} and {MMF_MAX_ROUND_COUNT}."
+                            )
                         rounds = []
-                        for round_index in range(MMF_ROUND_COUNT):
+                        configured_rounds = game.get("rounds", [])
+                        for round_index in range(round_count if not errors else 0):
+                            fallback_round = (
+                                configured_rounds[round_index]
+                                if round_index < len(configured_rounds)
+                                else DEFAULT_MMF_ROUNDS[round_index]
+                            )
                             people = []
                             for person_index in range(3):
                                 prefix = f"round_{round_index}_person_{person_index}"
-                                name = re.sub(r"\s+", " ", request.form.get(f"{prefix}_name", "").strip())[:80]
-                                raw_image_url = request.form.get(f"{prefix}_image_url", "").strip()
+                                fallback_person = fallback_round["people"][person_index]
+                                name = re.sub(
+                                    r"\s+",
+                                    " ",
+                                    request.form.get(f"{prefix}_name", str(fallback_person.get("name", ""))).strip(),
+                                )[:80]
+                                raw_image_url = request.form.get(
+                                    f"{prefix}_image_url",
+                                    str(fallback_person.get("image_url", "")),
+                                ).strip()
                                 image_url = safe_image_url(raw_image_url)
                                 if not name:
                                     errors.append(f"Round {round_index + 1}, person {person_index + 1} needs a name.")
@@ -14196,7 +14224,7 @@ def admin_portal(admin_view: str):
                         if not errors:
                             game["rounds"] = rounds
                             game["explicit_label"] = explicit_label
-                            messages.append("Saved all ten Murder, Marry, F%$@ rounds.")
+                            messages.append(f"Saved {round_count} Murder, Marry, F%$@ rounds.")
                             should_broadcast = True
 
                 elif action in {

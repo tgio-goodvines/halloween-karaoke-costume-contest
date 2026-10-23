@@ -128,8 +128,9 @@
   shuffle-bag sample of revealed questions, anonymous answers, and anonymous
   round favorites. Hosts can suppress all prompt-answer cards or hide one
   response from the TV without altering votes or scoring.
-- Murder, Marry, F%$@ presents all ten rounds as numbered controls with distinct
-  selected and completed indicators, and advances a saved ballot to the next
+- Murder, Marry, F%$@ defaults to five rounds and presents the host-configured
+  one-to-ten rounds as numbered controls with distinct selected and completed
+  indicators, and advances a saved ballot to the next
   incomplete round.
 - Costume signup validation for required name and costume description.
 - Costume signup success redirect and confirmation state.
@@ -327,8 +328,9 @@
   cards before resuming rotation.
 - The Games workspace independently operates the four adult games with an
   admin-controlled signed-in-name/anonymous-alias mode,
-  edits MMF's ten public-figure trios and optional images, manages three prompt
-  decks, advances prompt response/vote/reveal phases, shows aggregate progress,
+  chooses MMF's one-to-ten round count, edits its public-figure trios and
+  optional images, manages three prompt decks, advances prompt
+  response/vote/reveal phases, shows aggregate progress,
   and drives previous/next announcer presentation slides after game end.
 - The same workspace manages the Cursed Objectives deck and Scavenger Hunt
   item deck, shows all assigned missions, and provides a photo-review queue with

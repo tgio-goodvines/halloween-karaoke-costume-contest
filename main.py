@@ -7293,7 +7293,10 @@ def game_public_score_rows(game_key: str, game: dict[str, object]) -> list[dict[
         elif game_key == CURSED_OBJECTIVES_GAME_KEY:
             row["detail"] = f"{int(score.get('completed_missions', points) or 0)} of {int(score.get('assigned_missions', CURSED_OBJECTIVES_PER_PLAYER) or CURSED_OBJECTIVES_PER_PLAYER)} objectives"
         elif game_key == SCAVENGER_HUNT_GAME_KEY:
-            row["detail"] = f"{int(score.get('approved_submissions', points) or 0)} approved photos"
+            row["detail"] = (
+                f"{int(score.get('approved_submissions', points) or 0)} of "
+                f"{int(score.get('total_items', 0) or 0)} approved finds"
+            )
         else:
             row["detail"] = "Anonymous alias" if score.get("anonymous") else "Party account name"
         rows.append(row)
@@ -7317,6 +7320,7 @@ def safe_game_status_view(
     metadata = GAME_CATALOG[game_key]
     phase = str(game.get("phase", "signup") or "signup")
     participants = game.get("participants", {}) if isinstance(game.get("participants"), dict) else {}
+    has_winner = phase == "ended" and bool(game_winners(game_key, game))
     view: dict[str, object] = {
         "key": game_key,
         "slug": metadata["slug"],
@@ -7324,7 +7328,7 @@ def safe_game_status_view(
         "short_title": metadata["short_title"],
         "description": metadata["description"],
         "image_url": game_art_url(game_key),
-        "winner_image_url": "" if game_key in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY} else game_art_url(game_key, winner=True),
+        "winner_image_url": game_art_url(game_key, winner=True) if has_winner else "",
         "enabled": bool(game.get("enabled")),
         "phase": phase,
         "status_label": (
@@ -7338,7 +7342,11 @@ def safe_game_status_view(
         "result_mode": (
             "round_review"
             if game_key == MURDER_MARRY_FUCK_GAME_KEY
-            else ("progress" if game_key == CURSED_OBJECTIVES_GAME_KEY else "scored")
+            else (
+                "progress"
+                if game_key == CURSED_OBJECTIVES_GAME_KEY
+                else ("completion_progress" if game_key == SCAVENGER_HUNT_GAME_KEY else "scored")
+            )
         ),
         "metrics": [],
         "winners": [],
@@ -7481,7 +7489,7 @@ def upsert_game_result_archive(game_key: str) -> dict[str, object] | None:
         "subject_key": game_key,
         "title": GAME_CATALOG[game_key]["title"],
         "image_url": game_art_url(game_key),
-        "winner_image_url": "" if game_key in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY} else game_art_url(game_key, winner=True),
+        "winner_image_url": game_art_url(game_key, winner=True) if game_winners(game_key, game) else "",
         "status": str(existing.get("status", "draft")) if existing else "draft",
         "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
         "finalized_at": str(game.get("ended_at", "") or game.get("results", {}).get("finalized_at", "") or _utc_now_iso()),
@@ -7682,7 +7690,7 @@ def wrapup_readiness(attendee_account_ids: set[str]) -> dict[str, object]:
             errors.append(f"{metadata['title']} does not have a final result snapshot.")
         if (
             game.get("phase") == "ended"
-            and game_key not in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY}
+            and game_winners(game_key, game)
             and not game_winner_links(game_key, game)
         ):
             warnings.append(f"{metadata['title']} has no account-linked winner; public results can still be preserved.")
@@ -8460,6 +8468,33 @@ def game_scoreboard_entry(game_key: str) -> dict[str, object] | None:
                 "show_rank": False,
             },
         }
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        rows = []
+        for entry in scores:
+            approved = int(entry.get("approved_submissions", entry.get("points", 0)) or 0)
+            total_items = int(entry.get("total_items", 0) or 0)
+            percent = round((approved / total_items * 100) if total_items else 0)
+            rows.append(
+                {
+                    "name": entry.get("name", "Player"),
+                    "detail": "Full hunt completed" if entry.get("completed_hunt") else f"{percent}% approved",
+                    "value_label": f"{approved} / {total_items}",
+                    "meta_label": "Approved hunt progress",
+                }
+            )
+        approved_total = sum(int(entry.get("approved_submissions", entry.get("points", 0)) or 0) for entry in scores)
+        possible_total = sum(int(entry.get("total_items", 0) or 0) for entry in scores)
+        return {
+            "category": GAME_CATALOG[game_key]["title"],
+            "primary": "Final Hunt Progress",
+            "secondary": f"{approved_total} of {possible_total} possible finds approved",
+            "tertiary": "Only hunters who completed every item qualify as winners.",
+            "scoreboard": {
+                "entries": rows,
+                "show_all_entries": True,
+                "show_rank": False,
+            },
+        }
     rows = [
         {
             "rank": index + 1,
@@ -8492,6 +8527,13 @@ def game_winner_entry(game_key: str) -> dict[str, object] | None:
         return None
     names = [str(entry.get("name", entry.get("alias", "Player"))) for entry in winners]
     points = int(winners[0].get("points", 0) or 0)
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        return {
+            "category": f"{GAME_CATALOG[game_key]['title']} Winner{'s' if len(winners) != 1 else ''}",
+            "primary": ", ".join(names),
+            "secondary": f"Completed all {points} hunt item{'s' if points != 1 else ''}",
+            "tertiary": "Every find was approved." if len(winners) == 1 else "Every tied finisher completed the full hunt.",
+        }
     return {
         "category": f"{GAME_CATALOG[game_key]['title']} Winner{'s' if len(winners) != 1 else ''}",
         "primary": ", ".join(names),
@@ -8509,6 +8551,13 @@ def game_outcome_entry(game_key: str) -> dict[str, object] | None:
     winner = game_winner_entry(game_key)
     if winner:
         return winner
+    if game_key == SCAVENGER_HUNT_GAME_KEY:
+        return {
+            "category": f"{GAME_CATALOG[game_key]['title']} Results",
+            "primary": "No Complete Hunter",
+            "secondary": "No player completed every hunt item.",
+            "tertiary": "Every player's final approved progress is still available.",
+        }
     return {
         "category": f"{GAME_CATALOG[game_key]['title']} Results",
         "primary": "No Winner This Round",
@@ -8610,12 +8659,12 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
                 slides.append({"type": "game_presentation", "title": f"Round {index + 1} Winner", "highlight": response.get("text", ""), "message": identities_by_player.get(response.get("player_id"), "Player"), "details": [winner_detail]})
     scoreboard = game_scoreboard_entry(game_key) if game.get("phase") == "ended" else None
     if scoreboard:
-        if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        if game_key in {CURSED_OBJECTIVES_GAME_KEY, SCAVENGER_HUNT_GAME_KEY}:
             slides.append(
                 {
                     "type": "game_presentation",
                     "title": title,
-                    "highlight": "Final objective progress",
+                    "highlight": "Final objective progress" if game_key == CURSED_OBJECTIVES_GAME_KEY else "Final hunt progress",
                     "message": scoreboard.get("secondary", ""),
                     "details": [],
                     "scoreboard": copy.deepcopy(scoreboard["scoreboard"]),
@@ -8625,7 +8674,7 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             slides.append({"type": "game_presentation", "title": title, "highlight": "Final leaderboard", "message": scoreboard.get("secondary", ""), "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]})
     outcome = game_outcome_entry(game_key)
     if outcome:
-        slides.append({"type": "game_winner", "title": outcome["category"], "highlight": outcome["primary"], "message": outcome["secondary"], "details": [outcome["tertiary"]]})
+        slides.append({"type": "game_winner" if game_winner_entry(game_key) else "game_results", "title": outcome["category"], "highlight": outcome["primary"], "message": outcome["secondary"], "details": [outcome["tertiary"]]})
     for slide in slides:
         slide.setdefault("image_url", game_art_url(
             game_key,
@@ -8829,14 +8878,21 @@ def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[
         cards = (
             (("scores", "Player Progress", scoreboard),)
             if game_key == CURSED_OBJECTIVES_GAME_KEY
-            else (("winner", "Winner / Outcome", outcome), ("scores", "Final Scores", scoreboard))
+            else (
+                (("winner", "Winner / Outcome", outcome), ("scores", "Player Progress", scoreboard))
+                if game_key == SCAVENGER_HUNT_GAME_KEY
+                else (("winner", "Winner / Outcome", outcome), ("scores", "Final Scores", scoreboard))
+            )
         )
         for suffix, card_type, card in cards:
             if not card:
                 continue
             entry = _display_entry("games", f"{game_key}-{suffix}", **card)
             entry["kind"] = "result" if suffix == "winner" else "scoreboard"
-            entry["image_url"] = game_art_url(game_key, winner=suffix == "winner")
+            entry["image_url"] = game_art_url(
+                game_key,
+                winner=suffix == "winner" and bool(game_winners(game_key, game)),
+            )
             entry["media_treatment"] = "background"
             if game_key == CURSED_OBJECTIVES_GAME_KEY:
                 stats = cursed_objectives_statistics(game)
@@ -8851,7 +8907,7 @@ def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[
                     _display_fact("Players", len(game.get("participants", {}))),
                     _display_fact("Status", "Final"),
                 ]
-            if suffix == "winner" and scoreboard and scoreboard.get("scoreboard"):
+            if suffix == "winner" and scoreboard and scoreboard.get("scoreboard") and game_key != SCAVENGER_HUNT_GAME_KEY:
                 entry["scoreboard"] = {
                     "entries": copy.deepcopy(scoreboard["scoreboard"].get("entries", []))[:3]
                 }
@@ -9430,8 +9486,12 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             entry["action_label"] = "Upload evidence in Party Games" if phase == "active" else "Evidence review in progress"
             if phase == "ended":
                 winners = game_winners(game_key, game)
-                entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners) or "Final results ready"
-                entry["secondary"] = "Scavenger Hunt champion" if len(winners) == 1 else "Scavenger Hunt champions"
+                if winners:
+                    entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners)
+                    entry["secondary"] = "Completed every approved hunt item"
+                else:
+                    entry["primary"] = "No hunter completed the full list"
+                    entry["secondary"] = "Final player progress is ready on the center stage."
             else:
                 spotlight_rows = _scavenger_live_spotlight(game, phase)
                 if phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
@@ -14217,7 +14277,12 @@ def admin_portal(admin_view: str):
                         game["results"] = calculate_scavenger_hunt_results(game, finalized_at=finalized_at)
                         upsert_game_result_archive(game_key)
                         write_state_backup_if_available("game-scavenger-hunt-ended")
-                        messages.append("Scavenger Hunt scores are final. Winner presentation controls are now available.")
+                        winner_count = len(game_winners(game_key, game))
+                        messages.append(
+                            f"Scavenger Hunt progress is final. {winner_count} hunter{'s' if winner_count != 1 else ''} completed every item."
+                            if winner_count
+                            else "Scavenger Hunt progress is final. No hunter completed every item, so no winner was declared."
+                        )
                         should_broadcast = True
 
                 elif action == "add_game_prompt":
@@ -14404,7 +14469,11 @@ def admin_portal(admin_view: str):
                     if game.get("phase") != "ended":
                         errors.append("End the game before showing its winner.")
                     elif not winner:
-                        errors.append("This game does not have a positive-score winner.")
+                        errors.append(
+                            "No player completed every hunt item, so Scavenger Hunt has no winner."
+                            if game_key == SCAVENGER_HUNT_GAME_KEY
+                            else "This game does not have a positive-score winner."
+                        )
                     else:
                         live_display_event_override = {"type": "game_winner", "title": winner["category"], "highlight": winner["primary"], "message": winner["secondary"], "details": [winner["tertiary"]], "image_url": game_art_url(game_key, winner=True), "media_treatment": "background"}
                         messages.append(f"Live display paused on the {title} winner.")
@@ -14417,7 +14486,7 @@ def admin_portal(admin_view: str):
                     elif not scoreboard:
                         errors.append("No final scores are available.")
                     else:
-                        if game_key == CURSED_OBJECTIVES_GAME_KEY:
+                        if game_key in {CURSED_OBJECTIVES_GAME_KEY, SCAVENGER_HUNT_GAME_KEY}:
                             live_display_event_override = {
                                 "type": "game_results",
                                 "title": f"{title} Results",
@@ -14428,7 +14497,11 @@ def admin_portal(admin_view: str):
                                 "image_url": game_art_url(game_key),
                                 "media_treatment": "background",
                             }
-                            messages.append("Live display paused on every player's final Cursed Objectives progress.")
+                            messages.append(
+                                "Live display paused on every player's final Cursed Objectives progress."
+                                if game_key == CURSED_OBJECTIVES_GAME_KEY
+                                else "Live display paused on every player's final Scavenger Hunt progress."
+                            )
                         else:
                             live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]], "image_url": game_art_url(game_key), "media_treatment": "background"}
                             messages.append(f"Live display paused on the {title} results.")

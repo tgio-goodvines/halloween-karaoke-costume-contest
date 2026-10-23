@@ -1451,6 +1451,12 @@ def cursed_objectives_statistics(game: dict[str, Any]) -> dict[str, Any]:
 
 
 def calculate_scavenger_hunt_results(game: dict[str, Any], *, finalized_at: str | None = None) -> dict[str, Any]:
+    enabled_item_ids = {
+        str(item.get("id", ""))
+        for item in game.get("items", [])
+        if isinstance(item, dict) and item.get("enabled") and item.get("id")
+    }
+    total_items = len(enabled_item_ids)
     scores = []
     for participant in game.get("participants", {}).values():
         if not isinstance(participant, dict):
@@ -1458,22 +1464,28 @@ def calculate_scavenger_hunt_results(game: dict[str, Any], *, finalized_at: str 
         submissions = participant.get("submissions", {}) if isinstance(participant.get("submissions"), dict) else {}
         approved = sum(
             1
-            for submission in submissions.values()
-            if isinstance(submission, dict) and submission.get("review_status") == "approved"
+            for item_id, submission in submissions.items()
+            if str(item_id) in enabled_item_ids
+            and isinstance(submission, dict)
+            and submission.get("review_status") == "approved"
         )
         scores.append({
             "player_id": str(participant.get("player_id", "")),
             "name": normalize_player_name(participant.get("display_name")) or "Player",
             "points": approved,
             "approved_submissions": approved,
-            "submitted_items": len(submissions),
+            "submitted_items": sum(1 for item_id in submissions if str(item_id) in enabled_item_ids),
+            "total_items": total_items,
+            "completion_percent": round((approved / total_items * 100) if total_items else 0.0, 1),
+            "completed_hunt": bool(total_items and approved == total_items),
         })
-    scores.sort(key=lambda entry: (-entry["points"], entry["name"].casefold()))
-    top = scores[0]["points"] if scores else 0
+    # The complete roster is a progress report, not a ranking. A winner is any
+    # player with approved evidence for every enabled hunt item.
+    scores.sort(key=lambda entry: entry["name"].casefold())
     return {
         "finalized_at": finalized_at or utc_now_iso(),
         "scores": scores,
-        "winner_player_ids": [entry["player_id"] for entry in scores if top > 0 and entry["points"] == top],
+        "winner_player_ids": [entry["player_id"] for entry in scores if entry["completed_hunt"]],
     }
 
 
@@ -1737,7 +1749,7 @@ def build_simulated_game_state(
             for item_index, item in enumerate(game["items"]):
                 if not item.get("enabled"):
                     continue
-                if (index + item_index) % 4 == 0:
+                if index > 0 and (index + item_index) % 4 == 0:
                     continue
                 item_id = str(item["id"])
                 submissions[item_id] = {

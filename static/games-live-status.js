@@ -26,13 +26,15 @@
     return node;
   };
 
-  const renderScoreboard = (scores) => {
+  const renderScoreboard = (scores, resultMode = '') => {
     const list = element('ol', 'compact-scoreboard');
-    (Array.isArray(scores) ? scores : []).slice(0, 5).forEach((score, index) => {
+    const progressResult = ['progress', 'completion_progress'].includes(resultMode);
+    const entries = Array.isArray(scores) ? scores : [];
+    (progressResult ? entries : entries.slice(0, 5)).forEach((score, index) => {
       const item = element('li');
       item.append(
-        element('span', '', `#${score.rank || index + 1} ${score.name || 'Player'}`),
-        element('strong', '', `${score.points || 0} pts`),
+        element('span', '', `${progressResult ? '' : `#${score.rank || index + 1} `}${score.name || 'Player'}`),
+        element('strong', '', progressResult ? (score.detail || score.value_label || `${score.points || 0}`) : `${score.points || 0} pts`),
       );
       list.appendChild(item);
     });
@@ -57,6 +59,8 @@
     );
     if (game.winners?.length) body.appendChild(element('p', 'live-game-card__winner', `Winner${game.winners.length === 1 ? '' : 's'}: ${game.winners.join(', ')}`));
     else if (game.result_mode === 'round_review' && game.phase === 'ended') body.appendChild(element('p', '', 'Ballots unsealed · no scores or winners. Open the game for the round-by-round review.'));
+    else if (game.result_mode === 'progress' && game.phase === 'ended') body.appendChild(element('p', '', 'Final objective progress is available for every player. This game has no winner.'));
+    else if (game.result_mode === 'completion_progress' && game.phase === 'ended') body.appendChild(element('p', '', 'No hunter completed every item. Final approved progress is available for every player.'));
     else body.appendChild(element('p', '', game.description || ''));
     const metrics = element('dl', 'live-game-card__metrics');
     (game.metrics || []).forEach((metric) => {
@@ -65,7 +69,7 @@
       metrics.appendChild(item);
     });
     body.appendChild(metrics);
-    if (game.phase === 'ended' && game.scores?.length) body.appendChild(renderScoreboard(game.scores));
+    if (game.phase === 'ended' && game.scores?.length) body.appendChild(renderScoreboard(game.scores, game.result_mode));
     if (game.enabled && document.body.dataset.partyDay === 'true') {
       const link = element('a', 'button', game.phase === 'ended' ? 'See Full Results' : 'Open Game');
       link.href = `/party/games?game=${encodeURIComponent(game.slug || '')}`;
@@ -115,8 +119,15 @@
       const copy = element('div');
       copy.append(element('span', '', `${archive.year || ''} · ${archive.kind === 'costume' ? 'Costume' : 'Game'}`), element('h4', '', archive.title || 'Official result'));
       const winners = archive.summary?.winners || [];
-      copy.appendChild(element('p', '', winners.length ? `Winner${winners.length === 1 ? '' : 's'}: ${winners.join(', ')}` : (archive.summary?.result_mode === 'round_review' ? 'Round review · this game has no winner.' : 'No positive-score winner was recorded.')));
-      if (archive.summary?.scores?.length) copy.appendChild(renderScoreboard(archive.summary.scores));
+      const noWinnerCopy = archive.summary?.result_mode === 'round_review'
+        ? 'Round review · this game has no winner.'
+        : (archive.summary?.result_mode === 'progress'
+          ? 'Winner-free final player progress.'
+          : (archive.summary?.result_mode === 'completion_progress'
+            ? 'No player completed every hunt item; final progress is preserved.'
+            : 'No positive-score winner was recorded.'));
+      copy.appendChild(element('p', '', winners.length ? `Winner${winners.length === 1 ? '' : 's'}: ${winners.join(', ')}` : noWinnerCopy));
+      if (archive.summary?.scores?.length) copy.appendChild(renderScoreboard(archive.summary.scores, archive.summary?.result_mode));
       card.appendChild(copy);
       container.appendChild(card);
     });

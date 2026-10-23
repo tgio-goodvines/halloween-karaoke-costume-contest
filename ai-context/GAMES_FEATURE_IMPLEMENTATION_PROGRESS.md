@@ -21,11 +21,11 @@ operations, and host-controlled live-display results.
 5. **Wrong Answers Only** — fictional/general questions, blind wrong answers,
    response voting, and an admin-selected public identity mode.
 6. **Cursed Objectives** — three private, non-overlapping social missions per
-   participant, editable self-reported completion throughout the event, and one
-   final named leaderboard when the host closes the game.
+   participant, editable self-reported completion throughout the event, and a
+   winner-free final progress reveal for every player.
 7. **Scavenger Hunt** — an editable item deck, private participant photo
-   uploads, host approve/reject review grouped by item, and one point per
-   approved photo before the final named leaderboard.
+   uploads, host approve/reject review grouped by item, final progress for every
+   player, and winners only when every enabled hunt item has approved evidence.
 
 All new games deploy disabled. Enabling a game opens it immediately: its tab,
 dashboard status, enrollment, and gameplay become available without a separate
@@ -81,6 +81,21 @@ players; guessing becomes useful as additional mystery guests join.
 - Self-voting is rejected.
 - Each vote received is one cumulative point.
 - Tied round responses and tied final leaders are preserved.
+
+### Cursed Objectives
+
+- Every player receives three private, non-overlapping objectives.
+- The ended game preserves each player's completed/assigned progress without
+  ranking players or declaring a winner.
+
+### Scavenger Hunt
+
+- Each approved photo counts toward that player's enabled-item progress.
+- The final result shows every player's approved/total count without ranking
+  incomplete hunters.
+- A player wins only by receiving approval for every enabled hunt item.
+  Multiple full completers are tied winners; if nobody completes the full list,
+  the game records no winner while preserving all progress.
 
 ## Privacy And Content Guardrails
 
@@ -380,5 +395,28 @@ slide. Non-game image cards retain their foreground-media layout.
 - No Redis schema or migration was required; normalization recalculates ended
   legacy Cursed Objectives state into the winner-free result shape.
 - Verification passed with 269 Python tests and 37 subtests, all 27
+  dependency-free JavaScript tests, Python/JavaScript syntax checks, and
+  whitespace validation.
+
+## Scavenger Hunt Complete-Hunt Winners And Progress Results (2026-10-22)
+
+- Scavenger Hunt now awards winner status only to players with approved
+  evidence for every enabled hunt item. The highest partial total is never
+  treated as a winner; multiple complete hunters remain tied winners.
+- Final results retain an alphabetical, unranked progress row for every player
+  with approved/total counts and completion percentages. The center-stage
+  `Player Progress` card shows the complete roster and uses the existing dense
+  two-column treatment for larger groups.
+- The admin console exposes `Show All Player Progress` plus a
+  `Show Complete-Hunt Winner` action that is disabled when nobody qualifies.
+  The generated progress and winner/outcome cards remain independently
+  controllable from `/admin/display`.
+- Winner spotlights state that every hunt item was completed. When nobody
+  qualifies, the outcome explains that no complete hunter exists while still
+  directing attention to the final progress record.
+- Attendee live results, official archives, recap data, and recognition use the
+  complete-hunt threshold. Legacy ended state is recalculated during normal
+  normalization, so no Redis schema migration is required.
+- Verification passed with 270 Python tests and 37 subtests, all 27
   dependency-free JavaScript tests, Python/JavaScript syntax checks, and
   whitespace validation.

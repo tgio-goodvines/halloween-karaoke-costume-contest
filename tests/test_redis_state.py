@@ -7564,7 +7564,8 @@ class RedisStateTests(unittest.TestCase):
         self.assertEqual(200, finalized.status_code)
         self.assertEqual("ended", game["phase"])
         self.assertEqual(1, game["results"]["scores"][0]["points"])
-        self.assertEqual([game["participants"]["user-1"]["player_id"]], game["results"]["winner_player_ids"])
+        self.assertEqual([], game["results"]["winner_player_ids"])
+        self.assertEqual("No Complete Hunter", main.game_outcome_entry(game_key)["primary"])
 
     def test_two_truths_late_join_appears_in_attendee_live_fragment(self):
         with main.app.test_client() as admin:
@@ -7914,6 +7915,17 @@ class RedisStateTests(unittest.TestCase):
                     self.assertEqual(6, len(progress_card["scoreboard"]["entries"]))
                     self.assertTrue(progress_card["scoreboard"]["show_all_entries"])
                     self.assertFalse(progress_card["scoreboard"]["show_rank"])
+                elif game_key == main.SCAVENGER_HUNT_GAME_KEY:
+                    winner_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-winner")
+                    progress_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-scores")
+                    self.assertEqual("result", winner_card["kind"])
+                    self.assertNotIn("scoreboard", winner_card)
+                    self.assertEqual("Player Progress", progress_card["card_type"])
+                    self.assertEqual(6, len(progress_card["scoreboard"]["entries"]))
+                    self.assertTrue(progress_card["scoreboard"]["show_all_entries"])
+                    self.assertFalse(progress_card["scoreboard"]["show_rank"])
+                    self.assertEqual(1, len(main.game_winners(game_key, game)))
+                    self.assertTrue(main.game_winners(game_key, game)[0]["completed_hunt"])
                 else:
                     winner_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-winner")
                     self.assertIn(f"games:{game_key}-winner", card_ids)
@@ -8019,6 +8031,47 @@ class RedisStateTests(unittest.TestCase):
         archive = next(entry for entry in main.result_archives if entry["subject_key"] == game_key)
         self.assertEqual("progress", archive["summary"]["result_mode"])
         self.assertEqual([], archive["winner_links"])
+
+    def test_scavenger_hunt_admin_shows_all_progress_and_only_complete_hunt_winner(self):
+        game_key = main.SCAVENGER_HUNT_GAME_KEY
+        main.games_state[game_key] = main.build_simulated_game_state(
+            game_key,
+            main.party_game_state(game_key),
+            player_count=8,
+            generated_at="2026-10-31T23:00:00Z",
+        )
+        main.upsert_game_result_archive(game_key)
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            progress_response = admin.post(
+                "/admin/games?game=scavenger_hunt",
+                data={"action": "show_game_results", "game_key": game_key},
+            )
+            progress_override = copy.deepcopy(main.live_display_event_override)
+            winner_response = admin.post(
+                "/admin/games?game=scavenger_hunt",
+                data={"action": "show_game_winner", "game_key": game_key},
+            )
+
+        self.assertEqual(200, progress_response.status_code)
+        self.assertIn(b"Show All Player Progress", progress_response.data)
+        self.assertIn(b"Show Complete-Hunt Winner", progress_response.data)
+        self.assertEqual("game_results", progress_override["type"])
+        self.assertEqual("Final Hunt Progress", progress_override["highlight"])
+        self.assertEqual(8, len(progress_override["scoreboard"]["entries"]))
+        self.assertTrue(progress_override["scoreboard"]["show_all_entries"])
+        self.assertFalse(progress_override["scoreboard"]["show_rank"])
+        winners = main.game_winners(game_key, main.party_game_state(game_key))
+        self.assertEqual(["Test Player 01"], [winner["name"] for winner in winners])
+        self.assertTrue(winners[0]["completed_hunt"])
+        self.assertEqual(200, winner_response.status_code)
+        self.assertEqual("Scavenger Hunt Winner", main.live_display_event_override["title"])
+        self.assertIn("Completed all", main.live_display_event_override["message"])
+        archive = next(entry for entry in main.result_archives if entry["subject_key"] == game_key)
+        self.assertEqual("completion_progress", archive["summary"]["result_mode"])
+        self.assertEqual(1, len(archive["winner_links"]))
 
     def test_ended_game_without_positive_score_gets_no_winner_outcome_card(self):
         game = main.two_truths_game()

@@ -111,12 +111,15 @@ def _score_rows(game_key: str, game: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(score, dict):
             continue
         value = _nonnegative_int(score.get("correct")) if game_key == TWO_TRUTHS_GAME_KEY else _nonnegative_int(score.get("points"))
+        value_label = f"{value} {'correct' if game_key == TWO_TRUTHS_GAME_KEY else 'pts'}"
+        if game_key == SCAVENGER_HUNT_GAME_KEY:
+            value_label = f"{value} / {_nonnegative_int(score.get('total_items'))} approved"
         rows.append(
             {
                 "rank": index + 1,
                 "name": _text(score.get("name") or score.get("alias"), 80) or "Player",
                 "value": value,
-                "value_label": f"{value} {'correct' if game_key == TWO_TRUTHS_GAME_KEY else 'pts'}",
+                "value_label": value_label,
             }
         )
     return rows
@@ -149,7 +152,15 @@ def build_game_result_snapshots(raw_games: object, *, include_incomplete: bool =
                 "winner_label": (
                     "Objective Progress"
                     if ended and game_key == CURSED_OBJECTIVES_GAME_KEY
-                    else (", ".join(winner_names) if winner_names else ("No Winner" if ended else "Pending"))
+                    else (
+                        ", ".join(winner_names)
+                        if winner_names
+                        else (
+                            "No Complete Hunter"
+                            if ended and game_key == SCAVENGER_HUNT_GAME_KEY
+                            else ("No Winner" if ended else "Pending")
+                        )
+                    )
                 ),
                 "scores": _score_rows(game_key, game),
             }

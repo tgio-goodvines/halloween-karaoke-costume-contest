@@ -25,9 +25,9 @@
           <div class="live-game-card__body">
             <span class="game-phase game-phase--{{ game.phase }}">{{ game.status_label }}</span>
             <h4>{{ game.title }}</h4>
-            {% if game.winners %}<p class="live-game-card__winner">Winner{% if game.winners|length != 1 %}s{% endif %}: {{ game.winners|join(', ') }}</p>{% elif game.result_mode == 'round_review' and game.phase == 'ended' %}<p>Ballots unsealed · no scores or winners. Open the game for the round-by-round review.</p>{% else %}<p>{{ game.description }}</p>{% endif %}
+            {% if game.winners %}<p class="live-game-card__winner">Winner{% if game.winners|length != 1 %}s{% endif %}: {{ game.winners|join(', ') }}</p>{% elif game.result_mode == 'round_review' and game.phase == 'ended' %}<p>Ballots unsealed · no scores or winners. Open the game for the round-by-round review.</p>{% elif game.result_mode == 'progress' and game.phase == 'ended' %}<p>Final objective progress is available for every player. This game has no winner.</p>{% elif game.result_mode == 'completion_progress' and game.phase == 'ended' %}<p>No hunter completed every item. Final approved progress is available for every player.</p>{% else %}<p>{{ game.description }}</p>{% endif %}
             <dl class="live-game-card__metrics">{% for metric in game.metrics %}<div><dt>{{ metric.label }}</dt><dd>{{ metric.value }}</dd></div>{% endfor %}</dl>
-            {% if game.phase == 'ended' and game.scores %}<ol class="compact-scoreboard">{% for score in game.scores[:5] %}<li><span>#{{ score.rank }} {{ score.name }}</span><strong>{{ score.points }} pts</strong></li>{% endfor %}</ol>{% endif %}
+            {% if game.phase == 'ended' and game.scores %}{% set progress_result = game.result_mode in ['progress', 'completion_progress'] %}{% set displayed_scores = game.scores if progress_result else game.scores[:5] %}<ol class="compact-scoreboard">{% for score in displayed_scores %}<li><span>{% if not progress_result %}#{{ score.rank }} {% endif %}{{ score.name }}</span><strong>{{ score.detail if progress_result else score.points ~ ' pts' }}</strong></li>{% endfor %}</ol>{% endif %}
             {% if game.enabled and party_day_has_arrived %}<a class="button" href="{{ url_for('party_games', game=game.slug) }}">{{ 'See Full Results' if game.phase == 'ended' else 'Open Game' }}</a>{% endif %}
           </div>
         </article>
@@ -61,8 +61,8 @@
         <article class="history-card">
           {% if archive.winner_image_url or archive.image_url %}<img src="{{ archive.winner_image_url or archive.image_url }}" alt="" class="history-card__image">{% endif %}
           <div><span>{{ archive.year }} · {{ archive.kind|title }}</span><h4>{{ archive.title }}</h4>
-            {% if archive.summary.winners %}<p><strong>Winner{% if archive.summary.winners|length != 1 %}s{% endif %}:</strong> {{ archive.summary.winners|join(', ') }}</p>{% elif archive.summary.result_mode == 'round_review' %}<p>Round review · this game has no winner.</p>{% else %}<p>No positive-score winner was recorded.</p>{% endif %}
-            {% if archive.summary.scores %}<ol class="compact-scoreboard">{% for score in archive.summary.scores[:5] %}<li><span>#{{ score.rank }} {{ score.name }}</span><strong>{{ score.points }}</strong></li>{% endfor %}</ol>{% endif %}
+            {% if archive.summary.winners %}<p><strong>Winner{% if archive.summary.winners|length != 1 %}s{% endif %}:</strong> {{ archive.summary.winners|join(', ') }}</p>{% elif archive.summary.result_mode == 'round_review' %}<p>Round review · this game has no winner.</p>{% elif archive.summary.result_mode == 'progress' %}<p>Winner-free final player progress.</p>{% elif archive.summary.result_mode == 'completion_progress' %}<p>No player completed every hunt item; final progress is preserved.</p>{% else %}<p>No positive-score winner was recorded.</p>{% endif %}
+            {% if archive.summary.scores %}{% set progress_result = archive.summary.result_mode in ['progress', 'completion_progress'] %}{% set displayed_scores = archive.summary.scores if progress_result else archive.summary.scores[:5] %}<ol class="compact-scoreboard">{% for score in displayed_scores %}<li><span>{% if not progress_result %}#{{ score.rank }} {% endif %}{{ score.name }}</span><strong>{{ score.detail if progress_result else score.points }}</strong></li>{% endfor %}</ol>{% endif %}
           </div>
         </article>
       {% else %}

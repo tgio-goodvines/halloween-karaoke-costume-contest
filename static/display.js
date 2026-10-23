@@ -489,6 +489,8 @@ document.addEventListener('DOMContentLoaded', () => {
     media_tone: override.media_tone || '',
     karaoke: override.karaoke,
     scoreboard: override.scoreboard,
+    facts: override.facts,
+    fact_limit: override.fact_limit,
     duration_seconds: 8,
     override_type: override.type || '',
   });
@@ -534,7 +536,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     if (focusMode === 'cta') renderCta(safeEntry);
-    if (focusMode === 'facts') renderFacts(elements.centerFacts, safeEntry.facts, 2);
+    if (focusMode === 'facts') {
+      const requestedFactLimit = Number(safeEntry.fact_limit);
+      const factLimit = Number.isFinite(requestedFactLimit)
+        ? Math.min(4, Math.max(1, Math.floor(requestedFactLimit)))
+        : 2;
+      renderFacts(elements.centerFacts, safeEntry.facts, factLimit);
+    }
     if (focusMode === 'steps') renderSteps(elements.centerSteps, safeEntry.steps, 2);
     if (focusMode === 'scoreboard') renderScoreboard(safeEntry.scoreboard);
     if (focusMode === 'link' && safeEntry.link) {

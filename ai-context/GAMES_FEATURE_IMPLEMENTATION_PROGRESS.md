@@ -122,7 +122,10 @@ players; guessing becomes useful as additional mystery guests join.
 - Ended games provide Start, Previous, and Next announcer presentation controls,
   applicable winner/results cards, and normal-rotation resume.
 - MMF presentation walks through each trio and then each person with the public
-  identities behind all three choices. It does not create winner/score cards. Prompt presentation
+  identities behind all three choices. Each person card uses three full-width
+  structured rows so the center stage shows every attendee identity assigned to
+  Murder, Marry, and the configured third choice without dropping a row. It
+  does not create winner/score cards. Prompt presentation
   walks through each revealed prompt and winning response under its selected
   public identity.
 - Ended winner/scoreboard cards join normal live-display rotation. Prompt

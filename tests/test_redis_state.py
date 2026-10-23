@@ -8172,6 +8172,15 @@ class RedisStateTests(unittest.TestCase):
             f"Murder: {', '.join(sorted(aliases.values()))}",
             presentation_slides[2]["details"],
         )
+        self.assertEqual(3, presentation_slides[2]["fact_limit"])
+        self.assertEqual(
+            ["Murder", "Marry", "F%$@"],
+            [fact["label"] for fact in presentation_slides[2]["facts"]],
+        )
+        self.assertEqual(
+            ", ".join(sorted(aliases.values())),
+            presentation_slides[2]["facts"][0]["value"],
+        )
         archive = next(
             entry
             for entry in main.result_archives

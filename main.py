@@ -8536,10 +8536,22 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
             slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": " · ".join(people), "message": "Time to explain your choices.", "details": [f"{review.get('respondent_count', 0)} completed ballots"]})
             for person in review.get("people", []):
                 detail_rows = []
+                choice_facts = []
                 for action in MMF_ACTIONS:
                     identities = person.get("choices", {}).get(action, [])
-                    detail_rows.append(f"{labels[action]}: {', '.join(identities) if identities else 'Nobody'}")
-                slides.append({"type": "game_presentation", "title": f"Round {index + 1}", "highlight": person.get("name", "Unknown"), "message": "Who chose what", "details": detail_rows, "image_url": person.get("image_url", "") or game_art_url(game_key)})
+                    choice_names = ", ".join(identities) if identities else "Nobody"
+                    detail_rows.append(f"{labels[action]}: {choice_names}")
+                    choice_facts.append({"label": labels[action], "value": choice_names})
+                slides.append({
+                    "type": "game_presentation",
+                    "title": f"Round {index + 1} · All choices",
+                    "highlight": person.get("name", "Unknown"),
+                    "message": "",
+                    "details": detail_rows,
+                    "facts": choice_facts,
+                    "fact_limit": len(MMF_ACTIONS),
+                    "image_url": person.get("image_url", "") or game_art_url(game_key),
+                })
     elif game_key in PROMPT_GAME_KEYS:
         for index, game_round in enumerate(game.get("rounds", [])):
             if game_round.get("status") != "revealed":

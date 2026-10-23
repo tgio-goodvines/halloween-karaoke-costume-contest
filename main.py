@@ -7324,7 +7324,7 @@ def safe_game_status_view(
         "short_title": metadata["short_title"],
         "description": metadata["description"],
         "image_url": game_art_url(game_key),
-        "winner_image_url": "" if game_key == MURDER_MARRY_FUCK_GAME_KEY else game_art_url(game_key, winner=True),
+        "winner_image_url": "" if game_key in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY} else game_art_url(game_key, winner=True),
         "enabled": bool(game.get("enabled")),
         "phase": phase,
         "status_label": (
@@ -7335,7 +7335,11 @@ def safe_game_status_view(
         "participant_count": len(participants),
         "participating": bool(user_id and user_id in participants),
         "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
-        "result_mode": "round_review" if game_key == MURDER_MARRY_FUCK_GAME_KEY else "scored",
+        "result_mode": (
+            "round_review"
+            if game_key == MURDER_MARRY_FUCK_GAME_KEY
+            else ("progress" if game_key == CURSED_OBJECTIVES_GAME_KEY else "scored")
+        ),
         "metrics": [],
         "winners": [],
         "scores": [],
@@ -7438,6 +7442,8 @@ def safe_game_status_view(
 
 
 def game_winner_links(game_key: str, game: dict[str, object]) -> list[dict[str, str]]:
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        return []
     winners = game_winners(game_key, game)
     links: list[dict[str, str]] = []
     if game_key == TWO_TRUTHS_GAME_KEY:
@@ -7475,7 +7481,7 @@ def upsert_game_result_archive(game_key: str) -> dict[str, object] | None:
         "subject_key": game_key,
         "title": GAME_CATALOG[game_key]["title"],
         "image_url": game_art_url(game_key),
-        "winner_image_url": "" if game_key == MURDER_MARRY_FUCK_GAME_KEY else game_art_url(game_key, winner=True),
+        "winner_image_url": "" if game_key in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY} else game_art_url(game_key, winner=True),
         "status": str(existing.get("status", "draft")) if existing else "draft",
         "simulation": bool(game.get("simulation", {}).get("is_simulated")) if isinstance(game.get("simulation"), dict) else False,
         "finalized_at": str(game.get("ended_at", "") or game.get("results", {}).get("finalized_at", "") or _utc_now_iso()),
@@ -7674,7 +7680,11 @@ def wrapup_readiness(attendee_account_ids: set[str]) -> dict[str, object]:
             errors.append(f"End {metadata['title']} before finalizing the party.")
         elif not isinstance(game.get("results"), dict):
             errors.append(f"{metadata['title']} does not have a final result snapshot.")
-        if game.get("phase") == "ended" and not game_winner_links(game_key, game):
+        if (
+            game.get("phase") == "ended"
+            and game_key not in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY}
+            and not game_winner_links(game_key, game)
+        ):
             warnings.append(f"{metadata['title']} has no account-linked winner; public results can still be preserved.")
 
     if not contest_state.get("winner_locked") or not isinstance(contest_state.get("winner"), dict):
@@ -8423,6 +8433,33 @@ def game_scoreboard_entry(game_key: str) -> dict[str, object] | None:
     scores = game.get("results", {}).get("scores", [])
     if not scores:
         return None
+    if game_key == CURSED_OBJECTIVES_GAME_KEY:
+        rows = []
+        for entry in scores:
+            completed = int(entry.get("completed_missions", entry.get("points", 0)) or 0)
+            assigned = int(entry.get("assigned_missions", CURSED_OBJECTIVES_PER_PLAYER) or CURSED_OBJECTIVES_PER_PLAYER)
+            percent = round((completed / assigned * 100) if assigned else 0)
+            rows.append(
+                {
+                    "name": entry.get("name", "Player"),
+                    "detail": f"{percent}% complete",
+                    "value_label": f"{completed} / {assigned}",
+                    "meta_label": "Objective progress",
+                }
+            )
+        completed_total = sum(int(entry.get("completed_missions", entry.get("points", 0)) or 0) for entry in scores)
+        assigned_total = sum(int(entry.get("assigned_missions", CURSED_OBJECTIVES_PER_PLAYER) or CURSED_OBJECTIVES_PER_PLAYER) for entry in scores)
+        return {
+            "category": GAME_CATALOG[game_key]["title"],
+            "primary": "Final Objective Progress",
+            "secondary": f"{completed_total} of {assigned_total} objectives completed",
+            "tertiary": "No rankings. Every player's final progress is shown.",
+            "scoreboard": {
+                "entries": rows,
+                "show_all_entries": True,
+                "show_rank": False,
+            },
+        }
     rows = [
         {
             "rank": index + 1,
@@ -8448,7 +8485,7 @@ def game_winner_entry(game_key: str) -> dict[str, object] | None:
         return None
     if game_key == TWO_TRUTHS_GAME_KEY:
         return build_two_truths_winner_entry()
-    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+    if game_key in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY}:
         return None
     winners = game_winners(game_key, game)
     if not winners:
@@ -8467,7 +8504,7 @@ def game_outcome_entry(game_key: str) -> dict[str, object] | None:
     game = party_game_state(game_key)
     if game.get("phase") != "ended":
         return None
-    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+    if game_key in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY}:
         return None
     winner = game_winner_entry(game_key)
     if winner:
@@ -8573,7 +8610,19 @@ def build_game_presentation_slides(game_key: str) -> list[dict[str, object]]:
                 slides.append({"type": "game_presentation", "title": f"Round {index + 1} Winner", "highlight": response.get("text", ""), "message": identities_by_player.get(response.get("player_id"), "Player"), "details": [winner_detail]})
     scoreboard = game_scoreboard_entry(game_key) if game.get("phase") == "ended" else None
     if scoreboard:
-        slides.append({"type": "game_presentation", "title": title, "highlight": "Final leaderboard", "message": scoreboard.get("secondary", ""), "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]})
+        if game_key == CURSED_OBJECTIVES_GAME_KEY:
+            slides.append(
+                {
+                    "type": "game_presentation",
+                    "title": title,
+                    "highlight": "Final objective progress",
+                    "message": scoreboard.get("secondary", ""),
+                    "details": [],
+                    "scoreboard": copy.deepcopy(scoreboard["scoreboard"]),
+                }
+            )
+        else:
+            slides.append({"type": "game_presentation", "title": title, "highlight": "Final leaderboard", "message": scoreboard.get("secondary", ""), "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]]})
     outcome = game_outcome_entry(game_key)
     if outcome:
         slides.append({"type": "game_winner", "title": outcome["category"], "highlight": outcome["primary"], "message": outcome["secondary"], "details": [outcome["tertiary"]]})
@@ -8777,7 +8826,11 @@ def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[
             continue
         outcome = game_outcome_entry(game_key)
         scoreboard = game_scoreboard_entry(game_key)
-        cards = (("winner", "Winner / Outcome", outcome), ("scores", "Final Scores", scoreboard))
+        cards = (
+            (("scores", "Player Progress", scoreboard),)
+            if game_key == CURSED_OBJECTIVES_GAME_KEY
+            else (("winner", "Winner / Outcome", outcome), ("scores", "Final Scores", scoreboard))
+        )
         for suffix, card_type, card in cards:
             if not card:
                 continue
@@ -8785,11 +8838,19 @@ def generated_game_result_entries(*, include_hidden: bool = False) -> list[dict[
             entry["kind"] = "result" if suffix == "winner" else "scoreboard"
             entry["image_url"] = game_art_url(game_key, winner=suffix == "winner")
             entry["media_treatment"] = "background"
-            entry["facts"] = [
-                _display_fact("Game", GAME_CATALOG[game_key]["short_title"]),
-                _display_fact("Players", len(game.get("participants", {}))),
-                _display_fact("Status", "Final"),
-            ]
+            if game_key == CURSED_OBJECTIVES_GAME_KEY:
+                stats = cursed_objectives_statistics(game)
+                entry["facts"] = [
+                    _display_fact("Players", len(game.get("participants", {}))),
+                    _display_fact("Completed", stats.get("completed_missions", 0)),
+                    _display_fact("Assigned", stats.get("assigned_missions", 0)),
+                ]
+            else:
+                entry["facts"] = [
+                    _display_fact("Game", GAME_CATALOG[game_key]["short_title"]),
+                    _display_fact("Players", len(game.get("participants", {}))),
+                    _display_fact("Status", "Final"),
+                ]
             if suffix == "winner" and scoreboard and scoreboard.get("scoreboard"):
                 entry["scoreboard"] = {
                     "entries": copy.deepcopy(scoreboard["scoreboard"].get("entries", []))[:3]
@@ -9341,9 +9402,8 @@ def build_game_stage_entries() -> list[dict[str, object]]:
             ]
             entry["action_label"] = "Reveal your objectives in Party Games"
             if phase == "ended":
-                winners = game_winners(game_key, game)
-                entry["primary"] = ", ".join(str(winner.get("name", "Player")) for winner in winners) or "Final results ready"
-                entry["secondary"] = "Cursed Objectives champion" if len(winners) == 1 else "Cursed Objectives champions"
+                entry["primary"] = f"{stats.get('completed_missions', 0)} of {stats.get('assigned_missions', 0)} objectives completed"
+                entry["secondary"] = "Final player progress is ready on the center stage."
             elif phase == "active" and len(participants) < LIVE_GAME_RECRUITMENT_MINIMUM:
                 _apply_game_recruitment_card(
                     entry,
@@ -13819,7 +13879,8 @@ def admin_portal(admin_view: str):
                             upsert_game_result_archive(game_key)
                             if game_key != MURDER_MARRY_FUCK_GAME_KEY:
                                 card_settings = display_config.setdefault("game_result_card_enabled", {})
-                                card_settings[f"games:{game_key}-winner"] = True
+                                if game_key != CURSED_OBJECTIVES_GAME_KEY:
+                                    card_settings[f"games:{game_key}-winner"] = True
                                 card_settings[f"games:{game_key}-scores"] = True
                         if live_display_event_override and str(live_display_event_override.get("type", "")).startswith("game_"):
                             live_display_event_override = None
@@ -13932,7 +13993,11 @@ def admin_portal(admin_view: str):
                         messages.append(
                             f"{title} ended. Its ballots are unsealed for the round-by-round review."
                             if game_key == MURDER_MARRY_FUCK_GAME_KEY
-                            else f"{title} ended and its scores were finalized."
+                            else (
+                                f"{title} ended and every player's objective progress was finalized."
+                                if game_key == CURSED_OBJECTIVES_GAME_KEY
+                                else f"{title} ended and its scores were finalized."
+                            )
                         )
                         should_broadcast = True
 
@@ -14352,8 +14417,21 @@ def admin_portal(admin_view: str):
                     elif not scoreboard:
                         errors.append("No final scores are available.")
                     else:
-                        live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]], "image_url": game_art_url(game_key), "media_treatment": "background"}
-                        messages.append(f"Live display paused on the {title} results.")
+                        if game_key == CURSED_OBJECTIVES_GAME_KEY:
+                            live_display_event_override = {
+                                "type": "game_results",
+                                "title": f"{title} Results",
+                                "highlight": scoreboard["primary"],
+                                "message": scoreboard["secondary"],
+                                "details": [],
+                                "scoreboard": copy.deepcopy(scoreboard["scoreboard"]),
+                                "image_url": game_art_url(game_key),
+                                "media_treatment": "background",
+                            }
+                            messages.append("Live display paused on every player's final Cursed Objectives progress.")
+                        else:
+                            live_display_event_override = {"type": "game_results", "title": f"{title} Results", "highlight": scoreboard["secondary"], "message": "Final standings", "details": [f"#{row['rank']} {row['name']}: {row['value_label']}" for row in scoreboard["scoreboard"]["entries"]], "image_url": game_art_url(game_key), "media_treatment": "background"}
+                            messages.append(f"Live display paused on the {title} results.")
                         should_broadcast = True
 
         elif action == "set_role_preview":

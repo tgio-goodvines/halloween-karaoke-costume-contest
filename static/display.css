@@ -430,6 +430,8 @@ body.display-mode * { box-sizing: border-box; }
   list-style: none;
 }
 .display-scoreboard li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: clamp(0.5rem, 1vw, 0.9rem); padding: clamp(0.45rem, 0.8vh, 0.7rem) clamp(0.6rem, 1vw, 0.9rem); border: 1px solid #3f3f46; border-radius: 0.55rem; background: rgba(0, 0, 0, 0.26); text-align: left; }
+.display-scoreboard.is-unranked li { grid-template-columns: minmax(0, 1fr) auto; }
+.display-scoreboard.is-complete-roster { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(68rem, 100%); }
 .display-scoreboard li > span { color: #ff5555; font: 800 clamp(0.72rem, 1vw, 1.1rem)/1 "Outfit", sans-serif; }
 .display-scoreboard li div { min-width: 0; }
 .display-scoreboard li div strong,
@@ -786,6 +788,7 @@ body.display-mode * { box-sizing: border-box; }
 }
 
 @media (max-width: 900px) {
+  .display-scoreboard.is-complete-roster { grid-template-columns: minmax(0, 1fr); }
   .display-shell.has-games .display-stage { grid-template-columns: minmax(7.5rem, 0.68fr) minmax(0, 2.5fr); }
   .display-shell.has-bar .display-stage { grid-template-columns: minmax(0, 2.5fr) minmax(7.5rem, 0.68fr); }
   .display-shell.has-games.has-bar .display-stage { grid-template-columns: minmax(7.5rem, 0.62fr) minmax(0, 2fr) minmax(7.5rem, 0.62fr); }

@@ -7855,7 +7855,10 @@ class RedisStateTests(unittest.TestCase):
                     self.assertEqual(10, len(main.build_mmf_round_reviews(game)))
                 else:
                     self.assertTrue(game["results"]["scores"])
-                    self.assertTrue(main.game_winners(game_key, game))
+                    if game_key == main.CURSED_OBJECTIVES_GAME_KEY:
+                        self.assertEqual([], main.game_winners(game_key, game))
+                    else:
+                        self.assertTrue(main.game_winners(game_key, game))
                 if game_key == main.TWO_TRUTHS_GAME_KEY:
                     self.assertEqual("active", game["phase"])
                     self.assertEqual("", game["ended_at"])
@@ -7903,19 +7906,28 @@ class RedisStateTests(unittest.TestCase):
                     persisted = self.redis_state()
                     self.assertTrue(persisted["games_state"][game_key]["simulation"]["is_simulated"])
                     continue
-                winner_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-winner")
-                self.assertIn(f"games:{game_key}-winner", card_ids)
                 self.assertIn(f"games:{game_key}-scores", card_ids)
-                self.assertEqual("result", winner_card["kind"])
-                self.assertEqual(3, len(winner_card["facts"]))
-                self.assertTrue(winner_card["scoreboard"]["entries"])
-                self.assertLessEqual(len(winner_card["scoreboard"]["entries"]), 3)
+                if game_key == main.CURSED_OBJECTIVES_GAME_KEY:
+                    self.assertNotIn(f"games:{game_key}-winner", card_ids)
+                    progress_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-scores")
+                    self.assertEqual("Player Progress", progress_card["card_type"])
+                    self.assertEqual(6, len(progress_card["scoreboard"]["entries"]))
+                    self.assertTrue(progress_card["scoreboard"]["show_all_entries"])
+                    self.assertFalse(progress_card["scoreboard"]["show_rank"])
+                else:
+                    winner_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-winner")
+                    self.assertIn(f"games:{game_key}-winner", card_ids)
+                    self.assertEqual("result", winner_card["kind"])
+                    self.assertEqual(3, len(winner_card["facts"]))
+                    self.assertTrue(winner_card["scoreboard"]["entries"])
+                    self.assertLessEqual(len(winner_card["scoreboard"]["entries"]), 3)
                 if game_key == main.TWO_TRUTHS_GAME_KEY:
                     scores_card = next(entry for entry in cards if entry["id"] == f"games:{game_key}-scores")
                     self.assertEqual(8, len(scores_card["scoreboard"]["entries"]))
                     self.assertTrue(scores_card["scoreboard"]["show_all_entries"])
                 self.assertIn(b"Generated Game Result Cards", display_page.data)
-                self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
+                if game_key != main.CURSED_OBJECTIVES_GAME_KEY:
+                    self.assertIn(f"games:{game_key}-winner".encode(), display_page.data)
                 persisted = self.redis_state()
                 self.assertEqual(main.STATE_SCHEMA_VERSION, persisted["schema_version"])
                 self.assertTrue(persisted["games_state"][game_key]["simulation"]["is_simulated"])
@@ -7974,6 +7986,39 @@ class RedisStateTests(unittest.TestCase):
         self.assertTrue(main.display_config["source_enabled"]["games"])
         self.assertEqual(winner_id, main.display_runtime["pinned_card_id"])
         self.assertTrue(main.display_runtime["center_paused"])
+
+    def test_cursed_objectives_admin_shows_every_players_unranked_progress(self):
+        game_key = main.CURSED_OBJECTIVES_GAME_KEY
+        main.games_state[game_key] = main.build_simulated_game_state(
+            game_key,
+            main.party_game_state(game_key),
+            player_count=8,
+            generated_at="2026-10-31T23:00:00Z",
+        )
+        main.upsert_game_result_archive(game_key)
+        self.save_current_state()
+
+        with main.app.test_client() as admin:
+            self.login_admin(admin)
+            response = admin.post(
+                "/admin/games?game=cursed_objectives",
+                data={"action": "show_game_results", "game_key": game_key},
+            )
+
+        self.assertEqual(200, response.status_code)
+        self.assertIn(b"Show All Player Progress", response.data)
+        self.assertNotIn(b'name="action" value="show_game_winner"', response.data)
+        self.assertEqual("game_results", main.live_display_event_override["type"])
+        self.assertEqual("Final Objective Progress", main.live_display_event_override["highlight"])
+        scoreboard = main.live_display_event_override["scoreboard"]
+        self.assertEqual(8, len(scoreboard["entries"]))
+        self.assertTrue(scoreboard["show_all_entries"])
+        self.assertFalse(scoreboard["show_rank"])
+        self.assertEqual([], main.game_winners(game_key, main.party_game_state(game_key)))
+        self.assertEqual([], main.game_winner_links(game_key, main.party_game_state(game_key)))
+        archive = next(entry for entry in main.result_archives if entry["subject_key"] == game_key)
+        self.assertEqual("progress", archive["summary"]["result_mode"])
+        self.assertEqual([], archive["winner_links"])
 
     def test_ended_game_without_positive_score_gets_no_winner_outcome_card(self):
         game = main.two_truths_game()

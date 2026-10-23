@@ -1417,12 +1417,13 @@ def calculate_cursed_objectives_results(game: dict[str, Any], *, finalized_at: s
                 "assigned_missions": len(mission_ids),
             }
         )
-    scores.sort(key=lambda entry: (-entry["points"], entry["name"].casefold()))
-    top = scores[0]["points"] if scores else 0
+    # Cursed Objectives is a shared progress reveal, not a competition. Keep the
+    # final roster alphabetical so completion totals never imply a ranking.
+    scores.sort(key=lambda entry: entry["name"].casefold())
     return {
         "finalized_at": finalized_at or utc_now_iso(),
         "scores": scores,
-        "winner_player_ids": [entry["player_id"] for entry in scores if top > 0 and entry["points"] == top],
+        "winner_player_ids": [],
     }
 
 
@@ -1586,7 +1587,7 @@ def game_winners(game_key: str, game: dict[str, Any]) -> list[dict[str, Any]]:
     if game_key == TWO_TRUTHS_GAME_KEY:
         winner_ids = set(results.get("winner_ids", []))
         return [entry for entry in results.get("scores", []) if entry.get("user_id") in winner_ids]
-    if game_key == MURDER_MARRY_FUCK_GAME_KEY:
+    if game_key in {MURDER_MARRY_FUCK_GAME_KEY, CURSED_OBJECTIVES_GAME_KEY}:
         return []
     winner_ids = set(results.get("winner_player_ids", []))
     return [entry for entry in results.get("scores", []) if entry.get("player_id") in winner_ids]

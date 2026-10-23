@@ -359,3 +359,26 @@ slide. Non-game image cards retain their foreground-media layout.
   participant and score to the center-stage scoreboard instead of truncating
   the standings.
 - No Redis schema or migration was required.
+
+## Cursed Objectives Winner-Free Progress Results (2026-10-22)
+
+- Cursed Objectives now ends with an unranked progress reveal rather than a
+  winner. Finalization retains each player's completed and assigned objective
+  counts, orders the roster alphabetically, and records no winner IDs or
+  recognition links.
+- The generated center-stage result is one `Player Progress` card containing
+  every player. It shows completed/assigned totals and completion percentages,
+  suppresses rank numbers, and uses a compact two-column roster when the player
+  count is large.
+- The selected-game admin console exposes `Show All Player Progress`, retains
+  the existing presentation previous/next controls, and removes the Cursed
+  Objectives winner action. `/admin/display` can still Show Now or include/hide
+  the generated card in center rotation.
+- Attendee-safe results and historical archives identify the result mode as
+  progress, omit winner artwork and winner credit, and preserve the complete
+  player progress record.
+- No Redis schema or migration was required; normalization recalculates ended
+  legacy Cursed Objectives state into the winner-free result shape.
+- Verification passed with 269 Python tests and 37 subtests, all 27
+  dependency-free JavaScript tests, Python/JavaScript syntax checks, and
+  whitespace validation.

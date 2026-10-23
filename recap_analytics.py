@@ -146,7 +146,11 @@ def build_game_result_snapshots(raw_games: object, *, include_incomplete: bool =
                 "participant_count": participant_count,
                 "simulation": bool(game.get("simulation", {}).get("is_simulated")),
                 "winner_names": winner_names,
-                "winner_label": ", ".join(winner_names) if winner_names else ("No Winner" if ended else "Pending"),
+                "winner_label": (
+                    "Objective Progress"
+                    if ended and game_key == CURSED_OBJECTIVES_GAME_KEY
+                    else (", ".join(winner_names) if winner_names else ("No Winner" if ended else "Pending"))
+                ),
                 "scores": _score_rows(game_key, game),
             }
         )
@@ -326,7 +330,7 @@ def build_sample_recap_payload() -> dict[str, Any]:
             {"title": "Fill in the Blank: After Dark", "winner_label": "No Winner", "participant_count": 10},
             {"title": "Bad Advice Hotline", "winner_label": "Dr. Disaster", "participant_count": 9},
             {"title": "Wrong Answers Only", "winner_label": "Specimen Seven", "participant_count": 8},
-            {"title": "Cursed Objectives", "winner_label": "Morgan", "participant_count": 7},
+            {"title": "Cursed Objectives", "winner_label": "Objective Progress", "participant_count": 7},
             {"title": "Scavenger Hunt", "winner_label": "Jamie", "participant_count": 11},
         ],
         "costume_result": {"winner": "Specimen Seven", "costume": "Radioactive Vampire"},

@@ -40,7 +40,7 @@ def test_join_fails_instead_of_reusing_an_assigned_objective():
         assign_cursed_objectives(game, "one-too-many", display_name="Late Player")
 
 
-def test_scoring_preserves_tied_positive_winners():
+def test_final_results_preserve_every_players_progress_without_a_winner():
     game = empty_cursed_objectives_game_state(enabled=True)
     first = assign_cursed_objectives(game, "account-1", display_name="First", rng=random.Random(3))
     second = assign_cursed_objectives(game, "account-2", display_name="Second", rng=random.Random(4))
@@ -50,7 +50,8 @@ def test_scoring_preserves_tied_positive_winners():
     results = calculate_cursed_objectives_results(game, finalized_at="2026-10-31T23:00:00Z")
 
     assert [entry["points"] for entry in results["scores"]] == [2, 2]
-    assert set(results["winner_player_ids"]) == {first["player_id"], second["player_id"]}
+    assert [entry["name"] for entry in results["scores"]] == ["First", "Second"]
+    assert results["winner_player_ids"] == []
 
 
 def test_normalization_drops_duplicate_cross_player_assignments():

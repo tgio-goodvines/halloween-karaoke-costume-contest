@@ -382,6 +382,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const rows = safeScoreboard.show_all_entries ? entries : entries.slice(0, 3);
     if (!elements.centerScoreboard || !rows.length) return false;
     elements.centerScoreboard.innerHTML = '';
+    const showRank = safeScoreboard.show_rank !== false;
+    elements.centerScoreboard.classList.toggle('is-unranked', !showRank);
+    elements.centerScoreboard.classList.toggle('is-complete-roster', Boolean(safeScoreboard.show_all_entries && rows.length > 6));
     rows.forEach((row, index) => {
       const item = document.createElement('li');
       const rank = document.createElement('span');
@@ -392,7 +395,8 @@ document.addEventListener('DOMContentLoaded', () => {
       copy.querySelector('strong').textContent = row.name || '';
       copy.querySelector('small').textContent = row.detail || row.meta_label || '';
       value.textContent = row.value_label || '';
-      item.append(rank, copy, value);
+      if (showRank) item.append(rank);
+      item.append(copy, value);
       elements.centerScoreboard.appendChild(item);
     });
     setHidden(elements.centerScoreboard, false);

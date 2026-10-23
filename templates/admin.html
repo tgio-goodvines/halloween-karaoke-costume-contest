@@ -202,7 +202,7 @@
 
     <section class="admin-subsection">
       <h4>Generated Game Result Cards</h4>
-      <p>Ended games create center-stage winner or outcome cards and final-score cards. These remain available even after attendee enrollment is disabled.</p>
+      <p>Ended games create center-stage winner/outcome and final-score cards. Winner-free games use their own result treatment, including the complete Cursed Objectives player-progress card. These remain available even after attendee enrollment is disabled.</p>
       {% if game_result_cards %}
         <div class="display-admin__game-list">
           {% for card in game_result_cards %}
@@ -215,7 +215,7 @@
             </article>
           {% endfor %}
         </div>
-      {% else %}<p class="empty-state">End or simulate a game to create its winner and final-score cards.</p>{% endif %}
+      {% else %}<p class="empty-state">End or simulate a game to create its center-stage result cards.</p>{% endif %}
     </section>
 
     <section class="admin-subsection">

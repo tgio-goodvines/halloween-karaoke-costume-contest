@@ -79,7 +79,7 @@
               <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="disable_game">Disable</button></form>
             {% endif %}
             {% if admin_game.enabled and admin_game.phase == 'active' %}
-              <form method="post" onsubmit="return confirm('Close {{ admin_game.metadata.title|e }}? New players and submissions will be locked.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="end_game">{{ 'Close Uploads & Review' if game_key == 'scavenger_hunt' else 'Close Game & Calculate Results' }}</button></form>
+              <form method="post" onsubmit="return confirm('Close {{ admin_game.metadata.title|e }}? New players and submissions will be locked.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="end_game">{{ 'Close Uploads & Review' if game_key == 'scavenger_hunt' else ('Close Game & Finalize Progress' if game_key == 'cursed_objectives' else 'Close Game & Calculate Results') }}</button></form>
             {% endif %}
             {% if game_key == 'scavenger_hunt' and admin_game.phase == 'review' %}
               <form method="post" onsubmit="return confirm('Finalize Scavenger Hunt scores? Review decisions will lock and winner controls will become available.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button button--primary" name="action" value="finalize_scavenger_hunt"{% if admin_game.statistics.pending_count %} disabled{% endif %}>Finalize Scores</button></form>
@@ -135,7 +135,7 @@
 
     <section class="admin-subsection" data-view-key="game:{{ game_key }}:results">
       <div class="game-admin-section-heading">
-        <div><p class="admin-panel__eyebrow">Results and display</p><h5>{{ 'Ballot review and announcer controls' if game_key == 'murder_marry_fuck' else 'Leaderboard and announcer controls' }}</h5></div>
+        <div><p class="admin-panel__eyebrow">Results and display</p><h5>{{ 'Ballot review and announcer controls' if game_key == 'murder_marry_fuck' else ('Player progress and display controls' if game_key == 'cursed_objectives' else 'Leaderboard and announcer controls') }}</h5></div>
         <div class="contest-actions">
           {% if game_key == 'two_truths_and_a_lie' %}
             <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="pause_game_display">Pause on Game Card</button></form>
@@ -148,8 +148,8 @@
             <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="previous_game_slide">Previous</button></form>
             <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="next_game_slide">Next</button></form>
             {% if admin_game.phase == 'ended' and game_key != 'murder_marry_fuck' %}
-            <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_results">Results</button></form>
-            <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_winner">Winner</button></form>
+            <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_results">{{ 'Show All Player Progress' if game_key == 'cursed_objectives' else 'Results' }}</button></form>
+            {% if game_key != 'cursed_objectives' %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="game_key" value="{{ game_key }}"><button class="button" name="action" value="show_game_winner">Winner</button></form>{% endif %}
             {% endif %}
           {% endif %}
           <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button" name="action" value="resume_game_display">Resume Rotation</button></form>
@@ -159,8 +159,8 @@
       {% if game_key == 'murder_marry_fuck' and admin_game.phase == 'ended' %}
         <div class="game-instructions"><h4>Ballots unsealed</h4><p>Use Start Presentation, Previous, and Next to review every round and reveal who assigned each person to Murder, Marry, or {{ admin_game.explicit_label }}. This game has no scores or winners.</p></div>
       {% elif admin_game.statistics.scores %}
-        <div class="table-wrapper"><table><thead><tr><th>Rank</th><th>Player</th><th>{% if game_key == 'two_truths_and_a_lie' %}Correct{% else %}Points{% endif %}</th>{% if game_key == 'two_truths_and_a_lie' %}<th>Attempts</th><th>Accuracy</th>{% endif %}</tr></thead><tbody>
-          {% for score in admin_game.statistics.scores[:20] %}<tr><td>#{{ loop.index }}</td><td>{{ score.name }}</td><td>{{ score.correct if game_key == 'two_truths_and_a_lie' else score.points }}</td>{% if game_key == 'two_truths_and_a_lie' %}<td>{{ score.attempts }}</td><td>{{ score.accuracy }}%</td>{% endif %}</tr>{% endfor %}
+        <div class="table-wrapper"><table><thead><tr>{% if game_key != 'cursed_objectives' %}<th>Rank</th>{% endif %}<th>Player</th><th>{% if game_key == 'two_truths_and_a_lie' %}Correct{% elif game_key == 'cursed_objectives' %}Objective progress{% else %}Points{% endif %}</th>{% if game_key == 'two_truths_and_a_lie' %}<th>Attempts</th><th>Accuracy</th>{% endif %}</tr></thead><tbody>
+          {% for score in admin_game.statistics.scores[:20] %}<tr>{% if game_key != 'cursed_objectives' %}<td>#{{ loop.index }}</td>{% endif %}<td>{{ score.name }}</td><td>{% if game_key == 'two_truths_and_a_lie' %}{{ score.correct }}{% elif game_key == 'cursed_objectives' %}{{ score.completed_missions }} / {{ score.assigned_missions }}{% else %}{{ score.points }}{% endif %}</td>{% if game_key == 'two_truths_and_a_lie' %}<td>{{ score.attempts }}</td><td>{{ score.accuracy }}%</td>{% endif %}</tr>{% endfor %}
         </tbody></table></div>
         {% if admin_game.statistics.scores|length > 20 %}<p class="contest-status">Showing the top 20 of {{ admin_game.statistics.scores|length }} players. The complete result set is included in the game export.</p>{% endif %}
       {% else %}<p class="empty-state">No score data is available yet.</p>{% endif %}
@@ -169,7 +169,7 @@
           <div>
             <p class="admin-panel__eyebrow">Historical record</p>
             <strong>{{ 'Official Hall of Fame result' if selected_game_archive.status == 'official' else 'Draft result saved' }}</strong>
-            <p>{% if selected_game_archive.simulation %}Simulated results can appear on the live display but can never grant achievements.{% elif game_key == 'murder_marry_fuck' and selected_game_archive.status == 'official' %}This winner-free round review survives game resets as aggregate history.{% elif game_key == 'murder_marry_fuck' %}Publish after the review to preserve the aggregate result across years; this game grants no winner achievements.{% elif selected_game_archive.status == 'official' %}This result survives game resets and its linked winners have recognition credit.{% else %}Publish after verifying the final standings to grant winner achievements and preserve this result across years.{% endif %}</p>
+            <p>{% if selected_game_archive.simulation %}Simulated results can appear on the live display but can never grant achievements.{% elif game_key in ['murder_marry_fuck', 'cursed_objectives'] and selected_game_archive.status == 'official' %}This winner-free {{ 'progress record' if game_key == 'cursed_objectives' else 'round review' }} survives game resets as aggregate history.{% elif game_key in ['murder_marry_fuck', 'cursed_objectives'] %}Publish after the review to preserve this winner-free {{ 'progress record' if game_key == 'cursed_objectives' else 'aggregate result' }} across years; this game grants no winner achievements.{% elif selected_game_archive.status == 'official' %}This result survives game resets and its linked winners have recognition credit.{% else %}Publish after verifying the final standings to grant winner achievements and preserve this result across years.{% endif %}</p>
           </div>
           {% if selected_game_archive.status != 'official' and not selected_game_archive.simulation %}
             <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="archive_id" value="{{ selected_game_archive.id }}"><button class="button button--primary" name="action" value="publish_result_archive">Publish Official Result</button></form>

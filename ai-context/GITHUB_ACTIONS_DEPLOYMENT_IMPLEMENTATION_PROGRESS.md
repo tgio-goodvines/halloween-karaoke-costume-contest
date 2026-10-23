@@ -280,3 +280,18 @@ Current durable deployment context should be read from this file,
 - Authenticated production UI verification confirmed `Show Hunt Item List`,
   `Show Completed Objectives`, and `Show Uncompleted Objectives` are present in
   their selected-game admin consoles.
+
+## Configurable MMF Round Count Deployment (2026-10-23)
+
+- Feature commit `2c252309a7d56f9456656186460a70c5a4261238` changed new
+  and reset Murder, Marry, F%$@ games to five rounds by default and added a
+  validated one-to-ten round-count control before the game opens.
+- GitHub Actions run `39992160957` completed successfully. The workflow passed
+  273 Python tests, 37 subtests, browser JavaScript checks/tests, deploy-script
+  validation, exact-SHA SSM deployment, and public smoke tests.
+- The exact feature commit was deployed successfully to API instances
+  `i-025ef087abb6b2e73` and `i-0d8b1d54de888cf9b`.
+- Independent post-deploy checks confirmed healthy Redis-backed responses from
+  `https://tnq-halloween.com/health` and
+  `https://www.tnq-halloween.com/health`; `https://appg-v.com/health` remained
+  online.
